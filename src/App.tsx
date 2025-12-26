@@ -47,6 +47,16 @@ function App() {
     }
   }
 
+  const handleFilesSelect = async (files: File[]) => {
+    if (files.length > 1) {
+      setError('Please upload one CSV file at a time.')
+      return
+    }
+    if (files.length === 1) {
+      await handleFileSelect(files[0])
+    }
+  }
+
   const handleReset = () => {
     setParsedData(null)
     setError(null)
@@ -91,7 +101,7 @@ function App() {
         />
       ) : (
         <div>
-          <FileUpload onFileSelect={handleFileSelect} />
+          <FileUpload onFilesSelect={handleFilesSelect} />
 
           {error && (
             <div className="mt-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
