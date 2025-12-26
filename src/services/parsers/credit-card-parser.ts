@@ -10,7 +10,7 @@ import {
   parseSantanderDate,
   generateTransactionId,
 } from './utils'
-import { getMerchantCategory } from '../categorizer/merchant-patterns'
+import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 
 /**
  * Parse a Santander credit card CSV file
@@ -158,9 +158,10 @@ function parseTransactions(
       (currency === 'USD' && dolaresAmount < 0) ||
       (currency === 'UYU' && pesosAmount < 0)
 
-    // Auto-categorize based on merchant name
-    const { category, confidence } = getMerchantCategory(
-      rawTransaction.descripcion
+    // Auto-categorize based on transaction details
+    const { category, confidence } = categorizeTransaction(
+      rawTransaction.descripcion,
+      isCredit ? 'credit' : 'debit'
     )
 
     const transaction: Transaction = {

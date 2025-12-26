@@ -3,6 +3,8 @@ import { FileUpload } from './components/FileUpload'
 import { ParsedDataDisplay } from './components/ParsedDataDisplay'
 import { parseCSV } from './services/parsers'
 import type { ParsedData } from './models'
+import { Category } from './models'
+import { setMerchantCategoryOverride } from './services/categorizer/category-overrides'
 
 function App() {
   const [parsedData, setParsedData] = useState<ParsedData | null>(null)
@@ -30,6 +32,35 @@ function App() {
     setError(null)
   }
 
+  const handleCategoryChange = (
+    transactionId: string,
+    nextCategory: Category
+  ) => {
+    setParsedData((current) => {
+      if (!current) {
+        return current
+      }
+
+      const updatedTransactions = current.transactions.map((tx) => {
+        if (tx.id !== transactionId) {
+          return tx
+        }
+
+        setMerchantCategoryOverride(tx.description, nextCategory)
+        return {
+          ...tx,
+          category: nextCategory,
+          categoryConfidence: 1,
+        }
+      })
+
+      return {
+        ...current,
+        transactions: updatedTransactions,
+      }
+    })
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -54,7 +85,11 @@ function App() {
             </div>
           </div>
         ) : parsedData ? (
-          <ParsedDataDisplay data={parsedData} onReset={handleReset} />
+          <ParsedDataDisplay
+            data={parsedData}
+            onReset={handleReset}
+            onCategoryChange={handleCategoryChange}
+          />
         ) : (
           <div>
             <FileUpload onFileSelect={handleFileSelect} />
