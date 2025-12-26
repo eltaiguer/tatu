@@ -121,14 +121,14 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 **Goal**: Create robust data layer with local storage persistence
 
 ### Tasks
-- [ ] **3.1** Transaction Store (TDD)
+- [x] **3.1** Transaction Store (TDD) ✅
   - ✅ Write tests for transaction CRUD operations
   - ✅ Write tests for duplicate detection
   - ✅ Write tests for merging multiple imports
   - ✅ Implement transaction store with Zustand or Context
   - ✅ Add LocalStorage persistence
 
-- [ ] **3.2** Data Aggregation Service (TDD)
+- [x] **3.2** Data Aggregation Service (TDD) ✅
   - ✅ Write tests for grouping by category
   - ✅ Write tests for grouping by month/date
   - ✅ Write tests for currency conversion utilities
@@ -136,7 +136,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
   - ✅ Implement aggregation functions
   - ✅ Add memoization for performance
 
-- [ ] **3.3** Filter & Search Engine (TDD)
+- [x] **3.3** Filter & Search Engine (TDD) ✅
   - ✅ Write tests for date range filtering
   - ✅ Write tests for category filtering
   - ✅ Write tests for amount range filtering
@@ -296,21 +296,24 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ---
 
-## Current Heat: HEAT 3
+## Current Heat: HEAT 4
 **Status**: IN PROGRESS 🔥
 **Completed**:
 - 2.1 - Define Category System (TDD) ✅
 - 2.2 - Build Merchant Pattern Matcher (TDD) ✅
 - 2.3 - Transaction Categorizer (TDD) ✅
 - 2.4 - Manual Category Override (TDD) ✅
-**Next Task**: 3.1 - Transaction Store (TDD)
+- 3.1 - Transaction Store (TDD) ✅
+- 3.2 - Data Aggregation Service (TDD) ✅
+- 3.3 - Filter & Search Engine (TDD) ✅
+**Next Task**: 4.1 - Layout & Navigation (TDD)
 
 ---
 
 ## Progress Tracking
 - [x] Heat 1: Foundation & CSV Parser ✅
 - [ ] Heat 2: Category Inference Engine
-- [ ] Heat 3: Data Models & State Management
+- [x] Heat 3: Data Models & State Management ✅
 - [ ] Heat 4: Dashboard & Visualizations
 - [ ] Heat 5: Advanced Features & Polish
 - [ ] Heat 6: Currency & Insights

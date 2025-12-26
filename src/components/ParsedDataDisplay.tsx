@@ -7,6 +7,12 @@ import {
   getAllCategories,
 } from '../models/category'
 import { getMerchantCategoryOverride } from '../services/categorizer/category-overrides'
+import { calculateTotals } from '../services/aggregator/aggregation'
+import {
+  applyFilters,
+  sortTransactions,
+  type FilterOptions,
+} from '../services/filters/filters'
 
 interface ParsedDataDisplayProps {
   data: ParsedData
@@ -22,6 +28,11 @@ export function ParsedDataDisplay({
   const metadata = data.metadata
   const categories = getAllCategories()
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [filters, setFilters] = useState<FilterOptions>({})
+
+  const filteredTransactions = applyFilters(data.transactions, filters)
+  const sortedTransactions = sortTransactions(filteredTransactions)
+  const totals = calculateTotals(sortedTransactions)
 
   useEffect(() => {
     if (!editingId) {
@@ -84,7 +95,7 @@ export function ParsedDataDisplay({
               Transactions:
             </span>
             <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-              {data.transactions.length}
+              {sortedTransactions.length}
             </span>
           </div>
           <div>
@@ -181,6 +192,72 @@ export function ParsedDataDisplay({
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="flex-1">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+              Search
+            </label>
+            <input
+              type="text"
+              value={filters.query ?? ''}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  query: event.target.value || undefined,
+                }))
+              }
+              placeholder="Search description"
+              className="w-full rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700"
+            />
+          </div>
+          <div className="min-w-[180px]">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+              Category
+            </label>
+            <select
+              value={filters.categories?.[0] ?? ''}
+              onChange={(event) => {
+                const value = event.target.value
+                setFilters((current) => ({
+                  ...current,
+                  categories: value ? [value] : undefined,
+                }))
+              }}
+              className="w-full rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700"
+            >
+              <option value="">All categories</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {CATEGORY_LABELS[category]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-[140px]">
+            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
+              Currency
+            </label>
+            <select
+              value={filters.currencies?.[0] ?? ''}
+              onChange={(event) => {
+                const value = event.target.value
+                setFilters((current) => ({
+                  ...current,
+                  currencies: value ? [value as 'USD' | 'UYU'] : undefined,
+                }))
+              }}
+              className="w-full rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700"
+            >
+              <option value="">All currencies</option>
+              <option value="USD">USD</option>
+              <option value="UYU">UYU</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Transactions Table */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
         <div className="p-6 pb-0">
@@ -213,7 +290,7 @@ export function ParsedDataDisplay({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {data.transactions.map((tx) => {
+              {sortedTransactions.map((tx) => {
                 const override = getMerchantCategoryOverride(tx.description)
                 const displayCategory =
                   override ??
@@ -333,10 +410,9 @@ export function ParsedDataDisplay({
             Total Debits
           </p>
           <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-2">
-            {data.transactions
-              .filter((tx) => tx.type === 'debit')
-              .reduce((sum, tx) => sum + tx.amount, 0)
-              .toFixed(2)}
+            {totals.expense.USD + totals.expense.UYU > 0
+              ? `${totals.expense.USD.toFixed(2)} USD / ${totals.expense.UYU.toFixed(2)} UYU`
+              : '0.00'}
           </p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
@@ -344,23 +420,22 @@ export function ParsedDataDisplay({
             Total Credits
           </p>
           <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-2">
-            {data.transactions
-              .filter((tx) => tx.type === 'credit')
-              .reduce((sum, tx) => sum + tx.amount, 0)
-              .toFixed(2)}
+            {totals.income.USD + totals.income.UYU > 0
+              ? `${totals.income.USD.toFixed(2)} USD / ${totals.income.UYU.toFixed(2)} UYU`
+              : '0.00'}
           </p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
           <p className="text-sm text-gray-500 dark:text-gray-400">Net</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">
-            {(
-              data.transactions
-                .filter((tx) => tx.type === 'credit')
-                .reduce((sum, tx) => sum + tx.amount, 0) -
-              data.transactions
-                .filter((tx) => tx.type === 'debit')
-                .reduce((sum, tx) => sum + tx.amount, 0)
-            ).toFixed(2)}
+            {totals.income.USD - totals.expense.USD !== 0 ||
+            totals.income.UYU - totals.expense.UYU !== 0
+              ? `${(totals.income.USD - totals.expense.USD).toFixed(
+                  2
+                )} USD / ${(totals.income.UYU - totals.expense.UYU).toFixed(
+                  2
+                )} UYU`
+              : '0.00'}
           </p>
         </div>
       </div>

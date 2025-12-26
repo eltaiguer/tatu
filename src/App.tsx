@@ -1,15 +1,33 @@
 import { useState } from 'react'
+import { useStore } from 'zustand'
 import { FileUpload } from './components/FileUpload'
 import { ParsedDataDisplay } from './components/ParsedDataDisplay'
 import { parseCSV } from './services/parsers'
 import type { ParsedData } from './models'
 import { Category } from './models'
 import { setMerchantCategoryOverride } from './services/categorizer/category-overrides'
+import { transactionStore } from './stores/transaction-store'
 
 function App() {
   const [parsedData, setParsedData] = useState<ParsedData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const transactions = useStore(
+    transactionStore,
+    (state) => state.transactions
+  )
+  const setTransactions = useStore(
+    transactionStore,
+    (state) => state.setTransactions
+  )
+  const clearTransactions = useStore(
+    transactionStore,
+    (state) => state.clearTransactions
+  )
+  const updateTransaction = useStore(
+    transactionStore,
+    (state) => state.updateTransaction
+  )
 
   const handleFileSelect = async (file: File) => {
     setIsLoading(true)
@@ -18,6 +36,7 @@ function App() {
     try {
       const content = await file.text()
       const result = parseCSV(content, file.name)
+      setTransactions(result.transactions)
       setParsedData(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse CSV file')
@@ -30,34 +49,22 @@ function App() {
   const handleReset = () => {
     setParsedData(null)
     setError(null)
+    clearTransactions()
   }
 
   const handleCategoryChange = (
     transactionId: string,
     nextCategory: Category
   ) => {
-    setParsedData((current) => {
-      if (!current) {
-        return current
-      }
+    const tx = transactions.find((item) => item.id === transactionId)
+    if (!tx) {
+      return
+    }
 
-      const updatedTransactions = current.transactions.map((tx) => {
-        if (tx.id !== transactionId) {
-          return tx
-        }
-
-        setMerchantCategoryOverride(tx.description, nextCategory)
-        return {
-          ...tx,
-          category: nextCategory,
-          categoryConfidence: 1,
-        }
-      })
-
-      return {
-        ...current,
-        transactions: updatedTransactions,
-      }
+    setMerchantCategoryOverride(tx.description, nextCategory)
+    updateTransaction(transactionId, {
+      category: nextCategory,
+      categoryConfidence: 1,
     })
   }
 
@@ -86,7 +93,7 @@ function App() {
           </div>
         ) : parsedData ? (
           <ParsedDataDisplay
-            data={parsedData}
+            data={{ ...parsedData, transactions }}
             onReset={handleReset}
             onCategoryChange={handleCategoryChange}
           />
