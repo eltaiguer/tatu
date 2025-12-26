@@ -11,7 +11,7 @@ import {
   parseSantanderDate,
   generateTransactionId,
 } from './utils'
-import { getMerchantCategory } from '../categorizer/merchant-patterns'
+import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 
 /**
  * Parse a Santander bank account CSV file (USD or UYU)
@@ -154,8 +154,8 @@ function parseTransactions(
       .join(' ')
       .trim()
 
-    // Auto-categorize based on description
-    const { category, confidence } = getMerchantCategory(description)
+    // Auto-categorize based on transaction details
+    const { category, confidence } = categorizeTransaction(description, type)
 
     const transaction: Transaction = {
       id: generateTransactionId(

@@ -1,17 +1,50 @@
+import { useEffect, useState } from 'react'
 import type { ParsedData } from '../models'
 import {
   Category,
   CATEGORY_LABELS,
   CATEGORY_ICONS,
+  getAllCategories,
 } from '../models/category'
+import { getMerchantCategoryOverride } from '../services/categorizer/category-overrides'
 
 interface ParsedDataDisplayProps {
   data: ParsedData
   onReset: () => void
+  onCategoryChange: (transactionId: string, category: Category) => void
 }
 
-export function ParsedDataDisplay({ data, onReset }: ParsedDataDisplayProps) {
+export function ParsedDataDisplay({
+  data,
+  onReset,
+  onCategoryChange,
+}: ParsedDataDisplayProps) {
   const metadata = data.metadata
+  const categories = getAllCategories()
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!editingId) {
+      return
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (!target) {
+        return
+      }
+
+      const container = target.closest(
+        `[data-category-editor-id="${editingId}"]`
+      )
+      if (!container) {
+        setEditingId(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [editingId])
 
   return (
     <div className="space-y-6">
@@ -180,7 +213,15 @@ export function ParsedDataDisplay({ data, onReset }: ParsedDataDisplayProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {data.transactions.map((tx) => (
+              {data.transactions.map((tx) => {
+                const override = getMerchantCategoryOverride(tx.description)
+                const displayCategory =
+                  override ??
+                  (tx.category as Category | undefined) ??
+                  Category.Uncategorized
+                const isOverridden = override !== null
+
+                return (
                 <tr
                   key={tx.id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-700/50"
@@ -192,10 +233,64 @@ export function ParsedDataDisplay({ data, onReset }: ParsedDataDisplayProps) {
                     {tx.description}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-                      <span>{CATEGORY_ICONS[tx.category as Category] || '❓'}</span>
-                      <span>{CATEGORY_LABELS[tx.category as Category] || tx.category || 'Uncategorized'}</span>
-                    </span>
+                    <div
+                      className="relative inline-flex"
+                      data-category-editor-id={tx.id}
+                    >
+                      <button
+                        type="button"
+                        className={`inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md ${
+                          editingId === tx.id
+                            ? 'bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-gray-100'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
+                        onClick={() =>
+                          setEditingId(editingId === tx.id ? null : tx.id)
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            setEditingId(null)
+                          }
+                        }}
+                        data-testid={`category-pill-${tx.id}`}
+                      >
+                        <span>{CATEGORY_ICONS[displayCategory] || '❓'}</span>
+                        <span>
+                          {CATEGORY_LABELS[displayCategory] ||
+                            tx.category ||
+                            'Uncategorized'}
+                        </span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          ▾
+                        </span>
+                      </button>
+                      {editingId === tx.id && (
+                        <div
+                          className="absolute left-0 top-full z-10 mt-2 w-56 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg"
+                          data-testid={`category-menu-${tx.id}`}
+                        >
+                          {categories.map((category) => (
+                            <button
+                              key={category}
+                              type="button"
+                              className={`flex w-full items-center gap-2 px-3 py-2 text-xs font-medium ${
+                                isOverridden && override === category
+                                  ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+                                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/70'
+                              }`}
+                              onClick={() => {
+                                onCategoryChange(tx.id, category)
+                                setEditingId(null)
+                              }}
+                              data-testid={`category-option-${category}-${tx.id}`}
+                            >
+                              <span>{CATEGORY_ICONS[category] || '❓'}</span>
+                              <span>{CATEGORY_LABELS[category]}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span
@@ -224,7 +319,8 @@ export function ParsedDataDisplay({ data, onReset }: ParsedDataDisplayProps) {
                       : '-'}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>

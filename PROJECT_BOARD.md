@@ -95,15 +95,15 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
   - ✅ Integrate into credit card and bank account parsers
   - ✅ Update UI to display categories with icons
 
-- [ ] **2.3** Transaction Categorizer (TDD)
-  - [ ] Write tests for auto-categorization logic
-  - [ ] Write tests for income detection (credits, salary)
-  - [ ] Write tests for transfer detection
-  - [ ] Write tests for fee detection
-  - [ ] Implement categorization service
-  - [ ] Add confidence scores for categorizations
+- [x] **2.3** Transaction Categorizer (TDD) ✅
+  - ✅ Write tests for auto-categorization logic
+  - ✅ Write tests for income detection (credits, salary)
+  - ✅ Write tests for transfer detection
+  - ✅ Write tests for fee detection
+  - ✅ Implement categorization service
+  - ✅ Add confidence scores for categorizations
 
-- [ ] **2.4** Manual Category Override (TDD)
+- [x] **2.4** Manual Category Override (TDD) ✅
   - ✅ Write tests for user category assignments
   - ✅ Write tests for persisting user preferences
   - ✅ Implement override functionality
@@ -296,12 +296,14 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ---
 
-## Current Heat: HEAT 2
+## Current Heat: HEAT 3
 **Status**: IN PROGRESS 🔥
 **Completed**:
 - 2.1 - Define Category System (TDD) ✅
 - 2.2 - Build Merchant Pattern Matcher (TDD) ✅
-**Next Task**: 2.3 - Transaction Categorizer (TDD)
+- 2.3 - Transaction Categorizer (TDD) ✅
+- 2.4 - Manual Category Override (TDD) ✅
+**Next Task**: 3.1 - Transaction Store (TDD)
 
 ---
 
