@@ -78,4 +78,21 @@ describe('TransactionList', () => {
     const rows = screen.getAllByTestId('transaction-row')
     expect(rows.length).toBeLessThan(30)
   })
+
+  it('highlights search matches in descriptions', () => {
+    const transactions = [
+      makeTransaction('tx-1', { description: 'Devoto Supermercado' }),
+    ]
+
+    render(<TransactionList transactions={transactions} highlightQuery="dev" />)
+
+    const highlight = screen.getByTestId('search-highlight')
+    expect(highlight).toHaveTextContent('Dev')
+  })
+
+  it('shows empty state when there are no transactions', () => {
+    render(<TransactionList transactions={[]} />)
+
+    expect(screen.getByText('No transactions to display')).toBeInTheDocument()
+  })
 })

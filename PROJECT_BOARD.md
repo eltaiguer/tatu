@@ -311,7 +311,12 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - 4.3 - Dashboard Overview (TDD) ✅
 - 4.4 - Charts & Visualizations (TDD) ✅
 - 4.5 - Transaction List View (TDD) ✅
-**Next Task**: 5.1 - Advanced Filtering UI (TDD)
+- 5.1 - Advanced Filtering UI (TDD) ✅
+- 5.2 - Search Functionality (TDD) ✅
+- 5.3 - Export Features (TDD) ✅
+- 5.4 - Category Management (TDD) ✅
+- 5.5 - UX Polish ✅
+**Next Task**: 6.1 - Currency Conversion
 
 ---
 
@@ -320,5 +325,5 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - [ ] Heat 2: Category Inference Engine
 - [x] Heat 3: Data Models & State Management ✅
 - [x] Heat 4: Dashboard & Visualizations ✅
-- [ ] Heat 5: Advanced Features & Polish
+- [x] Heat 5: Advanced Features & Polish ✅
 - [ ] Heat 6: Currency & Insights

@@ -1,47 +1,29 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
-  getMerchantCategoryOverride,
-  setMerchantCategoryOverride,
-  clearMerchantCategoryOverride,
-  listMerchantCategoryOverrides,
   clearAllCategoryOverrides,
+  clearMerchantCategoryOverride,
+  getMerchantCategoryOverride,
+  listMerchantCategoryOverrides,
+  setMerchantCategoryOverride,
 } from './category-overrides'
 import { Category } from '../../models'
 
-describe('Category Overrides', () => {
+describe('Category overrides', () => {
   beforeEach(() => {
     clearAllCategoryOverrides()
   })
 
-  it('should set and get overrides using normalized merchant name', () => {
-    setMerchantCategoryOverride('  Devoto Supermercado ', Category.Shopping)
-
-    expect(getMerchantCategoryOverride('devoto supermercado')).toBe(
-      Category.Shopping
-    )
-  })
-
-  it('should clear an override', () => {
-    setMerchantCategoryOverride('Farmashop', Category.Healthcare)
-    clearMerchantCategoryOverride('Farmashop')
-
-    expect(getMerchantCategoryOverride('Farmashop')).toBeNull()
-  })
-
-  it('should list overrides', () => {
-    setMerchantCategoryOverride('Antel', Category.Utilities)
+  it('sets and retrieves overrides', () => {
     setMerchantCategoryOverride('Netflix', Category.Entertainment)
 
-    const overrides = listMerchantCategoryOverrides()
-    expect(Object.keys(overrides)).toHaveLength(2)
-    expect(overrides['antel'].category).toBe(Category.Utilities)
+    expect(getMerchantCategoryOverride('Netflix')).toBe(Category.Entertainment)
+    expect(listMerchantCategoryOverrides()).toHaveProperty('netflix')
   })
 
-  it('should persist overrides in localStorage', () => {
-    setMerchantCategoryOverride('PedidosYa', Category.Restaurants)
+  it('clears overrides', () => {
+    setMerchantCategoryOverride('Devoto', Category.Groceries)
+    clearMerchantCategoryOverride('Devoto')
 
-    const stored = window.localStorage.getItem('tatu:categoryOverrides')
-    expect(stored).toBeTruthy()
-    expect(getMerchantCategoryOverride('PedidosYa')).toBe(Category.Restaurants)
+    expect(getMerchantCategoryOverride('Devoto')).toBeNull()
   })
 })

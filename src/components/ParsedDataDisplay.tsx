@@ -1,19 +1,22 @@
 import { useCallback, useState } from 'react'
 import type { ParsedData } from '../models'
-import { Category, CATEGORY_LABELS, getAllCategories } from '../models'
 import {
   applyFilters,
   sortTransactions,
   type FilterOptions,
 } from '../services/filters/filters'
+import { buildSearchSuggestions } from '../services/filters/search'
 import { DashboardOverview } from './DashboardOverview'
 import { ChartsSection } from './ChartsSection'
 import { TransactionList } from './TransactionList'
+import { AdvancedFilters } from './AdvancedFilters'
+import { ExportPanel } from './ExportPanel'
+import { CategoryManagement } from './CategoryManagement'
 
 interface ParsedDataDisplayProps {
   data: ParsedData
   onReset: () => void
-  onCategoryChange: (transactionId: string, category: Category) => void
+  onCategoryChange: (transactionId: string, category: string) => void
 }
 
 export function ParsedDataDisplay({
@@ -22,8 +25,8 @@ export function ParsedDataDisplay({
   onCategoryChange,
 }: ParsedDataDisplayProps) {
   const metadata = data.metadata
-  const categories = getAllCategories()
   const [filters, setFilters] = useState<FilterOptions>({})
+  const [, setCategoryRevision] = useState(0)
   const handlePeriodChange = useCallback(
     ({ dateFrom, dateTo }: { dateFrom?: Date; dateTo?: Date }) =>
       setFilters((current) => ({
@@ -36,6 +39,8 @@ export function ParsedDataDisplay({
 
   const filteredTransactions = applyFilters(data.transactions, filters)
   const sortedTransactions = sortTransactions(filteredTransactions)
+  const searchSuggestions = buildSearchSuggestions(data.transactions)
+  const exportFileName = data.fileName.replace(/\.csv$/i, '') || 'tatu-export'
 
   return (
     <div className="space-y-6">
@@ -75,13 +80,11 @@ export function ParsedDataDisplay({
               Transactions:
             </span>
             <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-              {sortedTransactions.length}
+              <span aria-live="polite">{sortedTransactions.length}</span>
             </span>
           </div>
           <div>
-            <span className="text-gray-500 dark:text-gray-400">
-              Parsed At:
-            </span>
+            <span className="text-gray-500 dark:text-gray-400">Parsed At:</span>
             <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
               {data.parsedAt.toLocaleString()}
             </span>
@@ -179,77 +182,29 @@ export function ParsedDataDisplay({
 
       <ChartsSection transactions={sortedTransactions} />
 
-      {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center">
-          <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-              Search
-            </label>
-            <input
-              type="text"
-              value={filters.query ?? ''}
-              onChange={(event) =>
-                setFilters((current) => ({
-                  ...current,
-                  query: event.target.value || undefined,
-                }))
-              }
-              placeholder="Search description"
-              className="w-full rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700"
-            />
-          </div>
-          <div className="min-w-[180px]">
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-              Category
-            </label>
-            <select
-              value={filters.categories?.[0] ?? ''}
-              onChange={(event) => {
-                const value = event.target.value
-                setFilters((current) => ({
-                  ...current,
-                  categories: value ? [value] : undefined,
-                }))
-              }}
-              className="w-full rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700"
-            >
-              <option value="">All categories</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {CATEGORY_LABELS[category]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="min-w-[140px]">
-            <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-              Currency
-            </label>
-            <select
-              value={filters.currencies?.[0] ?? ''}
-              onChange={(event) => {
-                const value = event.target.value
-                setFilters((current) => ({
-                  ...current,
-                  currencies: value ? [value as 'USD' | 'UYU'] : undefined,
-                }))
-              }}
-              className="w-full rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-800 dark:text-gray-200 focus:border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-200 dark:focus:ring-gray-700"
-            >
-              <option value="">All currencies</option>
-              <option value="USD">USD</option>
-              <option value="UYU">UYU</option>
-            </select>
-          </div>
-        </div>
-      </div>
+      <AdvancedFilters
+        filters={filters}
+        onChange={setFilters}
+        searchSuggestions={searchSuggestions}
+      />
+
+      <ExportPanel
+        allTransactions={data.transactions}
+        filteredTransactions={sortedTransactions}
+        fileName={exportFileName}
+      />
+
+      <CategoryManagement
+        onCategoriesUpdated={() =>
+          setCategoryRevision((current) => current + 1)
+        }
+      />
 
       <TransactionList
         transactions={sortedTransactions}
         onCategoryChange={onCategoryChange}
+        highlightQuery={filters.query}
       />
-
     </div>
   )
 }

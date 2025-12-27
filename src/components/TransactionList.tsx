@@ -1,18 +1,19 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import type { Transaction } from '../models'
-import {
-  Category,
-  CATEGORY_ICONS,
-  CATEGORY_LABELS,
-  getAllCategories,
-} from '../models'
+import { Category } from '../models'
 import { sortTransactions, type SortField } from '../services/filters/filters'
 import { getMerchantCategoryOverride } from '../services/categorizer/category-overrides'
+import { splitHighlight } from '../services/filters/search'
+import {
+  getCategoryDefinition,
+  getCategoryDefinitions,
+} from '../services/categories/category-registry'
 
 interface TransactionListProps {
   transactions: Transaction[]
   pageSize?: number
-  onCategoryChange?: (transactionId: string, category: Category) => void
+  onCategoryChange?: (transactionId: string, category: string) => void
+  highlightQuery?: string
 }
 
 const ROW_HEIGHT = 48
@@ -22,6 +23,7 @@ export function TransactionList({
   transactions,
   pageSize = 10,
   onCategoryChange,
+  highlightQuery,
 }: TransactionListProps) {
   const [page, setPage] = useState(0)
   const [sortField, setSortField] = useState<SortField>('date')
@@ -30,7 +32,7 @@ export function TransactionList({
   const [containerHeight, setContainerHeight] = useState(400)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const categories = getAllCategories()
+  const categories = getCategoryDefinitions()
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -62,9 +64,28 @@ export function TransactionList({
   }, [editingId])
 
   const sorted = useMemo(
-    () => sortTransactions(transactions, { field: sortField, direction: sortDirection }),
+    () =>
+      sortTransactions(transactions, {
+        field: sortField,
+        direction: sortDirection,
+      }),
     [transactions, sortField, sortDirection]
   )
+
+  if (sorted.length === 0) {
+    return (
+      <div className="rounded-2xl bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
+        <div className="px-6 py-10 text-center">
+          <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            No transactions to display
+          </p>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Try adjusting your filters or upload another statement.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize))
   const pageIndex = Math.min(page, totalPages - 1)
@@ -166,10 +187,9 @@ export function TransactionList({
             ) : null}
             {visibleItems.map((tx) => {
               const override = getMerchantCategoryOverride(tx.description)
-              const category =
-                (override ??
-                  (tx.category as Category | undefined) ??
-                  Category.Uncategorized) as Category
+              const categoryId =
+                override ?? tx.category ?? Category.Uncategorized
+              const definition = getCategoryDefinition(categoryId)
               return (
                 <tr
                   key={tx.id}
@@ -180,7 +200,22 @@ export function TransactionList({
                     {tx.date.toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 text-gray-900 dark:text-gray-100">
-                    {tx.description}
+                    {splitHighlight(tx.description, highlightQuery ?? '').map(
+                      (segment, index) =>
+                        segment.isMatch ? (
+                          <mark
+                            key={`${tx.id}-match-${index}`}
+                            className="rounded bg-amber-100 px-1 text-gray-900 dark:bg-amber-400/40 dark:text-gray-100"
+                            data-testid="search-highlight"
+                          >
+                            {segment.text}
+                          </mark>
+                        ) : (
+                          <span key={`${tx.id}-text-${index}`}>
+                            {segment.text}
+                          </span>
+                        )
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     {onCategoryChange ? (
@@ -204,11 +239,16 @@ export function TransactionList({
                             }
                           }}
                           data-testid={`category-pill-${tx.id}`}
+                          aria-haspopup="listbox"
+                          aria-expanded={editingId === tx.id}
                         >
-                          <span>{CATEGORY_ICONS[category] || '❓'}</span>
-                          <span>
-                            {CATEGORY_LABELS[category] || 'Uncategorized'}
-                          </span>
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: definition.color }}
+                            aria-hidden="true"
+                          />
+                          <span>{definition.icon}</span>
+                          <span>{definition.label}</span>
                           <span className="text-gray-500 dark:text-gray-400">
                             ▾
                           </span>
@@ -217,24 +257,31 @@ export function TransactionList({
                           <div
                             className="absolute left-0 top-full z-10 mt-2 w-56 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-lg"
                             data-testid={`category-menu-${tx.id}`}
+                            role="listbox"
+                            aria-label="Select category"
                           >
                             {categories.map((option) => (
                               <button
-                                key={option}
+                                key={option.id}
                                 type="button"
                                 className={`flex w-full items-center gap-2 px-3 py-2 text-xs font-medium ${
-                                  override === option
+                                  override === option.id
                                     ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                                     : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/70'
                                 }`}
                                 onClick={() => {
-                                  onCategoryChange(tx.id, option)
+                                  onCategoryChange(tx.id, option.id)
                                   setEditingId(null)
                                 }}
-                                data-testid={`category-option-${option}-${tx.id}`}
+                                data-testid={`category-option-${option.id}-${tx.id}`}
                               >
-                                <span>{CATEGORY_ICONS[option] || '❓'}</span>
-                                <span>{CATEGORY_LABELS[option]}</span>
+                                <span
+                                  className="h-2 w-2 rounded-full"
+                                  style={{ backgroundColor: option.color }}
+                                  aria-hidden="true"
+                                />
+                                <span>{option.icon}</span>
+                                <span>{option.label}</span>
                               </button>
                             ))}
                           </div>
@@ -242,10 +289,13 @@ export function TransactionList({
                       </div>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
-                        <span>{CATEGORY_ICONS[category] || '❓'}</span>
-                        <span>
-                          {CATEGORY_LABELS[category] || 'Uncategorized'}
-                        </span>
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: definition.color }}
+                          aria-hidden="true"
+                        />
+                        <span>{definition.icon}</span>
+                        <span>{definition.label}</span>
                       </span>
                     )}
                   </td>

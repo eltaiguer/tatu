@@ -1,15 +1,7 @@
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-} from 'recharts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import type { Currency, Transaction } from '../../models'
-import { Category, CATEGORY_LABELS } from '../../models'
 import { buildCategorySpending } from '../../services/charts/chart-data'
-
-const COLORS = ['#111827', '#2563eb', '#16a34a', '#f97316', '#ef4444']
+import { getCategoryDefinition } from '../../services/categories/category-registry'
 
 interface CategorySpendingChartProps {
   transactions: Transaction[]
@@ -20,10 +12,14 @@ export function CategorySpendingChart({
   transactions,
   currency,
 }: CategorySpendingChartProps) {
-  const data = buildCategorySpending(transactions, currency).map((item) => ({
-    ...item,
-    label: CATEGORY_LABELS[item.category as Category] ?? item.category,
-  }))
+  const data = buildCategorySpending(transactions, currency).map((item) => {
+    const definition = getCategoryDefinition(item.category)
+    return {
+      ...item,
+      label: definition.label,
+      color: definition.color,
+    }
+  })
 
   return (
     <div className="h-64 w-full" data-testid="chart-category">
@@ -38,16 +34,11 @@ export function CategorySpendingChart({
             paddingAngle={2}
           >
             {data.map((entry, index) => (
-              <Cell
-                key={`${entry.category}-${index}`}
-                fill={COLORS[index % COLORS.length]}
-              />
+              <Cell key={`${entry.category}-${index}`} fill={entry.color} />
             ))}
           </Pie>
           <Tooltip
-            formatter={(value: number) =>
-              `${value.toFixed(2)} ${currency}`
-            }
+            formatter={(value: number) => `${value.toFixed(2)} ${currency}`}
           />
         </PieChart>
       </ResponsiveContainer>

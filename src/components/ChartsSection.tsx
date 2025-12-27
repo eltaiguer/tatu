@@ -12,6 +12,7 @@ const CURRENCIES: Currency[] = ['USD', 'UYU']
 
 export function ChartsSection({ transactions }: ChartsSectionProps) {
   const [currency, setCurrency] = useState<Currency>('USD')
+  const isEmpty = transactions.length === 0
 
   return (
     <section className="space-y-4">
@@ -35,6 +36,7 @@ export function ChartsSection({ transactions }: ChartsSectionProps) {
                   ? 'bg-gray-900 text-white'
                   : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
               }`}
+              disabled={isEmpty}
             >
               {item}
             </button>
@@ -47,28 +49,46 @@ export function ChartsSection({ transactions }: ChartsSectionProps) {
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
             Spending by Category
           </p>
-          <CategorySpendingChart
-            transactions={transactions}
-            currency={currency}
-          />
+          {isEmpty ? (
+            <div className="flex h-64 items-center justify-center text-xs text-gray-500 dark:text-gray-400">
+              Upload data to see category breakdowns.
+            </div>
+          ) : (
+            <CategorySpendingChart
+              transactions={transactions}
+              currency={currency}
+            />
+          )}
         </div>
         <div className="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-sm">
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
             Monthly Trends
           </p>
-          <MonthlyTrendsChart
-            transactions={transactions}
-            currency={currency}
-          />
+          {isEmpty ? (
+            <div className="flex h-64 items-center justify-center text-xs text-gray-500 dark:text-gray-400">
+              Upload data to see monthly trends.
+            </div>
+          ) : (
+            <MonthlyTrendsChart
+              transactions={transactions}
+              currency={currency}
+            />
+          )}
         </div>
         <div className="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-sm">
           <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
             Income vs Expenses
           </p>
-          <IncomeExpenseChart
-            transactions={transactions}
-            currency={currency}
-          />
+          {isEmpty ? (
+            <div className="flex h-64 items-center justify-center text-xs text-gray-500 dark:text-gray-400">
+              Upload data to compare income and expenses.
+            </div>
+          ) : (
+            <IncomeExpenseChart
+              transactions={transactions}
+              currency={currency}
+            />
+          )}
         </div>
       </div>
     </section>

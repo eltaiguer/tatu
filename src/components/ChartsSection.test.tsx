@@ -34,4 +34,13 @@ describe('ChartsSection', () => {
 
     expect(uyuButton).toBeInTheDocument()
   })
+
+  it('shows empty state messaging when no data', () => {
+    render(<ChartsSection transactions={[]} />)
+
+    expect(
+      screen.getByText('Upload data to see category breakdowns.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'USD' })).toBeDisabled()
+  })
 })

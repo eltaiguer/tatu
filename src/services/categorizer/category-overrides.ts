@@ -1,17 +1,19 @@
-import { Category } from '../../models'
 import { normalizeMerchantName } from './merchant-patterns'
 
 const STORAGE_KEY = 'tatu:categoryOverrides'
 
 interface CategoryOverride {
-  category: Category
+  merchantName?: string
+  category: string
   updatedAt: string
 }
 
 type CategoryOverrides = Record<string, CategoryOverride>
 
 function hasLocalStorage(): boolean {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+  return (
+    typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+  )
 }
 
 function loadOverrides(): CategoryOverrides {
@@ -42,7 +44,7 @@ function saveOverrides(overrides: CategoryOverrides): void {
 
 export function getMerchantCategoryOverride(
   merchantName: string
-): Category | null {
+): string | null {
   const normalized = normalizeMerchantName(merchantName)
   if (!normalized) {
     return null
@@ -54,7 +56,7 @@ export function getMerchantCategoryOverride(
 
 export function setMerchantCategoryOverride(
   merchantName: string,
-  category: Category
+  category: string
 ): void {
   const normalized = normalizeMerchantName(merchantName)
   if (!normalized) {
@@ -64,6 +66,7 @@ export function setMerchantCategoryOverride(
   const overrides = loadOverrides()
   overrides[normalized] = {
     category,
+    merchantName,
     updatedAt: new Date().toISOString(),
   }
   saveOverrides(overrides)
