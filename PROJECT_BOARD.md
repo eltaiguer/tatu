@@ -170,7 +170,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
   - ✅ Implement upload UI with visual feedback
   - ✅ Handle multiple file selection
 
-- [ ] **4.3** Dashboard Overview (TDD)
+- [x] **4.3** Dashboard Overview (TDD) ✅
   - ✅ Write tests for summary cards (total income, expenses, balance)
   - ✅ Write tests for multi-currency display
   - ✅ Implement summary components
@@ -306,7 +306,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - 3.1 - Transaction Store (TDD) ✅
 - 3.2 - Data Aggregation Service (TDD) ✅
 - 3.3 - Filter & Search Engine (TDD) ✅
-**Next Task**: 4.3 - Dashboard Overview (TDD)
+**Next Task**: 4.4 - Charts & Visualizations (TDD)
 
 ---
 
