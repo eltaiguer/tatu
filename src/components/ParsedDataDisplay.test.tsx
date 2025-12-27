@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ParsedDataDisplay } from './ParsedDataDisplay'
 import { Category } from '../models'
@@ -55,9 +55,21 @@ describe('ParsedDataDisplay', () => {
     const user = userEvent.setup()
     const onCategoryChange = vi.fn()
 
+    const now = new Date()
+    const data = {
+      ...sampleData,
+      parsedAt: now,
+      transactions: [
+        {
+          ...sampleData.transactions[0],
+          date: now,
+        },
+      ],
+    }
+
     render(
       <ParsedDataDisplay
-        data={sampleData}
+        data={data}
         onReset={() => undefined}
         onCategoryChange={onCategoryChange}
       />
@@ -75,15 +87,7 @@ describe('ParsedDataDisplay', () => {
       await user.click(option)
     })
 
-    await waitFor(() => {
-      expect(onCategoryChange).toHaveBeenCalledWith(
-        'tx-1',
-        Category.Shopping
-      )
-    })
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('category-menu-tx-1')).toBeNull()
-    })
+    expect(onCategoryChange).toHaveBeenCalledWith('tx-1', Category.Shopping)
+    expect(screen.queryByTestId('category-menu-tx-1')).toBeNull()
   })
 })
