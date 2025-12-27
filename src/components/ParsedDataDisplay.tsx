@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { ParsedData } from '../models'
 import {
   Category,
@@ -7,12 +7,12 @@ import {
   getAllCategories,
 } from '../models/category'
 import { getMerchantCategoryOverride } from '../services/categorizer/category-overrides'
-import { calculateTotals } from '../services/aggregator/aggregation'
 import {
   applyFilters,
   sortTransactions,
   type FilterOptions,
 } from '../services/filters/filters'
+import { DashboardOverview } from './DashboardOverview'
 
 interface ParsedDataDisplayProps {
   data: ParsedData
@@ -29,10 +29,18 @@ export function ParsedDataDisplay({
   const categories = getAllCategories()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [filters, setFilters] = useState<FilterOptions>({})
+  const handlePeriodChange = useCallback(
+    ({ dateFrom, dateTo }: { dateFrom?: Date; dateTo?: Date }) =>
+      setFilters((current) => ({
+        ...current,
+        dateFrom,
+        dateTo,
+      })),
+    []
+  )
 
   const filteredTransactions = applyFilters(data.transactions, filters)
   const sortedTransactions = sortTransactions(filteredTransactions)
-  const totals = calculateTotals(sortedTransactions)
 
   useEffect(() => {
     if (!editingId) {
@@ -191,6 +199,11 @@ export function ParsedDataDisplay({
           )}
         </div>
       </div>
+
+      <DashboardOverview
+        transactions={sortedTransactions}
+        onPeriodChange={handlePeriodChange}
+      />
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
@@ -403,42 +416,6 @@ export function ParsedDataDisplay({
         </div>
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Total Debits
-          </p>
-          <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-2">
-            {totals.expense.USD + totals.expense.UYU > 0
-              ? `${totals.expense.USD.toFixed(2)} USD / ${totals.expense.UYU.toFixed(2)} UYU`
-              : '0.00'}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Total Credits
-          </p>
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-2">
-            {totals.income.USD + totals.income.UYU > 0
-              ? `${totals.income.USD.toFixed(2)} USD / ${totals.income.UYU.toFixed(2)} UYU`
-              : '0.00'}
-          </p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Net</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">
-            {totals.income.USD - totals.expense.USD !== 0 ||
-            totals.income.UYU - totals.expense.UYU !== 0
-              ? `${(totals.income.USD - totals.expense.USD).toFixed(
-                  2
-                )} USD / ${(totals.income.UYU - totals.expense.UYU).toFixed(
-                  2
-                )} UYU`
-              : '0.00'}
-          </p>
-        </div>
-      </div>
     </div>
   )
 }
