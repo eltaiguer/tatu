@@ -176,7 +176,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
   - ✅ Implement summary components
   - ✅ Add period selector (this month, last month, custom range)
 
-- [ ] **4.4** Charts & Visualizations (TDD)
+- [x] **4.4** Charts & Visualizations (TDD) ✅
   - ✅ Write tests for spending by category (pie/donut chart)
   - ✅ Write tests for monthly trends (line/bar chart)
   - ✅ Write tests for income vs expenses comparison
@@ -306,7 +306,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - 3.1 - Transaction Store (TDD) ✅
 - 3.2 - Data Aggregation Service (TDD) ✅
 - 3.3 - Filter & Search Engine (TDD) ✅
-**Next Task**: 4.4 - Charts & Visualizations (TDD)
+**Next Task**: 4.5 - Transaction List View (TDD)
 
 ---
 

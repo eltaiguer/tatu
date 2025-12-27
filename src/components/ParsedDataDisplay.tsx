@@ -13,6 +13,7 @@ import {
   type FilterOptions,
 } from '../services/filters/filters'
 import { DashboardOverview } from './DashboardOverview'
+import { ChartsSection } from './ChartsSection'
 
 interface ParsedDataDisplayProps {
   data: ParsedData
@@ -204,6 +205,8 @@ export function ParsedDataDisplay({
         transactions={sortedTransactions}
         onPeriodChange={handlePeriodChange}
       />
+
+      <ChartsSection transactions={sortedTransactions} />
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm">
