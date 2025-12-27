@@ -26,6 +26,7 @@ export {
   Category,
   CATEGORY_LABELS,
   CATEGORY_ICONS,
+  CATEGORY_COLORS,
   isExpenseCategory,
   isIncomeCategory,
   isTransferCategory,

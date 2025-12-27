@@ -78,6 +78,29 @@ export const CATEGORY_ICONS: Record<Category, string> = {
 }
 
 /**
+ * Color tokens for each category
+ */
+export const CATEGORY_COLORS: Record<Category, string> = {
+  [Category.Groceries]: '#22c55e',
+  [Category.Restaurants]: '#f97316',
+  [Category.Transport]: '#0ea5e9',
+  [Category.Utilities]: '#64748b',
+  [Category.Healthcare]: '#ef4444',
+  [Category.Shopping]: '#ec4899',
+  [Category.Entertainment]: '#f59e0b',
+  [Category.Software]: '#6366f1',
+  [Category.Education]: '#14b8a6',
+  [Category.Automotive]: '#84cc16',
+  [Category.Housing]: '#6b7280',
+  [Category.Personal]: '#f43f5e',
+  [Category.Insurance]: '#10b981',
+  [Category.Income]: '#16a34a',
+  [Category.Transfer]: '#0284c7',
+  [Category.Fees]: '#fb7185',
+  [Category.Uncategorized]: '#94a3b8',
+}
+
+/**
  * Helper to check if a category is an expense
  */
 export function isExpenseCategory(category: Category): boolean {
