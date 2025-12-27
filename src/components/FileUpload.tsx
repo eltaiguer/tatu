@@ -1,11 +1,14 @@
 import { useCallback, useState } from 'react'
 
 interface FileUploadProps {
-  onFileSelect: (file: File) => void
+  onFilesSelect: (files: File[]) => void
 }
 
-export function FileUpload({ onFileSelect }: FileUploadProps) {
+export function FileUpload({ onFilesSelect }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
+  const [isProcessing, setIsProcessing] = useState(false)
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -17,29 +20,63 @@ export function FileUpload({ onFileSelect }: FileUploadProps) {
     setIsDragging(false)
   }, [])
 
+  const handleFiles = useCallback(
+    (files: File[]) => {
+      const csvFiles = files.filter((file) =>
+        file.name.toLowerCase().endsWith('.csv')
+      )
+
+      if (csvFiles.length === 0) {
+        setError('Only CSV files are supported.')
+        return
+      }
+
+      if (csvFiles.length !== files.length) {
+        setError('Only CSV files are supported.')
+        return
+      }
+
+      setError(null)
+      setIsProcessing(true)
+      setProgress(0)
+
+      const reader = new FileReader()
+      reader.onprogress = (event) => {
+        if (event.lengthComputable && event.total > 0) {
+          const next = Math.round((event.loaded / event.total) * 100)
+          setProgress(next)
+        }
+      }
+      reader.onloadend = () => {
+        onFilesSelect(csvFiles)
+        setTimeout(() => {
+          setIsProcessing(false)
+        }, 0)
+      }
+      reader.readAsArrayBuffer(csvFiles[0])
+    },
+    [onFilesSelect]
+  )
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
       setIsDragging(false)
 
       const files = Array.from(e.dataTransfer.files)
-      const csvFile = files.find((f) => f.name.endsWith('.csv'))
-
-      if (csvFile) {
-        onFileSelect(csvFile)
-      }
+      handleFiles(files)
     },
-    [onFileSelect]
+    [handleFiles]
   )
 
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files
-      if (files && files[0]) {
-        onFileSelect(files[0])
+      if (files && files.length > 0) {
+        handleFiles(Array.from(files))
       }
     },
-    [onFileSelect]
+    [handleFiles]
   )
 
   return (
@@ -47,6 +84,7 @@ export function FileUpload({ onFileSelect }: FileUploadProps) {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      data-testid="file-dropzone"
       className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
         isDragging
           ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
@@ -66,9 +104,11 @@ export function FileUpload({ onFileSelect }: FileUploadProps) {
         <input
           type="file"
           accept=".csv"
+          multiple
           onChange={handleFileInput}
           className="hidden"
           id="file-upload"
+          data-testid="file-input"
         />
         <label
           htmlFor="file-upload"
@@ -79,6 +119,14 @@ export function FileUpload({ onFileSelect }: FileUploadProps) {
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-4">
           Supports: Credit Card, USD Account, UYU Account
         </p>
+        {error ? (
+          <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
+        ) : null}
+        {isProcessing ? (
+          <p className="text-xs text-blue-600 dark:text-blue-400">
+            Uploading... {progress}%
+          </p>
+        ) : null}
       </div>
     </div>
   )

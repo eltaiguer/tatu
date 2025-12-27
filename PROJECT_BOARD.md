@@ -163,7 +163,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
   - ✅ Add navigation structure
   - ✅ Test mobile responsiveness
 
-- [ ] **4.2** File Upload Component (TDD)
+- [x] **4.2** File Upload Component (TDD) ✅
   - ✅ Write tests for drag & drop functionality
   - ✅ Write tests for file validation
   - ✅ Write tests for upload progress
@@ -306,7 +306,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - 3.1 - Transaction Store (TDD) ✅
 - 3.2 - Data Aggregation Service (TDD) ✅
 - 3.3 - Filter & Search Engine (TDD) ✅
-**Next Task**: 4.2 - File Upload Component (TDD)
+**Next Task**: 4.3 - Dashboard Overview (TDD)
 
 ---
 
