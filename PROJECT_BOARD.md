@@ -250,21 +250,36 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ---
 
-## 🔥 HEAT 6: Currency & Insights (Future)
-**Goal**: Advanced currency features and financial insights
+## 🔥 HEAT 6: Navigation & Layout Reorg (TDD)
+**Goal**: Fix navigation and reorganize the main layout to reduce visual density
 
 ### Tasks
-- [ ] **6.1** Currency Conversion
+- [ ] **6.1** Navigation link behavior (TDD)
+  - Fix navigation link behavior (scroll/active state)
+  - Add section anchors for main dashboard views
+  - Add tests for navigation behavior
+
+- [ ] **6.2** Layout reorganization (TDD)
+  - Reorganize layout to reduce visual density
+  - Add tests for layout behavior
+
+---
+
+## ❄️ ICEBOX: Heat 7 Currency & Insights
+**Goal**: Advanced currency features and financial insights (deferred)
+
+### Tasks
+- [ ] **7.1** Currency Conversion
   - Exchange rate integration
   - Historical rate lookup
   - Unified currency view
 
-- [ ] **6.2** Budget Tracking
+- [ ] **7.2** Budget Tracking
   - Set category budgets
   - Budget vs actual comparison
   - Alerts for overspending
 
-- [ ] **6.3** Insights & Analytics
+- [ ] **7.3** Insights & Analytics
   - Spending trends and patterns
   - Anomaly detection
   - Recurring transaction detection
@@ -316,7 +331,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - 5.3 - Export Features (TDD) ✅
 - 5.4 - Category Management (TDD) ✅
 - 5.5 - UX Polish ✅
-**Next Task**: 6.1 - Currency Conversion (TDD)
+**Next Task**: 6.1 - Navigation link behavior (TDD)
 
 ---
 
@@ -326,4 +341,5 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - [x] Heat 3: Data Models & State Management ✅
 - [x] Heat 4: Dashboard & Visualizations ✅
 - [x] Heat 5: Advanced Features & Polish ✅
-- [ ] Heat 6: Currency & Insights
+- [ ] Heat 6: Navigation & Layout Reorg
+- [ ] Heat 7: Currency & Insights
