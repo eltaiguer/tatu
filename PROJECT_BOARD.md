@@ -265,21 +265,39 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ---
 
-## ❄️ ICEBOX: Heat 7 Currency & Insights
+## 🔥 HEAT 7: Transactions Focus & Navigation (TDD)
+**Goal**: Prioritize transactions flow, reduce clutter, and improve section routing
+
+### Tasks
+- [ ] **7.1** Transactions section ordering (TDD)
+  - Place transactions section immediately after dashboard
+  - Keep insights/tools grouped after transactions
+
+- [ ] **7.2** Filter visibility toggle (TDD)
+  - Add toggle button to show/hide advanced filters
+  - Default to filters hidden and no filters applied
+
+- [ ] **7.3** Section routing polish (TDD)
+  - Improve section routing or anchors for navigation links
+  - Add tests for routing/section behavior
+
+---
+
+## ❄️ ICEBOX: Heat 8 Currency & Insights
 **Goal**: Advanced currency features and financial insights (deferred)
 
 ### Tasks
-- [ ] **7.1** Currency Conversion
+- [ ] **8.1** Currency Conversion
   - Exchange rate integration
   - Historical rate lookup
   - Unified currency view
 
-- [ ] **7.2** Budget Tracking
+- [ ] **8.2** Budget Tracking
   - Set category budgets
   - Budget vs actual comparison
   - Alerts for overspending
 
-- [ ] **7.3** Insights & Analytics
+- [ ] **8.3** Insights & Analytics
   - Spending trends and patterns
   - Anomaly detection
   - Recurring transaction detection
@@ -311,8 +329,8 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ---
 
-## Current Heat: HEAT 6
-**Status**: COMPLETED ✅
+## Current Heat: HEAT 7
+**Status**: IN PROGRESS 🔥
 **Completed**:
 - 2.1 - Define Category System (TDD) ✅
 - 2.2 - Build Merchant Pattern Matcher (TDD) ✅
@@ -333,7 +351,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - 5.5 - UX Polish ✅
 - 6.1 - Navigation link behavior (TDD) ✅
 - 6.2 - Layout reorganization (TDD) ✅
-**Next Task**: 7.1 - Currency Conversion (Icebox)
+**Next Task**: 7.1 - Transactions section ordering (TDD)
 
 ---
 
@@ -344,4 +362,5 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - [x] Heat 4: Dashboard & Visualizations ✅
 - [x] Heat 5: Advanced Features & Polish ✅
 - [x] Heat 6: Navigation & Layout Reorg ✅
-- [ ] Heat 7: Currency & Insights
+- [ ] Heat 7: Transactions Focus & Navigation
+- [ ] Heat 8: Currency & Insights
