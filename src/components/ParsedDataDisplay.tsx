@@ -28,6 +28,7 @@ export function ParsedDataDisplay({
   const metadata = data.metadata
   const [filters, setFilters] = useState<FilterOptions>({})
   const [, setCategoryRevision] = useState(0)
+  const [showFilters, setShowFilters] = useState(false)
   const [sectionsOpen, setSectionsOpen] = useState(() => ({
     dashboard: true,
     transactions: true,
@@ -231,6 +232,45 @@ export function ParsedDataDisplay({
       </CollapsibleSection>
 
       <CollapsibleSection
+        id="transactions"
+        title="Transactions"
+        subtitle="Filters, search, and the transaction list."
+        isOpen={sectionsOpen.transactions}
+        onToggle={(next) =>
+          setSectionsOpen((current) => ({ ...current, transactions: next }))
+        }
+      >
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+              Filters
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowFilters((current) => !current)}
+              className="rounded-full border border-gray-200 dark:border-gray-700 px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+            >
+              {showFilters ? 'Hide filters' : 'Show filters'}
+            </button>
+          </div>
+
+          {showFilters ? (
+            <AdvancedFilters
+              filters={filters}
+              onChange={setFilters}
+              searchSuggestions={searchSuggestions}
+            />
+          ) : null}
+
+          <TransactionList
+            transactions={sortedTransactions}
+            onCategoryChange={onCategoryChange}
+            highlightQuery={filters.query}
+          />
+        </div>
+      </CollapsibleSection>
+
+      <CollapsibleSection
         id="insights"
         title="Insights"
         subtitle="Charts, exports, and category management."
@@ -252,30 +292,6 @@ export function ParsedDataDisplay({
             onCategoriesUpdated={() =>
               setCategoryRevision((current) => current + 1)
             }
-          />
-        </div>
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        id="transactions"
-        title="Transactions"
-        subtitle="Filters, search, and the transaction list."
-        isOpen={sectionsOpen.transactions}
-        onToggle={(next) =>
-          setSectionsOpen((current) => ({ ...current, transactions: next }))
-        }
-      >
-        <div className="space-y-6">
-          <AdvancedFilters
-            filters={filters}
-            onChange={setFilters}
-            searchSuggestions={searchSuggestions}
-          />
-
-          <TransactionList
-            transactions={sortedTransactions}
-            onCategoryChange={onCategoryChange}
-            highlightQuery={filters.query}
           />
         </div>
       </CollapsibleSection>

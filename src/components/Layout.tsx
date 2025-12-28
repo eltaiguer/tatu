@@ -88,6 +88,7 @@ export function Layout({ title, subtitle, children }: LayoutProps) {
                         : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
                     }`}
                     onClick={handleNavigate(item.id)}
+                    aria-current={activeSection === item.id ? 'page' : undefined}
                   >
                     {item.label}
                   </a>
