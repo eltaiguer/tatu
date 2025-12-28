@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 
 interface LayoutProps {
   title: string
@@ -6,9 +7,51 @@ interface LayoutProps {
   children: ReactNode
 }
 
-const NAV_ITEMS = ['Import', 'Dashboard', 'Transactions', 'Insights']
+const NAV_ITEMS = [
+  { label: 'Import', id: 'import' },
+  { label: 'Dashboard', id: 'dashboard' },
+  { label: 'Transactions', id: 'transactions' },
+  { label: 'Insights', id: 'insights' },
+]
 
 export function Layout({ title, subtitle, children }: LayoutProps) {
+  const [activeSection, setActiveSection] = useState('import')
+
+  useEffect(() => {
+    const updateFromHash = () => {
+      if (typeof window === 'undefined') {
+        return
+      }
+      const hash = window.location.hash.replace('#', '')
+      if (hash) {
+        setActiveSection(hash)
+      }
+    }
+
+    updateFromHash()
+    window.addEventListener('hashchange', updateFromHash)
+    return () => window.removeEventListener('hashchange', updateFromHash)
+  }, [])
+
+  const handleNavigate =
+    (id: string) => (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault()
+
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const target = document.getElementById(id)
+    if (target?.scrollIntoView) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    window.history.replaceState(null, '', `#${id}`)
+    setActiveSection(id)
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
@@ -36,17 +79,18 @@ export function Layout({ title, subtitle, children }: LayoutProps) {
                 data-testid="layout-desktop-nav"
               >
                 {NAV_ITEMS.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
+                  <a
+                    key={item.id}
+                    href={`#${item.id}`}
                     className={`rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
-                      item === 'Import'
+                      activeSection === item.id
                         ? 'bg-gray-900 text-white'
                         : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
                     }`}
+                    onClick={handleNavigate(item.id)}
                   >
-                    {item}
-                  </button>
+                    {item.label}
+                  </a>
                 ))}
               </div>
             </nav>

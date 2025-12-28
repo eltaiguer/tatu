@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { Layout } from './Layout'
 
 describe('Layout', () => {
@@ -22,9 +22,18 @@ describe('Layout', () => {
       </Layout>
     )
 
-    expect(screen.getByText('Import')).toBeInTheDocument()
-    expect(screen.getByText('Dashboard')).toBeInTheDocument()
-    expect(screen.getByText('Transactions')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Import' })).toHaveAttribute(
+      'href',
+      '#import'
+    )
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
+      'href',
+      '#dashboard'
+    )
+    expect(screen.getByRole('link', { name: 'Transactions' })).toHaveAttribute(
+      'href',
+      '#transactions'
+    )
   })
 
   it('uses responsive navigation classes', () => {
@@ -37,5 +46,23 @@ describe('Layout', () => {
     const desktopNav = screen.getByTestId('layout-desktop-nav')
     expect(desktopNav.className).toContain('hidden')
     expect(desktopNav.className).toContain('md:flex')
+  })
+
+  it('scrolls to sections when clicking navigation links', () => {
+    const section = document.createElement('div')
+    section.id = 'dashboard'
+    section.scrollIntoView = vi.fn()
+    document.body.appendChild(section)
+
+    render(
+      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+        <div>Content</div>
+      </Layout>
+    )
+
+    fireEvent.click(screen.getByRole('link', { name: 'Dashboard' }))
+    expect(section.scrollIntoView).toHaveBeenCalled()
+
+    document.body.removeChild(section)
   })
 })

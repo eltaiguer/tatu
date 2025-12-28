@@ -98,7 +98,7 @@ function App() {
             onCategoryChange={handleCategoryChange}
           />
         ) : (
-          <div>
+          <div id="import">
             <FileUpload onFilesSelect={handleFilesSelect} />
 
             {error && (
