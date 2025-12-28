@@ -203,7 +203,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 **Goal**: Add filtering, export, and UX improvements
 
 ### Tasks
-- [ ] **5.1** Advanced Filtering UI (TDD)
+- [x] **5.1** Advanced Filtering UI (TDD) ✅
   - ✅ Write tests for filter panel
   - ✅ Write tests for multi-select category filter
   - ✅ Write tests for date range picker
@@ -212,28 +212,28 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
   - ✅ Add filter chips/tags display
   - ✅ Test filter combinations
 
-- [ ] **5.2** Search Functionality (TDD)
+- [x] **5.2** Search Functionality (TDD) ✅
   - ✅ Write tests for search input
   - ✅ Write tests for search debouncing
   - ✅ Write tests for highlighting search results
   - ✅ Implement search UI
   - ✅ Add search suggestions
 
-- [ ] **5.3** Export Features (TDD)
+- [x] **5.3** Export Features (TDD) ✅
   - ✅ Write tests for CSV export
   - ✅ Write tests for filtered data export
   - ✅ Write tests for PDF report generation
   - ✅ Implement export functionality
   - ✅ Add export options (date range, format)
 
-- [ ] **5.4** Category Management (TDD)
+- [x] **5.4** Category Management (TDD) ✅
   - ✅ Write tests for category editor
   - ✅ Write tests for custom category creation
   - ✅ Write tests for merchant rule management
   - ✅ Implement category settings UI
   - ✅ Add category color customization
 
-- [ ] **5.5** UX Polish
+- [x] **5.5** UX Polish ✅
   - ✅ Add loading states
   - ✅ Add empty states
   - ✅ Add error boundaries
@@ -296,7 +296,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ---
 
-## Current Heat: HEAT 5
+## Current Heat: HEAT 6
 **Status**: IN PROGRESS 🔥
 **Completed**:
 - 2.1 - Define Category System (TDD) ✅
@@ -316,13 +316,13 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - 5.3 - Export Features (TDD) ✅
 - 5.4 - Category Management (TDD) ✅
 - 5.5 - UX Polish ✅
-**Next Task**: 6.1 - Currency Conversion
+**Next Task**: 6.1 - Currency Conversion (TDD)
 
 ---
 
 ## Progress Tracking
 - [x] Heat 1: Foundation & CSV Parser ✅
-- [ ] Heat 2: Category Inference Engine
+- [x] Heat 2: Category Inference Engine ✅
 - [x] Heat 3: Data Models & State Management ✅
 - [x] Heat 4: Dashboard & Visualizations ✅
 - [x] Heat 5: Advanced Features & Polish ✅

@@ -13,7 +13,10 @@ describe('Credit Card Parser - Integration Tests with Real Sample', () => {
     )
     const csvContent = readFileSync(samplePath, 'utf-8')
 
-    const result = parseCreditCardCSV(csvContent, 'CreditCardsMovementsDetail.csv')
+    const result = parseCreditCardCSV(
+      csvContent,
+      'CreditCardsMovementsDetail.csv'
+    )
 
     // Verify basic structure
     expect(result.fileType).toBe('credit_card')
@@ -64,7 +67,10 @@ describe('Credit Card Parser - Integration Tests with Real Sample', () => {
     )
     const csvContent = readFileSync(samplePath, 'utf-8')
 
-    const result = parseCreditCardCSV(csvContent, 'CreditCardsMovementsDetail.csv')
+    const result = parseCreditCardCSV(
+      csvContent,
+      'CreditCardsMovementsDetail.csv'
+    )
 
     // Should not have errors
     expect(result.errors).toBeUndefined()
@@ -89,7 +95,10 @@ describe('Credit Card Parser - Integration Tests with Real Sample', () => {
     )
     const csvContent = readFileSync(samplePath, 'utf-8')
 
-    const result = parseCreditCardCSV(csvContent, 'CreditCardsMovementsDetail.csv')
+    const result = parseCreditCardCSV(
+      csvContent,
+      'CreditCardsMovementsDetail.csv'
+    )
 
     // Find some known merchants from the sample
     const devoto = result.transactions.find((tx) =>

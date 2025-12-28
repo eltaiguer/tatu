@@ -53,7 +53,9 @@ describe('FileUpload', () => {
       dataTransfer: { files: [file] },
     })
 
-    expect(screen.getByText('Only CSV files are supported.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Only CSV files are supported.')
+    ).toBeInTheDocument()
     expect(onFilesSelect).not.toHaveBeenCalled()
   })
 

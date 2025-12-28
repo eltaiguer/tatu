@@ -14,10 +14,7 @@ interface TransactionStoreActions {
     added: Transaction[]
     duplicates: Transaction[]
   }
-  updateTransaction: (
-    id: string,
-    updates: Partial<Transaction>
-  ) => void
+  updateTransaction: (id: string, updates: Partial<Transaction>) => void
   removeTransaction: (id: string) => void
   clearTransactions: () => void
   setTransactions: (transactions: Transaction[]) => void
@@ -36,7 +33,9 @@ interface TransactionStoreOptions {
 }
 
 function hasLocalStorage(): boolean {
-  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+  return (
+    typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+  )
 }
 
 function normalizeTransactions(transactions: Transaction[]): Transaction[] {
@@ -142,27 +141,22 @@ export function createTransactionStore(options: TransactionStoreOptions = {}) {
 
   if (shouldPersist && hasLocalStorage()) {
     return createStore<TransactionStore>()(
-      persist(
-        (set, get) => createTransactionStoreState(set, get),
-        {
-          name: storageKey,
-          storage: createJSONStorage(() => window.localStorage),
-          partialize: (state) => ({ transactions: state.transactions }),
-          merge: (persistedState, currentState) => {
-            const persisted = persistedState as
-              | Partial<TransactionStoreState>
-              | undefined
+      persist((set, get) => createTransactionStoreState(set, get), {
+        name: storageKey,
+        storage: createJSONStorage(() => window.localStorage),
+        partialize: (state) => ({ transactions: state.transactions }),
+        merge: (persistedState, currentState) => {
+          const persisted = persistedState as
+            | Partial<TransactionStoreState>
+            | undefined
 
-            return {
-              ...currentState,
-              ...persisted,
-              transactions: normalizeTransactions(
-                persisted?.transactions ?? []
-              ),
-            }
-          },
-        }
-      )
+          return {
+            ...currentState,
+            ...persisted,
+            transactions: normalizeTransactions(persisted?.transactions ?? []),
+          }
+        },
+      })
     )
   }
 

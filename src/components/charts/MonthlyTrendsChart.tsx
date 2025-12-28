@@ -29,9 +29,7 @@ export function MonthlyTrendsChart({
           <XAxis dataKey="month" />
           <YAxis />
           <Tooltip
-            formatter={(value: number) =>
-              `${value.toFixed(2)} ${currency}`
-            }
+            formatter={(value: number) => `${value.toFixed(2)} ${currency}`}
           />
           <Bar dataKey="income" fill="#16a34a" radius={[6, 6, 0, 0]} />
           <Bar dataKey="expense" fill="#ef4444" radius={[6, 6, 0, 0]} />

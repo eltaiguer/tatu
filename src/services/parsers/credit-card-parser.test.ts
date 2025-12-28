@@ -25,7 +25,10 @@ Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,
 describe('Credit Card Parser', () => {
   describe('parseCreditCardCSV', () => {
     it('should parse valid credit card CSV and return ParsedData', () => {
-      const result = parseCreditCardCSV(sampleCSV, 'CreditCardsMovementsDetail.csv')
+      const result = parseCreditCardCSV(
+        sampleCSV,
+        'CreditCardsMovementsDetail.csv'
+      )
 
       expect(result).toBeDefined()
       expect(result.fileType).toBe('credit_card')
@@ -158,11 +161,15 @@ Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,
       const result = parseCreditCardCSV(sampleCSV, 'test.csv')
 
       // Transaction with only Pesos
-      const uyuTx = result.transactions.find((tx) => tx.description === 'Devoto Supermercado')
+      const uyuTx = result.transactions.find(
+        (tx) => tx.description === 'Devoto Supermercado'
+      )
       expect(uyuTx?.currency).toBe('UYU')
 
       // Transaction with only Dólares
-      const usdTx = result.transactions.find((tx) => tx.description === 'Jetbrains Americas Inc')
+      const usdTx = result.transactions.find(
+        (tx) => tx.description === 'Jetbrains Americas Inc'
+      )
       expect(usdTx?.currency).toBe('USD')
     })
 
@@ -170,7 +177,9 @@ Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,
       const result = parseCreditCardCSV(sampleCSV, 'test.csv')
 
       // Find transactions on 06/11/2025
-      const sameDateTxs = result.transactions.filter((tx) => tx.date.getDate() === 6)
+      const sameDateTxs = result.transactions.filter(
+        (tx) => tx.date.getDate() === 6
+      )
 
       expect(sameDateTxs.length).toBe(2)
       expect(sameDateTxs[0].id).not.toBe(sameDateTxs[1].id)

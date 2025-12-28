@@ -99,21 +99,19 @@ export const groupByMonth = memoizeByReference(
   }
 )
 
-export const groupByDate = memoizeByReference(
-  (transactions: Transaction[]) => {
-    const grouped: Record<string, SummaryTotals> = {}
+export const groupByDate = memoizeByReference((transactions: Transaction[]) => {
+  const grouped: Record<string, SummaryTotals> = {}
 
-    transactions.forEach((tx) => {
-      const key = toDateKey(tx.date)
-      if (!grouped[key]) {
-        grouped[key] = emptySummary()
-      }
-      applyTransaction(grouped[key], tx)
-    })
+  transactions.forEach((tx) => {
+    const key = toDateKey(tx.date)
+    if (!grouped[key]) {
+      grouped[key] = emptySummary()
+    }
+    applyTransaction(grouped[key], tx)
+  })
 
-    return grouped
-  }
-)
+  return grouped
+})
 
 export const calculateTotals = memoizeByReference(
   (transactions: Transaction[]) => {

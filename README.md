@@ -10,8 +10,9 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - Automatic category inference from merchant names
 - CSV import for 3 file types (Credit Card, USD Account, UYU Account)
 - Dashboard with visualizations
-- Transaction filtering and search
-- Export capabilities
+- Advanced filtering and debounced search with highlights
+- Export capabilities (CSV + PDF)
+- Custom categories, colors, and merchant rules
 
 ## Tech Stack
 
@@ -22,6 +23,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - **CSV Parsing**: PapaParse
 - **State Management**: Zustand
 - **Charts**: Recharts
+- **Hosting/Backend (optional)**: Firebase
 
 ## Getting Started
 
@@ -34,6 +36,12 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 ```bash
 npm install
 ```
+
+### Firebase (Optional)
+
+If you want Firebase enabled, copy `.env.example` to `.env` and fill in the
+`VITE_FIREBASE_*` values. The app will only initialize Firebase when required
+variables are present.
 
 ### Development
 
@@ -114,13 +122,12 @@ All commits must have passing tests.
 
 ## Current Status
 
-**Heat 1.1 - COMPLETED ✅**
-- Project structure initialized
-- Testing infrastructure configured
-- All dependencies installed
-- Initial tests passing
+**Heat 5 - COMPLETED ✅**
+- Advanced filtering, search, and export tools
+- Category management with custom rules
+- UX polish and accessibility improvements
 
-**Next**: Heat 1.2 - Create TypeScript interfaces (TDD)
+**Next**: Heat 6 - Currency & Insights
 
 See [PROJECT_BOARD.md](./PROJECT_BOARD.md) for detailed roadmap.
 

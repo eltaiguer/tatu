@@ -195,10 +195,7 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
  * - Removes extra spaces
  */
 export function normalizeMerchantName(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, ' ')
+  return name.toLowerCase().trim().replace(/\s+/g, ' ')
 }
 
 /**

@@ -39,9 +39,7 @@ export function IncomeExpenseChart({
           <XAxis type="number" />
           <YAxis dataKey="name" type="category" width={80} />
           <Tooltip
-            formatter={(value: number) =>
-              `${value.toFixed(2)} ${currency}`
-            }
+            formatter={(value: number) => `${value.toFixed(2)} ${currency}`}
           />
           <Bar dataKey="value" fill="#2563eb" radius={[0, 6, 6, 0]} />
         </BarChart>

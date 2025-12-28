@@ -48,7 +48,10 @@ export interface Transaction {
   balance?: number
 
   /** Reference to the original raw data */
-  rawData: CreditCardTransaction | BankAccountTransaction | Record<string, unknown>
+  rawData:
+    | CreditCardTransaction
+    | BankAccountTransaction
+    | Record<string, unknown>
 }
 
 /**
