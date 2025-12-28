@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ParsedDataDisplay } from './ParsedDataDisplay'
 import { Category } from '../models'
@@ -89,5 +89,23 @@ describe('ParsedDataDisplay', () => {
 
     expect(onCategoryChange).toHaveBeenCalledWith('tx-1', Category.Shopping)
     expect(screen.queryByTestId('category-menu-tx-1')).toBeNull()
+  })
+
+  it('shows filters only after toggling in transactions section', () => {
+    render(
+      <ParsedDataDisplay
+        data={sampleData}
+        onReset={() => undefined}
+        onCategoryChange={() => undefined}
+      />
+    )
+
+    expect(screen.queryByText('Advanced Filtering')).toBeNull()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show filters' })
+    )
+
+    expect(screen.getByText('Advanced Filtering')).toBeInTheDocument()
   })
 })
