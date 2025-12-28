@@ -36,7 +36,9 @@ export function parseSantanderNumber(value: string): number {
  * @returns Date object set to midnight
  */
 export function parseSantanderDate(dateStr: string): Date {
-  const [day, month, year] = dateStr.split('/').map((part) => parseInt(part, 10))
+  const [day, month, year] = dateStr
+    .split('/')
+    .map((part) => parseInt(part, 10))
 
   // Month is 0-indexed in JavaScript Date
   return new Date(year, month - 1, day, 0, 0, 0, 0)

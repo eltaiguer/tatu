@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  applyFilters,
-  sortTransactions,
-  matchesText,
-} from './filters'
+import { applyFilters, sortTransactions, matchesText } from './filters'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
 

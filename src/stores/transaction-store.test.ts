@@ -88,29 +88,25 @@ describe('Transaction Store - Duplicates and Merge', () => {
   })
 
   it('detects duplicate ids against existing transactions', () => {
-    store.getState().setTransactions([
-      makeTransaction('tx-1'),
-      makeTransaction('tx-2'),
-    ])
+    store
+      .getState()
+      .setTransactions([makeTransaction('tx-1'), makeTransaction('tx-2')])
 
-    const duplicates = store.getState().findDuplicateIds([
-      makeTransaction('tx-2'),
-      makeTransaction('tx-3'),
-    ])
+    const duplicates = store
+      .getState()
+      .findDuplicateIds([makeTransaction('tx-2'), makeTransaction('tx-3')])
 
     expect(duplicates).toEqual(['tx-2'])
   })
 
   it('merges new transactions without duplicating existing ones', () => {
-    store.getState().setTransactions([
-      makeTransaction('tx-1'),
-      makeTransaction('tx-2'),
-    ])
+    store
+      .getState()
+      .setTransactions([makeTransaction('tx-1'), makeTransaction('tx-2')])
 
-    const result = store.getState().mergeTransactions([
-      makeTransaction('tx-2'),
-      makeTransaction('tx-3'),
-    ])
+    const result = store
+      .getState()
+      .mergeTransactions([makeTransaction('tx-2'), makeTransaction('tx-3')])
 
     expect(result.duplicates).toHaveLength(1)
     expect(result.added).toHaveLength(1)
