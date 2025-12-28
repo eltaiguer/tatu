@@ -65,4 +65,18 @@ describe('Layout', () => {
 
     document.body.removeChild(section)
   })
+
+  it('marks the active link from the URL hash', () => {
+    window.location.hash = '#transactions'
+
+    render(
+      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+        <div>Content</div>
+      </Layout>
+    )
+
+    expect(
+      screen.getByRole('link', { name: 'Transactions' })
+    ).toHaveAttribute('aria-current', 'page')
+  })
 })
