@@ -5,13 +5,13 @@ import App from './App'
 describe('App', () => {
   it('renders the app title', () => {
     render(<App />)
-    expect(screen.getByText('Tatu - Expense Tracker')).toBeInTheDocument()
+    expect(screen.getByText('Tatú')).toBeInTheDocument()
   })
 
   it('renders the subtitle', () => {
     render(<App />)
     expect(
-      screen.getByText('Santander Uruguay Bank Statement Parser')
+      screen.getByText('Gestor de gastos confiable y moderno')
     ).toBeInTheDocument()
   })
 
