@@ -3,21 +3,21 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { Layout } from './Layout'
 
 describe('Layout', () => {
-  it('renders title, subtitle, and children', () => {
+  it('renders logo, subtitle, and children', () => {
     render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+      <Layout subtitle="Santander Uruguay">
         <div>Content</div>
       </Layout>
     )
 
-    expect(screen.getByText('Tatu - Expense Tracker')).toBeInTheDocument()
+    expect(screen.getByText('Tatú')).toBeInTheDocument()
     expect(screen.getByText('Santander Uruguay')).toBeInTheDocument()
     expect(screen.getByText('Content')).toBeInTheDocument()
   })
 
   it('renders navigation items', () => {
     render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+      <Layout subtitle="Santander Uruguay">
         <div>Content</div>
       </Layout>
     )
@@ -38,7 +38,7 @@ describe('Layout', () => {
 
   it('uses responsive navigation classes', () => {
     render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+      <Layout subtitle="Santander Uruguay">
         <div>Content</div>
       </Layout>
     )
@@ -55,7 +55,7 @@ describe('Layout', () => {
     document.body.appendChild(section)
 
     render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+      <Layout subtitle="Santander Uruguay">
         <div>Content</div>
       </Layout>
     )
@@ -70,7 +70,7 @@ describe('Layout', () => {
     window.location.hash = '#transactions'
 
     render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+      <Layout subtitle="Santander Uruguay">
         <div>Content</div>
       </Layout>
     )

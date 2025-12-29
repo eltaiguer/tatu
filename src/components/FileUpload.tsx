@@ -87,8 +87,8 @@ export function FileUpload({ onFilesSelect }: FileUploadProps) {
       data-testid="file-dropzone"
       className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
         isDragging
-          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-          : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+          ? 'border-brand-primary bg-blue-50 dark:bg-blue-900/20'
+          : 'border-gray-300 dark:border-gray-600 hover:border-brand-primary dark:hover:border-brand-primary'
       }`}
     >
       <div className="space-y-4">
@@ -112,7 +112,7 @@ export function FileUpload({ onFilesSelect }: FileUploadProps) {
         />
         <label
           htmlFor="file-upload"
-          className="inline-block px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer transition-colors"
+          className="inline-block px-4 py-2 bg-brand-primary text-white rounded-md hover:bg-blue-700 cursor-pointer transition-colors"
         >
           Choose File
         </label>

@@ -86,10 +86,10 @@ export function DashboardOverview({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className={`rounded-full px-4 py-2 text-xs font-semibold ${
+            className={`rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
               period === 'this_month'
-                ? 'bg-gray-900 text-white'
-                : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                ? 'bg-brand-primary text-white'
+                : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-brand-primary hover:text-brand-primary'
             }`}
             onClick={() => setPeriod('this_month')}
           >
@@ -97,10 +97,10 @@ export function DashboardOverview({
           </button>
           <button
             type="button"
-            className={`rounded-full px-4 py-2 text-xs font-semibold ${
+            className={`rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
               period === 'last_month'
-                ? 'bg-gray-900 text-white'
-                : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                ? 'bg-brand-primary text-white'
+                : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-brand-primary hover:text-brand-primary'
             }`}
             onClick={() => setPeriod('last_month')}
           >
@@ -108,10 +108,10 @@ export function DashboardOverview({
           </button>
           <button
             type="button"
-            className={`rounded-full px-4 py-2 text-xs font-semibold ${
+            className={`rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
               period === 'custom'
-                ? 'bg-gray-900 text-white'
-                : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                ? 'bg-brand-primary text-white'
+                : 'border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-brand-primary hover:text-brand-primary'
             }`}
             onClick={() => setPeriod('custom')}
           >
