@@ -283,21 +283,37 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ---
 
-## ❄️ ICEBOX: Heat 8 Currency & Insights
+## 🔥 HEAT 8: Production Readiness & Firebase Deploy
+**Goal**: Hardening for production and deploy to Firebase Hosting
+
+### Tasks
+- [x] **8.1** Production readiness checklist ✅
+  - Validate build/lint/test commands
+  - Document environment configuration
+  - Add deploy scripts for Firebase
+
+- [ ] **8.2** Firebase Hosting deployment
+  - Build production bundle
+  - Deploy to Firebase Hosting
+  - Verify production URL
+
+---
+
+## ❄️ ICEBOX: Heat 9 Currency & Insights
 **Goal**: Advanced currency features and financial insights (deferred)
 
 ### Tasks
-- [ ] **8.1** Currency Conversion
+- [ ] **9.1** Currency Conversion
   - Exchange rate integration
   - Historical rate lookup
   - Unified currency view
 
-- [ ] **8.2** Budget Tracking
+- [ ] **9.2** Budget Tracking
   - Set category budgets
   - Budget vs actual comparison
   - Alerts for overspending
 
-- [ ] **8.3** Insights & Analytics
+- [ ] **9.3** Insights & Analytics
   - Spending trends and patterns
   - Anomaly detection
   - Recurring transaction detection
@@ -329,8 +345,8 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ---
 
-## Current Heat: HEAT 7
-**Status**: COMPLETED ✅
+## Current Heat: HEAT 8
+**Status**: IN PROGRESS 🔥
 **Completed**:
 - 2.1 - Define Category System (TDD) ✅
 - 2.2 - Build Merchant Pattern Matcher (TDD) ✅
@@ -354,7 +370,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - 7.1 - Transactions section ordering (TDD) ✅
 - 7.2 - Filter visibility toggle (TDD) ✅
 - 7.3 - Section routing polish (TDD) ✅
-**Next Task**: 8.1 - Currency Conversion (Icebox)
+**Next Task**: 8.1 - Production readiness checklist
 
 ---
 
@@ -366,4 +382,5 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - [x] Heat 5: Advanced Features & Polish ✅
 - [x] Heat 6: Navigation & Layout Reorg ✅
 - [x] Heat 7: Transactions Focus & Navigation ✅
-- [ ] Heat 8: Currency & Insights
+- [ ] Heat 8: Production Readiness & Firebase Deploy
+- [ ] Heat 9: Currency & Insights

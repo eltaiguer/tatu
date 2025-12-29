@@ -75,6 +75,18 @@ npm run build
 npm run preview
 ```
 
+### Deploy (Firebase Hosting)
+
+```bash
+# Build production assets
+npm run build
+
+# Deploy to Firebase Hosting
+npx firebase-tools deploy
+```
+
+Firebase config lives in `.firebaserc` and `firebase.json`.
+
 ## Project Structure
 
 ```
