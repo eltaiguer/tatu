@@ -40,7 +40,10 @@ describe('AdvancedFilters', () => {
     const groceries = screen.getByLabelText('Groceries')
     fireEvent.click(groceries)
 
-    const [next] = handleChange.mock.calls.at(-1) as [FilterOptions]
+    const [next] =
+      handleChange.mock.calls[handleChange.mock.calls.length - 1] as [
+        FilterOptions,
+      ]
     expect(next.categories).toEqual([Category.Groceries])
   })
 
@@ -54,7 +57,10 @@ describe('AdvancedFilters', () => {
       target: { value: '2025-03-31' },
     })
 
-    const [next] = handleChange.mock.calls.at(-1) as [FilterOptions]
+    const [next] =
+      handleChange.mock.calls[handleChange.mock.calls.length - 1] as [
+        FilterOptions,
+      ]
     expect(next.dateFrom?.toISOString()).toBe('2025-03-01T00:00:00.000Z')
     expect(next.dateTo?.toISOString()).toBe('2025-03-31T23:59:59.999Z')
   })
@@ -69,7 +75,10 @@ describe('AdvancedFilters', () => {
       target: { value: '200' },
     })
 
-    const [next] = handleChange.mock.calls.at(-1) as [FilterOptions]
+    const [next] =
+      handleChange.mock.calls[handleChange.mock.calls.length - 1] as [
+        FilterOptions,
+      ]
     expect(next.amountMin).toBe(50)
     expect(next.amountMax).toBe(200)
   })
@@ -87,7 +96,10 @@ describe('AdvancedFilters', () => {
     expect(screen.getByText('Amount: 10 - 100')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Clear all'))
-    const [next] = handleChange.mock.calls.at(-1) as [FilterOptions]
+    const [next] =
+      handleChange.mock.calls[handleChange.mock.calls.length - 1] as [
+        FilterOptions,
+      ]
     expect(next).toEqual({})
   })
 })

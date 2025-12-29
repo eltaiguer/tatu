@@ -70,7 +70,8 @@ describe('DashboardOverview', () => {
     fireEvent.click(screen.getByText('Last month'))
 
     await waitFor(() => {
-      const [range] = onPeriodChange.mock.calls.at(-1) ?? []
+      const [range] =
+        onPeriodChange.mock.calls[onPeriodChange.mock.calls.length - 1] ?? []
       expect(range.dateFrom.toISOString()).toBe('2025-02-01T00:00:00.000Z')
       expect(range.dateTo.toISOString()).toBe('2025-02-28T23:59:59.999Z')
     })
@@ -97,7 +98,8 @@ describe('DashboardOverview', () => {
     fireEvent.change(endInput, { target: { value: '2025-03-20' } })
 
     await waitFor(() => {
-      const [range] = onPeriodChange.mock.calls.at(-1) ?? []
+      const [range] =
+        onPeriodChange.mock.calls[onPeriodChange.mock.calls.length - 1] ?? []
       expect(range.dateFrom.toISOString()).toBe('2025-03-05T00:00:00.000Z')
       expect(range.dateTo.toISOString()).toBe('2025-03-20T23:59:59.999Z')
     })
