@@ -153,7 +153,10 @@ describe('Transaction Store - Persistence', () => {
     window.localStorage.setItem(storageKey, JSON.stringify(stored))
 
     store = createTransactionStore({ persist: true, storageKey })
-    await store.persist.rehydrate()
+    const persisted = store as typeof store & {
+      persist?: { rehydrate: () => Promise<void> }
+    }
+    await persisted.persist?.rehydrate()
 
     expect(store.getState().transactions).toHaveLength(1)
     expect(store.getState().transactions[0].id).toBe('tx-1')

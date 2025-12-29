@@ -11,7 +11,8 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "format": "prettier --write \"src/**/*.{ts,tsx,json,css,md}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,json,css,md}\"",
+    "deploy:firebase": "npm run build && npx firebase-tools deploy"
   },
   "dependencies": {
     "firebase": "^10.7.2",

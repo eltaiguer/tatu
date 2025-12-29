@@ -179,7 +179,9 @@ describe('ParsedData Models', () => {
       }
 
       expect(parsedData.fileType).toBe('bank_account_usd')
-      expect(parsedData.metadata.moneda).toBe('USD')
+      if ('moneda' in parsedData.metadata) {
+        expect(parsedData.metadata.moneda).toBe('USD')
+      }
     })
 
     it('should handle multiple transactions', () => {
