@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { MouseEvent, ReactNode } from 'react'
-import { Logo } from './Logo'
 
 interface LayoutProps {
+  title: string
   subtitle?: string
   children: ReactNode
 }
@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { label: 'Insights', id: 'insights' },
 ]
 
-export function Layout({ subtitle, children }: LayoutProps) {
+export function Layout({ title, subtitle, children }: LayoutProps) {
   const [activeSection, setActiveSection] = useState('import')
 
   useEffect(() => {
@@ -57,10 +57,12 @@ export function Layout({ subtitle, children }: LayoutProps) {
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
         <div className="container mx-auto max-w-7xl px-4 py-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-col gap-2">
-              <Logo size="lg" variant="default" />
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                {title}
+              </h1>
               {subtitle ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                   {subtitle}
                 </p>
               ) : null}
@@ -82,8 +84,8 @@ export function Layout({ subtitle, children }: LayoutProps) {
                     href={`#${item.id}`}
                     className={`rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
                       activeSection === item.id
-                        ? 'bg-brand-primary text-white'
-                        : 'text-gray-600 hover:text-brand-primary dark:text-gray-300 dark:hover:text-white'
+                        ? 'bg-gray-900 text-white'
+                        : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
                     }`}
                     onClick={handleNavigate(item.id)}
                     aria-current={activeSection === item.id ? 'page' : undefined}
