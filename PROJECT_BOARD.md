@@ -370,7 +370,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - 7.1 - Transactions section ordering (TDD) ✅
 - 7.2 - Filter visibility toggle (TDD) ✅
 - 7.3 - Section routing polish (TDD) ✅
-**Next Task**: 8.1 - Production readiness checklist
+**Next Task**: 8.2 - Firebase Hosting deployment
 
 ---
 
