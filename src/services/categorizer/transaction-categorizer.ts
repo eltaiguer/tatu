@@ -40,7 +40,7 @@ export function categorizeTransaction(
   description: string,
   type: TransactionType
 ): {
-  category: Category
+  category: string
   confidence: number
 } {
   const normalized = normalizeMerchantName(description)
