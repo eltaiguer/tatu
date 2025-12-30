@@ -18,21 +18,25 @@ interface ParsedDataDisplayProps {
   data: ParsedData
   onReset: () => void
   onCategoryChange: (transactionId: string, category: string) => void
+  activeSection?: 'dashboard' | 'transactions' | 'insights'
+  showOnlyActiveSection?: boolean
 }
 
 export function ParsedDataDisplay({
   data,
   onReset,
   onCategoryChange,
+  activeSection,
+  showOnlyActiveSection = false,
 }: ParsedDataDisplayProps) {
   const metadata = data.metadata
   const [filters, setFilters] = useState<FilterOptions>({})
   const [, setCategoryRevision] = useState(0)
   const [showFilters, setShowFilters] = useState(false)
   const [sectionsOpen, setSectionsOpen] = useState(() => ({
-    dashboard: true,
-    transactions: true,
-    insights: false,
+    dashboard: !activeSection || activeSection === 'dashboard',
+    transactions: !activeSection || activeSection === 'transactions',
+    insights: !activeSection || activeSection === 'insights',
   }))
   const handlePeriodChange = useCallback(
     ({ dateFrom, dateTo }: { dateFrom?: Date; dateTo?: Date }) =>
@@ -48,32 +52,24 @@ export function ParsedDataDisplay({
   const sortedTransactions = sortTransactions(filteredTransactions)
   const searchSuggestions = buildSearchSuggestions(data.transactions)
   const exportFileName = data.fileName.replace(/\.csv$/i, '') || 'tatu-export'
-  const sectionIds = useMemo(
-    () => ['dashboard', 'transactions', 'insights'],
-    []
-  )
+  const visibleSections = useMemo(() => {
+    const allSections = ['dashboard', 'transactions', 'insights'] as const
+    if (!showOnlyActiveSection || !activeSection) {
+      return allSections
+    }
+    return [activeSection]
+  }, [activeSection, showOnlyActiveSection])
 
   useEffect(() => {
-    const openFromHash = () => {
-      if (typeof window === 'undefined') {
-        return
-      }
-
-      const hash = window.location.hash.replace('#', '')
-      if (!hash || !sectionIds.includes(hash)) {
-        return
-      }
-
-      setSectionsOpen((current) => ({
-        ...current,
-        [hash]: true,
-      }))
+    if (!activeSection) {
+      return
     }
 
-    openFromHash()
-    window.addEventListener('hashchange', openFromHash)
-    return () => window.removeEventListener('hashchange', openFromHash)
-  }, [sectionIds])
+    setSectionsOpen((current) => ({
+      ...current,
+      [activeSection]: true,
+    }))
+  }, [activeSection])
 
   return (
     <div className="space-y-6">
@@ -93,208 +89,213 @@ export function ParsedDataDisplay({
         </button>
       </div>
 
-      {/* File Info */}
-      <CollapsibleSection
-        id="dashboard"
-        title="Dashboard"
-        subtitle="File details, metadata, and period overview."
-        isOpen={sectionsOpen.dashboard}
-        onToggle={(next) =>
-          setSectionsOpen((current) => ({ ...current, dashboard: next }))
-        }
-      >
-        <div className="space-y-6">
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
-              File Information
-            </h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">File:</span>
-                <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                  {data.fileName}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">Type:</span>
-                <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                  {data.fileType.replace(/_/g, ' ').toUpperCase()}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">
-                  Transactions:
-                </span>
-                <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                  <span aria-live="polite">{sortedTransactions.length}</span>
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-gray-400">
-                  Parsed At:
-                </span>
-                <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                  {data.parsedAt.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
-              Account Metadata
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              {'cliente' in metadata && (
+      {visibleSections.includes('dashboard') ? (
+        <CollapsibleSection
+          id="dashboard"
+          title="Dashboard"
+          subtitle="File details, metadata, and period overview."
+          isOpen={sectionsOpen.dashboard}
+          onToggle={(next) =>
+            setSectionsOpen((current) => ({ ...current, dashboard: next }))
+          }
+        >
+          <div className="space-y-6">
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+                File Information
+              </h3>
+              <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-500 dark:text-gray-400">
-                    Client:
-                  </span>
+                  <span className="text-gray-500 dark:text-gray-400">File:</span>
                   <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                    {metadata.cliente}
+                    {data.fileName}
                   </span>
                 </div>
-              )}
-
-              {'numeroTarjeta' in metadata && (
-                <>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">
-                      Card Number:
-                    </span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                      {metadata.numeroTarjeta}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">
-                      Card Alias:
-                    </span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                      {metadata.alias}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">
-                      Statement Period:
-                    </span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                      {metadata.periodoDesde} - {metadata.periodoHasta}
-                    </span>
-                  </div>
-                </>
-              )}
-
-              {'moneda' in metadata && (
-                <>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">
-                      Account:
-                    </span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                      {metadata.cuenta}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">
-                      Number:
-                    </span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                      {metadata.numero}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">
-                      Currency:
-                    </span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                      {metadata.moneda}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 dark:text-gray-400">
-                      Period:
-                    </span>
-                    <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
-                      {metadata.periodoDesde} - {metadata.periodoHasta}
-                    </span>
-                  </div>
-                </>
-              )}
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">Type:</span>
+                  <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                    {data.fileType.replace(/_/g, ' ').toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Transactions:
+                  </span>
+                  <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                    <span aria-live="polite">{sortedTransactions.length}</span>
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Parsed At:
+                  </span>
+                  <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                    {data.parsedAt.toLocaleString()}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <DashboardOverview
-            transactions={sortedTransactions}
-            onPeriodChange={handlePeriodChange}
-          />
-        </div>
-      </CollapsibleSection>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
+                Account Metadata
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                {'cliente' in metadata && (
+                  <div>
+                    <span className="text-gray-500 dark:text-gray-400">
+                      Client:
+                    </span>
+                    <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                      {metadata.cliente}
+                    </span>
+                  </div>
+                )}
 
-      <CollapsibleSection
-        id="transactions"
-        title="Transactions"
-        subtitle="Filters, search, and the transaction list."
-        isOpen={sectionsOpen.transactions}
-        onToggle={(next) =>
-          setSectionsOpen((current) => ({ ...current, transactions: next }))
-        }
-      >
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-              Filters
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowFilters((current) => !current)}
-              className="rounded-full border border-gray-200 dark:border-gray-700 px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-            >
-              {showFilters ? 'Hide filters' : 'Show filters'}
-            </button>
-          </div>
+                {'numeroTarjeta' in metadata && (
+                  <>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Card Number:
+                      </span>
+                      <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                        {metadata.numeroTarjeta}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Card Alias:
+                      </span>
+                      <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                        {metadata.alias}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Statement Period:
+                      </span>
+                      <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                        {metadata.periodoDesde} - {metadata.periodoHasta}
+                      </span>
+                    </div>
+                  </>
+                )}
 
-          {showFilters ? (
-            <AdvancedFilters
-              filters={filters}
-              onChange={setFilters}
-              searchSuggestions={searchSuggestions}
+                {'moneda' in metadata && (
+                  <>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Account:
+                      </span>
+                      <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                        {metadata.cuenta}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Number:
+                      </span>
+                      <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                        {metadata.numero}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Currency:
+                      </span>
+                      <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                        {metadata.moneda}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Period:
+                      </span>
+                      <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+                        {metadata.periodoDesde} - {metadata.periodoHasta}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <DashboardOverview
+              transactions={sortedTransactions}
+              onPeriodChange={handlePeriodChange}
             />
-          ) : null}
+          </div>
+        </CollapsibleSection>
+      ) : null}
 
-          <TransactionList
-            transactions={sortedTransactions}
-            onCategoryChange={onCategoryChange}
-            highlightQuery={filters.query}
-          />
-        </div>
-      </CollapsibleSection>
+      {visibleSections.includes('transactions') ? (
+        <CollapsibleSection
+          id="transactions"
+          title="Transactions"
+          subtitle="Filters, search, and the transaction list."
+          isOpen={sectionsOpen.transactions}
+          onToggle={(next) =>
+            setSectionsOpen((current) => ({ ...current, transactions: next }))
+          }
+        >
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                Filters
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowFilters((current) => !current)}
+                className="rounded-full border border-gray-200 dark:border-gray-700 px-4 py-2 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+              >
+                {showFilters ? 'Hide filters' : 'Show filters'}
+              </button>
+            </div>
 
-      <CollapsibleSection
-        id="insights"
-        title="Insights"
-        subtitle="Charts, exports, and category management."
-        isOpen={sectionsOpen.insights}
-        onToggle={(next) =>
-          setSectionsOpen((current) => ({ ...current, insights: next }))
-        }
-      >
-        <div className="space-y-6">
-          <ChartsSection transactions={sortedTransactions} />
+            {showFilters ? (
+              <AdvancedFilters
+                filters={filters}
+                onChange={setFilters}
+                searchSuggestions={searchSuggestions}
+              />
+            ) : null}
 
-          <ExportPanel
-            allTransactions={data.transactions}
-            filteredTransactions={sortedTransactions}
-            fileName={exportFileName}
-          />
+            <TransactionList
+              transactions={sortedTransactions}
+              onCategoryChange={onCategoryChange}
+              highlightQuery={filters.query}
+            />
+          </div>
+        </CollapsibleSection>
+      ) : null}
 
-          <CategoryManagement
-            onCategoriesUpdated={() =>
-              setCategoryRevision((current) => current + 1)
-            }
-          />
-        </div>
-      </CollapsibleSection>
+      {visibleSections.includes('insights') ? (
+        <CollapsibleSection
+          id="insights"
+          title="Insights"
+          subtitle="Charts, exports, and category management."
+          isOpen={sectionsOpen.insights}
+          onToggle={(next) =>
+            setSectionsOpen((current) => ({ ...current, insights: next }))
+          }
+        >
+          <div className="space-y-6">
+            <ChartsSection transactions={sortedTransactions} />
+
+            <ExportPanel
+              allTransactions={data.transactions}
+              filteredTransactions={sortedTransactions}
+              fileName={exportFileName}
+            />
+
+            <CategoryManagement
+              onCategoriesUpdated={() =>
+                setCategoryRevision((current) => current + 1)
+              }
+            />
+          </div>
+        </CollapsibleSection>
+      ) : null}
     </div>
   )
 }

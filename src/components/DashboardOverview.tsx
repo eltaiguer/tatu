@@ -143,19 +143,19 @@ export function DashboardOverview({
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-sm">
           <p className="text-xs font-semibold text-gray-400">Total Income</p>
-          <p className="mt-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <p className="font-mono mt-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {formatTotals(totals.income.USD, totals.income.UYU)}
           </p>
         </div>
         <div className="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-sm">
           <p className="text-xs font-semibold text-gray-400">Total Expenses</p>
-          <p className="mt-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <p className="font-mono mt-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {formatTotals(totals.expense.USD, totals.expense.UYU)}
           </p>
         </div>
         <div className="rounded-2xl bg-white dark:bg-gray-800 p-5 shadow-sm">
           <p className="text-xs font-semibold text-gray-400">Net</p>
-          <p className="mt-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <p className="font-mono mt-3 text-lg font-semibold text-gray-900 dark:text-gray-100">
             {formatTotals(totals.net.USD, totals.net.UYU)}
           </p>
         </div>

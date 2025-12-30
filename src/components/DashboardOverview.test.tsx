@@ -104,4 +104,33 @@ describe('DashboardOverview', () => {
       expect(range.dateTo.toISOString()).toBe('2025-03-20T23:59:59.999Z')
     })
   })
+
+  it('applies font-mono class to financial amount displays', () => {
+    const transactions = [
+      makeTransaction('tx-1', {
+        amount: 100,
+        type: 'credit',
+        currency: 'USD',
+      }),
+      makeTransaction('tx-2', {
+        amount: 40,
+        type: 'debit',
+        currency: 'USD',
+      }),
+    ]
+
+    const { container } = render(<DashboardOverview transactions={transactions} />)
+
+    // Find the amount paragraphs by looking for elements with both font-mono and the amount text
+    const amountElements = container.querySelectorAll('p.font-mono')
+
+    expect(amountElements.length).toBeGreaterThan(0)
+
+    // Verify at least one of them contains the income amount
+    const incomeElement = Array.from(amountElements).find(el =>
+      el.textContent?.includes('100.00 USD')
+    )
+    expect(incomeElement).toBeDefined()
+    expect(incomeElement?.className).toContain('font-mono')
+  })
 })

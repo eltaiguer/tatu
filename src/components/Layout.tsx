@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { MouseEvent, ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { NavLink } from 'react-router-dom'
 
 interface LayoutProps {
   title: string
@@ -8,57 +8,20 @@ interface LayoutProps {
 }
 
 const NAV_ITEMS = [
-  { label: 'Import', id: 'import' },
-  { label: 'Dashboard', id: 'dashboard' },
-  { label: 'Transactions', id: 'transactions' },
-  { label: 'Insights', id: 'insights' },
+  { label: 'Import', path: '/' },
+  { label: 'Dashboard', path: '/dashboard' },
+  { label: 'Transactions', path: '/transactions' },
+  { label: 'Insights', path: '/insights' },
 ]
 
 export function Layout({ title, subtitle, children }: LayoutProps) {
-  const [activeSection, setActiveSection] = useState('import')
-
-  useEffect(() => {
-    const updateFromHash = () => {
-      if (typeof window === 'undefined') {
-        return
-      }
-      const hash = window.location.hash.replace('#', '')
-      if (hash) {
-        setActiveSection(hash)
-      }
-    }
-
-    updateFromHash()
-    window.addEventListener('hashchange', updateFromHash)
-    return () => window.removeEventListener('hashchange', updateFromHash)
-  }, [])
-
-  const handleNavigate =
-    (id: string) => (event: MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault()
-
-    if (typeof window === 'undefined') {
-      return
-    }
-
-    const target = document.getElementById(id)
-    if (target?.scrollIntoView) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
-
-    window.history.replaceState(null, '', `#${id}`)
-    setActiveSection(id)
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <header className="border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
         <div className="container mx-auto max-w-7xl px-4 py-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+              <h1 className="font-display text-3xl font-bold text-gray-900 dark:text-gray-100">
                 {title}
               </h1>
               {subtitle ? (
@@ -79,19 +42,20 @@ export function Layout({ title, subtitle, children }: LayoutProps) {
                 data-testid="layout-desktop-nav"
               >
                 {NAV_ITEMS.map((item) => (
-                  <a
-                    key={item.id}
-                    href={`#${item.id}`}
-                    className={`rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
-                      activeSection === item.id
-                        ? 'bg-gray-900 text-white'
-                        : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
-                    }`}
-                    onClick={handleNavigate(item.id)}
-                    aria-current={activeSection === item.id ? 'page' : undefined}
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end={item.path === '/'}
+                    className={({ isActive }) =>
+                      `rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
+                        isActive
+                          ? 'bg-gray-900 text-white'
+                          : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
+                      }`
+                    }
                   >
                     {item.label}
-                  </a>
+                  </NavLink>
                 ))}
               </div>
             </nav>

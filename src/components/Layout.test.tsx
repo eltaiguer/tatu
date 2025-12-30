@@ -1,13 +1,16 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { Layout } from './Layout'
 
 describe('Layout', () => {
   it('renders title, subtitle, and children', () => {
     render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
-        <div>Content</div>
-      </Layout>
+      <MemoryRouter>
+        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+          <div>Content</div>
+        </Layout>
+      </MemoryRouter>
     )
 
     expect(screen.getByText('Tatu - Expense Tracker')).toBeInTheDocument()
@@ -17,30 +20,34 @@ describe('Layout', () => {
 
   it('renders navigation items', () => {
     render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
-        <div>Content</div>
-      </Layout>
+      <MemoryRouter>
+        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+          <div>Content</div>
+        </Layout>
+      </MemoryRouter>
     )
 
     expect(screen.getByRole('link', { name: 'Import' })).toHaveAttribute(
       'href',
-      '#import'
+      '/'
     )
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
       'href',
-      '#dashboard'
+      '/dashboard'
     )
     expect(screen.getByRole('link', { name: 'Transactions' })).toHaveAttribute(
       'href',
-      '#transactions'
+      '/transactions'
     )
   })
 
   it('uses responsive navigation classes', () => {
     render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
-        <div>Content</div>
-      </Layout>
+      <MemoryRouter>
+        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+          <div>Content</div>
+        </Layout>
+      </MemoryRouter>
     )
 
     const desktopNav = screen.getByTestId('layout-desktop-nav')
@@ -48,35 +55,30 @@ describe('Layout', () => {
     expect(desktopNav.className).toContain('md:flex')
   })
 
-  it('scrolls to sections when clicking navigation links', () => {
-    const section = document.createElement('div')
-    section.id = 'dashboard'
-    section.scrollIntoView = vi.fn()
-    document.body.appendChild(section)
-
+  it('marks the active link from the current route', () => {
     render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
-        <div>Content</div>
-      </Layout>
-    )
-
-    fireEvent.click(screen.getByRole('link', { name: 'Dashboard' }))
-    expect(section.scrollIntoView).toHaveBeenCalled()
-
-    document.body.removeChild(section)
-  })
-
-  it('marks the active link from the URL hash', () => {
-    window.location.hash = '#transactions'
-
-    render(
-      <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
-        <div>Content</div>
-      </Layout>
+      <MemoryRouter initialEntries={['/transactions']}>
+        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+          <div>Content</div>
+        </Layout>
+      </MemoryRouter>
     )
 
     expect(
       screen.getByRole('link', { name: 'Transactions' })
     ).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('applies font-display class to the title heading', () => {
+    render(
+      <MemoryRouter>
+        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+          <div>Content</div>
+        </Layout>
+      </MemoryRouter>
+    )
+
+    const heading = screen.getByRole('heading', { name: 'Tatu - Expense Tracker', level: 1 })
+    expect(heading.className).toContain('font-display')
   })
 })

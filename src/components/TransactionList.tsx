@@ -196,7 +196,7 @@ export function TransactionList({
                   className="hover:bg-gray-50 dark:hover:bg-gray-700/50 h-12"
                   data-testid="transaction-row"
                 >
-                  <td className="px-6 py-4 whitespace-nowrap text-gray-900 dark:text-gray-100">
+                  <td className="font-mono px-6 py-4 whitespace-nowrap text-gray-900 dark:text-gray-100">
                     {tx.date.toLocaleDateString()}
                   </td>
                   <td className="px-6 py-4 text-gray-900 dark:text-gray-100">
@@ -310,10 +310,10 @@ export function TransactionList({
                       {tx.type}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right font-medium text-gray-900 dark:text-gray-100">
+                  <td className="font-mono px-6 py-4 whitespace-nowrap text-right font-medium text-gray-900 dark:text-gray-100">
                     {tx.amount.toFixed(2)} {tx.currency}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-gray-900 dark:text-gray-100">
+                  <td className="font-mono px-6 py-4 whitespace-nowrap text-right text-gray-900 dark:text-gray-100">
                     {tx.balance !== undefined
                       ? `${tx.balance.toFixed(2)} ${tx.currency}`
                       : '-'}
