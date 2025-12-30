@@ -7,7 +7,20 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Semantic colors (theme-aware, adapt to light/dark mode)
+        background: 'var(--background)',
+        foreground: 'var(--foreground)',
+        card: {
+          DEFAULT: 'var(--card)',
+          foreground: 'var(--card-foreground)',
+        },
+        popover: {
+          DEFAULT: 'var(--popover)',
+          foreground: 'var(--popover-foreground)',
+        },
         primary: {
+          DEFAULT: 'var(--primary)',
+          foreground: 'var(--primary-foreground)',
           50: 'var(--primary-50)',
           100: 'var(--primary-100)',
           200: 'var(--primary-200)',
@@ -19,7 +32,17 @@ export default {
           800: 'var(--primary-800)',
           900: 'var(--primary-900)',
         },
+        secondary: {
+          DEFAULT: 'var(--secondary)',
+          foreground: 'var(--secondary-foreground)',
+        },
+        muted: {
+          DEFAULT: 'var(--muted)',
+          foreground: 'var(--muted-foreground)',
+        },
         accent: {
+          DEFAULT: 'var(--accent)',
+          foreground: 'var(--accent-foreground)',
           50: 'var(--accent-50)',
           100: 'var(--accent-100)',
           200: 'var(--accent-200)',
@@ -30,6 +53,10 @@ export default {
           700: 'var(--accent-700)',
           800: 'var(--accent-800)',
           900: 'var(--accent-900)',
+        },
+        destructive: {
+          DEFAULT: 'var(--destructive)',
+          foreground: 'var(--destructive-foreground)',
         },
         success: {
           50: 'var(--success-50)',
@@ -67,6 +94,9 @@ export default {
           800: 'var(--neutral-800)',
           900: 'var(--neutral-900)',
         },
+        border: 'var(--border)',
+        input: 'var(--input)',
+        ring: 'var(--ring)',
       },
       spacing: {
         1: 'var(--space-1)',

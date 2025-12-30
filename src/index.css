@@ -3,6 +3,7 @@
 @import './styles/colors.css';
 @import './styles/spacing.css';
 @import './styles/layout.css';
+@import './styles/theme.css';
 
 @tailwind base;
 @tailwind components;
