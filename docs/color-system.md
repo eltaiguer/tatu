@@ -120,108 +120,15 @@ Cool gray scale for text and backgrounds.
 </div>
 ```
 
-## Spacing System
-
-Based on a 4px unit (0.25rem) for consistent spacing throughout the application.
-
-```css
---space-1: 0.25rem;   /* 4px */
---space-2: 0.5rem;    /* 8px */
---space-3: 0.75rem;   /* 12px */
---space-4: 1rem;      /* 16px */
---space-5: 1.25rem;   /* 20px */
---space-6: 1.5rem;    /* 24px */
---space-8: 2rem;      /* 32px */
---space-10: 2.5rem;   /* 40px */
---space-12: 3rem;     /* 48px */
---space-16: 4rem;     /* 64px */
---space-20: 5rem;     /* 80px */
-```
-
-**Usage:**
-```tsx
-<div className="p-4 gap-3">      {/* 16px padding, 12px gap */}
-  <div className="mb-6">         {/* 24px bottom margin */}
-    <div className="space-y-2">  {/* 8px vertical spacing */}
-      ...
-    </div>
-  </div>
-</div>
-```
-
-## Border Radius
-
-Consistent border radius scale for rounded corners.
-
-```css
---radius-xs: 0.25rem;   /* 4px - Small elements */
---radius-sm: 0.375rem;  /* 6px - Inputs, small buttons */
---radius-md: 0.5rem;    /* 8px - Default buttons */
---radius-lg: 0.75rem;   /* 12px - Cards */
---radius-xl: 1rem;      /* 16px - Large cards */
---radius-2xl: 1.5rem;   /* 24px - Modals */
---radius-full: 9999px;  /* Pills, avatars */
-```
-
-**Usage:**
-```tsx
-<button className="rounded-md">    {/* 8px radius */}
-  Default Button
-</button>
-
-<div className="rounded-lg">      {/* 12px radius */}
-  Card content
-</div>
-
-<span className="rounded-full">   {/* Fully rounded */}
-  Badge
-</span>
-```
-
-## Shadows
-
-Elevation system using box shadows.
-
-```css
---shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);           /* Subtle lift */
---shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);         /* Default cards */
---shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);       /* Elevated cards */
---shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);       /* Modals */
---shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);    /* Maximum depth */
-```
-
-**Usage:**
-```tsx
-<div className="shadow-sm">       {/* Subtle shadow */}
-  Low elevation
-</div>
-
-<div className="shadow-lg">       {/* Prominent shadow */}
-  High elevation
-</div>
-```
-
 ## Tailwind Integration
 
-All color tokens, spacing, border radius, and shadows are available as Tailwind utilities:
+All color tokens are available as Tailwind utilities:
 
 ```tsx
 // Colors
 className="bg-primary-600 text-white"
 className="border border-neutral-200"
 className="text-success-700"
-
-// Spacing
-className="p-4 mt-6 gap-3"
-className="space-y-4"
-
-// Border Radius
-className="rounded-lg"
-className="rounded-full"
-
-// Shadows
-className="shadow-md"
-className="hover:shadow-lg"
 ```
 
 ## CSS Custom Properties
@@ -232,9 +139,6 @@ All tokens are also available as CSS custom properties for use in custom styles:
 .custom-element {
   background: var(--primary-600);
   color: var(--neutral-50);
-  padding: var(--space-4);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-md);
 }
 ```
 
@@ -264,3 +168,9 @@ The color system is designed to work with Tailwind's dark mode. When implementin
 ## Testing
 
 All color tokens are tested in [src/styles/colors.test.ts](../src/styles/colors.test.ts) to ensure proper definition and availability.
+
+## Related Design Tokens
+
+- [Spacing System](./spacing-system.md) - 4px-based spacing scale
+- [Layout System](./layout-system.md) - Border radius and shadows
+- [Typography System](./typography-system.md) - Fonts and text styles

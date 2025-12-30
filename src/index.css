@@ -1,6 +1,8 @@
 /* Import design system BEFORE Tailwind base */
 @import './styles/typography.css';
 @import './styles/colors.css';
+@import './styles/spacing.css';
+@import './styles/layout.css';
 
 @tailwind base;
 @tailwind components;
