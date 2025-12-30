@@ -21,7 +21,7 @@ export function Layout({ title, subtitle, children }: LayoutProps) {
         <div className="container mx-auto max-w-7xl px-4 py-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+              <h1 className="font-display text-3xl font-bold text-gray-900 dark:text-gray-100">
                 {title}
               </h1>
               {subtitle ? (

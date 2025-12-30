@@ -68,4 +68,17 @@ describe('Layout', () => {
       screen.getByRole('link', { name: 'Transactions' })
     ).toHaveAttribute('aria-current', 'page')
   })
+
+  it('applies font-display class to the title heading', () => {
+    render(
+      <MemoryRouter>
+        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+          <div>Content</div>
+        </Layout>
+      </MemoryRouter>
+    )
+
+    const heading = screen.getByRole('heading', { name: 'Tatu - Expense Tracker', level: 1 })
+    expect(heading.className).toContain('font-display')
+  })
 })
