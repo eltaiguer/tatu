@@ -1,0 +1,22 @@
+/* Chart Colors - Data Visualization Palette */
+/* Adapted from Figma Design System */
+
+:root {
+  /* Light mode chart colors */
+  --chart-1: var(--primary-500);       /* Ocean blue */
+  --chart-2: var(--accent-500);        /* Terracotta */
+  --chart-3: var(--success-500);       /* Mate green */
+  --chart-4: var(--warning-500);       /* Amber */
+  --chart-5: #8b5cf6;                  /* Purple */
+  --chart-6: #ec4899;                  /* Pink */
+}
+
+.dark {
+  /* Dark mode chart colors - lighter shades for better visibility */
+  --chart-1: var(--primary-400);       /* Lighter ocean blue */
+  --chart-2: var(--accent-400);        /* Lighter terracotta */
+  --chart-3: var(--success-400);       /* Lighter mate green */
+  --chart-4: var(--warning-400);       /* Lighter amber */
+  --chart-5: #a78bfa;                  /* Lighter purple */
+  --chart-6: #f472b6;                  /* Lighter pink */
+}

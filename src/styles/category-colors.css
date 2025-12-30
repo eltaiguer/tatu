@@ -1,0 +1,28 @@
+/* Category Colors - Transaction Categories */
+/* Adapted from Figma Design System */
+
+:root {
+  /* Light mode category colors */
+  --category-food: var(--accent-500);          /* Terracotta for food */
+  --category-transport: var(--primary-500);    /* Ocean blue for transport */
+  --category-utilities: var(--warning-500);    /* Amber for utilities */
+  --category-entertainment: #8b5cf6;           /* Purple for entertainment */
+  --category-shopping: #ec4899;                /* Pink for shopping */
+  --category-health: var(--success-500);       /* Mate green for health */
+  --category-education: #06b6d4;               /* Cyan for education */
+  --category-income: var(--success-600);       /* Darker green for income */
+  --category-other: var(--neutral-400);        /* Gray for uncategorized */
+}
+
+.dark {
+  /* Dark mode category colors - adjusted for visibility */
+  --category-food: var(--accent-400);          /* Lighter terracotta */
+  --category-transport: var(--primary-400);    /* Lighter ocean blue */
+  --category-utilities: var(--warning-400);    /* Lighter amber */
+  --category-entertainment: #a78bfa;           /* Lighter purple */
+  --category-shopping: #f472b6;                /* Lighter pink */
+  --category-health: var(--success-400);       /* Lighter mate green */
+  --category-education: #22d3ee;               /* Lighter cyan */
+  --category-income: var(--success-400);       /* Lighter green */
+  --category-other: var(--neutral-500);        /* Lighter gray */
+}

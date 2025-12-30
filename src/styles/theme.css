@@ -1,0 +1,50 @@
+/* Semantic Theme Tokens - Light and Dark Mode Support */
+/* Adapted from Figma Design System */
+
+:root {
+  /* Light mode semantic tokens */
+  --background: var(--neutral-50);
+  --foreground: var(--neutral-900);
+  --card: #ffffff;
+  --card-foreground: var(--neutral-900);
+  --popover: #ffffff;
+  --popover-foreground: var(--neutral-900);
+  --primary: var(--primary-600);
+  --primary-foreground: #ffffff;
+  --secondary: var(--neutral-100);
+  --secondary-foreground: var(--neutral-900);
+  --muted: var(--neutral-100);
+  --muted-foreground: var(--neutral-500);
+  --accent: var(--accent-500);
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: var(--neutral-200);
+  --input: var(--neutral-200);
+  --input-background: #ffffff;
+  --ring: var(--primary-600);
+}
+
+.dark {
+  /* Dark mode semantic tokens */
+  --background: var(--neutral-900);
+  --foreground: var(--neutral-50);
+  --card: var(--neutral-800);
+  --card-foreground: var(--neutral-50);
+  --popover: var(--neutral-800);
+  --popover-foreground: var(--neutral-50);
+  --primary: var(--primary-400);
+  --primary-foreground: var(--neutral-900);
+  --secondary: var(--neutral-800);
+  --secondary-foreground: var(--neutral-50);
+  --muted: var(--neutral-800);
+  --muted-foreground: var(--neutral-400);
+  --accent: var(--accent-400);
+  --accent-foreground: var(--neutral-900);
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: var(--neutral-700);
+  --input: var(--neutral-700);
+  --input-background: var(--neutral-800);
+  --ring: var(--primary-400);
+}
