@@ -108,4 +108,26 @@ describe('ParsedDataDisplay', () => {
 
     expect(screen.getByText('Advanced Filtering')).toBeInTheDocument()
   })
+
+  it('renders only the active section when showOnlyActiveSection is true', () => {
+    render(
+      <ParsedDataDisplay
+        data={sampleData}
+        onReset={() => undefined}
+        onCategoryChange={() => undefined}
+        activeSection="transactions"
+        showOnlyActiveSection
+      />
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Transactions' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Dashboard' })
+    ).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Insights' })
+    ).toBeNull()
+  })
 })
