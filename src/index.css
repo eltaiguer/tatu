@@ -1,5 +1,6 @@
-/* Import typography system BEFORE Tailwind base */
+/* Import design system BEFORE Tailwind base */
 @import './styles/typography.css';
+@import './styles/colors.css';
 
 @tailwind base;
 @tailwind components;
