@@ -4,6 +4,8 @@
 @import './styles/spacing.css';
 @import './styles/layout.css';
 @import './styles/theme.css';
+@import './styles/chart-colors.css';
+@import './styles/category-colors.css';
 
 @tailwind base;
 @tailwind components;

@@ -16,12 +16,21 @@ describe('Layout System', () => {
         --radius-2xl: 1.5rem;
         --radius-full: 9999px;
 
-        /* Shadows */
+        /* Shadows - Light mode */
         --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
         --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
         --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
         --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
         --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+      }
+
+      .dark {
+        /* Shadows - Dark mode */
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.5);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+        --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5);
+        --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.5);
       }
     `
     document.head.appendChild(styleElement)
@@ -45,7 +54,7 @@ describe('Layout System', () => {
     })
   })
 
-  describe('Shadow Scale', () => {
+  describe('Shadow Scale - Light Mode', () => {
     it('should define shadow scale from sm to 2xl', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
@@ -54,6 +63,31 @@ describe('Layout System', () => {
       expect(rootStyle.getPropertyValue('--shadow-lg').trim()).toContain('0 10px 15px')
       expect(rootStyle.getPropertyValue('--shadow-xl').trim()).toContain('0 20px 25px')
       expect(rootStyle.getPropertyValue('--shadow-2xl').trim()).toContain('0 25px 50px')
+    })
+  })
+
+  describe('Shadow Scale - Dark Mode', () => {
+    let darkElement: HTMLDivElement
+
+    beforeEach(() => {
+      darkElement = document.createElement('div')
+      darkElement.className = 'dark'
+      document.body.appendChild(darkElement)
+    })
+
+    afterEach(() => {
+      document.body.removeChild(darkElement)
+    })
+
+    it('should define stronger shadows for dark mode', () => {
+      const darkStyle = getComputedStyle(darkElement)
+
+      // Dark mode shadows should have 0.5 opacity instead of 0.05-0.25
+      expect(darkStyle.getPropertyValue('--shadow-sm').trim()).toContain('0.5')
+      expect(darkStyle.getPropertyValue('--shadow-md').trim()).toContain('0.5')
+      expect(darkStyle.getPropertyValue('--shadow-lg').trim()).toContain('0.5')
+      expect(darkStyle.getPropertyValue('--shadow-xl').trim()).toContain('0.5')
+      expect(darkStyle.getPropertyValue('--shadow-2xl').trim()).toContain('0.5')
     })
   })
 })
