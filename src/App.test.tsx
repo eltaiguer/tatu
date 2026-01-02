@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 
 describe('App', () => {
-  it('renders file upload component on import route', () => {
+  it('renders import page on /import route', () => {
     render(
       <MemoryRouter initialEntries={['/import']}>
         <App />
@@ -16,7 +16,7 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows supported file types information', () => {
+  it('shows supported file types on import page', () => {
     render(
       <MemoryRouter initialEntries={['/import']}>
         <App />
@@ -42,9 +42,9 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
-  it('redirects section routes to import when no data is loaded', () => {
+  it('redirects transactions route to import when no data is loaded', () => {
     render(
-      <MemoryRouter initialEntries={['/dashboard']}>
+      <MemoryRouter initialEntries={['/transactions']}>
         <App />
       </MemoryRouter>
     )
@@ -54,13 +54,14 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders the tools placeholder route', () => {
+  it('renders the tools page', () => {
     render(
       <MemoryRouter initialEntries={['/tools']}>
         <App />
       </MemoryRouter>
     )
 
+    expect(screen.getByRole('heading', { name: 'Herramientas' })).toBeInTheDocument()
     expect(screen.getByText('Coming soon')).toBeInTheDocument()
   })
 })

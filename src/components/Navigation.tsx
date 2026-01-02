@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', path: '/dashboard' },
+  { label: 'Dashboard', path: '/' },
   { label: 'Transacciones', path: '/transactions' },
   { label: 'Insights', path: '/insights' },
   { label: 'Herramientas', path: '/tools' },
@@ -22,6 +22,7 @@ export function Navigation({ className }: NavigationProps) {
         <NavLink
           key={item.path}
           to={item.path}
+          end={item.path === '/'}
           className={({ isActive }) =>
             `rounded-xl px-4 py-2 transition-colors ${
               isActive

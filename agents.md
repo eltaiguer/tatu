@@ -308,6 +308,7 @@ Tests: 78 new tests, all passing
 
 ### Branch Naming
 
+- Always work on a feature branch; do not commit directly to `main`.
 - `main` - Production-ready code
 - `heat-X-feature-name` - Feature branches for each Heat
 - `fix/issue-description` - Bug fixes

@@ -26,13 +26,13 @@ describe('Layout', () => {
       </MemoryRouter>
     )
 
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
+      'href',
+      '/'
+    )
     expect(screen.getByRole('link', { name: 'Importar' })).toHaveAttribute(
       'href',
       '/import'
-    )
-    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
-      'href',
-      '/dashboard'
     )
     expect(
       screen.getByRole('link', { name: 'Transacciones' })
