@@ -10,8 +10,9 @@ describe('App', () => {
         <App />
       </MemoryRouter>
     )
+    expect(screen.getByText('Importar Transacciones')).toBeInTheDocument()
     expect(
-      screen.getByText('Drop your Santander CSV file here')
+      screen.getByText('Arrastrá tu archivo CSV aquí')
     ).toBeInTheDocument()
   })
 
@@ -21,10 +22,12 @@ describe('App', () => {
         <App />
       </MemoryRouter>
     )
-    expect(screen.getByText('Supported File Types')).toBeInTheDocument()
-    expect(screen.getByText(/Credit Card Statements/)).toBeInTheDocument()
-    expect(screen.getByText(/USD Bank Account/)).toBeInTheDocument()
-    expect(screen.getByText(/UYU Bank Account/)).toBeInTheDocument()
+    expect(screen.getByText('Tarjeta de Crédito')).toBeInTheDocument()
+    expect(screen.getByText('Cuenta USD')).toBeInTheDocument()
+    expect(screen.getByText('Cuenta UYU')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Extracto de tarjeta Santander/)
+    ).toBeInTheDocument()
   })
 
   it('redirects section routes to import when no data is loaded', () => {
@@ -35,7 +38,7 @@ describe('App', () => {
     )
 
     expect(
-      screen.getByText('Drop your Santander CSV file here')
+      screen.getByText('Arrastrá tu archivo CSV aquí')
     ).toBeInTheDocument()
   })
 
