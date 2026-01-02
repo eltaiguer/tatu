@@ -28,7 +28,7 @@ describe('Layout', () => {
 
     expect(screen.getByRole('link', { name: 'Importar' })).toHaveAttribute(
       'href',
-      '/'
+      '/import'
     )
     expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute(
       'href',

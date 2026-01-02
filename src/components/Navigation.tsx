@@ -5,7 +5,7 @@ const NAV_ITEMS = [
   { label: 'Transacciones', path: '/transactions' },
   { label: 'Insights', path: '/insights' },
   { label: 'Herramientas', path: '/tools' },
-  { label: 'Importar', path: '/' },
+  { label: 'Importar', path: '/import' },
 ]
 
 interface NavigationProps {
@@ -22,7 +22,6 @@ export function Navigation({ className }: NavigationProps) {
         <NavLink
           key={item.path}
           to={item.path}
-          end={item.path === '/'}
           className={({ isActive }) =>
             `rounded-xl px-4 py-2 transition-colors ${
               isActive

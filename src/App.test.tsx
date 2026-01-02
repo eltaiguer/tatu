@@ -4,9 +4,9 @@ import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 
 describe('App', () => {
-  it('renders file upload component initially', () => {
+  it('renders file upload component on import route', () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/import']}>
         <App />
       </MemoryRouter>
     )
@@ -18,7 +18,7 @@ describe('App', () => {
 
   it('shows supported file types information', () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/import']}>
         <App />
       </MemoryRouter>
     )
@@ -27,6 +27,18 @@ describe('App', () => {
     expect(screen.getByText('Cuenta UYU')).toBeInTheDocument()
     expect(
       screen.getByText(/Extracto de tarjeta Santander/)
+    ).toBeInTheDocument()
+  })
+
+  it('redirects root to import when no data is loaded', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(
+      screen.getByText('Arrastrá tu archivo CSV aquí')
     ).toBeInTheDocument()
   })
 
