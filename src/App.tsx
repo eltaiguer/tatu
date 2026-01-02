@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-do
 import { FileUpload } from './components/FileUpload'
 import { Layout } from './components/Layout'
 import { ParsedDataDisplay } from './components/ParsedDataDisplay'
+import { ToolsPlaceholder } from './components/ToolsPlaceholder'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { parseCSV } from './services/parsers'
 import type { ParsedData } from './models'
@@ -113,10 +114,7 @@ function App() {
   }
 
   return (
-    <Layout
-      title="Tatu - Expense Tracker"
-      subtitle="Santander Uruguay Bank Statement Parser"
-    >
+    <Layout>
       <ErrorBoundary onReset={handleReset}>
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
@@ -212,6 +210,7 @@ function App() {
                 )
               }
             />
+            <Route path="/tools" element={<ToolsPlaceholder />} />
             <Route
               path="/:section(dashboard|transactions|insights)"
               element={

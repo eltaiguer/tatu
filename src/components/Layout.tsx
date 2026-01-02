@@ -1,69 +1,39 @@
 import type { ReactNode } from 'react'
-import { NavLink } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { Palette } from 'lucide-react'
+import { Navigation } from './Navigation'
+import { TatuLogo } from './TatuLogo'
+import { ThemeToggle } from './ThemeToggle'
 
 interface LayoutProps {
-  title: string
-  subtitle?: string
   children: ReactNode
 }
 
-const NAV_ITEMS = [
-  { label: 'Import', path: '/' },
-  { label: 'Dashboard', path: '/dashboard' },
-  { label: 'Transactions', path: '/transactions' },
-  { label: 'Insights', path: '/insights' },
-]
-
-export function Layout({ title, subtitle, children }: LayoutProps) {
+export function Layout({ children }: LayoutProps) {
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
-        <div className="container mx-auto max-w-7xl px-4 py-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="font-display text-3xl font-bold text-gray-900 dark:text-gray-100">
-                {title}
-              </h1>
-              {subtitle ? (
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  {subtitle}
-                </p>
-              ) : null}
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-50 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-700 backdrop-blur-sm">
+        <div className="mx-auto max-w-[1400px] px-8">
+          <div className="flex h-16 items-center justify-between gap-4">
+            <TatuLogo />
+            <Navigation className="hidden md:flex" />
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <Link
+                to="/design-system"
+                className="hidden lg:inline-flex items-center gap-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/30 px-3 py-1.5 text-sm font-medium text-neutral-900 dark:text-neutral-50 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              >
+                <Palette className="h-4 w-4" />
+                Design System
+              </Link>
             </div>
-            <nav className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                className="inline-flex items-center rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-200 md:hidden"
-              >
-                Menu
-              </button>
-              <div
-                className="hidden md:flex items-center gap-2 text-sm"
-                data-testid="layout-desktop-nav"
-              >
-                {NAV_ITEMS.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === '/'}
-                    className={({ isActive }) =>
-                      `rounded-full px-4 py-2 text-xs font-semibold transition-colors ${
-                        isActive
-                          ? 'bg-gray-900 text-white'
-                          : 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'
-                      }`
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            </nav>
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto max-w-7xl px-4 py-8">{children}</main>
+      <main className="mx-auto max-w-[1400px] px-4 sm:px-6 lg:px-8 py-8">
+        {children}
+      </main>
     </div>
   )
 }

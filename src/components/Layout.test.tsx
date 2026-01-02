@@ -4,30 +4,29 @@ import { MemoryRouter } from 'react-router-dom'
 import { Layout } from './Layout'
 
 describe('Layout', () => {
-  it('renders title, subtitle, and children', () => {
+  it('renders logo and children', () => {
     render(
       <MemoryRouter>
-        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+        <Layout>
           <div>Content</div>
         </Layout>
       </MemoryRouter>
     )
 
-    expect(screen.getByText('Tatu - Expense Tracker')).toBeInTheDocument()
-    expect(screen.getByText('Santander Uruguay')).toBeInTheDocument()
+    expect(screen.getByText('Tatú')).toBeInTheDocument()
     expect(screen.getByText('Content')).toBeInTheDocument()
   })
 
   it('renders navigation items', () => {
     render(
       <MemoryRouter>
-        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+        <Layout>
           <div>Content</div>
         </Layout>
       </MemoryRouter>
     )
 
-    expect(screen.getByRole('link', { name: 'Import' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Importar' })).toHaveAttribute(
       'href',
       '/'
     )
@@ -35,22 +34,32 @@ describe('Layout', () => {
       'href',
       '/dashboard'
     )
-    expect(screen.getByRole('link', { name: 'Transactions' })).toHaveAttribute(
+    expect(
+      screen.getByRole('link', { name: 'Transacciones' })
+    ).toHaveAttribute(
       'href',
       '/transactions'
+    )
+    expect(screen.getByRole('link', { name: 'Insights' })).toHaveAttribute(
+      'href',
+      '/insights'
+    )
+    expect(screen.getByRole('link', { name: 'Herramientas' })).toHaveAttribute(
+      'href',
+      '/tools'
     )
   })
 
   it('uses responsive navigation classes', () => {
     render(
       <MemoryRouter>
-        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+        <Layout>
           <div>Content</div>
         </Layout>
       </MemoryRouter>
     )
 
-    const desktopNav = screen.getByTestId('layout-desktop-nav')
+    const desktopNav = screen.getByRole('navigation', { name: 'Main' })
     expect(desktopNav.className).toContain('hidden')
     expect(desktopNav.className).toContain('md:flex')
   })
@@ -58,27 +67,28 @@ describe('Layout', () => {
   it('marks the active link from the current route', () => {
     render(
       <MemoryRouter initialEntries={['/transactions']}>
-        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+        <Layout>
           <div>Content</div>
         </Layout>
       </MemoryRouter>
     )
 
     expect(
-      screen.getByRole('link', { name: 'Transactions' })
+      screen.getByRole('link', { name: 'Transacciones' })
     ).toHaveAttribute('aria-current', 'page')
   })
 
-  it('applies font-display class to the title heading', () => {
+  it('renders the design system link', () => {
     render(
       <MemoryRouter>
-        <Layout title="Tatu - Expense Tracker" subtitle="Santander Uruguay">
+        <Layout>
           <div>Content</div>
         </Layout>
       </MemoryRouter>
     )
 
-    const heading = screen.getByRole('heading', { name: 'Tatu - Expense Tracker', level: 1 })
-    expect(heading.className).toContain('font-display')
+    expect(
+      screen.getByRole('link', { name: 'Design System' })
+    ).toHaveAttribute('href', '/design-system')
   })
 })

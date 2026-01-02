@@ -4,26 +4,6 @@ import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 
 describe('App', () => {
-  it('renders the app title', () => {
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>
-    )
-    expect(screen.getByText('Tatu - Expense Tracker')).toBeInTheDocument()
-  })
-
-  it('renders the subtitle', () => {
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>
-    )
-    expect(
-      screen.getByText('Santander Uruguay Bank Statement Parser')
-    ).toBeInTheDocument()
-  })
-
   it('renders file upload component initially', () => {
     render(
       <MemoryRouter>
@@ -57,5 +37,15 @@ describe('App', () => {
     expect(
       screen.getByText('Drop your Santander CSV file here')
     ).toBeInTheDocument()
+  })
+
+  it('renders the tools placeholder route', () => {
+    render(
+      <MemoryRouter initialEntries={['/tools']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('Coming soon')).toBeInTheDocument()
   })
 })
