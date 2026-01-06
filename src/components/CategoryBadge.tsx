@@ -1,17 +1,17 @@
 // Category Badge with icon for Tatu
 
-import { 
-  Utensils, 
-  Car, 
-  Zap, 
-  Tv, 
-  ShoppingBag, 
-  Heart, 
-  GraduationCap, 
-  TrendingUp, 
-  Ellipsis 
+import {
+  Utensils,
+  Car,
+  Zap,
+  Tv,
+  ShoppingBag,
+  Heart,
+  GraduationCap,
+  TrendingUp,
+  Ellipsis
 } from 'lucide-react';
-import { categories } from '../utils/data';
+import { categories } from '../utils/figma-data';
 
 interface CategoryBadgeProps {
   categoryId: string;
