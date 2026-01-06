@@ -1,5 +1,5 @@
-import { Dashboard } from "../components/Dashboard"
-import { type Transaction } from "../utils/data"
+import { Dashboard } from '../components/Dashboard'
+import type { Transaction } from '../models'
 
 interface DashboardPageProps {
   transactions: Transaction[]

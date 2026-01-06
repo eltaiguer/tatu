@@ -1,0 +1,10 @@
+/* Tatu Brand Typography - Expressive, modern fintech */
+
+/* Primary: Inter for UI and data */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* Display: Space Grotesk for brand moments */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+
+/* Monospace: JetBrains Mono for numbers and data */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');

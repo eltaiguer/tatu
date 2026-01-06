@@ -3,6 +3,12 @@
 
 import { useState, useEffect } from 'react'
 import { TatuLogo } from './components/TatuLogo'
+import { Dashboard } from './components/Dashboard'
+import { Transactions } from './components/Transactions'
+import { Charts } from './components/Charts'
+import { Tools } from './components/Tools'
+import { ImportCSV } from './components/ImportCSV'
+import { Button } from './components/ui/button'
 import {
   Sun,
   Moon,
@@ -14,35 +20,10 @@ import {
   Package,
   ChartBar,
 } from 'lucide-react'
-import { generateSampleTransactions, type Transaction } from './utils/data'
-import { DashboardPage } from './pages/DashboardPage'
-import { TransactionsPage } from './pages/TransactionsPage'
-import { Button } from './components/ui/button'
+import { useStore } from 'zustand'
+import { transactionStore } from './stores/transaction-store'
 
-// App configuration
-const APP_CONFIG = {
-  footer: {
-    email: 'hola@tatu.uy',
-    location: 'Montevideo, Uruguay',
-    github: '#',
-    description: 'Gestión inteligente de gastos para Uruguay. Privado, seguro y fácil de usar.',
-    copyright: '© 2024 Tatú. Hecho con ❤️ en Uruguay.',
-  },
-  links: [
-    { label: 'Cómo funciona', href: '#' },
-    { label: 'Privacidad', href: '#' },
-    { label: 'Términos de uso', href: '#' },
-    { label: 'Soporte', href: '#' },
-  ],
-}
-
-type View =
-  | 'dashboard'
-  | 'transactions'
-  | 'charts'
-  | 'tools'
-  | 'import'
-  | 'design-system'
+type View = 'dashboard' | 'transactions' | 'charts' | 'tools' | 'import'
 
 function App() {
   // Initialize theme from localStorage
@@ -52,13 +33,9 @@ function App() {
   })
   const [currentView, setCurrentView] = useState<View>('dashboard')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [transactions, setTransactions] = useState<Transaction[]>([])
 
-  // Initialize sample data
-  useEffect(() => {
-    const sampleData = generateSampleTransactions(150)
-    setTransactions(sampleData)
-  }, [])
+  // Get transactions from store
+  const transactions = useStore(transactionStore, (state) => state.transactions)
 
   // Handle theme toggle and persist to localStorage
   useEffect(() => {
@@ -89,12 +66,11 @@ function App() {
             <TatuLogo size="md" />
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-1" aria-label="Main navigation">
+            <nav className="hidden md:flex items-center gap-1">
               {navItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setCurrentView(item.id)}
-                  aria-current={currentView === item.id ? 'page' : undefined}
                   className={`px-4 py-2 rounded-lg transition-colors ${
                     currentView === item.id
                       ? 'bg-primary text-primary-foreground'
@@ -114,7 +90,6 @@ function App() {
                 size="sm"
                 onClick={() => setIsDark(!isDark)}
                 className="hidden sm:flex"
-                aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDark ? <Sun size={18} /> : <Moon size={18} />}
               </Button>
@@ -125,8 +100,6 @@ function App() {
                 size="sm"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden"
-                aria-label="Toggle menu"
-                aria-expanded={mobileMenuOpen}
               >
                 {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
               </Button>
@@ -137,7 +110,7 @@ function App() {
         {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-border bg-card">
-            <nav className="px-4 py-4 space-y-1" aria-label="Mobile navigation">
+            <nav className="px-4 py-4 space-y-1">
               {navItems.map((item) => {
                 const Icon = item.icon
                 return (
@@ -147,7 +120,6 @@ function App() {
                       setCurrentView(item.id)
                       setMobileMenuOpen(false)
                     }}
-                    aria-current={currentView === item.id ? 'page' : undefined}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                       currentView === item.id
                         ? 'bg-primary text-primary-foreground'
@@ -162,7 +134,6 @@ function App() {
               <button
                 onClick={() => setIsDark(!isDark)}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               >
                 {isDark ? <Sun size={18} /> : <Moon size={18} />}
                 <span>{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
@@ -174,29 +145,11 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentView === 'dashboard' && <DashboardPage transactions={transactions} />}
-        {currentView === 'transactions' && <TransactionsPage />}
-        {currentView === 'charts' && (
-          <div className="text-center py-12">
-            <ChartPie className="mx-auto mb-4 text-muted-foreground" size={48} />
-            <h2 className="mb-2">Insights</h2>
-            <p className="text-muted-foreground">Esta sección estará disponible próximamente</p>
-          </div>
-        )}
-        {currentView === 'tools' && (
-          <div className="text-center py-12">
-            <Package className="mx-auto mb-4 text-muted-foreground" size={48} />
-            <h2 className="mb-2">Herramientas</h2>
-            <p className="text-muted-foreground">Esta sección estará disponible próximamente</p>
-          </div>
-        )}
-        {currentView === 'import' && (
-          <div className="text-center py-12">
-            <Upload className="mx-auto mb-4 text-muted-foreground" size={48} />
-            <h2 className="mb-2">Importar</h2>
-            <p className="text-muted-foreground">Esta sección estará disponible próximamente</p>
-          </div>
-        )}
+        {currentView === 'dashboard' && <Dashboard transactions={transactions} />}
+        {currentView === 'transactions' && <Transactions transactions={transactions} />}
+        {currentView === 'charts' && <Charts transactions={transactions} />}
+        {currentView === 'tools' && <Tools transactions={transactions} />}
+        {currentView === 'import' && <ImportCSV />}
       </main>
 
       {/* Footer */}
@@ -206,28 +159,42 @@ function App() {
             <div>
               <TatuLogo size="sm" />
               <p className="text-sm text-muted-foreground mt-3">
-                {APP_CONFIG.footer.description}
+                Gestión inteligente de gastos para Uruguay. Privado, seguro y
+                fácil de usar.
               </p>
             </div>
             <div>
               <h4 className="mb-3">Enlaces</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                {APP_CONFIG.links.map((link) => (
-                  <li key={link.label}>
-                    <a href={link.href} className="hover:text-primary transition-colors">
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Cómo funciona
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Privacidad
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Términos de uso
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Soporte
+                  </a>
+                </li>
               </ul>
             </div>
             <div>
               <h4 className="mb-3">Contacto</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>{APP_CONFIG.footer.email}</li>
-                <li>{APP_CONFIG.footer.location}</li>
+                <li>hola@tatu.uy</li>
+                <li>Montevideo, Uruguay</li>
                 <li className="pt-2">
-                  <a href={APP_CONFIG.footer.github} className="text-primary hover:underline">
+                  <a href="#" className="text-primary hover:underline">
                     Ver en GitHub →
                   </a>
                 </li>
@@ -235,7 +202,7 @@ function App() {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>{APP_CONFIG.footer.copyright}</p>
+            <p>© 2024 Tatú. Hecho con ❤️ en Uruguay.</p>
           </div>
         </div>
       </footer>
