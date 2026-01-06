@@ -237,15 +237,6 @@ export function FileUpload({ onFilesSelect }: FileUploadProps) {
           </li>
         </ol>
       </div>
-
-      {/* Privacy Banner */}
-      <div className="border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/10 rounded-2xl p-4">
-        <p className="text-sm text-neutral-900 dark:text-neutral-50">
-          <strong className="font-bold">Tu privacidad es importante:</strong>{' '}
-          Los archivos se procesan localmente en tu navegador. Tatú no envía
-          tus datos financieros a ningún servidor externo.
-        </p>
-      </div>
     </div>
   )
 }

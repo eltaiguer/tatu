@@ -1,24 +1,10 @@
-import type { ParsedData } from '../models'
-import { ParsedDataDisplay } from '../components/ParsedDataDisplay'
+import { Dashboard } from "../components/Dashboard"
+import { type Transaction } from "../utils/data"
 
 interface DashboardPageProps {
-  data: ParsedData
-  onReset: () => void
-  onCategoryChange: (transactionId: string, category: string) => void
+  transactions: Transaction[]
 }
 
-export function DashboardPage({
-  data,
-  onReset,
-  onCategoryChange,
-}: DashboardPageProps) {
-  return (
-    <ParsedDataDisplay
-      data={data}
-      onReset={onReset}
-      onCategoryChange={onCategoryChange}
-      activeSection="dashboard"
-      showOnlyActiveSection
-    />
-  )
+export function DashboardPage({ transactions }: DashboardPageProps) {
+  return <Dashboard transactions={transactions} />
 }
