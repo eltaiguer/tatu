@@ -3,7 +3,8 @@
 import { Card } from './ui/card';
 import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign } from 'lucide-react';
 import type { Transaction, Currency } from '../models';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { filterByPeriod, type Period } from '../utils/date-utils';
 
 // Helper functions
 function formatCurrency(amount: number, currency: Currency): string {
@@ -44,17 +45,22 @@ interface DashboardProps {
 
 export function Dashboard({ transactions }: DashboardProps) {
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | 'all'>('all');
-  const [period, setPeriod] = useState('month');
+  const [period, setPeriod] = useState<Period>('month');
 
-  // Calculate summaries
-  const allSummary = calculateSummary(transactions);
-  const uyuSummary = calculateSummary(transactions, 'UYU');
-  const usdSummary = calculateSummary(transactions, 'USD');
+  // Filter transactions by selected period
+  const filteredTransactions = useMemo(() => {
+    return filterByPeriod(transactions, 'date', period);
+  }, [transactions, period]);
 
-  const summary = selectedCurrency === 'all' 
-    ? allSummary 
-    : selectedCurrency === 'UYU' 
-      ? uyuSummary 
+  // Calculate summaries from filtered transactions
+  const allSummary = useMemo(() => calculateSummary(filteredTransactions), [filteredTransactions]);
+  const uyuSummary = useMemo(() => calculateSummary(filteredTransactions, 'UYU'), [filteredTransactions]);
+  const usdSummary = useMemo(() => calculateSummary(filteredTransactions, 'USD'), [filteredTransactions]);
+
+  const summary = selectedCurrency === 'all'
+    ? allSummary
+    : selectedCurrency === 'UYU'
+      ? uyuSummary
       : usdSummary;
 
 
@@ -78,10 +84,10 @@ export function Dashboard({ transactions }: DashboardProps) {
         
         <div className="flex gap-3">
           {/* Period Selector */}
-          <select 
+          <select
             className="px-4 py-2 rounded-lg border border-input bg-input-background"
             value={period}
-            onChange={(e) => setPeriod(e.target.value)}
+            onChange={(e) => setPeriod(e.target.value as Period)}
           >
             <option value="week">Esta semana</option>
             <option value="month">Este mes</option>
