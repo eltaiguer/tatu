@@ -145,8 +145,12 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {currentView === 'dashboard' && <Dashboard transactions={transactions} />}
-        {currentView === 'transactions' && <Transactions transactions={transactions} />}
+        {currentView === 'dashboard' && (
+          <Dashboard transactions={transactions} />
+        )}
+        {currentView === 'transactions' && (
+          <Transactions transactions={transactions} />
+        )}
         {currentView === 'charts' && <Charts transactions={transactions} />}
         {currentView === 'tools' && <Tools transactions={transactions} />}
         {currentView === 'import' && <ImportCSV />}
@@ -202,7 +206,7 @@ function App() {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>© 2024 Tatú. Hecho con ❤️ en Uruguay.</p>
+            <p>© 2025 Tatú. Hecho con ❤️ en Uruguay.</p>
           </div>
         </div>
       </footer>

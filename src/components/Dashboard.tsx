@@ -4,7 +4,7 @@ import { Card } from './ui/card';
 import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign } from 'lucide-react';
 import type { Transaction, Currency } from '../models';
 import { useState, useMemo } from 'react';
-import { filterByPeriod, type Period } from '../utils/date-utils';
+import { filterByPeriod, generatePeriodOptions } from '../utils/date-utils';
 
 // Helper functions
 function formatCurrency(amount: number, currency: Currency): string {
@@ -45,12 +45,24 @@ interface DashboardProps {
 
 export function Dashboard({ transactions }: DashboardProps) {
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | 'all'>('all');
-  const [period, setPeriod] = useState<Period>('month');
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('all');
+
+  // Generate dynamic period options based on transaction dates
+  const periodOptions = useMemo(() => {
+    const dates = transactions.map(t => t.date);
+    return generatePeriodOptions(dates);
+  }, [transactions]);
+
+  // Find the selected period option
+  const selectedPeriod = useMemo(() => {
+    return periodOptions.find(p => p.id === selectedPeriodId) || periodOptions[0];
+  }, [periodOptions, selectedPeriodId]);
 
   // Filter transactions by selected period
   const filteredTransactions = useMemo(() => {
-    return filterByPeriod(transactions, 'date', period);
-  }, [transactions, period]);
+    if (!selectedPeriod) return transactions;
+    return filterByPeriod(transactions, 'date', selectedPeriod.period, selectedPeriod.referenceDate);
+  }, [transactions, selectedPeriod]);
 
   // Calculate summaries from filtered transactions
   const allSummary = useMemo(() => calculateSummary(filteredTransactions), [filteredTransactions]);
@@ -86,13 +98,14 @@ export function Dashboard({ transactions }: DashboardProps) {
           {/* Period Selector */}
           <select
             className="px-4 py-2 rounded-lg border border-input bg-input-background"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as Period)}
+            value={selectedPeriodId}
+            onChange={(e) => setSelectedPeriodId(e.target.value)}
           >
-            <option value="week">Esta semana</option>
-            <option value="month">Este mes</option>
-            <option value="quarter">Trimestre</option>
-            <option value="year">Año 2024</option>
+            {periodOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
           </select>
 
           {/* Currency Filter */}
