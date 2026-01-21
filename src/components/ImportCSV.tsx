@@ -4,14 +4,23 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react';
 import { useState } from 'react';
+import { parseCSV } from '../services/parsers/csv-parser';
+import { transactionStore } from '../stores/transaction-store';
+import type { ParsedData } from '../models';
 
 type ImportState = 'idle' | 'validating' | 'success' | 'error';
 
-export function ImportCSV() {
+interface ImportCSVProps {
+  onImportComplete?: () => void;
+}
+
+export function ImportCSV({ onImportComplete }: ImportCSVProps) {
   const [importState, setImportState] = useState<ImportState>('idle');
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string>('');
   const [fileType, setFileType] = useState<'credit_card' | 'usd_account' | 'uyu_account' | null>(null);
+  const [parsedData, setParsedData] = useState<ParsedData | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -37,24 +46,41 @@ export function ImportCSV() {
     if (!file.name.endsWith('.csv')) {
       setImportState('error');
       setFileName(file.name);
+      setErrorMessage('El archivo debe estar en formato CSV');
       return;
     }
 
     setFileName(file.name);
     setImportState('validating');
+    setErrorMessage('');
 
-    // Simulate file processing
-    setTimeout(() => {
-      // Detect file type based on name
-      if (file.name.toLowerCase().includes('credit') || file.name.toLowerCase().includes('tarjeta')) {
-        setFileType('credit_card');
-      } else if (file.name.toLowerCase().includes('usd') || file.name.toLowerCase().includes('dolar')) {
-        setFileType('usd_account');
-      } else {
-        setFileType('uyu_account');
+    // Read and parse file content
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const csvContent = e.target?.result as string;
+        const result = parseCSV(csvContent, file.name);
+        setParsedData(result);
+
+        // Map file type to UI type
+        if (result.fileType === 'credit_card') {
+          setFileType('credit_card');
+        } else if (result.fileType === 'bank_account_usd') {
+          setFileType('usd_account');
+        } else {
+          setFileType('uyu_account');
+        }
+        setImportState('success');
+      } catch (error) {
+        setImportState('error');
+        setErrorMessage(error instanceof Error ? error.message : 'Error al procesar el archivo');
       }
-      setImportState('success');
-    }, 2000);
+    };
+    reader.onerror = () => {
+      setImportState('error');
+      setErrorMessage('Error al leer el archivo');
+    };
+    reader.readAsText(file);
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,6 +93,22 @@ export function ImportCSV() {
     setImportState('idle');
     setFileName('');
     setFileType(null);
+    setParsedData(null);
+    setErrorMessage('');
+  };
+
+  const processImport = () => {
+    if (!parsedData) return;
+
+    transactionStore.getState().addTransactions(parsedData.transactions);
+
+    // Reset state after successful import
+    resetImport();
+
+    // Navigate to transactions view if callback provided
+    if (onImportComplete) {
+      onImportComplete();
+    }
   };
 
   const getAccountTypeLabel = (type: string) => {
@@ -160,8 +202,8 @@ export function ImportCSV() {
                 <Button onClick={resetImport} variant="outline">
                   Importar otro archivo
                 </Button>
-                <Button>
-                  Procesar 145 transacciones
+                <Button onClick={processImport}>
+                  Procesar {parsedData?.transactions.length ?? 0} transacciones
                 </Button>
               </div>
             </div>
@@ -178,7 +220,7 @@ export function ImportCSV() {
                 <p className="font-medium mb-1">Error al validar archivo</p>
                 <p className="text-sm text-muted-foreground mb-2">{fileName}</p>
                 <p className="text-sm text-destructive">
-                  El archivo debe estar en formato CSV
+                  {errorMessage || 'El archivo debe estar en formato CSV'}
                 </p>
               </div>
               <Button onClick={resetImport}>

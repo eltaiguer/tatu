@@ -153,7 +153,7 @@ function App() {
         )}
         {currentView === 'charts' && <Charts transactions={transactions} />}
         {currentView === 'tools' && <Tools transactions={transactions} />}
-        {currentView === 'import' && <ImportCSV />}
+        {currentView === 'import' && <ImportCSV onImportComplete={() => setCurrentView('transactions')} />}
       </main>
 
       {/* Footer */}
