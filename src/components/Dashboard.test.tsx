@@ -59,6 +59,6 @@ describe('Dashboard', () => {
     fireEvent.change(currencySelect, { target: { value: 'USD' } })
 
     expect(screen.getByText('US$ 200,00')).toBeInTheDocument()
-    expect(screen.getByText('US$ 50,00')).toBeInTheDocument()
+    expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
   })
 })

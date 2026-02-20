@@ -8,10 +8,16 @@ import {
   ShoppingBag,
   Heart,
   GraduationCap,
+  Laptop,
+  Home,
+  UserRound,
+  Shield,
+  ArrowLeftRight,
+  Receipt,
   TrendingUp,
   Ellipsis
 } from 'lucide-react';
-import { categories } from '../utils/figma-data';
+import { getCategoryDisplay } from '../utils/category-display';
 
 interface CategoryBadgeProps {
   categoryId: string;
@@ -20,22 +26,29 @@ interface CategoryBadgeProps {
 }
 
 const iconMap = {
-  food: Utensils,
+  groceries: Utensils,
+  restaurants: Utensils,
   transport: Car,
+  transfer: ArrowLeftRight,
   utilities: Zap,
   entertainment: Tv,
   shopping: ShoppingBag,
-  health: Heart,
+  healthcare: Heart,
   education: GraduationCap,
+  software: Laptop,
+  automotive: Car,
+  housing: Home,
+  personal: UserRound,
+  insurance: Shield,
+  fees: Receipt,
+  uncategorized: Ellipsis,
   income: TrendingUp,
-  other: Ellipsis,
 };
 
 export function CategoryBadge({ categoryId, showIcon = true, size = 'md' }: CategoryBadgeProps) {
-  const category = categories.find(c => c.id === categoryId);
-  if (!category) return null;
+  const category = getCategoryDisplay(categoryId);
 
-  const Icon = iconMap[categoryId as keyof typeof iconMap];
+  const Icon = iconMap[category.icon];
   const iconSize = size === 'sm' ? 12 : 14;
   const padding = size === 'sm' ? 'px-2 py-0.5' : 'px-2.5 py-1';
   const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
@@ -49,7 +62,7 @@ export function CategoryBadge({ categoryId, showIcon = true, size = 'md' }: Cate
       }}
     >
       {showIcon && Icon && <Icon size={iconSize} />}
-      <span>{category.name}</span>
+      <span>{category.label}</span>
     </span>
   );
 }

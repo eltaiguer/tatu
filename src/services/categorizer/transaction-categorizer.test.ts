@@ -39,6 +39,34 @@ describe('Transaction Categorizer', () => {
     expect(result.category).toBe(Category.Transfer)
   })
 
+  it('should categorize incoming supernet credits as transfers', () => {
+    const result = categorizeTransaction(
+      'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE',
+      'credit'
+    )
+
+    expect(result.category).toBe(Category.Transfer)
+    expect(result.confidence).toBeGreaterThanOrEqual(0.85)
+  })
+
+  it('should categorize cash withdrawals as transfers', () => {
+    const result = categorizeTransaction(
+      'RETIRO CORRESPONSALES MONTEVIDEO',
+      'debit'
+    )
+
+    expect(result.category).toBe(Category.Transfer)
+  })
+
+  it('should categorize instant received transfers as transfers', () => {
+    const result = categorizeTransaction(
+      'TRANSF INSTANTANEA RECIBIDA 644388LR',
+      'credit'
+    )
+
+    expect(result.category).toBe(Category.Transfer)
+  })
+
   it('should categorize income when credit matches income keywords', () => {
     const result = categorizeTransaction(
       'CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL',

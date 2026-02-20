@@ -7,7 +7,9 @@ import { CategoryBadge } from './CategoryBadge';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { Search, ArrowUpDown, Pencil, CreditCard, Wallet } from 'lucide-react';
 import type { Transaction, Currency } from '../models';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import { Category } from '../models';
+import { useEffect } from 'react';
 
 // Helper functions
 function formatCurrency(amount: number, currency: Currency): string {
@@ -207,7 +209,10 @@ export function Transactions({ transactions }: TransactionsProps) {
                     </div>
                   </td>
                   <td className="p-4">
-                    <CategoryBadge categoryId={transaction.category || 'other'} size="sm" />
+                    <CategoryBadge
+                      categoryId={transaction.category || Category.Uncategorized}
+                      size="sm"
+                    />
                   </td>
                   <td className="p-4">
                     <ConfidenceBadge
@@ -275,7 +280,10 @@ export function Transactions({ transactions }: TransactionsProps) {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                <CategoryBadge categoryId={transaction.category || 'other'} size="sm" />
+                <CategoryBadge
+                  categoryId={transaction.category || Category.Uncategorized}
+                  size="sm"
+                />
                 <ConfidenceBadge
                   confidence={transaction.categoryConfidence || 0}
                   manualOverride={false}
