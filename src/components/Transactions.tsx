@@ -7,7 +7,7 @@ import { CategoryBadge } from './CategoryBadge';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { Search, ArrowUpDown, Pencil, CreditCard, Wallet } from 'lucide-react';
 import type { Transaction, Currency } from '../models';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 // Helper functions
 function formatCurrency(amount: number, currency: Currency): string {
@@ -45,28 +45,29 @@ export function Transactions({ transactions }: TransactionsProps) {
 
   // Filter and sort transactions
   const filteredTransactions = useMemo(() => {
-    let filtered = transactions.filter(t =>
+    const filtered = transactions.filter(t =>
       t.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     // Sort
     filtered.sort((a, b) => {
-      let compareA: any = a[sortField];
-      let compareB: any = b[sortField];
+      const direction = sortDirection === 'asc' ? 1 : -1;
 
       if (sortField === 'date') {
-        compareA = a.date.getTime();
-        compareB = b.date.getTime();
-      } else if (sortField === 'amount') {
-        compareA = Math.abs(a.amount);
-        compareB = Math.abs(b.amount);
+        return (a.date.getTime() - b.date.getTime()) * direction;
       }
 
-      if (sortDirection === 'asc') {
-        return compareA > compareB ? 1 : -1;
-      } else {
-        return compareA < compareB ? 1 : -1;
+      if (sortField === 'amount') {
+        return (Math.abs(a.amount) - Math.abs(b.amount)) * direction;
       }
+
+      if (sortField === 'description') {
+        return a.description.localeCompare(b.description, 'es') * direction;
+      }
+
+      const aCategory = a.category ?? '';
+      const bCategory = b.category ?? '';
+      return aCategory.localeCompare(bCategory, 'es') * direction;
     });
 
     return filtered;
@@ -74,6 +75,12 @@ export function Transactions({ transactions }: TransactionsProps) {
 
   // Pagination
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+  const safeTotalPages = Math.max(1, totalPages);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, safeTotalPages));
+  }, [safeTotalPages]);
+
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedTransactions = filteredTransactions.slice(startIndex, startIndex + itemsPerPage);
 
@@ -170,6 +177,15 @@ export function Transactions({ transactions }: TransactionsProps) {
               </tr>
             </thead>
             <tbody>
+              {paginatedTransactions.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    {searchTerm
+                      ? 'No hay transacciones que coincidan con la búsqueda'
+                      : 'No hay transacciones para mostrar'}
+                  </td>
+                </tr>
+              )}
               {paginatedTransactions.map((transaction) => (
                 <tr 
                   key={transaction.id}
@@ -230,6 +246,13 @@ export function Transactions({ transactions }: TransactionsProps) {
 
         {/* Mobile View */}
         <div className="md:hidden divide-y divide-border">
+          {paginatedTransactions.length === 0 && (
+            <div className="p-6 text-center text-sm text-muted-foreground">
+              {searchTerm
+                ? 'No hay transacciones que coincidan con la búsqueda'
+                : 'No hay transacciones para mostrar'}
+            </div>
+          )}
           {paginatedTransactions.map((transaction) => (
             <div key={transaction.id} className="p-4 space-y-3">
               <div className="flex items-start justify-between">
@@ -270,7 +293,9 @@ export function Transactions({ transactions }: TransactionsProps) {
       {/* Pagination */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          Mostrando {startIndex + 1}-{Math.min(startIndex + itemsPerPage, filteredTransactions.length)} de {filteredTransactions.length}
+          {filteredTransactions.length === 0
+            ? 'Mostrando 0 de 0'
+            : `Mostrando ${startIndex + 1}-${Math.min(startIndex + itemsPerPage, filteredTransactions.length)} de ${filteredTransactions.length}`}
         </div>
         <div className="flex gap-2">
           <Button
@@ -301,7 +326,7 @@ export function Transactions({ transactions }: TransactionsProps) {
             variant="outline"
             size="sm"
             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
+            disabled={currentPage === safeTotalPages}
           >
             Siguiente
           </Button>

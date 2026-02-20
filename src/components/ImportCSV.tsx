@@ -6,7 +6,6 @@ import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react';
 import { useState } from 'react';
 import { parseCSV } from '../services/parsers/csv-parser';
 import { transactionStore } from '../stores/transaction-store';
-import type { ParsedData } from '../models';
 
 type ImportState = 'idle' | 'validating' | 'success' | 'error';
 
@@ -19,7 +18,11 @@ export function ImportCSV({ onImportComplete }: ImportCSVProps) {
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string>('');
   const [fileType, setFileType] = useState<'credit_card' | 'usd_account' | 'uyu_account' | null>(null);
-  const [parsedData, setParsedData] = useState<ParsedData | null>(null);
+  const [importSummary, setImportSummary] = useState<{
+    total: number;
+    imported: number;
+    duplicates: number;
+  } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   const handleDrag = (e: React.DragEvent) => {
@@ -60,8 +63,6 @@ export function ImportCSV({ onImportComplete }: ImportCSVProps) {
       try {
         const csvContent = e.target?.result as string;
         const result = parseCSV(csvContent, file.name);
-        setParsedData(result);
-
         // Map file type to UI type
         if (result.fileType === 'credit_card') {
           setFileType('credit_card');
@@ -70,7 +71,21 @@ export function ImportCSV({ onImportComplete }: ImportCSVProps) {
         } else {
           setFileType('uyu_account');
         }
+
+        const { added, duplicates } = transactionStore
+          .getState()
+          .addTransactions(result.transactions);
+        setImportSummary({
+          total: result.transactions.length,
+          imported: added.length,
+          duplicates: duplicates.length,
+        });
         setImportState('success');
+
+        // Navigate to transactions view if callback provided
+        if (onImportComplete) {
+          onImportComplete();
+        }
       } catch (error) {
         setImportState('error');
         setErrorMessage(error instanceof Error ? error.message : 'Error al procesar el archivo');
@@ -93,22 +108,8 @@ export function ImportCSV({ onImportComplete }: ImportCSVProps) {
     setImportState('idle');
     setFileName('');
     setFileType(null);
-    setParsedData(null);
+    setImportSummary(null);
     setErrorMessage('');
-  };
-
-  const processImport = () => {
-    if (!parsedData) return;
-
-    transactionStore.getState().addTransactions(parsedData.transactions);
-
-    // Reset state after successful import
-    resetImport();
-
-    // Navigate to transactions view if callback provided
-    if (onImportComplete) {
-      onImportComplete();
-    }
   };
 
   const getAccountTypeLabel = (type: string) => {
@@ -190,21 +191,27 @@ export function ImportCSV({ onImportComplete }: ImportCSVProps) {
                 <Check className="text-success-600" size={48} />
               </div>
               <div>
-                <p className="font-medium mb-1">Archivo validado correctamente</p>
+                <p className="font-medium mb-1">Importación completada</p>
                 <p className="text-sm text-muted-foreground mb-4">{fileName}</p>
                 {fileType && (
                   <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
                     {getAccountTypeLabel(fileType)}
                   </div>
                 )}
+                {importSummary && (
+                  <p className="text-sm text-muted-foreground mt-3">
+                    {importSummary.imported} de {importSummary.total} transacciones guardadas
+                    {importSummary.duplicates > 0 && (
+                      <> ({importSummary.duplicates} duplicadas omitidas)</>
+                    )}
+                  </p>
+                )}
               </div>
               <div className="flex gap-3 mt-4">
                 <Button onClick={resetImport} variant="outline">
                   Importar otro archivo
                 </Button>
-                <Button onClick={processImport}>
-                  Procesar {parsedData?.transactions.length ?? 0} transacciones
-                </Button>
+                {onImportComplete && <Button onClick={onImportComplete}>Ver transacciones</Button>}
               </div>
             </div>
           </div>

@@ -74,6 +74,10 @@ export function Dashboard({ transactions }: DashboardProps) {
     : selectedCurrency === 'UYU'
       ? uyuSummary
       : usdSummary;
+  const averageExpense =
+    summary.transactionCount > 0
+      ? summary.expenses / summary.transactionCount
+      : 0;
 
 
   return (
@@ -258,8 +262,8 @@ export function Dashboard({ transactions }: DashboardProps) {
             <p className="text-sm text-muted-foreground mb-1">Gasto promedio</p>
             <p className="font-mono">
               {selectedCurrency === 'all' 
-                ? formatCurrency(summary.expenses / summary.transactionCount, 'UYU')
-                : formatCurrency(summary.expenses / summary.transactionCount, selectedCurrency as Currency)
+                ? formatCurrency(averageExpense, 'UYU')
+                : formatCurrency(averageExpense, selectedCurrency as Currency)
               }
             </p>
           </div>

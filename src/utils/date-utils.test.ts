@@ -133,7 +133,7 @@ describe('date-utils', () => {
     it('should handle items with non-date values', () => {
       const invalidItems = [
         { id: 1, date: new Date('2025-01-15'), value: 'valid' },
-        { id: 2, date: 'not-a-date' as any, value: 'invalid' },
+        { id: 2, date: 'not-a-date' as unknown as Date, value: 'invalid' },
       ];
 
       const referenceDate = new Date('2025-01-15T12:00:00');
