@@ -6,12 +6,19 @@ import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react';
 import { useState } from 'react';
 import { parseCSV } from '../services/parsers/csv-parser';
 import { transactionStore } from '../stores/transaction-store';
+import type { Transaction } from '../models';
 
 type ImportState = 'idle' | 'validating' | 'success' | 'error';
 type UiFileType = 'credit_card' | 'usd_account' | 'uyu_account';
 
 interface ImportCSVProps {
   onImportComplete?: () => void;
+  onTransactionsImported?: (
+    transactions: Transaction[]
+  ) => Promise<{
+    added: Transaction[];
+    duplicates: Transaction[];
+  }>;
 }
 
 async function readFileAsText(file: File): Promise<string> {
@@ -27,7 +34,10 @@ async function readFileAsText(file: File): Promise<string> {
   });
 }
 
-export function ImportCSV({ onImportComplete }: ImportCSVProps) {
+export function ImportCSV({
+  onImportComplete,
+  onTransactionsImported,
+}: ImportCSVProps) {
   const [importState, setImportState] = useState<ImportState>('idle');
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string>('');
@@ -83,9 +93,9 @@ export function ImportCSV({ onImportComplete }: ImportCSVProps) {
         setFileType('uyu_account');
       }
 
-      const { added, duplicates } = transactionStore
-        .getState()
-        .addTransactions(result.transactions);
+      const { added, duplicates } = onTransactionsImported
+        ? await onTransactionsImported(result.transactions)
+        : transactionStore.getState().addTransactions(result.transactions);
 
       setImportSummary({
         total: result.transactions.length,

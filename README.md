@@ -23,7 +23,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 - **CSV Parsing**: PapaParse
 - **State Management**: Zustand
 - **Charts**: Recharts
-- **Hosting/Backend (optional)**: Firebase
+- **Backend (optional)**: Supabase / Firebase
 
 ## Getting Started
 
@@ -36,6 +36,22 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 ```bash
 npm install
 ```
+
+### Supabase (Optional)
+
+If you want authentication + cloud persistence enabled:
+
+1. Copy `.env.example` to `.env`
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+3. Run the SQL in `supabase/schema.sql` inside your Supabase project
+
+When these variables are present, the app enables login and stores
+transactions in Supabase.
+
+Auth flow includes:
+- Email/password sign in and sign up
+- Password reset email request
+- Automatic migration of existing local transactions after first login
 
 ### Firebase (Optional)
 

@@ -204,4 +204,32 @@ describe('ImportCSV', () => {
     expect(addTransactionsMock).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(onImportComplete).toHaveBeenCalledTimes(1))
   })
+
+  it('uses custom import handler when provided', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    addTransactionsMock.mockReturnValue({
+      added: [],
+      duplicates: [],
+    })
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-1'), makeTx('tx-2')],
+      duplicates: [makeTx('tx-3')],
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+
+    const input = screen.getByLabelText('Seleccionar archivo')
+    fireEvent.change(input, {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    expect(
+      screen.getByText('2 de 3 transacciones guardadas (1 duplicadas omitidas)')
+    ).toBeInTheDocument()
+    expect(onTransactionsImported).toHaveBeenCalledTimes(1)
+    expect(addTransactionsMock).not.toHaveBeenCalled()
+  })
 })
