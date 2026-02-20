@@ -1,67 +1,80 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
-import App from './App'
+import { describe, expect, it, vi } from 'vitest';
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import App from './App';
+
+vi.mock('./components/Dashboard', () => ({
+  Dashboard: () => <h2>Dashboard View</h2>,
+}));
+
+vi.mock('./components/ImportCSV', () => ({
+  ImportCSV: () => <h2>Importar Transacciones</h2>,
+}));
+
+vi.mock('./components/Tools', () => ({
+  Tools: () => <h2>Herramientas</h2>,
+}));
+
+vi.mock('./components/Transactions', () => ({
+  Transactions: () => <h2>Transacciones</h2>,
+}));
+
+vi.mock('./components/Charts', () => ({
+  Charts: () => <h2>Insights y Análisis</h2>,
+}));
 
 describe('App', () => {
-  it('renders import page on /import route', () => {
-    render(
-      <MemoryRouter initialEntries={['/import']}>
-        <App />
-      </MemoryRouter>
-    )
-    expect(screen.getByText('Importar Transacciones')).toBeInTheDocument()
-    expect(
-      screen.getByText('Arrastrá tu archivo CSV aquí')
-    ).toBeInTheDocument()
-  })
+  it('renders dashboard by default', () => {
+    render(<App />);
 
-  it('shows supported file types on import page', () => {
-    render(
-      <MemoryRouter initialEntries={['/import']}>
-        <App />
-      </MemoryRouter>
-    )
-    expect(screen.getByText('Tarjeta de Crédito')).toBeInTheDocument()
-    expect(screen.getByText('Cuenta USD')).toBeInTheDocument()
-    expect(screen.getByText('Cuenta UYU')).toBeInTheDocument()
-    expect(
-      screen.getByText(/Extracto de tarjeta Santander/)
-    ).toBeInTheDocument()
-  })
+    expect(screen.getByRole('heading', { name: 'Dashboard View' })).toBeInTheDocument();
+  });
 
-  it('redirects root to import when no data is loaded', () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App />
-      </MemoryRouter>
-    )
+  it('shows import flow when navigating to Importar', async () => {
+    const user = userEvent.setup();
 
-    expect(
-      screen.getByText('Arrastrá tu archivo CSV aquí')
-    ).toBeInTheDocument()
-  })
+    render(<App />);
 
-  it('redirects transactions route to import when no data is loaded', () => {
-    render(
-      <MemoryRouter initialEntries={['/transactions']}>
-        <App />
-      </MemoryRouter>
-    )
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Importar' }));
+    });
 
-    expect(
-      screen.getByText('Arrastrá tu archivo CSV aquí')
-    ).toBeInTheDocument()
-  })
+    expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument();
+  });
 
-  it('renders the tools page', () => {
-    render(
-      <MemoryRouter initialEntries={['/tools']}>
-        <App />
-      </MemoryRouter>
-    )
+  it('shows tools page when navigating to Herramientas', async () => {
+    const user = userEvent.setup();
 
-    expect(screen.getByRole('heading', { name: 'Herramientas' })).toBeInTheDocument()
-    expect(screen.getByText('Coming soon')).toBeInTheDocument()
-  })
-})
+    render(<App />);
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Herramientas' }));
+    });
+
+    expect(screen.getByRole('heading', { name: 'Herramientas' })).toBeInTheDocument();
+  });
+
+  it('shows transactions when navigating to Transacciones', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Transacciones' }));
+    });
+
+    expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument();
+  });
+
+  it('shows insights charts when navigating to Insights', async () => {
+    const user = userEvent.setup();
+
+    render(<App />);
+
+    await act(async () => {
+      await user.click(screen.getByRole('button', { name: 'Insights' }));
+    });
+
+    expect(screen.getByRole('heading', { name: 'Insights y Análisis' })).toBeInTheDocument();
+  });
+});

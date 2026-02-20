@@ -3,7 +3,8 @@
 import { Card } from './ui/card';
 import type { Transaction } from '../models';
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { categories } from '../utils/figma-data';
+import { getCategoryDisplay } from '../utils/category-display';
+import { Category } from '../models';
 
 // Helper functions
 function groupByCategory(transactions: Transaction[]) {
@@ -12,7 +13,7 @@ function groupByCategory(transactions: Transaction[]) {
   transactions
     .filter(t => t.type === 'debit') // Only expenses
     .forEach(t => {
-      const category = t.category || 'other';
+      const category = t.category || Category.Uncategorized;
       grouped[category] = (grouped[category] || 0) + t.amount;
     });
 
@@ -50,11 +51,11 @@ export function Charts({ transactions }: ChartsProps) {
   // Prepare data for charts
   const categoryData = Object.entries(groupByCategory(transactions))
     .map(([categoryId, amount]) => {
-      const category = categories.find(c => c.id === categoryId);
+      const category = getCategoryDisplay(categoryId);
       return {
-        name: category?.name || categoryId,
+        name: category.label,
         value: amount,
-        color: category?.color || '#888',
+        color: category.color,
       };
     })
     .sort((a, b) => b.value - a.value);
@@ -109,7 +110,9 @@ export function Charts({ transactions }: ChartsProps) {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={(entry) => `${entry.name} ${((entry.value / totalExpenses) * 100).toFixed(0)}%`}
+                  label={(entry) =>
+                    `${entry.name} ${totalExpenses > 0 ? ((entry.value / totalExpenses) * 100).toFixed(0) : 0}%`
+                  }
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
@@ -245,9 +248,11 @@ export function Charts({ transactions }: ChartsProps) {
         <Card className="p-6">
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">Mayor Categoría</p>
-            <p className="text-2xl font-mono">{categoryData[0]?.name}</p>
+            <p className="text-2xl font-mono">{categoryData[0]?.name || 'Sin datos'}</p>
             <p className="text-sm text-muted-foreground">
-              {((categoryData[0]?.value / totalExpenses) * 100).toFixed(1)}% del total
+              {totalExpenses > 0 && categoryData[0]
+                ? `${((categoryData[0].value / totalExpenses) * 100).toFixed(1)}% del total`
+                : '0.0% del total'}
             </p>
           </div>
         </Card>

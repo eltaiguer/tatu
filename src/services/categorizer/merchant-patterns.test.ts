@@ -214,6 +214,11 @@ describe('Merchant Pattern Matcher', () => {
       const result = matchMerchantPattern('Puesto Ezequi.Handy.')
       expect(result?.category).toBe(Category.Transport)
     })
+
+    it('should match TuPase toll payments', () => {
+      const result = matchMerchantPattern('Merpago Tupase')
+      expect(result?.category).toBe(Category.Transport)
+    })
   })
 
   describe('matchMerchantPattern - Insurance', () => {
@@ -230,6 +235,35 @@ describe('Merchant Pattern Matcher', () => {
     it('should match Seguro keyword', () => {
       const result = matchMerchantPattern('Seguro Saldo Deudor')
       expect(result?.category).toBe(Category.Insurance)
+    })
+
+    it('should match Mercado Pago insurance installments', () => {
+      const result = matchMerchantPattern('Merpago Seguros Cuota 09 10')
+      expect(result?.category).toBe(Category.Insurance)
+    })
+  })
+
+  describe('matchMerchantPattern - Software and Personal', () => {
+    it('should match Fireflies AI', () => {
+      const result = matchMerchantPattern('Fireflies Ai')
+      expect(result?.category).toBe(Category.Software)
+    })
+
+    it('should match Lazo Fintech', () => {
+      const result = matchMerchantPattern('Lazo Fintech Inc')
+      expect(result?.category).toBe(Category.Software)
+    })
+
+    it('should match tintoreria as personal care', () => {
+      const result = matchMerchantPattern('Tintoreria Martinizi')
+      expect(result?.category).toBe(Category.Personal)
+    })
+  })
+
+  describe('matchMerchantPattern - Fees', () => {
+    it('should match CJPPU contributions', () => {
+      const result = matchMerchantPattern('C J P P U  Aportes')
+      expect(result?.category).toBe(Category.Fees)
     })
   })
 

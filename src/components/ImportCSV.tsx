@@ -4,14 +4,39 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react';
 import { useState } from 'react';
+import { useStore } from 'zustand';
+import { parseCSV } from '../services/parsers/csv-parser';
+import { transactionStore } from '../stores/transaction-store';
+import type { FileType, ParsedData } from '../models';
 
 type ImportState = 'idle' | 'validating' | 'success' | 'error';
+type ProcessResult = {
+  added: number;
+  duplicates: number;
+} | null;
+
+async function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === 'function') {
+    return file.text();
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(new Error('No se pudo leer el archivo seleccionado.'));
+    reader.readAsText(file);
+  });
+}
 
 export function ImportCSV() {
   const [importState, setImportState] = useState<ImportState>('idle');
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string>('');
-  const [fileType, setFileType] = useState<'credit_card' | 'usd_account' | 'uyu_account' | null>(null);
+  const [fileType, setFileType] = useState<FileType | null>(null);
+  const [parsedData, setParsedData] = useState<ParsedData | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [processResult, setProcessResult] = useState<ProcessResult>(null);
+  const mergeTransactions = useStore(transactionStore, (state) => state.mergeTransactions);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -33,33 +58,40 @@ export function ImportCSV() {
     }
   };
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
+    setErrorMessage('');
+    setProcessResult(null);
+    setParsedData(null);
+
     if (!file.name.endsWith('.csv')) {
       setImportState('error');
       setFileName(file.name);
+      setErrorMessage('El archivo debe estar en formato CSV');
       return;
     }
 
     setFileName(file.name);
     setImportState('validating');
 
-    // Simulate file processing
-    setTimeout(() => {
-      // Detect file type based on name
-      if (file.name.toLowerCase().includes('credit') || file.name.toLowerCase().includes('tarjeta')) {
-        setFileType('credit_card');
-      } else if (file.name.toLowerCase().includes('usd') || file.name.toLowerCase().includes('dolar')) {
-        setFileType('usd_account');
-      } else {
-        setFileType('uyu_account');
-      }
+    try {
+      const content = await readFileAsText(file);
+      const parsed = parseCSV(content, file.name);
+      setParsedData(parsed);
+      setFileType(parsed.fileType);
       setImportState('success');
-    }, 2000);
+    } catch (error) {
+      setImportState('error');
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo procesar el archivo CSV seleccionado.'
+      );
+    }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      handleFile(e.target.files[0]);
+      void handleFile(e.target.files[0]);
     }
   };
 
@@ -67,13 +99,28 @@ export function ImportCSV() {
     setImportState('idle');
     setFileName('');
     setFileType(null);
+    setParsedData(null);
+    setErrorMessage('');
+    setProcessResult(null);
   };
 
-  const getAccountTypeLabel = (type: string) => {
+  const processTransactions = () => {
+    if (!parsedData) {
+      return;
+    }
+
+    const result = mergeTransactions(parsedData.transactions);
+    setProcessResult({
+      added: result.added.length,
+      duplicates: result.duplicates.length,
+    });
+  };
+
+  const getAccountTypeLabel = (type: FileType) => {
     switch (type) {
       case 'credit_card': return 'Tarjeta de Crédito';
-      case 'usd_account': return 'Cuenta USD';
-      case 'uyu_account': return 'Cuenta UYU';
+      case 'bank_account_usd': return 'Cuenta USD';
+      case 'bank_account_uyu': return 'Cuenta UYU';
       default: return '';
     }
   };
@@ -160,10 +207,18 @@ export function ImportCSV() {
                 <Button onClick={resetImport} variant="outline">
                   Importar otro archivo
                 </Button>
-                <Button>
-                  Procesar 145 transacciones
+                <Button onClick={processTransactions} disabled={!parsedData}>
+                  Procesar {parsedData?.transactions.length ?? 0} transacciones
                 </Button>
               </div>
+              {processResult && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  {`Se agregaron ${processResult.added} transacciones`}
+                  {processResult.duplicates > 0
+                    ? ` (${processResult.duplicates} duplicadas omitidas)`
+                    : ''}
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -178,7 +233,7 @@ export function ImportCSV() {
                 <p className="font-medium mb-1">Error al validar archivo</p>
                 <p className="text-sm text-muted-foreground mb-2">{fileName}</p>
                 <p className="text-sm text-destructive">
-                  El archivo debe estar en formato CSV
+                  {errorMessage || 'El archivo debe estar en formato CSV'}
                 </p>
               </div>
               <Button onClick={resetImport}>

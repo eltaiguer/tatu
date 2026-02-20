@@ -70,6 +70,11 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
     category: Category.Healthcare,
     confidence: 0.85,
   },
+  {
+    patterns: ['merpago seguros', 'seguro saldo deudor'],
+    category: Category.Insurance,
+    confidence: 0.9,
+  },
 
   // Software & Subscriptions
   {
@@ -103,6 +108,11 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
     patterns: ['linkedin'],
     category: Category.Software,
     confidence: 0.8,
+  },
+  {
+    patterns: ['fireflies ai', 'lazo fintech'],
+    category: Category.Software,
+    confidence: 0.9,
   },
 
   // Entertainment
@@ -139,6 +149,11 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
     confidence: 0.8,
   },
   {
+    patterns: ['rip curl', 'cleanline surf'],
+    category: Category.Shopping,
+    confidence: 0.85,
+  },
+  {
     patterns: ['tienda', 'boutique'],
     category: Category.Shopping,
     confidence: 0.75,
@@ -161,9 +176,9 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
     confidence: 0.95,
   },
   {
-    patterns: ['tintoreria'],
-    category: Category.Personal,
-    confidence: 0.85,
+    patterns: ['merpago tupase', 'tupase'],
+    category: Category.Transport,
+    confidence: 0.9,
   },
 
   // Insurance
@@ -179,10 +194,20 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
     category: Category.Personal,
     confidence: 0.85,
   },
+  {
+    patterns: ['tintoreria'],
+    category: Category.Personal,
+    confidence: 0.9,
+  },
 
   // Fees
   {
     patterns: ['comision', 'cargo', 'fee'],
+    category: Category.Fees,
+    confidence: 0.9,
+  },
+  {
+    patterns: ['c j p p u', 'aportes'],
     category: Category.Fees,
     confidence: 0.9,
   },
