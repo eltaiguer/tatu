@@ -3,6 +3,8 @@
 import { Card } from './ui/card';
 import type { Transaction } from '../models';
 import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import type { TooltipProps } from 'recharts';
+import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { categories } from '../utils/figma-data';
 
 // Helper functions
@@ -69,18 +71,21 @@ export function Charts({ transactions }: ChartsProps) {
 
   // Calculate totals
   const totalExpenses = categoryData.reduce((sum, cat) => sum + cat.value, 0);
+  const hasExpenseData = totalExpenses > 0;
+  const topCategory = categoryData[0];
 
-  const customTooltip = ({ active, payload }: any) => {
+  const customTooltip = ({ active, payload }: TooltipProps<ValueType, NameType>) => {
     if (active && payload && payload.length) {
+      const value = Number(payload[0].value ?? 0);
       return (
         <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
           <p className="font-medium mb-1">{payload[0].name}</p>
           <p className="text-sm text-muted-foreground">
-            $U {payload[0].value.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            $U {value.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
           {totalExpenses > 0 && (
             <p className="text-xs text-muted-foreground mt-1">
-              {((payload[0].value / totalExpenses) * 100).toFixed(1)}% del total
+              {((value / totalExpenses) * 100).toFixed(1)}% del total
             </p>
           )}
         </div>
@@ -109,7 +114,13 @@ export function Charts({ transactions }: ChartsProps) {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={(entry) => `${entry.name} ${((entry.value / totalExpenses) * 100).toFixed(0)}%`}
+                  label={(entry) =>
+                    `${entry.name} ${
+                      hasExpenseData
+                        ? ((entry.value / totalExpenses) * 100).toFixed(0)
+                        : '0'
+                    }%`
+                  }
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
@@ -126,7 +137,9 @@ export function Charts({ transactions }: ChartsProps) {
           <div className="space-y-3">
             <h4 className="mb-4">Desglose Detallado</h4>
             {categoryData.map((cat, index) => {
-              const percentage = (cat.value / totalExpenses) * 100;
+              const percentage = hasExpenseData
+                ? (cat.value / totalExpenses) * 100
+                : 0;
               return (
                 <div key={index} className="space-y-1">
                   <div className="flex items-center justify-between text-sm">
@@ -183,7 +196,7 @@ export function Charts({ transactions }: ChartsProps) {
                 borderRadius: '0.5rem',
                 boxShadow: 'var(--shadow-lg)'
               }}
-              formatter={(value: any) => `$U ${value.toLocaleString('es-UY', { minimumFractionDigits: 2 })}`}
+              formatter={(value: ValueType) => `$U ${Number(value).toLocaleString('es-UY', { minimumFractionDigits: 2 })}`}
             />
             <Legend />
             <Bar dataKey="ingresos" fill="var(--chart-3)" name="Ingresos" radius={[8, 8, 0, 0]} />
@@ -215,7 +228,7 @@ export function Charts({ transactions }: ChartsProps) {
                 borderRadius: '0.5rem',
                 boxShadow: 'var(--shadow-lg)'
               }}
-              formatter={(value: any) => `$U ${value.toLocaleString('es-UY', { minimumFractionDigits: 2 })}`}
+              formatter={(value: ValueType) => `$U ${Number(value).toLocaleString('es-UY', { minimumFractionDigits: 2 })}`}
             />
             <Legend />
             <Line 
@@ -245,9 +258,11 @@ export function Charts({ transactions }: ChartsProps) {
         <Card className="p-6">
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">Mayor Categoría</p>
-            <p className="text-2xl font-mono">{categoryData[0]?.name}</p>
+            <p className="text-2xl font-mono">{topCategory?.name ?? 'Sin datos'}</p>
             <p className="text-sm text-muted-foreground">
-              {((categoryData[0]?.value / totalExpenses) * 100).toFixed(1)}% del total
+              {hasExpenseData && topCategory
+                ? `${((topCategory.value / totalExpenses) * 100).toFixed(1)}% del total`
+                : '0.0% del total'}
             </p>
           </div>
         </Card>

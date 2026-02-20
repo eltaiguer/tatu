@@ -3,7 +3,8 @@
 import { Card } from './ui/card';
 import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign } from 'lucide-react';
 import type { Transaction, Currency } from '../models';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { filterByPeriod, generatePeriodOptions } from '../utils/date-utils';
 
 // Helper functions
 function formatCurrency(amount: number, currency: Currency): string {
@@ -44,18 +45,39 @@ interface DashboardProps {
 
 export function Dashboard({ transactions }: DashboardProps) {
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | 'all'>('all');
-  const [period, setPeriod] = useState('month');
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('all');
 
-  // Calculate summaries
-  const allSummary = calculateSummary(transactions);
-  const uyuSummary = calculateSummary(transactions, 'UYU');
-  const usdSummary = calculateSummary(transactions, 'USD');
+  // Generate dynamic period options based on transaction dates
+  const periodOptions = useMemo(() => {
+    const dates = transactions.map(t => t.date);
+    return generatePeriodOptions(dates);
+  }, [transactions]);
 
-  const summary = selectedCurrency === 'all' 
-    ? allSummary 
-    : selectedCurrency === 'UYU' 
-      ? uyuSummary 
+  // Find the selected period option
+  const selectedPeriod = useMemo(() => {
+    return periodOptions.find(p => p.id === selectedPeriodId) || periodOptions[0];
+  }, [periodOptions, selectedPeriodId]);
+
+  // Filter transactions by selected period
+  const filteredTransactions = useMemo(() => {
+    if (!selectedPeriod) return transactions;
+    return filterByPeriod(transactions, 'date', selectedPeriod.period, selectedPeriod.referenceDate);
+  }, [transactions, selectedPeriod]);
+
+  // Calculate summaries from filtered transactions
+  const allSummary = useMemo(() => calculateSummary(filteredTransactions), [filteredTransactions]);
+  const uyuSummary = useMemo(() => calculateSummary(filteredTransactions, 'UYU'), [filteredTransactions]);
+  const usdSummary = useMemo(() => calculateSummary(filteredTransactions, 'USD'), [filteredTransactions]);
+
+  const summary = selectedCurrency === 'all'
+    ? allSummary
+    : selectedCurrency === 'UYU'
+      ? uyuSummary
       : usdSummary;
+  const averageExpense =
+    summary.transactionCount > 0
+      ? summary.expenses / summary.transactionCount
+      : 0;
 
 
   return (
@@ -78,15 +100,16 @@ export function Dashboard({ transactions }: DashboardProps) {
         
         <div className="flex gap-3">
           {/* Period Selector */}
-          <select 
+          <select
             className="px-4 py-2 rounded-lg border border-input bg-input-background"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
+            value={selectedPeriodId}
+            onChange={(e) => setSelectedPeriodId(e.target.value)}
           >
-            <option value="week">Esta semana</option>
-            <option value="month">Este mes</option>
-            <option value="quarter">Trimestre</option>
-            <option value="year">Año 2024</option>
+            {periodOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
           </select>
 
           {/* Currency Filter */}
@@ -239,8 +262,8 @@ export function Dashboard({ transactions }: DashboardProps) {
             <p className="text-sm text-muted-foreground mb-1">Gasto promedio</p>
             <p className="font-mono">
               {selectedCurrency === 'all' 
-                ? formatCurrency(summary.expenses / summary.transactionCount, 'UYU')
-                : formatCurrency(summary.expenses / summary.transactionCount, selectedCurrency as Currency)
+                ? formatCurrency(averageExpense, 'UYU')
+                : formatCurrency(averageExpense, selectedCurrency as Currency)
               }
             </p>
           </div>

@@ -205,16 +205,22 @@ export function Tools({ transactions }: ToolsProps) {
             <h4 className="mb-4">Rango de Fechas</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm mb-2">Desde</label>
+                <label htmlFor="tools-date-start" className="block text-sm mb-2">
+                  Desde
+                </label>
                 <Input
+                  id="tools-date-start"
                   type="date"
                   value={dateRange.start}
                   onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
                 />
               </div>
               <div>
-                <label className="block text-sm mb-2">Hasta</label>
+                <label htmlFor="tools-date-end" className="block text-sm mb-2">
+                  Hasta
+                </label>
                 <Input
+                  id="tools-date-end"
                   type="date"
                   value={dateRange.end}
                   onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
@@ -228,8 +234,11 @@ export function Tools({ transactions }: ToolsProps) {
             <h4 className="mb-4">Rango de Monto</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm mb-2">Mínimo</label>
+                <label htmlFor="tools-amount-min" className="block text-sm mb-2">
+                  Mínimo
+                </label>
                 <Input
+                  id="tools-amount-min"
                   type="number"
                   placeholder="0.00"
                   value={amountRange.min}
@@ -237,8 +246,11 @@ export function Tools({ transactions }: ToolsProps) {
                 />
               </div>
               <div>
-                <label className="block text-sm mb-2">Máximo</label>
+                <label htmlFor="tools-amount-max" className="block text-sm mb-2">
+                  Máximo
+                </label>
                 <Input
+                  id="tools-amount-max"
                   type="number"
                   placeholder="999999.99"
                   value={amountRange.max}
@@ -320,12 +332,16 @@ export function Tools({ transactions }: ToolsProps) {
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm mb-2">Fecha inicial</label>
-                  <Input type="date" defaultValue="2024-01-01" />
+                  <label htmlFor="tools-export-start" className="block text-sm mb-2">
+                    Fecha inicial
+                  </label>
+                  <Input id="tools-export-start" type="date" defaultValue="2024-01-01" />
                 </div>
                 <div>
-                  <label className="block text-sm mb-2">Fecha final</label>
-                  <Input type="date" defaultValue="2024-12-29" />
+                  <label htmlFor="tools-export-end" className="block text-sm mb-2">
+                    Fecha final
+                  </label>
+                  <Input id="tools-export-end" type="date" defaultValue="2024-12-29" />
                 </div>
               </div>
 
@@ -405,7 +421,9 @@ export function Tools({ transactions }: ToolsProps) {
                     <span className="font-mono">
                       $U {Math.abs(
                         transactions
-                          .filter(t => t.category === category.id && t.amount < 0)
+                          .filter(
+                            (t) => t.category === category.id && t.type === 'debit'
+                          )
                           .reduce((sum, t) => sum + t.amount, 0)
                       ).toLocaleString('es-UY', { minimumFractionDigits: 2 })}
                     </span>
@@ -487,8 +505,13 @@ export function Tools({ transactions }: ToolsProps) {
             <h4 className="mb-4">Formatos Regionales</h4>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm mb-2">Formato de fecha</label>
-                <select className="w-full px-3 py-2 rounded-lg border border-input bg-input-background">
+                <label htmlFor="tools-date-format" className="block text-sm mb-2">
+                  Formato de fecha
+                </label>
+                <select
+                  id="tools-date-format"
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-input-background"
+                >
                   <option>DD/MM/YYYY (Uruguay)</option>
                   <option>MM/DD/YYYY (USA)</option>
                   <option>YYYY-MM-DD (ISO)</option>
@@ -496,8 +519,13 @@ export function Tools({ transactions }: ToolsProps) {
               </div>
 
               <div>
-                <label className="block text-sm mb-2">Separador decimal</label>
-                <select className="w-full px-3 py-2 rounded-lg border border-input bg-input-background">
+                <label htmlFor="tools-decimal-separator" className="block text-sm mb-2">
+                  Separador decimal
+                </label>
+                <select
+                  id="tools-decimal-separator"
+                  className="w-full px-3 py-2 rounded-lg border border-input bg-input-background"
+                >
                   <option>Coma (1.234,56)</option>
                   <option>Punto (1,234.56)</option>
                 </select>

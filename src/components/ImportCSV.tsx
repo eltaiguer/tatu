@@ -4,14 +4,26 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react';
 import { useState } from 'react';
+import { parseCSV } from '../services/parsers/csv-parser';
+import { transactionStore } from '../stores/transaction-store';
 
 type ImportState = 'idle' | 'validating' | 'success' | 'error';
 
-export function ImportCSV() {
+interface ImportCSVProps {
+  onImportComplete?: () => void;
+}
+
+export function ImportCSV({ onImportComplete }: ImportCSVProps) {
   const [importState, setImportState] = useState<ImportState>('idle');
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string>('');
   const [fileType, setFileType] = useState<'credit_card' | 'usd_account' | 'uyu_account' | null>(null);
+  const [importSummary, setImportSummary] = useState<{
+    total: number;
+    imported: number;
+    duplicates: number;
+  } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -37,24 +49,53 @@ export function ImportCSV() {
     if (!file.name.endsWith('.csv')) {
       setImportState('error');
       setFileName(file.name);
+      setErrorMessage('El archivo debe estar en formato CSV');
       return;
     }
 
     setFileName(file.name);
     setImportState('validating');
+    setErrorMessage('');
 
-    // Simulate file processing
-    setTimeout(() => {
-      // Detect file type based on name
-      if (file.name.toLowerCase().includes('credit') || file.name.toLowerCase().includes('tarjeta')) {
-        setFileType('credit_card');
-      } else if (file.name.toLowerCase().includes('usd') || file.name.toLowerCase().includes('dolar')) {
-        setFileType('usd_account');
-      } else {
-        setFileType('uyu_account');
+    // Read and parse file content
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const csvContent = e.target?.result as string;
+        const result = parseCSV(csvContent, file.name);
+        // Map file type to UI type
+        if (result.fileType === 'credit_card') {
+          setFileType('credit_card');
+        } else if (result.fileType === 'bank_account_usd') {
+          setFileType('usd_account');
+        } else {
+          setFileType('uyu_account');
+        }
+
+        const { added, duplicates } = transactionStore
+          .getState()
+          .addTransactions(result.transactions);
+        setImportSummary({
+          total: result.transactions.length,
+          imported: added.length,
+          duplicates: duplicates.length,
+        });
+        setImportState('success');
+
+        // Navigate to transactions view if callback provided
+        if (onImportComplete) {
+          onImportComplete();
+        }
+      } catch (error) {
+        setImportState('error');
+        setErrorMessage(error instanceof Error ? error.message : 'Error al procesar el archivo');
       }
-      setImportState('success');
-    }, 2000);
+    };
+    reader.onerror = () => {
+      setImportState('error');
+      setErrorMessage('Error al leer el archivo');
+    };
+    reader.readAsText(file);
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -67,6 +108,8 @@ export function ImportCSV() {
     setImportState('idle');
     setFileName('');
     setFileType(null);
+    setImportSummary(null);
+    setErrorMessage('');
   };
 
   const getAccountTypeLabel = (type: string) => {
@@ -148,21 +191,27 @@ export function ImportCSV() {
                 <Check className="text-success-600" size={48} />
               </div>
               <div>
-                <p className="font-medium mb-1">Archivo validado correctamente</p>
+                <p className="font-medium mb-1">Importación completada</p>
                 <p className="text-sm text-muted-foreground mb-4">{fileName}</p>
                 {fileType && (
                   <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
                     {getAccountTypeLabel(fileType)}
                   </div>
                 )}
+                {importSummary && (
+                  <p className="text-sm text-muted-foreground mt-3">
+                    {importSummary.imported} de {importSummary.total} transacciones guardadas
+                    {importSummary.duplicates > 0 && (
+                      <> ({importSummary.duplicates} duplicadas omitidas)</>
+                    )}
+                  </p>
+                )}
               </div>
               <div className="flex gap-3 mt-4">
                 <Button onClick={resetImport} variant="outline">
                   Importar otro archivo
                 </Button>
-                <Button>
-                  Procesar 145 transacciones
-                </Button>
+                {onImportComplete && <Button onClick={onImportComplete}>Ver transacciones</Button>}
               </div>
             </div>
           </div>
@@ -178,7 +227,7 @@ export function ImportCSV() {
                 <p className="font-medium mb-1">Error al validar archivo</p>
                 <p className="text-sm text-muted-foreground mb-2">{fileName}</p>
                 <p className="text-sm text-destructive">
-                  El archivo debe estar en formato CSV
+                  {errorMessage || 'El archivo debe estar en formato CSV'}
                 </p>
               </div>
               <Button onClick={resetImport}>
