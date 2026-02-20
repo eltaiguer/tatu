@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { createTransactionStore } from './transaction-store'
+import {
+  createTransactionStore,
+  getPersistedTransactionsSnapshot,
+} from './transaction-store'
 import type { Transaction } from '../models'
 
 function makeTransaction(id: string, overrides: Partial<Transaction> = {}) {
@@ -177,5 +180,28 @@ describe('Transaction Store - Persistence', () => {
     expect(store.getState().transactions).toHaveLength(1)
     expect(store.getState().transactions[0].id).toBe('tx-1')
     expect(store.getState().transactions[0].date).toBeInstanceOf(Date)
+  })
+
+  it('reads persisted snapshot and normalizes dates', () => {
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        state: {
+          transactions: [
+            {
+              ...makeTransaction('tx-9'),
+              date: '2025-01-10T00:00:00.000Z',
+            },
+          ],
+        },
+        version: 0,
+      })
+    )
+
+    const snapshot = getPersistedTransactionsSnapshot(storageKey)
+
+    expect(snapshot).toHaveLength(1)
+    expect(snapshot[0].id).toBe('tx-9')
+    expect(snapshot[0].date).toBeInstanceOf(Date)
   })
 })

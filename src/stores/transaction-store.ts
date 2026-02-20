@@ -2,7 +2,7 @@ import { createStore } from 'zustand/vanilla'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { Transaction } from '../models'
 
-const DEFAULT_STORAGE_KEY = 'tatu:transactions'
+export const DEFAULT_TRANSACTION_STORAGE_KEY = 'tatu:transactions'
 
 interface TransactionStoreState {
   transactions: Transaction[]
@@ -136,7 +136,10 @@ function createTransactionStoreState(
 }
 
 export function createTransactionStore(options: TransactionStoreOptions = {}) {
-  const { persist: shouldPersist = true, storageKey = DEFAULT_STORAGE_KEY } =
+  const {
+    persist: shouldPersist = true,
+    storageKey = DEFAULT_TRANSACTION_STORAGE_KEY,
+  } =
     options
 
   if (shouldPersist && hasLocalStorage()) {
@@ -166,3 +169,25 @@ export function createTransactionStore(options: TransactionStoreOptions = {}) {
 }
 
 export const transactionStore = createTransactionStore()
+
+export function getPersistedTransactionsSnapshot(
+  storageKey: string = DEFAULT_TRANSACTION_STORAGE_KEY
+): Transaction[] {
+  if (!hasLocalStorage()) {
+    return []
+  }
+
+  const raw = window.localStorage.getItem(storageKey)
+  if (!raw) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      state?: { transactions?: Transaction[] }
+    }
+    return normalizeTransactions(parsed.state?.transactions ?? [])
+  } catch {
+    return []
+  }
+}
