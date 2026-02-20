@@ -4,16 +4,15 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react';
 import { useState } from 'react';
-import { useStore } from 'zustand';
 import { parseCSV } from '../services/parsers/csv-parser';
 import { transactionStore } from '../stores/transaction-store';
-import type { FileType, ParsedData } from '../models';
 
 type ImportState = 'idle' | 'validating' | 'success' | 'error';
-type ProcessResult = {
-  added: number;
-  duplicates: number;
-} | null;
+type UiFileType = 'credit_card' | 'usd_account' | 'uyu_account';
+
+interface ImportCSVProps {
+  onImportComplete?: () => void;
+}
 
 async function readFileAsText(file: File): Promise<string> {
   if (typeof file.text === 'function') {
@@ -23,27 +22,29 @@ async function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.onerror = () => reject(new Error('No se pudo leer el archivo seleccionado.'));
+    reader.onerror = () => reject(new Error('Error al leer el archivo'));
     reader.readAsText(file);
   });
 }
 
-export function ImportCSV() {
+export function ImportCSV({ onImportComplete }: ImportCSVProps) {
   const [importState, setImportState] = useState<ImportState>('idle');
   const [dragActive, setDragActive] = useState(false);
   const [fileName, setFileName] = useState<string>('');
-  const [fileType, setFileType] = useState<FileType | null>(null);
-  const [parsedData, setParsedData] = useState<ParsedData | null>(null);
+  const [fileType, setFileType] = useState<UiFileType | null>(null);
+  const [importSummary, setImportSummary] = useState<{
+    total: number;
+    imported: number;
+    duplicates: number;
+  } | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>('');
-  const [processResult, setProcessResult] = useState<ProcessResult>(null);
-  const mergeTransactions = useStore(transactionStore, (state) => state.mergeTransactions);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
+    if (e.type === 'dragenter' || e.type === 'dragover') {
       setDragActive(true);
-    } else if (e.type === "dragleave") {
+    } else if (e.type === 'dragleave') {
       setDragActive(false);
     }
   };
@@ -52,17 +53,13 @@ export function ImportCSV() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0]);
+      void handleFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleFile = async (file: File) => {
-    setErrorMessage('');
-    setProcessResult(null);
-    setParsedData(null);
-
     if (!file.name.endsWith('.csv')) {
       setImportState('error');
       setFileName(file.name);
@@ -72,19 +69,39 @@ export function ImportCSV() {
 
     setFileName(file.name);
     setImportState('validating');
+    setErrorMessage('');
 
     try {
-      const content = await readFileAsText(file);
-      const parsed = parseCSV(content, file.name);
-      setParsedData(parsed);
-      setFileType(parsed.fileType);
+      const csvContent = await readFileAsText(file);
+      const result = parseCSV(csvContent, file.name);
+
+      if (result.fileType === 'credit_card') {
+        setFileType('credit_card');
+      } else if (result.fileType === 'bank_account_usd') {
+        setFileType('usd_account');
+      } else {
+        setFileType('uyu_account');
+      }
+
+      const { added, duplicates } = transactionStore
+        .getState()
+        .addTransactions(result.transactions);
+
+      setImportSummary({
+        total: result.transactions.length,
+        imported: added.length,
+        duplicates: duplicates.length,
+      });
+
       setImportState('success');
+
+      if (onImportComplete) {
+        onImportComplete();
+      }
     } catch (error) {
       setImportState('error');
       setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo procesar el archivo CSV seleccionado.'
+        error instanceof Error ? error.message : 'Error al procesar el archivo'
       );
     }
   };
@@ -99,29 +116,20 @@ export function ImportCSV() {
     setImportState('idle');
     setFileName('');
     setFileType(null);
-    setParsedData(null);
+    setImportSummary(null);
     setErrorMessage('');
-    setProcessResult(null);
   };
 
-  const processTransactions = () => {
-    if (!parsedData) {
-      return;
-    }
-
-    const result = mergeTransactions(parsedData.transactions);
-    setProcessResult({
-      added: result.added.length,
-      duplicates: result.duplicates.length,
-    });
-  };
-
-  const getAccountTypeLabel = (type: FileType) => {
+  const getAccountTypeLabel = (type: UiFileType) => {
     switch (type) {
-      case 'credit_card': return 'Tarjeta de Crédito';
-      case 'bank_account_usd': return 'Cuenta USD';
-      case 'bank_account_uyu': return 'Cuenta UYU';
-      default: return '';
+      case 'credit_card':
+        return 'Tarjeta de Crédito';
+      case 'usd_account':
+        return 'Cuenta USD';
+      case 'uyu_account':
+        return 'Cuenta UYU';
+      default:
+        return '';
     }
   };
 
@@ -134,7 +142,6 @@ export function ImportCSV() {
         </p>
       </div>
 
-      {/* Upload Area */}
       <Card className="p-8">
         {importState === 'idle' && (
           <div
@@ -153,9 +160,7 @@ export function ImportCSV() {
                 <Upload className="text-primary" size={32} />
               </div>
               <div>
-                <p className="font-medium mb-1">
-                  Arrastrá tu archivo CSV aquí
-                </p>
+                <p className="font-medium mb-1">Arrastrá tu archivo CSV aquí</p>
                 <p className="text-sm text-muted-foreground">
                   o hacé clic para seleccionar
                 </p>
@@ -195,30 +200,31 @@ export function ImportCSV() {
                 <Check className="text-success-600" size={48} />
               </div>
               <div>
-                <p className="font-medium mb-1">Archivo validado correctamente</p>
+                <p className="font-medium mb-1">Importación completada</p>
                 <p className="text-sm text-muted-foreground mb-4">{fileName}</p>
                 {fileType && (
                   <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
                     {getAccountTypeLabel(fileType)}
                   </div>
                 )}
+                {importSummary && (
+                  <p className="text-sm text-muted-foreground mt-3">
+                    {importSummary.imported} de {importSummary.total}{' '}
+                    transacciones guardadas
+                    {importSummary.duplicates > 0 && (
+                      <> ({importSummary.duplicates} duplicadas omitidas)</>
+                    )}
+                  </p>
+                )}
               </div>
               <div className="flex gap-3 mt-4">
                 <Button onClick={resetImport} variant="outline">
                   Importar otro archivo
                 </Button>
-                <Button onClick={processTransactions} disabled={!parsedData}>
-                  Procesar {parsedData?.transactions.length ?? 0} transacciones
-                </Button>
+                {onImportComplete && (
+                  <Button onClick={onImportComplete}>Ver transacciones</Button>
+                )}
               </div>
-              {processResult && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  {`Se agregaron ${processResult.added} transacciones`}
-                  {processResult.duplicates > 0
-                    ? ` (${processResult.duplicates} duplicadas omitidas)`
-                    : ''}
-                </p>
-              )}
             </div>
           </div>
         )}
@@ -236,15 +242,12 @@ export function ImportCSV() {
                   {errorMessage || 'El archivo debe estar en formato CSV'}
                 </p>
               </div>
-              <Button onClick={resetImport}>
-                Intentar nuevamente
-              </Button>
+              <Button onClick={resetImport}>Intentar nuevamente</Button>
             </div>
           </div>
         )}
       </Card>
 
-      {/* File Type Info */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-3">
@@ -283,7 +286,6 @@ export function ImportCSV() {
         </Card>
       </div>
 
-      {/* Instructions */}
       <Card className="p-6">
         <h4 className="mb-4">Cómo obtener tu extracto CSV</h4>
         <ol className="space-y-3 text-sm text-muted-foreground">
@@ -291,50 +293,40 @@ export function ImportCSV() {
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
               1
             </span>
-            <span>
-              Ingresá a tu Home Banking de Santander Uruguay
-            </span>
+            <span>Ingresá a tu Home Banking de Santander Uruguay</span>
           </li>
           <li className="flex gap-3">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
               2
             </span>
-            <span>
-              Seleccioná la cuenta o tarjeta que querés exportar
-            </span>
+            <span>Seleccioná la cuenta o tarjeta que querés exportar</span>
           </li>
           <li className="flex gap-3">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
               3
             </span>
-            <span>
-              Buscá la opción "Exportar" o "Descargar movimientos"
-            </span>
+            <span>Buscá la opción "Exportar" o "Descargar movimientos"</span>
           </li>
           <li className="flex gap-3">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
               4
             </span>
-            <span>
-              Seleccioná formato CSV y el período deseado
-            </span>
+            <span>Seleccioná formato CSV y el período deseado</span>
           </li>
           <li className="flex gap-3">
             <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
               5
             </span>
-            <span>
-              Descargá el archivo y arrastralo a esta pantalla
-            </span>
+            <span>Descargá el archivo y arrastralo a esta pantalla</span>
           </li>
         </ol>
       </Card>
 
-      {/* Privacy Note */}
       <Card className="p-4 bg-primary-50 dark:bg-primary-900/10 border-primary/20">
         <p className="text-sm">
-          <strong>Tu privacidad es importante:</strong> Los archivos se procesan localmente en tu navegador. 
-          Tatú no envía tus datos financieros a ningún servidor externo.
+          <strong>Tu privacidad es importante:</strong> Los archivos se procesan
+          localmente en tu navegador. Tatú no envía tus datos financieros a
+          ningún servidor externo.
         </p>
       </Card>
     </div>

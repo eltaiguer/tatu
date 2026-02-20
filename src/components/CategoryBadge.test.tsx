@@ -8,19 +8,19 @@ describe('CategoryBadge', () => {
   it('renders readable label for modern categories', () => {
     render(<CategoryBadge categoryId="groceries" />);
 
-    expect(screen.getByText('Alimentacion')).toBeInTheDocument();
+    expect(screen.getByText('Alimentación')).toBeInTheDocument();
   });
 
   it('renders readable label for legacy category aliases', () => {
     render(<CategoryBadge categoryId="food" />);
 
-    expect(screen.getByText('Alimentacion')).toBeInTheDocument();
+    expect(screen.getByText('Alimentación')).toBeInTheDocument();
   });
 
   it('falls back to uncategorized label for unknown categories', () => {
     render(<CategoryBadge categoryId="unknown-category" />);
 
-    expect(screen.getByText('Sin categoria')).toBeInTheDocument();
+    expect(screen.getByText('Sin categoría')).toBeInTheDocument();
   });
 
   it('renders all built-in categories with a label', () => {

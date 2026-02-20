@@ -7,7 +7,7 @@ describe('getCategoryDisplay', () => {
     const result = getCategoryDisplay('groceries');
 
     expect(result.id).toBe('groceries');
-    expect(result.label).toBe('Alimentacion');
+    expect(result.label).toBe('Alimentación');
     expect(result.icon).toBe('groceries');
   });
 
@@ -15,7 +15,7 @@ describe('getCategoryDisplay', () => {
     const result = getCategoryDisplay('food');
 
     expect(result.id).toBe('groceries');
-    expect(result.label).toBe('Alimentacion');
+    expect(result.label).toBe('Alimentación');
     expect(result.icon).toBe('groceries');
   });
 
@@ -23,7 +23,7 @@ describe('getCategoryDisplay', () => {
     const result = getCategoryDisplay('non-existent-category');
 
     expect(result.id).toBe('uncategorized');
-    expect(result.label).toBe('Sin categoria');
+    expect(result.label).toBe('Sin categoría');
     expect(result.icon).toBe('uncategorized');
   });
 

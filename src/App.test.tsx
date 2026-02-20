@@ -1,80 +1,76 @@
-import { describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import App from './App';
-
-vi.mock('./components/Dashboard', () => ({
-  Dashboard: () => <h2>Dashboard View</h2>,
-}));
-
-vi.mock('./components/ImportCSV', () => ({
-  ImportCSV: () => <h2>Importar Transacciones</h2>,
-}));
-
-vi.mock('./components/Tools', () => ({
-  Tools: () => <h2>Herramientas</h2>,
-}));
-
-vi.mock('./components/Transactions', () => ({
-  Transactions: () => <h2>Transacciones</h2>,
-}));
-
-vi.mock('./components/Charts', () => ({
-  Charts: () => <h2>Insights y Análisis</h2>,
-}));
+import { beforeEach, describe, it, expect } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import App from './App'
+import { transactionStore } from './stores/transaction-store'
 
 describe('App', () => {
-  it('renders dashboard by default', () => {
-    render(<App />);
+  beforeEach(() => {
+    transactionStore.getState().clearTransactions()
+    localStorage.clear()
+  })
 
-    expect(screen.getByRole('heading', { name: 'Dashboard View' })).toBeInTheDocument();
-  });
+  it('renders dashboard view by default', () => {
+    render(<App />)
 
-  it('shows import flow when navigating to Importar', async () => {
-    const user = userEvent.setup();
+    expect(screen.getByRole('heading', { name: 'Bienvenido a Tatú' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Panel General' })).toBeInTheDocument()
+  })
 
-    render(<App />);
+  it('switches to import view from navigation', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: 'Importar' }));
-    });
+    expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument()
+    expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
+  })
 
-    expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument();
-  });
+  it('shows supported file types on import view', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
-  it('shows tools page when navigating to Herramientas', async () => {
-    const user = userEvent.setup();
+    expect(screen.getByText('Tarjeta de Crédito')).toBeInTheDocument()
+    expect(screen.getByText('Cuenta USD')).toBeInTheDocument()
+    expect(screen.getByText('Cuenta UYU')).toBeInTheDocument()
+    expect(screen.getByText(/Extracto de tarjeta Santander/)).toBeInTheDocument()
+  })
 
-    render(<App />);
+  it('switches to transactions view from navigation', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: 'Herramientas' }));
-    });
+    expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
+    expect(screen.getByText(/transacciones encontradas/)).toBeInTheDocument()
+  })
 
-    expect(screen.getByRole('heading', { name: 'Herramientas' })).toBeInTheDocument();
-  });
+  it('switches to tools view from navigation', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Herramientas' }))
 
-  it('shows transactions when navigating to Transacciones', async () => {
-    const user = userEvent.setup();
+    expect(screen.getByRole('heading', { name: 'Herramientas' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Filtros Avanzados' })).toBeInTheDocument()
+  })
 
-    render(<App />);
+  it('applies dark theme from localStorage on initial render', () => {
+    localStorage.setItem('theme', 'dark')
 
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: 'Transacciones' }));
-    });
+    render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument();
-  });
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
 
-  it('shows insights charts when navigating to Insights', async () => {
-    const user = userEvent.setup();
+  it('opens mobile menu and closes it when selecting a view', () => {
+    const { container } = render(<App />)
+    const menuToggle = container.querySelector(
+      'button.md\\:hidden'
+    ) as HTMLButtonElement
 
-    render(<App />);
+    expect(menuToggle).toBeTruthy()
+    fireEvent.click(menuToggle)
+    expect(screen.getByText('Modo oscuro')).toBeInTheDocument()
 
-    await act(async () => {
-      await user.click(screen.getByRole('button', { name: 'Insights' }));
-    });
-
-    expect(screen.getByRole('heading', { name: 'Insights y Análisis' })).toBeInTheDocument();
-  });
-});
+    const importButtons = screen.getAllByRole('button', { name: 'Importar' })
+    fireEvent.click(importButtons[importButtons.length - 1])
+    expect(screen.queryByText('Modo oscuro')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument()
+  })
+})

@@ -32,7 +32,7 @@ const MODERN_META: Record<
   { label: string; icon: CategoryIconName; color: string }
 > = {
   [Category.Groceries]: {
-    label: 'Alimentacion',
+    label: 'Alimentación',
     icon: 'groceries',
     color: CATEGORY_COLORS[Category.Groceries],
   },
@@ -72,7 +72,7 @@ const MODERN_META: Record<
     color: CATEGORY_COLORS[Category.Software],
   },
   [Category.Education]: {
-    label: 'Educacion',
+    label: 'Educación',
     icon: 'education',
     color: CATEGORY_COLORS[Category.Education],
   },
@@ -112,7 +112,7 @@ const MODERN_META: Record<
     color: CATEGORY_COLORS[Category.Fees],
   },
   [Category.Uncategorized]: {
-    label: 'Sin categoria',
+    label: 'Sin categoría',
     icon: 'uncategorized',
     color: CATEGORY_COLORS[Category.Uncategorized],
   },

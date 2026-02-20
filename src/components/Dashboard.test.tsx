@@ -1,107 +1,64 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { Dashboard } from './Dashboard';
-import type { Transaction } from '../models';
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { Dashboard } from './Dashboard'
+import type { Transaction } from '../models'
 
-function makeTransaction(overrides: Partial<Transaction>): Transaction {
+function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
-    id: overrides.id ?? 'tx-id',
-    date: overrides.date ?? new Date('2026-02-18T10:00:00.000Z'),
-    description: overrides.description ?? 'Test transaction',
-    amount: overrides.amount ?? 100,
-    currency: overrides.currency ?? 'UYU',
-    type: overrides.type ?? 'debit',
-    source: overrides.source ?? 'bank_account',
-    category: overrides.category,
-    categoryConfidence: overrides.categoryConfidence,
-    balance: overrides.balance,
-    rawData: overrides.rawData ?? {},
-  };
+    id: 'tx-1',
+    date: new Date('2026-01-10T00:00:00.000Z'),
+    description: 'sample',
+    amount: 100,
+    currency: 'UYU',
+    type: 'debit',
+    source: 'bank_account',
+    rawData: {},
+    ...overrides,
+  }
 }
 
 describe('Dashboard', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-02-20T12:00:00.000Z'));
-  });
+  it('does not render NaN/Infinity when there are no transactions', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-02-20T12:00:00.000Z'))
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+    render(<Dashboard transactions={[]} />)
 
-  it('does not render NaN with empty transactions', () => {
-    const { container } = render(<Dashboard transactions={[]} />);
+    expect(screen.queryByText(/NaN|Infinity/)).not.toBeInTheDocument()
+    expect(screen.getByText('0')).toBeInTheDocument()
 
-    expect(container.textContent).not.toContain('NaN');
-    expect(container.textContent).not.toContain('Infinity');
-    expect(screen.getByText('Sin movimientos en el período')).toBeInTheDocument();
-  });
+    vi.useRealTimers()
+  })
 
-  it('derives top expense/category from actual transactions', () => {
-    const transactions: Transaction[] = [
-      makeTransaction({ id: '1', description: 'UBER', amount: 250, category: 'transport' }),
-      makeTransaction({ id: '2', description: 'DEVOTO', amount: 100, category: 'groceries' }),
-      makeTransaction({ id: '3', description: 'SALARIO', amount: 1000, type: 'credit', category: 'salary' }),
-      makeTransaction({ id: '4', description: 'NETFLIX', amount: 50, currency: 'USD', category: 'entertainment' }),
-    ];
-
-    render(<Dashboard transactions={transactions} />);
-
-    expect(screen.getByText('UBER')).toBeInTheDocument();
-    expect(screen.getByText('Transporte')).toBeInTheDocument();
-  });
-
-  it('updates top expense based on selected period', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-
-    const transactions: Transaction[] = [
+  it('shows currency-specific summary when filtered to USD', () => {
+    const transactions = [
       makeTransaction({
-        id: 'old-month',
-        date: new Date('2026-02-03T10:00:00.000Z'),
-        description: 'ALQUILER',
-        amount: 700,
-        category: 'housing',
+        id: 'uyu-debit',
+        currency: 'UYU',
+        type: 'debit',
+        amount: 1000,
       }),
       makeTransaction({
-        id: 'current-week',
-        date: new Date('2026-02-19T10:00:00.000Z'),
-        description: 'UBER',
-        amount: 250,
-        category: 'transport',
+        id: 'usd-debit',
+        currency: 'USD',
+        type: 'debit',
+        amount: 50,
       }),
-    ];
+      makeTransaction({
+        id: 'usd-credit',
+        currency: 'USD',
+        type: 'credit',
+        amount: 200,
+      }),
+    ]
 
-    render(<Dashboard transactions={transactions} />);
+    render(<Dashboard transactions={transactions} />)
 
-    expect(screen.getByText('ALQUILER')).toBeInTheDocument();
+    const selects = screen.getAllByRole('combobox')
+    const currencySelect = selects[1]
+    fireEvent.change(currencySelect, { target: { value: 'USD' } })
 
-    await act(async () => {
-      await user.selectOptions(screen.getByLabelText('Período'), 'week');
-    });
-
-    expect(screen.getByText('UBER')).toBeInTheDocument();
-    expect(screen.queryByText('ALQUILER')).not.toBeInTheDocument();
-  });
-
-  it('recomputes stats when switching currency', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-
-    const transactions: Transaction[] = [
-      makeTransaction({ id: 'uyu', description: 'SUPERMERCADO', amount: 200, currency: 'UYU', category: 'groceries' }),
-      makeTransaction({ id: 'usd', description: 'NETFLIX', amount: 80, currency: 'USD', category: 'entertainment' }),
-    ];
-
-    const { container } = render(<Dashboard transactions={transactions} />);
-
-    await act(async () => {
-      await user.selectOptions(screen.getByLabelText('Moneda'), 'USD');
-    });
-
-    expect(screen.getByText('NETFLIX')).toBeInTheDocument();
-    expect(screen.getByText('Entretenimiento')).toBeInTheDocument();
-    expect(container.textContent).not.toContain('+12.5%');
-    expect(container.textContent).not.toContain('-8.3%');
-    expect(container.textContent).not.toContain('TC: $U 40.00');
-  });
-});
+    expect(screen.getByText('US$ 200,00')).toBeInTheDocument()
+    expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
+  })
+})

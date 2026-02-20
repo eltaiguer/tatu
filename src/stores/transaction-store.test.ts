@@ -138,6 +138,22 @@ describe('Transaction Store - Persistence', () => {
     expect(parsed.state.transactions[0].id).toBe('tx-1')
   })
 
+  it('persists bulk imported transactions to localStorage', () => {
+    store
+      .getState()
+      .addTransactions([makeTransaction('tx-1'), makeTransaction('tx-2')])
+
+    const raw = window.localStorage.getItem(storageKey)
+    expect(raw).toBeTruthy()
+
+    const parsed = JSON.parse(raw ?? '{}')
+    expect(parsed.state.transactions).toHaveLength(2)
+    expect(parsed.state.transactions.map((tx: { id: string }) => tx.id)).toEqual([
+      'tx-1',
+      'tx-2',
+    ])
+  })
+
   it('rehydrates transactions from localStorage', async () => {
     const stored = {
       state: {

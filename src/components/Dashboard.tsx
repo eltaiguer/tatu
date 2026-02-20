@@ -4,7 +4,7 @@ import { Card } from './ui/card';
 import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign } from 'lucide-react';
 import type { Transaction, Currency } from '../models';
 import { useMemo, useState } from 'react';
-import { filterByPeriod, type Period } from '../utils/date-utils';
+import { filterByPeriod, generatePeriodOptions } from '../utils/date-utils';
 import { getCategoryDisplay } from '../utils/category-display';
 
 function toSafeNumber(value: number): number {
@@ -97,32 +97,50 @@ interface DashboardProps {
 
 export function Dashboard({ transactions }: DashboardProps) {
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | 'all'>('all');
-  const [period, setPeriod] = useState<Period>('month');
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('all');
 
-  const periodFilteredTransactions = useMemo(
-    () => filterByPeriod(transactions, 'date', period),
-    [transactions, period]
+  const periodOptions = useMemo(() => {
+    const dates = transactions.map((tx) => tx.date);
+    return generatePeriodOptions(dates);
+  }, [transactions]);
+
+  const selectedPeriod = useMemo(
+    () => periodOptions.find((option) => option.id === selectedPeriodId) || periodOptions[0],
+    [periodOptions, selectedPeriodId]
   );
+
+  const filteredTransactions = useMemo(() => {
+    if (!selectedPeriod) {
+      return transactions;
+    }
+
+    return filterByPeriod(
+      transactions,
+      'date',
+      selectedPeriod.period,
+      selectedPeriod.referenceDate
+    );
+  }, [transactions, selectedPeriod]);
 
   const allSummary = useMemo(
-    () => calculateSummary(periodFilteredTransactions),
-    [periodFilteredTransactions]
+    () => calculateSummary(filteredTransactions),
+    [filteredTransactions]
   );
   const uyuSummary = useMemo(
-    () => calculateSummary(periodFilteredTransactions, 'UYU'),
-    [periodFilteredTransactions]
+    () => calculateSummary(filteredTransactions, 'UYU'),
+    [filteredTransactions]
   );
   const usdSummary = useMemo(
-    () => calculateSummary(periodFilteredTransactions, 'USD'),
-    [periodFilteredTransactions]
+    () => calculateSummary(filteredTransactions, 'USD'),
+    [filteredTransactions]
   );
 
   const currencyFilteredTransactions = useMemo(
     () =>
       selectedCurrency === 'all'
-        ? periodFilteredTransactions
-        : periodFilteredTransactions.filter((tx) => tx.currency === selectedCurrency),
-    [periodFilteredTransactions, selectedCurrency]
+        ? filteredTransactions
+        : filteredTransactions.filter((tx) => tx.currency === selectedCurrency),
+    [filteredTransactions, selectedCurrency]
   );
 
   const summary = selectedCurrency === 'all'
@@ -131,9 +149,7 @@ export function Dashboard({ transactions }: DashboardProps) {
       ? uyuSummary
       : usdSummary;
 
-  const debitCount = currencyFilteredTransactions.filter(
-    (tx) => tx.type === 'debit'
-  ).length;
+  const debitCount = currencyFilteredTransactions.filter((tx) => tx.type === 'debit').length;
   const averageExpense = debitCount > 0 ? summary.expenses / debitCount : 0;
   const currencyLabel = selectedCurrency === 'all' ? 'multimoneda' : selectedCurrency;
 
@@ -150,8 +166,8 @@ export function Dashboard({ transactions }: DashboardProps) {
     : getCategoryDisplay();
 
   const creditCardTransactions = useMemo(
-    () => periodFilteredTransactions.filter((tx) => tx.source === 'credit_card'),
-    [periodFilteredTransactions]
+    () => filteredTransactions.filter((tx) => tx.source === 'credit_card'),
+    [filteredTransactions]
   );
   const creditCardSummary = useMemo(
     () => calculateSummary(creditCardTransactions),
@@ -166,7 +182,7 @@ export function Dashboard({ transactions }: DashboardProps) {
     [creditCardTransactions]
   );
 
-  const usdTransactionsCount = periodFilteredTransactions.filter(
+  const usdTransactionsCount = filteredTransactions.filter(
     (tx) => tx.currency === 'USD'
   ).length;
 
@@ -190,13 +206,14 @@ export function Dashboard({ transactions }: DashboardProps) {
           <select
             aria-label="Período"
             className="px-4 py-2 rounded-lg border border-input bg-input-background"
-            value={period}
-            onChange={(event) => setPeriod(event.target.value as Period)}
+            value={selectedPeriodId}
+            onChange={(event) => setSelectedPeriodId(event.target.value)}
           >
-            <option value="week">Esta semana</option>
-            <option value="month">Este mes</option>
-            <option value="quarter">Trimestre</option>
-            <option value="year">Año actual</option>
+            {periodOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
           </select>
 
           <select
@@ -341,7 +358,7 @@ export function Dashboard({ transactions }: DashboardProps) {
             </div>
             <div className="flex justify-between text-xs text-muted-foreground mt-3">
               <span>{usdTransactionsCount} movimientos USD</span>
-              <span>{periodFilteredTransactions.length} totales</span>
+              <span>{filteredTransactions.length} totales</span>
             </div>
           </div>
         </Card>
