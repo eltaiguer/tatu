@@ -98,3 +98,83 @@ export function removeCustomCategory(id: string): void {
   const updated = categories.filter((category) => category.id !== id)
   saveCustomCategories(updated)
 }
+
+export function replaceCustomCategories(categories: CustomCategory[]): void {
+  saveCustomCategories(categories)
+}
+
+export async function addCustomCategoryWithSync(input: {
+  label: string
+  color: string
+  icon?: string
+}): Promise<CustomCategory> {
+  const created = addCustomCategory(input)
+
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { upsertCustomCategory } = await import(
+        '../supabase/custom-categories'
+      )
+      await upsertCustomCategory(session, {
+        id: created.id,
+        label: created.label,
+        color: created.color,
+        icon: created.icon,
+        isArchived: false,
+      })
+    }
+  } catch {
+    // local state is source of truth fallback when cloud sync fails
+  }
+
+  return created
+}
+
+export async function updateCustomCategoryWithSync(
+  id: string,
+  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon'>>
+): Promise<void> {
+  updateCustomCategory(id, updates)
+  const category = listCustomCategories().find((entry) => entry.id === id)
+  if (!category) {
+    return
+  }
+
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { upsertCustomCategory } = await import(
+        '../supabase/custom-categories'
+      )
+      await upsertCustomCategory(session, {
+        id: category.id,
+        label: category.label,
+        color: category.color,
+        icon: category.icon,
+        isArchived: false,
+      })
+    }
+  } catch {
+    // local update remains applied
+  }
+}
+
+export async function removeCustomCategoryWithSync(id: string): Promise<void> {
+  removeCustomCategory(id)
+
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { archiveCustomCategory } = await import(
+        '../supabase/custom-categories'
+      )
+      await archiveCustomCategory(session, id)
+    }
+  } catch {
+    // local deletion remains applied
+  }
+}

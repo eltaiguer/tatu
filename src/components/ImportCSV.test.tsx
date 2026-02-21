@@ -230,6 +230,16 @@ describe('ImportCSV', () => {
       screen.getByText('2 de 3 transacciones guardadas (1 duplicadas omitidas)')
     ).toBeInTheDocument()
     expect(onTransactionsImported).toHaveBeenCalledTimes(1)
+    expect(onTransactionsImported).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        fileName: 'movements.csv',
+        csvContent: expect.any(String),
+        parsedData: expect.objectContaining({
+          fileType: 'bank_account_uyu',
+        }),
+      })
+    )
     expect(addTransactionsMock).not.toHaveBeenCalled()
   })
 })

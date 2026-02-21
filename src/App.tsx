@@ -40,10 +40,34 @@ import {
 import {
   loadUserTransactions,
   persistTransactions,
+  softDeleteTransaction,
+  updateTransaction as updateRemoteTransaction,
 } from './services/supabase/transactions'
 import type { Transaction } from './models'
+import {
+  listMerchantCategoryOverrides,
+  clearAllCategoryOverrides,
+  replaceMerchantCategoryOverrides,
+} from './services/categorizer/category-overrides'
+import {
+  listCustomCategories as listLocalCustomCategories,
+  replaceCustomCategories,
+} from './services/categories/category-store'
+import { listCategoryOverrides, upsertCategoryOverride } from './services/supabase/category-overrides'
+import { listCustomCategories, upsertCustomCategory } from './services/supabase/custom-categories'
+import {
+  completeImportRun,
+  createImportRun,
+  failImportRun,
+  sha256Hex,
+} from './services/supabase/import-runs'
+import { setActiveSupabaseSession } from './services/supabase/runtime'
+import { resetUserSupabaseData } from './services/supabase/reset'
 
 type View = 'dashboard' | 'transactions' | 'charts' | 'tools' | 'import'
+const CATEGORY_OVERRIDES_MIGRATION_KEY =
+  'tatu:migration:category-overrides:v1'
+const CUSTOM_CATEGORIES_MIGRATION_KEY = 'tatu:migration:custom-categories:v1'
 
 function App() {
   const supabaseEnabled = isSupabaseConfigured()
@@ -80,6 +104,10 @@ function App() {
   }, [isDark])
 
   useEffect(() => {
+    setActiveSupabaseSession(session)
+  }, [session])
+
+  useEffect(() => {
     let cancelled = false
 
     async function syncTransactions() {
@@ -98,6 +126,7 @@ function App() {
       setAuthNotice('')
 
       try {
+        const notices: string[] = []
         const remoteTransactions = await loadUserTransactions(session)
         const localTransactions = getPersistedTransactionsSnapshot()
         const remoteIds = new Set(remoteTransactions.map((tx) => tx.id))
@@ -107,9 +136,81 @@ function App() {
 
         if (transactionsToMigrate.length > 0) {
           await persistTransactions(session, transactionsToMigrate)
-          setAuthNotice(
+          notices.push(
             `${transactionsToMigrate.length} transacciones locales migradas`
           )
+        }
+
+        const shouldMigrateOverrides =
+          localStorage.getItem(CATEGORY_OVERRIDES_MIGRATION_KEY) !== 'done'
+        if (shouldMigrateOverrides) {
+          const localOverrides = listMerchantCategoryOverrides()
+          for (const [merchantNormalized, override] of Object.entries(
+            localOverrides
+          )) {
+            await upsertCategoryOverride(session, {
+              merchantNormalized,
+              merchantOriginal: override.merchantName,
+              category: override.category,
+            })
+          }
+
+          localStorage.setItem(CATEGORY_OVERRIDES_MIGRATION_KEY, 'done')
+          if (Object.keys(localOverrides).length > 0) {
+            notices.push('Reglas de categoría migradas a la nube')
+          }
+        }
+
+        const remoteOverrides = await listCategoryOverrides(session)
+        replaceMerchantCategoryOverrides(
+          remoteOverrides.reduce(
+            (acc, override) => {
+              acc[override.merchantNormalized] = {
+                merchantName: override.merchantOriginal,
+                category: override.category,
+                updatedAt: override.updatedAt,
+              }
+              return acc
+            },
+            {} as Record<
+              string,
+              { merchantName?: string; category: string; updatedAt: string }
+            >
+          )
+        )
+
+        const shouldMigrateCustomCategories =
+          localStorage.getItem(CUSTOM_CATEGORIES_MIGRATION_KEY) !== 'done'
+        if (shouldMigrateCustomCategories) {
+          const localCustomCategories = listLocalCustomCategories()
+          for (const category of localCustomCategories) {
+            await upsertCustomCategory(session, {
+              id: category.id,
+              label: category.label,
+              color: category.color,
+              icon: category.icon,
+              isArchived: false,
+            })
+          }
+
+          localStorage.setItem(CUSTOM_CATEGORIES_MIGRATION_KEY, 'done')
+          if (localCustomCategories.length > 0) {
+            notices.push('Categorías personalizadas migradas a la nube')
+          }
+        }
+
+        const remoteCustomCategories = await listCustomCategories(session)
+        replaceCustomCategories(
+          remoteCustomCategories.map((category) => ({
+            id: category.id,
+            label: category.label,
+            color: category.color,
+            icon: category.icon,
+          }))
+        )
+
+        if (notices.length > 0) {
+          setAuthNotice(notices.join(' · '))
         }
 
         const mergedTransactions = [
@@ -181,9 +282,28 @@ function App() {
     }
   }
 
-  async function handleTransactionsImported(transactionsToImport: Transaction[]) {
+  async function handleTransactionsImported(
+    transactionsToImport: Transaction[],
+    context?: {
+      parsedData: {
+        fileType: 'credit_card' | 'bank_account_usd' | 'bank_account_uyu'
+      }
+      csvContent: string
+      fileName: string
+    }
+  ) {
     if (!supabaseEnabled || !session) {
       return transactionStore.getState().addTransactions(transactionsToImport)
+    }
+
+    let importRunId: string | null = null
+    if (context) {
+      const fileChecksum = await sha256Hex(context.csvContent)
+      importRunId = await createImportRun(session, {
+        fileName: context.fileName,
+        fileType: context.parsedData.fileType,
+        fileChecksum,
+      })
     }
 
     const state = transactionStore.getState()
@@ -193,8 +313,29 @@ function App() {
       duplicateIds.has(tx.id)
     )
 
-    await persistTransactions(session, added)
-    state.addTransactions(added)
+    try {
+      await persistTransactions(session, added, {
+        importId: importRunId ?? undefined,
+      })
+      state.addTransactions(added)
+
+      if (importRunId) {
+        await completeImportRun(session, importRunId, {
+          totalRows: transactionsToImport.length,
+          insertedRows: added.length,
+          duplicateRows: duplicates.length,
+        })
+      }
+    } catch (error) {
+      if (importRunId) {
+        await failImportRun(
+          session,
+          importRunId,
+          error instanceof Error ? error.message : 'Error de importación'
+        )
+      }
+      throw error
+    }
 
     return { added, duplicates }
   }
@@ -215,6 +356,72 @@ function App() {
       )
     } finally {
       setAuthSubmitting(false)
+    }
+  }
+
+  async function handleResetAllData() {
+    transactionStore.getState().clearTransactions()
+    clearAllCategoryOverrides()
+    replaceCustomCategories([])
+    localStorage.removeItem('tatu:transactions')
+    localStorage.removeItem('tatu:customCategories')
+    localStorage.removeItem('tatu:categoryOverrides')
+    localStorage.removeItem(CATEGORY_OVERRIDES_MIGRATION_KEY)
+    localStorage.removeItem(CUSTOM_CATEGORIES_MIGRATION_KEY)
+
+    if (supabaseEnabled && session) {
+      await resetUserSupabaseData(session)
+    }
+
+    setAuthNotice('Datos eliminados correctamente')
+  }
+
+  async function handleUpdateTransaction(
+    transactionId: string,
+    updates: {
+      description?: string
+      category?: string
+      tags?: string[]
+    }
+  ) {
+    const state = transactionStore.getState()
+    const current = state.transactions.find((tx) => tx.id === transactionId)
+    if (!current) {
+      return
+    }
+
+    try {
+      if (supabaseEnabled && session) {
+        await updateRemoteTransaction(session, transactionId, updates)
+      }
+
+      state.updateTransaction(transactionId, updates)
+      setAuthError('')
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo actualizar la transacción'
+      )
+    }
+  }
+
+  async function handleDeleteTransaction(transactionId: string) {
+    const state = transactionStore.getState()
+
+    try {
+      if (supabaseEnabled && session) {
+        await softDeleteTransaction(session, transactionId)
+      }
+
+      state.removeTransaction(transactionId)
+      setAuthError('')
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo eliminar la transacción'
+      )
     }
   }
 
@@ -381,10 +588,19 @@ function App() {
           <Dashboard transactions={transactions} />
         )}
         {currentView === 'transactions' && (
-          <Transactions transactions={transactions} />
+          <Transactions
+            transactions={transactions}
+            onUpdateTransaction={handleUpdateTransaction}
+            onDeleteTransaction={handleDeleteTransaction}
+          />
         )}
         {currentView === 'charts' && <Charts transactions={transactions} />}
-        {currentView === 'tools' && <Tools transactions={transactions} />}
+        {currentView === 'tools' && (
+          <Tools
+            transactions={transactions}
+            onResetAllData={handleResetAllData}
+          />
+        )}
         {currentView === 'import' && (
           <ImportCSV
             onImportComplete={() => setCurrentView('transactions')}

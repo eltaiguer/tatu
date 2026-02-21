@@ -1,7 +1,11 @@
-import { beforeEach, describe, it, expect } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import App from './App'
 import { transactionStore } from './stores/transaction-store'
+
+vi.mock('./services/supabase/client', () => ({
+  isSupabaseConfigured: () => false,
+}))
 
 describe('App', () => {
   beforeEach(() => {

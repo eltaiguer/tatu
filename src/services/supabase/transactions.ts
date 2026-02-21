@@ -1,5 +1,5 @@
 import type { Transaction } from '../../models'
-import { supabaseFetch, type SupabaseSession } from './client'
+import { getSupabaseClient, type SupabaseSession } from './client'
 
 interface TransactionRow {
   user_id: string
@@ -11,9 +11,13 @@ interface TransactionRow {
   type: string
   source: string
   category: string | null
+  tags?: string[] | null
   category_confidence: number | null
   balance: number | null
   raw_data: Record<string, unknown>
+  import_id?: string | null
+  is_deleted?: boolean
+  deleted_at?: string | null
 }
 
 function transactionToRow(userId: string, tx: Transaction): TransactionRow {
@@ -27,6 +31,7 @@ function transactionToRow(userId: string, tx: Transaction): TransactionRow {
     type: tx.type,
     source: tx.source,
     category: tx.category ?? null,
+    tags: tx.tags ?? [],
     category_confidence: tx.categoryConfidence ?? null,
     balance: tx.balance ?? null,
     raw_data: (tx.rawData ?? {}) as Record<string, unknown>,
@@ -43,6 +48,7 @@ function rowToTransaction(row: TransactionRow): Transaction {
     type: row.type as Transaction['type'],
     source: row.source as Transaction['source'],
     category: row.category ?? undefined,
+    tags: row.tags ?? [],
     categoryConfidence: row.category_confidence ?? undefined,
     balance: row.balance ?? undefined,
     rawData: row.raw_data ?? {},
@@ -52,38 +58,119 @@ function rowToTransaction(row: TransactionRow): Transaction {
 export async function loadUserTransactions(
   session: SupabaseSession
 ): Promise<Transaction[]> {
-  const userId = encodeURIComponent(session.user.id)
-  const rows = await supabaseFetch<TransactionRow[]>(
-    `/rest/v1/transactions?user_id=eq.${userId}&select=*`,
-    {
-      method: 'GET',
-    },
-    session.access_token
-  )
+  const client = getSupabaseClient()
+  const { data, error } = await client
+    .from('transactions')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .is('is_deleted', false)
 
-  return rows
-    .map(rowToTransaction)
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  return (data ?? [])
+    .map((row) => rowToTransaction(row as TransactionRow))
     .sort((a, b) => b.date.getTime() - a.date.getTime())
 }
 
 export async function persistTransactions(
   session: SupabaseSession,
-  transactions: Transaction[]
+  transactions: Transaction[],
+  options?: {
+    importId?: string
+  }
 ): Promise<void> {
   if (transactions.length === 0) {
     return
   }
 
-  const rows = transactions.map((tx) => transactionToRow(session.user.id, tx))
-  await supabaseFetch<null>(
-    '/rest/v1/transactions?on_conflict=user_id,transaction_id',
-    {
-      method: 'POST',
-      headers: {
-        Prefer: 'resolution=merge-duplicates,return=minimal',
-      },
-      body: JSON.stringify(rows),
-    },
-    session.access_token
-  )
+  const client = getSupabaseClient()
+  const rows = transactions.map((tx) => ({
+    ...transactionToRow(session.user.id, tx),
+    import_id: options?.importId ?? null,
+    is_deleted: false,
+    deleted_at: null,
+  }))
+
+  const { error } = await client
+    .from('transactions')
+    .upsert(rows, { onConflict: 'user_id,transaction_id' })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
+export async function softDeleteTransaction(
+  session: SupabaseSession,
+  transactionId: string
+): Promise<void> {
+  const client = getSupabaseClient()
+  const { error } = await client
+    .from('transactions')
+    .update({ is_deleted: true })
+    .eq('user_id', session.user.id)
+    .eq('transaction_id', transactionId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
+export async function restoreTransaction(
+  session: SupabaseSession,
+  transactionId: string
+): Promise<void> {
+  const client = getSupabaseClient()
+  const { error } = await client
+    .from('transactions')
+    .update({ is_deleted: false })
+    .eq('user_id', session.user.id)
+    .eq('transaction_id', transactionId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
+export interface UpdateTransactionInput {
+  description?: string
+  category?: string
+  tags?: string[]
+}
+
+export async function updateTransaction(
+  session: SupabaseSession,
+  transactionId: string,
+  updates: UpdateTransactionInput
+): Promise<void> {
+  const payload: Record<string, unknown> = {}
+
+  if (updates.description !== undefined) {
+    payload.description = updates.description
+  }
+
+  if (updates.category !== undefined) {
+    payload.category = updates.category || null
+  }
+
+  if (updates.tags !== undefined) {
+    payload.tags = updates.tags
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return
+  }
+
+  const client = getSupabaseClient()
+  const { error } = await client
+    .from('transactions')
+    .update(payload)
+    .eq('user_id', session.user.id)
+    .eq('transaction_id', transactionId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
 }
