@@ -10,14 +10,23 @@ import { ListFilter, Download, Plus, Pencil, Trash, FileText, Settings } from 'l
 import type { Transaction } from '../models';
 import { categories } from '../utils/figma-data';
 import { useState } from 'react';
+import { getCategoryDefinitions } from '../services/categories/category-registry';
+import {
+  addCustomCategoryWithSync,
+  removeCustomCategoryWithSync,
+  updateCustomCategoryWithSync,
+} from '../services/categories/category-store';
+import { getCategoryDisplay } from '../utils/category-display';
 
 
 interface ToolsProps {
   transactions: Transaction[];
+  onResetAllData?: () => Promise<void> | void;
 }
 
-export function Tools({ transactions }: ToolsProps) {
+export function Tools({ transactions, onResetAllData }: ToolsProps) {
   const [activeTab, setActiveTab] = useState<'filters' | 'export' | 'categories' | 'settings'>('filters');
+  const [, setCategoriesVersion] = useState(0);
 
   // Filter states
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -45,6 +54,77 @@ export function Tools({ transactions }: ToolsProps) {
     (dateRange.start || dateRange.end ? 1 : 0) + 
     (amountRange.min || amountRange.max ? 1 : 0) +
     (selectedCurrency !== 'all' ? 1 : 0);
+
+  const categoryDefinitions = getCategoryDefinitions();
+
+  const refreshCategoryDefinitions = () => {
+    setCategoriesVersion((value) => value + 1);
+  };
+
+  const customCategoryColor = '#0ea5e9';
+
+  const handleCreateCustomCategory = async () => {
+    const label = window.prompt('Nombre de la categoría')
+    if (!label || !label.trim()) {
+      return
+    }
+
+    await addCustomCategoryWithSync({
+      label: label.trim(),
+      color: customCategoryColor,
+      icon: '🏷️',
+    })
+    refreshCategoryDefinitions()
+  };
+
+  const handleEditCustomCategory = async (categoryId: string, currentLabel: string) => {
+    const nextLabel = window.prompt('Editar nombre de la categoría', currentLabel)
+    if (!nextLabel || !nextLabel.trim()) {
+      return
+    }
+
+    await updateCustomCategoryWithSync(categoryId, {
+      label: nextLabel.trim(),
+    })
+    refreshCategoryDefinitions()
+  };
+
+  const handleDeleteCustomCategory = async (categoryId: string) => {
+    await removeCustomCategoryWithSync(categoryId)
+    refreshCategoryDefinitions()
+  };
+
+  const getCategoryAmountTotal = (categoryId: string): number =>
+    Math.abs(
+      transactions
+        .filter((transaction) => {
+          const transactionCategory = getCategoryDisplay(transaction.category).id
+          const definitionCategory = getCategoryDisplay(categoryId).id
+          return (
+            transaction.type === 'debit' &&
+            transactionCategory === definitionCategory
+          )
+        })
+        .reduce((sum, transaction) => sum + transaction.amount, 0)
+    );
+
+  const getCategoryTransactionCount = (categoryId: string): number =>
+    transactions.filter((transaction) => {
+      const transactionCategory = getCategoryDisplay(transaction.category).id
+      const definitionCategory = getCategoryDisplay(categoryId).id
+      return transactionCategory === definitionCategory
+    }).length;
+
+  const handleResetAllData = async () => {
+    const confirmed = window.confirm(
+      'Esto eliminará todas tus transacciones y configuraciones. ¿Querés continuar?'
+    )
+    if (!confirmed || !onResetAllData) {
+      return
+    }
+
+    await onResetAllData()
+  };
 
   return (
     <div className="space-y-6">
@@ -388,22 +468,34 @@ export function Tools({ transactions }: ToolsProps) {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h3>Gestión de Categorías</h3>
-            <Button>
+            <Button onClick={() => void handleCreateCustomCategory()}>
               <Plus size={18} className="mr-2" />
               Nueva Categoría
             </Button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {categories.map(category => (
+            {categoryDefinitions.map(category => (
               <Card key={category.id} className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <CategoryBadge categoryId={category.id} />
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="sm">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!category.isCustom}
+                      onClick={() =>
+                        void handleEditCustomCategory(category.id, category.label)
+                      }
+                    >
                       <Pencil size={14} />
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!category.isCustom}
+                      onClick={() => void handleDeleteCustomCategory(category.id)}
+                    >
                       <Trash size={14} className="text-destructive" />
                     </Button>
                   </div>
@@ -413,19 +505,16 @@ export function Tools({ transactions }: ToolsProps) {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Transacciones</span>
                     <span className="font-mono">
-                      {transactions.filter(t => t.category === category.id).length}
+                      {getCategoryTransactionCount(category.id)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Total</span>
                     <span className="font-mono">
-                      $U {Math.abs(
-                        transactions
-                          .filter(
-                            (t) => t.category === category.id && t.type === 'debit'
-                          )
-                          .reduce((sum, t) => sum + t.amount, 0)
-                      ).toLocaleString('es-UY', { minimumFractionDigits: 2 })}
+                      $U {getCategoryAmountTotal(category.id).toLocaleString(
+                        'es-UY',
+                        { minimumFractionDigits: 2 }
+                      )}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -531,6 +620,20 @@ export function Tools({ transactions }: ToolsProps) {
                 </select>
               </div>
             </div>
+          </Card>
+
+          <Card className="p-6 border-destructive/30 bg-destructive/5">
+            <h4 className="mb-3">Reset de datos</h4>
+            <p className="text-sm text-muted-foreground mb-4">
+              Elimina todas las transacciones, categorías y reglas guardadas.
+            </p>
+            <Button
+              variant="destructive"
+              onClick={() => void handleResetAllData()}
+              disabled={!onResetAllData}
+            >
+              Resetear todos los datos
+            </Button>
           </Card>
         </div>
       )}

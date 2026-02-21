@@ -52,6 +52,8 @@ Auth flow includes:
 - Email/password sign in and sign up
 - Password reset email request
 - Automatic migration of existing local transactions after first login
+- Automatic migration of local category overrides and custom categories
+- Import run tracking (`import_runs`) for upload observability
 
 ### Firebase (Optional)
 

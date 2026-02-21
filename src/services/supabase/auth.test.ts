@@ -1,91 +1,107 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mockFetch = vi.fn()
+const {
+  signInWithPasswordMock,
+  signUpMock,
+  signOutMock,
+  resetPasswordForEmailMock,
+  loadStoredSessionMock,
+  storeSessionMock,
+  clearStoredSessionMock,
+} = vi.hoisted(() => ({
+  signInWithPasswordMock: vi.fn(),
+  signUpMock: vi.fn(),
+  signOutMock: vi.fn(),
+  resetPasswordForEmailMock: vi.fn(),
+  loadStoredSessionMock: vi.fn(),
+  storeSessionMock: vi.fn(),
+  clearStoredSessionMock: vi.fn(),
+}))
+
+vi.mock('./client', () => ({
+  isSupabaseConfigured: vi.fn(() => true),
+  loadStoredSession: loadStoredSessionMock,
+  storeSession: storeSessionMock,
+  clearStoredSession: clearStoredSessionMock,
+  getSupabaseClient: () => ({
+    auth: {
+      signInWithPassword: signInWithPasswordMock,
+      signUp: signUpMock,
+      signOut: signOutMock,
+      resetPasswordForEmail: resetPasswordForEmailMock,
+    },
+  }),
+}))
 
 describe('supabase auth service', () => {
   beforeEach(() => {
-    vi.resetModules()
-    vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co')
-    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-test-key')
-    localStorage.clear()
-    mockFetch.mockReset()
-    vi.stubGlobal('fetch', mockFetch)
+    vi.clearAllMocks()
   })
 
-  afterEach(() => {
-    vi.unstubAllEnvs()
-    vi.unstubAllGlobals()
-  })
-
-  it('signs in and persists session in localStorage', async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        access_token: 'access-token',
-        refresh_token: 'refresh-token',
-        token_type: 'bearer',
-        expires_in: 3600,
-        user: { id: 'user-1', email: 'test@example.com' },
-      }),
+  it('signs in and stores session', async () => {
+    signInWithPasswordMock.mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'access-token',
+          user: { id: 'user-1', email: 'test@example.com' },
+        },
+      },
+      error: null,
     })
 
-    const { signInWithPassword, getCurrentSession } = await import('./auth')
+    const { signInWithPassword } = await import('./auth')
     const session = await signInWithPassword('test@example.com', 'secret123')
 
     expect(session.user.id).toBe('user-1')
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://example.supabase.co/auth/v1/token?grant_type=password',
-      expect.objectContaining({
-        method: 'POST',
-      })
-    )
-
-    const storedSession = getCurrentSession()
-    expect(storedSession?.access_token).toBe('access-token')
+    expect(storeSessionMock).toHaveBeenCalledTimes(1)
   })
 
-  it('signs out and clears session', async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        access_token: 'access-token',
-        refresh_token: 'refresh-token',
-        token_type: 'bearer',
-        expires_in: 3600,
-        user: { id: 'user-1', email: 'test@example.com' },
-      }),
-    })
-    const { signInWithPassword, signOut, getCurrentSession } =
-      await import('./auth')
-    const session = await signInWithPassword('test@example.com', 'secret123')
-    mockFetch.mockResolvedValue({
-      ok: true,
-      status: 204,
-      json: async () => null,
+  it('signs up and stores session', async () => {
+    signUpMock.mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'access-token',
+          user: { id: 'user-1', email: 'test@example.com' },
+        },
+      },
+      error: null,
     })
 
-    await signOut(session)
+    const { signUpWithPassword } = await import('./auth')
+    const session = await signUpWithPassword('test@example.com', 'secret123')
 
-    expect(getCurrentSession()).toBeNull()
+    expect(session.user.id).toBe('user-1')
+    expect(storeSessionMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('signs out and clears stored session', async () => {
+    signOutMock.mockResolvedValue({ error: null })
+
+    const { signOut } = await import('./auth')
+    await signOut(null)
+
+    expect(clearStoredSessionMock).toHaveBeenCalledTimes(1)
   })
 
   it('requests password reset email', async () => {
-    mockFetch.mockResolvedValue({
-      ok: true,
-      status: 204,
-      json: async () => null,
-    })
+    resetPasswordForEmailMock.mockResolvedValue({ error: null })
 
     const { requestPasswordReset } = await import('./auth')
     await requestPasswordReset('test@example.com')
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://example.supabase.co/auth/v1/recover',
-      expect.objectContaining({
-        method: 'POST',
-      })
-    )
+    expect(resetPasswordForEmailMock).toHaveBeenCalledWith('test@example.com')
+  })
+
+  it('returns current session when configured', async () => {
+    loadStoredSessionMock.mockReturnValue({
+      access_token: 'access-token',
+      user: { id: 'user-1' },
+    })
+
+    const { getCurrentSession } = await import('./auth')
+    expect(getCurrentSession()).toEqual({
+      access_token: 'access-token',
+      user: { id: 'user-1' },
+    })
   })
 })

@@ -41,6 +41,9 @@ export interface Transaction {
   /** Inferred or manually assigned category (optional) */
   category?: string
 
+  /** User-defined tags for filtering and organization (optional) */
+  tags?: string[]
+
   /** Confidence score for auto-categorization (0-1, optional) */
   categoryConfidence?: number
 

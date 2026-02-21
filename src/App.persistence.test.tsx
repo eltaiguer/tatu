@@ -4,6 +4,10 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import type { Transaction } from './models'
 
+vi.mock('./services/supabase/client', () => ({
+  isSupabaseConfigured: () => false,
+}))
+
 const STORAGE_KEY = 'tatu:transactions'
 const OriginalFileReader = globalThis.FileReader
 

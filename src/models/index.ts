@@ -21,6 +21,10 @@ export type {
   ParsedData,
 } from './parsed-data'
 
+export type { ImportRun, ImportRunStatus } from './import-run'
+export type { CategoryOverride } from './category-override'
+export type { CustomCategoryRecord } from './custom-category'
+
 // Category system
 export {
   Category,

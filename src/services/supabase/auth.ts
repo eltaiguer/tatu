@@ -1,17 +1,11 @@
 import {
-  buildSession,
   clearStoredSession,
+  getSupabaseClient,
   isSupabaseConfigured,
   loadStoredSession,
   storeSession,
-  supabaseFetch,
-  type SupabaseAuthResponse,
   type SupabaseSession,
 } from './client'
-
-function getAuthErrorMessage(response: SupabaseAuthResponse): string {
-  return response.error_description ?? response.msg ?? 'Error de autenticación'
-}
 
 export function getCurrentSession(): SupabaseSession | null {
   if (!isSupabaseConfigured()) {
@@ -25,56 +19,55 @@ export async function signInWithPassword(
   email: string,
   password: string
 ): Promise<SupabaseSession> {
-  const response = await supabaseFetch<SupabaseAuthResponse>(
-    '/auth/v1/token?grant_type=password',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    }
-  )
+  const client = getSupabaseClient()
+  const { data, error } = await client.auth.signInWithPassword({
+    email,
+    password,
+  })
 
-  const session = buildSession(response)
-  if (!session) {
-    throw new Error(getAuthErrorMessage(response))
+  if (error) {
+    throw new Error(error.message)
   }
 
-  storeSession(session)
-  return session
+  if (!data.session) {
+    throw new Error('No se pudo iniciar sesión')
+  }
+
+  storeSession(data.session)
+  return data.session
 }
 
 export async function signUpWithPassword(
   email: string,
   password: string
 ): Promise<SupabaseSession> {
-  const response = await supabaseFetch<SupabaseAuthResponse>('/auth/v1/signup', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
+  const client = getSupabaseClient()
+  const { data, error } = await client.auth.signUp({
+    email,
+    password,
   })
 
-  const session = buildSession(response)
-  if (!session) {
-    throw new Error(
-      getAuthErrorMessage(response) ||
-        'No se pudo crear la cuenta. Verificá tu email.'
-    )
+  if (error) {
+    throw new Error(error.message)
   }
 
-  storeSession(session)
-  return session
+  if (!data.session) {
+    throw new Error('No se pudo crear la cuenta. Verificá tu email.')
+  }
+
+  storeSession(data.session)
+  return data.session
 }
 
 export async function signOut(
   session: SupabaseSession | null | undefined
 ): Promise<void> {
+  void session
+  const client = getSupabaseClient()
   try {
-    if (session?.access_token) {
-      await supabaseFetch<null>(
-        '/auth/v1/logout',
-        {
-          method: 'POST',
-        },
-        session.access_token
-      )
+    const { error } = await client.auth.signOut()
+    if (error) {
+      throw new Error(error.message)
     }
   } finally {
     clearStoredSession()
@@ -82,8 +75,9 @@ export async function signOut(
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
-  await supabaseFetch<null>('/auth/v1/recover', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  })
+  const client = getSupabaseClient()
+  const { error } = await client.auth.resetPasswordForEmail(email)
+  if (error) {
+    throw new Error(error.message)
+  }
 }

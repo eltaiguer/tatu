@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { Tools } from './Tools'
 import type { Transaction } from '../models'
@@ -72,5 +73,28 @@ describe('Tools', () => {
     expect(screen.getByRole('heading', { name: 'Configuración' })).toBeInTheDocument()
     expect(screen.getByLabelText('Formato de fecha')).toBeInTheDocument()
     expect(screen.getByLabelText('Separador decimal')).toBeInTheDocument()
+  })
+
+  it('confirms and triggers reset callback from settings tab', () => {
+    const onResetAllData = vi.fn()
+    const confirmSpy = vi
+      .spyOn(window, 'confirm')
+      .mockReturnValue(true)
+
+    render(
+      <Tools
+        transactions={[makeTransaction({ id: 'tx-a' })]}
+        onResetAllData={onResetAllData}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Configuración' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Resetear todos los datos' })
+    )
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(onResetAllData).toHaveBeenCalledTimes(1)
+    confirmSpy.mockRestore()
   })
 })
