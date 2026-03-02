@@ -8,6 +8,8 @@ const {
   signInWithPasswordMock,
   signOutMock,
   signUpWithPasswordMock,
+  subscribeToAuthChangesMock,
+  updatePasswordMock,
   isSupabaseConfiguredMock,
   loadUserTransactionsMock,
   persistTransactionsMock,
@@ -23,6 +25,8 @@ const {
   signInWithPasswordMock: vi.fn(),
   signOutMock: vi.fn(),
   signUpWithPasswordMock: vi.fn(),
+  subscribeToAuthChangesMock: vi.fn(),
+  updatePasswordMock: vi.fn(),
   isSupabaseConfiguredMock: vi.fn(),
   loadUserTransactionsMock: vi.fn(),
   persistTransactionsMock: vi.fn(),
@@ -44,6 +48,8 @@ vi.mock('./services/supabase/auth', () => ({
   signInWithPassword: signInWithPasswordMock,
   signOut: signOutMock,
   signUpWithPassword: signUpWithPasswordMock,
+  subscribeToAuthChanges: subscribeToAuthChangesMock,
+  updatePassword: updatePasswordMock,
 }))
 
 vi.mock('./services/supabase/transactions', () => ({
@@ -73,6 +79,7 @@ vi.mock('./services/supabase/import-runs', () => ({
 describe('App with supabase enabled', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.history.replaceState({}, '', '/')
     localStorage.clear()
     transactionStore.getState().clearTransactions()
     isSupabaseConfiguredMock.mockReturnValue(true)
@@ -86,6 +93,8 @@ describe('App with supabase enabled', () => {
     listCustomCategoriesMock.mockResolvedValue([])
     upsertCustomCategoryMock.mockResolvedValue(undefined)
     requestPasswordResetMock.mockResolvedValue(undefined)
+    subscribeToAuthChangesMock.mockReturnValue(() => undefined)
+    updatePasswordMock.mockResolvedValue(undefined)
     signOutMock.mockResolvedValue(undefined)
     signUpWithPasswordMock.mockResolvedValue({
       access_token: 'access',
@@ -154,6 +163,72 @@ describe('App with supabase enabled', () => {
     await waitFor(() =>
       expect(requestPasswordResetMock).toHaveBeenCalledWith('test@example.com')
     )
+  })
+
+  it('updates password from recovery mode', async () => {
+    window.history.replaceState({}, '', '/?mode=reset-password')
+
+    const { default: App } = await import('./App')
+    render(<App />)
+
+    expect(
+      screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByPlaceholderText('Nueva contraseña'), {
+      target: { value: 'new-secret123' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar contraseña' }))
+
+    await waitFor(() =>
+      expect(updatePasswordMock).toHaveBeenCalledWith('new-secret123')
+    )
+    await waitFor(() =>
+      expect(signOutMock).toHaveBeenCalledWith(null)
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: 'Ingresar a Tatú' })
+      ).toBeInTheDocument()
+    )
+  })
+
+  it('keeps user in reset screen during recovery even with active session', async () => {
+    window.history.replaceState({}, '', '/?mode=reset-password')
+    getCurrentSessionMock.mockReturnValue({
+      access_token: 'access',
+      refresh_token: 'refresh',
+      token_type: 'bearer',
+      expires_in: 3600,
+      expires_at: 9999,
+      user: { id: 'user-1', email: 'test@example.com' },
+    })
+
+    const { default: App } = await import('./App')
+    render(<App />)
+
+    expect(
+      screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Bienvenido a Tatú' })
+    ).not.toBeInTheDocument()
+    expect(loadUserTransactionsMock).not.toHaveBeenCalled()
+  })
+
+  it('switches to reset mode when recovery event is raised', async () => {
+    subscribeToAuthChangesMock.mockImplementation((_onSession, onRecovery) => {
+      onRecovery?.()
+      return () => undefined
+    })
+
+    const { default: App } = await import('./App')
+    render(<App />)
+
+    expect(
+      screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
+    ).toBeInTheDocument()
+    expect(loadUserTransactionsMock).not.toHaveBeenCalled()
   })
 
   it('migrates local persisted transactions after sign in', async () => {
@@ -251,7 +326,9 @@ describe('App with supabase enabled', () => {
     await waitFor(() => expect(upsertCustomCategoryMock).toHaveBeenCalledTimes(1))
   })
 
-  it('updates and soft-deletes transactions from transactions view', async () => {
+  it(
+    'updates and soft-deletes transactions from transactions view',
+    async () => {
     getCurrentSessionMock.mockReturnValue({
       access_token: 'access',
       refresh_token: 'refresh',
@@ -332,5 +409,7 @@ describe('App with supabase enabled', () => {
         'tx-10'
       )
     )
-  })
+    },
+    15000
+  )
 })

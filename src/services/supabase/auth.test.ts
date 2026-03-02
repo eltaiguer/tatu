@@ -5,6 +5,9 @@ const {
   signUpMock,
   signOutMock,
   resetPasswordForEmailMock,
+  updateUserMock,
+  onAuthStateChangeMock,
+  unsubscribeMock,
   loadStoredSessionMock,
   storeSessionMock,
   clearStoredSessionMock,
@@ -13,6 +16,9 @@ const {
   signUpMock: vi.fn(),
   signOutMock: vi.fn(),
   resetPasswordForEmailMock: vi.fn(),
+  updateUserMock: vi.fn(),
+  onAuthStateChangeMock: vi.fn(),
+  unsubscribeMock: vi.fn(),
   loadStoredSessionMock: vi.fn(),
   storeSessionMock: vi.fn(),
   clearStoredSessionMock: vi.fn(),
@@ -29,6 +35,8 @@ vi.mock('./client', () => ({
       signUp: signUpMock,
       signOut: signOutMock,
       resetPasswordForEmail: resetPasswordForEmailMock,
+      updateUser: updateUserMock,
+      onAuthStateChange: onAuthStateChangeMock,
     },
   }),
 }))
@@ -36,6 +44,9 @@ vi.mock('./client', () => ({
 describe('supabase auth service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    onAuthStateChangeMock.mockReturnValue({
+      data: { subscription: { unsubscribe: unsubscribeMock } },
+    })
   })
 
   it('signs in and stores session', async () => {
@@ -89,7 +100,76 @@ describe('supabase auth service', () => {
     const { requestPasswordReset } = await import('./auth')
     await requestPasswordReset('test@example.com')
 
-    expect(resetPasswordForEmailMock).toHaveBeenCalledWith('test@example.com')
+    expect(resetPasswordForEmailMock).toHaveBeenCalledWith(
+      'test@example.com',
+      expect.objectContaining({
+        redirectTo: expect.stringContaining('?mode=reset-password'),
+      })
+    )
+  })
+
+  it('updates password for authenticated user', async () => {
+    updateUserMock.mockResolvedValue({ error: null })
+
+    const { updatePassword } = await import('./auth')
+    await updatePassword('new-secret')
+
+    expect(updateUserMock).toHaveBeenCalledWith({ password: 'new-secret' })
+  })
+
+  it('subscribes to auth changes and handles password recovery', async () => {
+    const nextSession = {
+      access_token: 'next-token',
+      user: { id: 'user-1' },
+    }
+    let callback: ((event: string, session: unknown) => void) | undefined
+    onAuthStateChangeMock.mockImplementation(
+      (cb: (event: string, session: unknown) => void) => {
+        callback = cb
+        return {
+          data: { subscription: { unsubscribe: unsubscribeMock } },
+        }
+      }
+    )
+
+    const onSessionChange = vi.fn()
+    const onPasswordRecovery = vi.fn()
+    const { subscribeToAuthChanges } = await import('./auth')
+    const unsubscribe = subscribeToAuthChanges(
+      onSessionChange,
+      onPasswordRecovery
+    )
+
+    callback?.('PASSWORD_RECOVERY', nextSession)
+
+    expect(storeSessionMock).toHaveBeenCalledWith(nextSession)
+    expect(onSessionChange).toHaveBeenCalledWith(nextSession)
+    expect(onPasswordRecovery).toHaveBeenCalledTimes(1)
+
+    unsubscribe()
+    expect(unsubscribeMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('handles signed out auth change by clearing session', async () => {
+    let callback: ((event: string, session: unknown) => void) | undefined
+    onAuthStateChangeMock.mockImplementation(
+      (cb: (event: string, session: unknown) => void) => {
+        callback = cb
+        return {
+          data: { subscription: { unsubscribe: unsubscribeMock } },
+        }
+      }
+    )
+
+    const onSessionChange = vi.fn()
+    const { subscribeToAuthChanges } = await import('./auth')
+    subscribeToAuthChanges(onSessionChange)
+
+    callback?.('SIGNED_OUT', null)
+
+    expect(clearStoredSessionMock).toHaveBeenCalledTimes(1)
+    expect(onSessionChange).toHaveBeenCalledWith(null)
+    expect(storeSessionMock).not.toHaveBeenCalled()
   })
 
   it('returns current session when configured', async () => {
