@@ -32,6 +32,8 @@ import {
   signInWithPassword,
   signOut,
   signUpWithPassword,
+  subscribeToAuthChanges,
+  updatePassword,
 } from './services/supabase/auth'
 import {
   isSupabaseConfigured,
@@ -69,6 +71,36 @@ const CATEGORY_OVERRIDES_MIGRATION_KEY =
   'tatu:migration:category-overrides:v1'
 const CUSTOM_CATEGORIES_MIGRATION_KEY = 'tatu:migration:custom-categories:v1'
 
+function isPasswordResetMode(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return (
+    new URLSearchParams(window.location.search).get('mode') ===
+    'reset-password'
+  )
+}
+
+function clearPasswordResetModeFromUrl(): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  const url = new URL(window.location.href)
+  if (!url.searchParams.has('mode')) {
+    return
+  }
+
+  url.searchParams.delete('mode')
+  const nextQuery = url.searchParams.toString()
+  window.history.replaceState(
+    {},
+    '',
+    `${url.pathname}${nextQuery ? `?${nextQuery}` : ''}${url.hash}`
+  )
+}
+
 function App() {
   const supabaseEnabled = isSupabaseConfigured()
 
@@ -88,6 +120,9 @@ function App() {
   const [authNotice, setAuthNotice] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [authMode, setAuthMode] = useState<'signin' | 'reset'>(() =>
+    isPasswordResetMode() ? 'reset' : 'signin'
+  )
 
   // Get transactions from store
   const transactions = useStore(transactionStore, (state) => state.transactions)
@@ -108,10 +143,36 @@ function App() {
   }, [session])
 
   useEffect(() => {
+    if (!supabaseEnabled) {
+      return
+    }
+
+    const unsubscribe = subscribeToAuthChanges(
+      (nextSession) => {
+        setSession(nextSession)
+      },
+      () => {
+        setAuthMode('reset')
+        setAuthError('')
+        setAuthNotice('Ingresá una nueva contraseña para tu cuenta')
+      }
+    )
+
+    return () => {
+      unsubscribe()
+    }
+  }, [supabaseEnabled])
+
+  useEffect(() => {
     let cancelled = false
 
     async function syncTransactions() {
       if (!supabaseEnabled) {
+        setAuthLoading(false)
+        return
+      }
+
+      if (authMode === 'reset') {
         setAuthLoading(false)
         return
       }
@@ -241,7 +302,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [session, supabaseEnabled])
+  }, [authMode, session, supabaseEnabled])
 
   async function handleAuth(action: 'signin' | 'signup') {
     setAuthSubmitting(true)
@@ -268,6 +329,7 @@ function App() {
     try {
       await signOut(session)
       setSession(null)
+      setAuthMode('signin')
       transactionStore.getState().clearTransactions()
       setCurrentView('dashboard')
       setMobileMenuOpen(false)
@@ -359,6 +421,35 @@ function App() {
     }
   }
 
+  async function handlePasswordUpdate() {
+    setAuthSubmitting(true)
+    setAuthError('')
+    setAuthNotice('')
+
+    try {
+      await updatePassword(password)
+      try {
+        await signOut(session)
+      } catch {
+        // Ignore sign-out errors after a successful password change.
+      }
+      setSession(null)
+      transactionStore.getState().clearTransactions()
+      setPassword('')
+      setAuthMode('signin')
+      clearPasswordResetModeFromUrl()
+      setAuthNotice('Contraseña actualizada. Iniciá sesión nuevamente')
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo actualizar la contraseña'
+      )
+    } finally {
+      setAuthSubmitting(false)
+    }
+  }
+
   async function handleResetAllData() {
     transactionStore.getState().clearTransactions()
     clearAllCategoryOverrides()
@@ -433,18 +524,25 @@ function App() {
     { id: 'import' as View, label: 'Importar', icon: Upload },
   ]
 
-  if (supabaseEnabled && !session) {
+  if (supabaseEnabled && (!session || authMode === 'reset')) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 space-y-4">
           <div>
             <TatuLogo size="md" />
-            <h2 className="mt-4 mb-1">Ingresar a Tatú</h2>
+            <h2 className="mt-4 mb-1">
+              {authMode === 'reset'
+                ? 'Elegí una nueva contraseña'
+                : 'Ingresar a Tatú'}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Tu información se guarda de forma segura en tu cuenta.
+              {authMode === 'reset'
+                ? 'Este cambio se aplica a tu cuenta de Supabase.'
+                : 'Tu información se guarda de forma segura en tu cuenta.'}
             </p>
           </div>
           <AuthCard
+            mode={authMode}
             email={email}
             password={password}
             authError={authError}
@@ -460,6 +558,19 @@ function App() {
             }}
             onResetPassword={() => {
               void handlePasswordReset()
+            }}
+            onUpdatePassword={() => {
+              void handlePasswordUpdate()
+            }}
+            onBackToSignIn={() => {
+              setAuthMode('signin')
+              setPassword('')
+              setAuthError('')
+              setAuthNotice('')
+              clearPasswordResetModeFromUrl()
+              void signOut(session)
+              setSession(null)
+              transactionStore.getState().clearTransactions()
             }}
           />
         </div>

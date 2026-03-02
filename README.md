@@ -43,7 +43,9 @@ If you want authentication + cloud persistence enabled:
 
 1. Copy `.env.example` to `.env`
 2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
-3. Run the SQL in `supabase/schema.sql` inside your Supabase project
+3. Set `VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL` to your hosted app URL
+   (example: `https://tatu-fdba8.web.app`)
+4. Run the SQL in `supabase/schema.sql` inside your Supabase project
 
 When these variables are present, the app enables login and stores
 transactions in Supabase.
