@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
+import { Checkbox } from './ui/checkbox'
 import { Input } from './ui/input'
 import {
   Dialog,
@@ -23,22 +24,38 @@ import { CategoryBadge } from './CategoryBadge'
 import { ConfidenceBadge } from './ConfidenceBadge'
 import { Category } from '../models'
 import type { Currency, Transaction } from '../models'
+import { getDescriptionOverride } from '../services/descriptions/description-overrides'
 
 interface TransactionsProps {
   transactions: Transaction[]
   onUpdateTransaction?: (
     transactionId: string,
     updates: {
-      description?: string
+      displayDescription?: string
       category?: string
       tags?: string[]
+      applyScope: 'single' | 'matching_past_and_future' | 'future_matching_only'
     }
   ) => Promise<void> | void
   onDeleteTransaction?: (transactionId: string) => Promise<void> | void
+  onAutoCategorizeTransactions?: (transactionIds: string[]) => Promise<void> | void
 }
 
 type SortField = 'date' | 'amount' | 'description' | 'category'
 type SortDirection = 'asc' | 'desc'
+
+function getDisplayDescription(transaction: Transaction): string {
+  if (transaction.displayDescription?.trim()) {
+    return transaction.displayDescription.trim()
+  }
+
+  const override = getDescriptionOverride(transaction.description)
+  if (override?.friendlyDescription?.trim()) {
+    return override.friendlyDescription.trim()
+  }
+
+  return transaction.description
+}
 
 function formatCurrency(amount: number, currency: Currency): string {
   const absAmount = Math.abs(amount)
@@ -67,14 +84,22 @@ export function Transactions({
   transactions,
   onUpdateTransaction,
   onDeleteTransaction,
+  onAutoCategorizeTransactions,
 }: TransactionsProps) {
   const [searchTerm, setSearchTerm] = useState('')
+  const [descriptionFilter, setDescriptionFilter] = useState('')
+  const [dateFromFilter, setDateFromFilter] = useState('')
+  const [dateToFilter, setDateToFilter] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [accountFilter, setAccountFilter] = useState<'all' | 'credit_card' | 'bank_account'>('all')
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [currentPage, setCurrentPage] = useState(1)
   const [pendingTransactionId, setPendingTransactionId] = useState<string | null>(
     null
   )
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
+  const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
@@ -85,16 +110,50 @@ export function Transactions({
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const [newCategoryInput, setNewCategoryInput] = useState('')
   const [newTagInput, setNewTagInput] = useState('')
+  const [applyScope, setApplyScope] = useState<
+    'single' | 'matching_past_and_future' | 'future_matching_only'
+  >('single')
   const [editError, setEditError] = useState('')
 
   const itemsPerPage = 20
 
   const filteredTransactions = useMemo(() => {
     const query = searchTerm.toLowerCase()
+    const descriptionQuery = descriptionFilter.trim().toLowerCase()
+    const categoryQuery = categoryFilter.trim()
+    const dateFrom = dateFromFilter ? new Date(`${dateFromFilter}T00:00:00`) : null
+    const dateTo = dateToFilter ? new Date(`${dateToFilter}T23:59:59.999`) : null
+
     const filtered = transactions.filter((transaction) => {
       const searchable =
-        `${transaction.description} ${(transaction.tags ?? []).join(' ')}`.toLowerCase()
-      return searchable.includes(query)
+        `${getDisplayDescription(transaction)} ${transaction.description} ${(transaction.tags ?? []).join(' ')}`.toLowerCase()
+      if (!searchable.includes(query)) {
+        return false
+      }
+
+      const descriptionSearchable =
+        `${getDisplayDescription(transaction)} ${transaction.description}`.toLowerCase()
+      if (descriptionQuery && !descriptionSearchable.includes(descriptionQuery)) {
+        return false
+      }
+
+      if (dateFrom && transaction.date < dateFrom) {
+        return false
+      }
+
+      if (dateTo && transaction.date > dateTo) {
+        return false
+      }
+
+      if (categoryQuery && (transaction.category ?? '') !== categoryQuery) {
+        return false
+      }
+
+      if (accountFilter !== 'all' && transaction.source !== accountFilter) {
+        return false
+      }
+
+      return true
     })
 
     filtered.sort((a, b) => {
@@ -107,7 +166,10 @@ export function Transactions({
         return (Math.abs(a.amount) - Math.abs(b.amount)) * direction
       }
       if (sortField === 'description') {
-        return a.description.localeCompare(b.description, 'es') * direction
+        return (
+          getDisplayDescription(a).localeCompare(getDisplayDescription(b), 'es') *
+          direction
+        )
       }
 
       const aCategory = a.category ?? ''
@@ -116,7 +178,35 @@ export function Transactions({
     })
 
     return filtered
-  }, [transactions, searchTerm, sortField, sortDirection])
+  }, [
+    transactions,
+    searchTerm,
+    descriptionFilter,
+    dateFromFilter,
+    dateToFilter,
+    categoryFilter,
+    accountFilter,
+    sortField,
+    sortDirection,
+  ])
+
+  const availableCategories = useMemo(() => {
+    return Array.from(
+      new Set(
+        transactions
+          .map((transaction) => transaction.category?.trim() ?? '')
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b, 'es'))
+  }, [transactions])
+
+  const hasActiveFilters =
+    Boolean(searchTerm.trim()) ||
+    Boolean(descriptionFilter.trim()) ||
+    Boolean(dateFromFilter) ||
+    Boolean(dateToFilter) ||
+    Boolean(categoryFilter) ||
+    accountFilter !== 'all'
 
   const categorySuggestions = useMemo(() => {
     return Array.from(
@@ -171,6 +261,13 @@ export function Transactions({
     setCurrentPage((page) => Math.min(page, safeTotalPages))
   }, [safeTotalPages])
 
+  useEffect(() => {
+    const validIds = new Set(transactions.map((transaction) => transaction.id))
+    setSelectedTransactionIds((current) =>
+      current.filter((transactionId) => validIds.has(transactionId))
+    )
+  }, [transactions])
+
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedTransactions = filteredTransactions.slice(
     startIndex,
@@ -198,9 +295,10 @@ export function Transactions({
 
   function startEditTransaction(transaction: Transaction) {
     setEditingTransaction(transaction)
-    setEditDescription(transaction.description)
+    setEditDescription(getDisplayDescription(transaction))
     setEditCategory(transaction.category ?? '')
     setEditTagList(transaction.tags ?? [])
+    setApplyScope('single')
     setCategoryPickerOpen(false)
     setTagPickerOpen(false)
     setNewCategoryInput('')
@@ -213,6 +311,7 @@ export function Transactions({
     setEditDescription('')
     setEditCategory('')
     setEditTagList([])
+    setApplyScope('single')
     setCategoryPickerOpen(false)
     setTagPickerOpen(false)
     setNewCategoryInput('')
@@ -254,9 +353,10 @@ export function Transactions({
     setPendingTransactionId(editingTransaction.id)
     try {
       await onUpdateTransaction(editingTransaction.id, {
-        description: trimmedDescription,
+        displayDescription: trimmedDescription,
         category: editCategory.trim() || undefined,
         tags: editTagList,
+        applyScope,
       })
       resetEditState()
     } finally {
@@ -268,7 +368,7 @@ export function Transactions({
     if (!onDeleteTransaction) return
 
     const confirmed = window.confirm(
-      `¿Eliminar la transacción "${transaction.description}"?`
+      `¿Eliminar la transacción "${getDisplayDescription(transaction)}"?`
     )
     if (!confirmed) return
 
@@ -277,6 +377,36 @@ export function Transactions({
       await onDeleteTransaction(transaction.id)
     } finally {
       setPendingTransactionId(null)
+    }
+  }
+
+  function toggleTransactionSelection(transactionId: string, checked: boolean) {
+    setSelectedTransactionIds((current) => {
+      if (checked) {
+        return current.includes(transactionId)
+          ? current
+          : [...current, transactionId]
+      }
+
+      return current.filter((id) => id !== transactionId)
+    })
+  }
+
+  async function handleAutoCategorizeSelected() {
+    if (
+      !onAutoCategorizeTransactions ||
+      selectedTransactionIds.length === 0 ||
+      isAutoCategorizing
+    ) {
+      return
+    }
+
+    setIsAutoCategorizing(true)
+    try {
+      await onAutoCategorizeTransactions(selectedTransactionIds)
+      setSelectedTransactionIds([])
+    } finally {
+      setIsAutoCategorizing(false)
     }
   }
 
@@ -289,20 +419,130 @@ export function Transactions({
             {filteredTransactions.length} transacciones encontradas
           </p>
         </div>
+        {onAutoCategorizeTransactions && (
+          <Button
+            variant="outline"
+            disabled={selectedTransactionIds.length === 0 || isAutoCategorizing}
+            onClick={() => {
+              void handleAutoCategorizeSelected()
+            }}
+          >
+            Auto-categorizar seleccionadas
+          </Button>
+        )}
       </div>
 
       <Card className="p-4">
-        <div className="relative">
-          <Search
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            size={20}
-          />
-          <Input
-            placeholder="Buscar por comercio o descripción..."
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            className="pl-10"
-          />
+        <div className="space-y-4">
+          <div className="relative">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              size={20}
+            />
+            <Input
+              placeholder="Buscar por comercio o descripción..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="pl-10"
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <div className="space-y-1">
+              <label
+                htmlFor="transactions-description-filter"
+                className="text-sm font-medium"
+              >
+                Descripción
+              </label>
+              <Input
+                id="transactions-description-filter"
+                aria-label="Filtro descripción"
+                placeholder="Filtrar por descripción"
+                value={descriptionFilter}
+                onChange={(event) => setDescriptionFilter(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="transactions-date-from-filter"
+                className="text-sm font-medium"
+              >
+                Fecha desde
+              </label>
+              <Input
+                id="transactions-date-from-filter"
+                aria-label="Filtro fecha desde"
+                type="date"
+                value={dateFromFilter}
+                onChange={(event) => setDateFromFilter(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="transactions-date-to-filter"
+                className="text-sm font-medium"
+              >
+                Fecha hasta
+              </label>
+              <Input
+                id="transactions-date-to-filter"
+                aria-label="Filtro fecha hasta"
+                type="date"
+                value={dateToFilter}
+                onChange={(event) => setDateToFilter(event.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="transactions-category-filter"
+                className="text-sm font-medium"
+              >
+                Categoría
+              </label>
+              <select
+                id="transactions-category-filter"
+                aria-label="Filtro categoría"
+                value={categoryFilter}
+                onChange={(event) => setCategoryFilter(event.target.value)}
+                className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
+              >
+                <option value="">Todas</option>
+                {availableCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="transactions-account-filter"
+                className="text-sm font-medium"
+              >
+                Cuenta
+              </label>
+              <select
+                id="transactions-account-filter"
+                aria-label="Filtro cuenta"
+                value={accountFilter}
+                onChange={(event) =>
+                  setAccountFilter(
+                    event.target.value as 'all' | 'credit_card' | 'bank_account'
+                  )
+                }
+                className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
+              >
+                <option value="all">Todas</option>
+                <option value="bank_account">Cuenta bancaria</option>
+                <option value="credit_card">Tarjeta</option>
+              </select>
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -311,6 +551,9 @@ export function Transactions({
           <table className="w-full">
             <thead className="bg-muted/50 border-b border-border">
               <tr>
+                <th className="text-left p-4 text-sm font-medium w-12">
+                  <span className="sr-only">Selección</span>
+                </th>
                 <th className="text-left p-4 text-sm font-medium">
                   <button
                     onClick={() => handleSort('date')}
@@ -355,18 +598,33 @@ export function Transactions({
             <tbody>
               {paginatedTransactions.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                    {searchTerm
-                      ? 'No hay transacciones que coincidan con la búsqueda'
+                  <td colSpan={8} className="p-8 text-center text-muted-foreground">
+                    {hasActiveFilters
+                      ? 'No hay transacciones que coincidan con los filtros'
                       : 'No hay transacciones para mostrar'}
                   </td>
                 </tr>
               )}
               {paginatedTransactions.map((transaction) => (
+                (() => {
+                  const displayDescription = getDisplayDescription(transaction)
+                  const hasFriendlyOverride = displayDescription !== transaction.description
+
+                  return (
                 <tr
                   key={transaction.id}
                   className="border-b border-border hover:bg-muted/30 transition-colors"
                 >
+                  <td className="p-4 align-top">
+                    <Checkbox
+                      aria-label={`Seleccionar ${displayDescription}`}
+                      checked={selectedTransactionIds.includes(transaction.id)}
+                      onCheckedChange={(checked) =>
+                        toggleTransactionSelection(transaction.id, checked === true)
+                      }
+                      disabled={isAutoCategorizing}
+                    />
+                  </td>
                   <td className="p-4">
                     <div className="text-sm">{formatDate(transaction.date)}</div>
                     <div className="text-xs text-muted-foreground">
@@ -377,7 +635,12 @@ export function Transactions({
                     </div>
                   </td>
                   <td className="p-4">
-                    <div className="font-medium">{transaction.description}</div>
+                    <div className="font-medium">{displayDescription}</div>
+                    {hasFriendlyOverride && (
+                      <div className="text-xs text-muted-foreground">
+                        Original: {transaction.description}
+                      </div>
+                    )}
                     <div className="text-xs text-muted-foreground">
                       {transaction.type === 'debit' ? 'Débito' : 'Crédito'}
                     </div>
@@ -429,7 +692,7 @@ export function Transactions({
                       <Button
                         variant="ghost"
                         size="sm"
-                        aria-label={`Editar ${transaction.description}`}
+                        aria-label={`Editar ${displayDescription}`}
                         disabled={pendingTransactionId === transaction.id}
                         onClick={() => startEditTransaction(transaction)}
                       >
@@ -438,7 +701,7 @@ export function Transactions({
                       <Button
                         variant="ghost"
                         size="sm"
-                        aria-label={`Eliminar ${transaction.description}`}
+                        aria-label={`Eliminar ${displayDescription}`}
                         disabled={pendingTransactionId === transaction.id}
                         onClick={() => {
                           void handleDeleteTransaction(transaction)
@@ -449,6 +712,8 @@ export function Transactions({
                     </div>
                   </td>
                 </tr>
+                  )
+                })()
               ))}
             </tbody>
           </table>
@@ -457,16 +722,34 @@ export function Transactions({
         <div className="md:hidden divide-y divide-border">
           {paginatedTransactions.length === 0 && (
             <div className="p-6 text-center text-sm text-muted-foreground">
-              {searchTerm
-                ? 'No hay transacciones que coincidan con la búsqueda'
+              {hasActiveFilters
+                ? 'No hay transacciones que coincidan con los filtros'
                 : 'No hay transacciones para mostrar'}
             </div>
           )}
           {paginatedTransactions.map((transaction) => (
+            (() => {
+              const displayDescription = getDisplayDescription(transaction)
+              const hasFriendlyOverride = displayDescription !== transaction.description
+
+              return (
             <div key={transaction.id} className="p-4 space-y-3">
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-3">
+                <Checkbox
+                  aria-label={`Seleccionar ${displayDescription}`}
+                  checked={selectedTransactionIds.includes(transaction.id)}
+                  onCheckedChange={(checked) =>
+                    toggleTransactionSelection(transaction.id, checked === true)
+                  }
+                  disabled={isAutoCategorizing}
+                />
                 <div className="flex-1">
-                  <div className="font-medium mb-1">{transaction.description}</div>
+                  <div className="font-medium mb-1">{displayDescription}</div>
+                  {hasFriendlyOverride && (
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Original: {transaction.description}
+                    </div>
+                  )}
                   <div className="text-xs text-muted-foreground mb-2">
                     {formatDate(transaction.date)}
                   </div>
@@ -509,7 +792,7 @@ export function Transactions({
                 <Button
                   variant="outline"
                   size="sm"
-                  aria-label={`Editar ${transaction.description}`}
+                  aria-label={`Editar ${displayDescription}`}
                   disabled={pendingTransactionId === transaction.id}
                   onClick={() => startEditTransaction(transaction)}
                 >
@@ -519,7 +802,7 @@ export function Transactions({
                 <Button
                   variant="outline"
                   size="sm"
-                  aria-label={`Eliminar ${transaction.description}`}
+                  aria-label={`Eliminar ${displayDescription}`}
                   disabled={pendingTransactionId === transaction.id}
                   onClick={() => {
                     void handleDeleteTransaction(transaction)
@@ -530,6 +813,8 @@ export function Transactions({
                 </Button>
               </div>
             </div>
+              )
+            })()
           ))}
         </div>
       </Card>
@@ -539,18 +824,63 @@ export function Transactions({
           <DialogHeader>
             <DialogTitle>Editar transacción</DialogTitle>
             <DialogDescription>
-              Actualizá descripción, categoría y tags.
+              Actualizá descripción visible, categoría y tags.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium">Descripción</label>
+              <label className="text-sm font-medium">Descripción visible</label>
               <Input
                 aria-label="Descripción edición"
                 value={editDescription}
                 onChange={(event) => setEditDescription(event.target.value)}
               />
+              {editingTransaction && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Original: {editingTransaction.description}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="text-sm font-medium">
+                Aplicar cambios de descripción/categoría
+              </label>
+              <div className="mt-2 space-y-2">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="apply-scope"
+                    value="single"
+                    checked={applyScope === 'single'}
+                    onChange={() => setApplyScope('single')}
+                  />
+                  Solo esta transacción
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="apply-scope"
+                    value="matching_past_and_future"
+                    aria-label="Aplicar a todas las transacciones similares"
+                    checked={applyScope === 'matching_past_and_future'}
+                    onChange={() => setApplyScope('matching_past_and_future')}
+                  />
+                  Todas las similares (pasadas y futuras)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="apply-scope"
+                    value="future_matching_only"
+                    aria-label="Aplicar a transacciones futuras similares"
+                    checked={applyScope === 'future_matching_only'}
+                    onChange={() => setApplyScope('future_matching_only')}
+                  />
+                  Esta y futuras similares
+                </label>
+              </div>
             </div>
 
             <div>

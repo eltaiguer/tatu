@@ -49,13 +49,27 @@ import type { Transaction } from './models'
 import {
   listMerchantCategoryOverrides,
   clearAllCategoryOverrides,
+  clearMerchantCategoryOverrideWithSync,
   replaceMerchantCategoryOverrides,
+  setMerchantCategoryOverrideWithSync,
 } from './services/categorizer/category-overrides'
+import {
+  clearAllDescriptionOverrides,
+  clearDescriptionOverrideWithSync,
+  listDescriptionOverrides as listLocalDescriptionOverrides,
+  replaceDescriptionOverrides,
+  setDescriptionOverrideWithSync,
+} from './services/descriptions/description-overrides'
+import { buildDescriptionOverrideKey } from './services/descriptions/normalization'
 import {
   listCustomCategories as listLocalCustomCategories,
   replaceCustomCategories,
 } from './services/categories/category-store'
 import { listCategoryOverrides, upsertCategoryOverride } from './services/supabase/category-overrides'
+import {
+  listDescriptionOverrides as listRemoteDescriptionOverrides,
+  upsertDescriptionOverride,
+} from './services/supabase/description-overrides'
 import { listCustomCategories, upsertCustomCategory } from './services/supabase/custom-categories'
 import {
   completeImportRun,
@@ -65,10 +79,13 @@ import {
 } from './services/supabase/import-runs'
 import { setActiveSupabaseSession } from './services/supabase/runtime'
 import { resetUserSupabaseData } from './services/supabase/reset'
+import { categorizeTransaction } from './services/categorizer/transaction-categorizer'
 
 type View = 'dashboard' | 'transactions' | 'charts' | 'tools' | 'import'
 const CATEGORY_OVERRIDES_MIGRATION_KEY =
   'tatu:migration:category-overrides:v1'
+const DESCRIPTION_OVERRIDES_MIGRATION_KEY =
+  'tatu:migration:description-overrides:v1'
 const CUSTOM_CATEGORIES_MIGRATION_KEY = 'tatu:migration:custom-categories:v1'
 
 function isPasswordResetMode(): boolean {
@@ -76,9 +93,17 @@ function isPasswordResetMode(): boolean {
     return false
   }
 
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash
+  const hashParams = new URLSearchParams(hash)
+  const isRecoveryHash =
+    hashParams.get('type') === 'recovery' &&
+    hashParams.has('access_token')
+
   return (
     new URLSearchParams(window.location.search).get('mode') ===
-    'reset-password'
+      'reset-password' || isRecoveryHash
   )
 }
 
@@ -236,6 +261,52 @@ function App() {
             {} as Record<
               string,
               { merchantName?: string; category: string; updatedAt: string }
+            >
+          )
+        )
+
+        const shouldMigrateDescriptionOverrides =
+          localStorage.getItem(DESCRIPTION_OVERRIDES_MIGRATION_KEY) !== 'done'
+        if (shouldMigrateDescriptionOverrides) {
+          const localDescriptionOverrides = listLocalDescriptionOverrides()
+          for (const [descriptionNormalized, override] of Object.entries(
+            localDescriptionOverrides
+          )) {
+            await upsertDescriptionOverride(session, {
+              descriptionNormalized,
+              descriptionOriginal: override.descriptionOriginal,
+              friendlyDescription: override.friendlyDescription,
+              category: override.category,
+            })
+          }
+
+          localStorage.setItem(DESCRIPTION_OVERRIDES_MIGRATION_KEY, 'done')
+          if (Object.keys(localDescriptionOverrides).length > 0) {
+            notices.push('Reglas de descripción migradas a la nube')
+          }
+        }
+
+        const remoteDescriptionOverrides =
+          await listRemoteDescriptionOverrides(session)
+        replaceDescriptionOverrides(
+          remoteDescriptionOverrides.reduce(
+            (acc, override) => {
+              acc[override.descriptionNormalized] = {
+                descriptionOriginal: override.descriptionOriginal,
+                friendlyDescription: override.friendlyDescription,
+                category: override.category,
+                updatedAt: override.updatedAt,
+              }
+              return acc
+            },
+            {} as Record<
+              string,
+              {
+                descriptionOriginal?: string
+                friendlyDescription: string
+                category?: string
+                updatedAt: string
+              }
             >
           )
         )
@@ -453,11 +524,14 @@ function App() {
   async function handleResetAllData() {
     transactionStore.getState().clearTransactions()
     clearAllCategoryOverrides()
+    clearAllDescriptionOverrides()
     replaceCustomCategories([])
     localStorage.removeItem('tatu:transactions')
     localStorage.removeItem('tatu:customCategories')
     localStorage.removeItem('tatu:categoryOverrides')
+    localStorage.removeItem('tatu:descriptionOverrides')
     localStorage.removeItem(CATEGORY_OVERRIDES_MIGRATION_KEY)
+    localStorage.removeItem(DESCRIPTION_OVERRIDES_MIGRATION_KEY)
     localStorage.removeItem(CUSTOM_CATEGORIES_MIGRATION_KEY)
 
     if (supabaseEnabled && session) {
@@ -470,9 +544,10 @@ function App() {
   async function handleUpdateTransaction(
     transactionId: string,
     updates: {
-      description?: string
+      displayDescription?: string
       category?: string
       tags?: string[]
+      applyScope: 'single' | 'matching_past_and_future' | 'future_matching_only'
     }
   ) {
     const state = transactionStore.getState()
@@ -481,12 +556,170 @@ function App() {
       return
     }
 
+    const trimmedDisplayDescription = updates.displayDescription?.trim()
+    const applyToMatching = updates.applyScope === 'matching_past_and_future'
+    const applyToFutureOnly = updates.applyScope === 'future_matching_only'
+    const nextCategory = updates.category?.trim() || undefined
+    const nextTags = updates.tags
+
+    if (applyToMatching) {
+      const targetKey = buildDescriptionOverrideKey(current.description)
+      const matchingTransactions = state.transactions.filter(
+        (tx) => {
+          const key = buildDescriptionOverrideKey(tx.description)
+          return key !== null && key === targetKey
+        }
+      )
+
+      try {
+        if (
+          trimmedDisplayDescription &&
+          trimmedDisplayDescription !== current.description
+        ) {
+          await setDescriptionOverrideWithSync({
+            description: current.description,
+            friendlyDescription: trimmedDisplayDescription,
+            category: nextCategory,
+          })
+        } else {
+          await clearDescriptionOverrideWithSync(current.description)
+        }
+
+        if (nextCategory) {
+          await setMerchantCategoryOverrideWithSync(
+            current.description,
+            nextCategory
+          )
+        } else {
+          await clearMerchantCategoryOverrideWithSync(current.description)
+        }
+
+        if (supabaseEnabled && session) {
+          await Promise.all(
+            matchingTransactions.map((tx) =>
+              updateRemoteTransaction(session, tx.id, {
+                category: nextCategory,
+                displayDescription: undefined,
+              })
+            )
+          )
+
+          if (nextTags !== undefined) {
+            await updateRemoteTransaction(session, transactionId, {
+              tags: nextTags,
+            })
+          }
+        }
+
+        state.setTransactions(
+          state.transactions.map((tx) => {
+            if (
+              buildDescriptionOverrideKey(tx.description) !== targetKey
+            ) {
+              return tx
+            }
+
+            const categoryUpdates = nextCategory ? { category: nextCategory } : {}
+            const tagsUpdates =
+              tx.id === transactionId && nextTags !== undefined
+                ? { tags: nextTags }
+                : {}
+
+            return {
+              ...tx,
+              ...categoryUpdates,
+              ...tagsUpdates,
+              displayDescription: undefined,
+            }
+          })
+        )
+        setAuthError('')
+      } catch (error) {
+        setAuthError(
+          error instanceof Error
+            ? error.message
+            : 'No se pudo actualizar la transacción'
+        )
+      }
+      return
+    }
+
+    if (applyToFutureOnly) {
+      try {
+        if (
+          trimmedDisplayDescription &&
+          trimmedDisplayDescription !== current.description
+        ) {
+          await setDescriptionOverrideWithSync({
+            description: current.description,
+            friendlyDescription: trimmedDisplayDescription,
+            category: nextCategory,
+          })
+        } else {
+          await clearDescriptionOverrideWithSync(current.description)
+        }
+
+        if (nextCategory) {
+          await setMerchantCategoryOverrideWithSync(
+            current.description,
+            nextCategory
+          )
+        } else {
+          await clearMerchantCategoryOverrideWithSync(current.description)
+        }
+
+        if (supabaseEnabled && session) {
+          await updateRemoteTransaction(session, transactionId, {
+            displayDescription:
+              trimmedDisplayDescription &&
+              trimmedDisplayDescription !== current.description
+                ? trimmedDisplayDescription
+                : undefined,
+            category: nextCategory,
+            tags: nextTags,
+          })
+        }
+
+        state.updateTransaction(transactionId, {
+          displayDescription:
+            trimmedDisplayDescription &&
+            trimmedDisplayDescription !== current.description
+              ? trimmedDisplayDescription
+              : undefined,
+          category: nextCategory,
+          tags: nextTags,
+        })
+        setAuthError('')
+      } catch (error) {
+        setAuthError(
+          error instanceof Error
+            ? error.message
+            : 'No se pudo actualizar la transacción'
+        )
+      }
+      return
+    }
+
     try {
+      const singleDisplayDescription =
+        trimmedDisplayDescription &&
+        trimmedDisplayDescription !== current.description
+          ? trimmedDisplayDescription
+          : undefined
+
       if (supabaseEnabled && session) {
-        await updateRemoteTransaction(session, transactionId, updates)
+        await updateRemoteTransaction(session, transactionId, {
+          displayDescription: singleDisplayDescription,
+          category: nextCategory,
+          tags: nextTags,
+        })
       }
 
-      state.updateTransaction(transactionId, updates)
+      state.updateTransaction(transactionId, {
+        displayDescription: singleDisplayDescription,
+        category: nextCategory,
+        tags: nextTags,
+      })
       setAuthError('')
     } catch (error) {
       setAuthError(
@@ -512,6 +745,71 @@ function App() {
         error instanceof Error
           ? error.message
           : 'No se pudo eliminar la transacción'
+      )
+    }
+  }
+
+  async function handleAutoCategorizeTransactions(transactionIds: string[]) {
+    if (transactionIds.length === 0) {
+      return
+    }
+
+    const state = transactionStore.getState()
+    const targetIds = new Set(transactionIds)
+    const categorizedTransactions = state.transactions
+      .filter((transaction) => targetIds.has(transaction.id))
+      .map((transaction) => {
+        const result = categorizeTransaction(
+          transaction.description,
+          transaction.type
+        )
+
+        return {
+          id: transaction.id,
+          category: result.category,
+          categoryConfidence: result.confidence,
+        }
+      })
+
+    if (categorizedTransactions.length === 0) {
+      return
+    }
+
+    try {
+      if (supabaseEnabled && session) {
+        await Promise.all(
+          categorizedTransactions.map((transaction) =>
+            updateRemoteTransaction(session, transaction.id, {
+              category: transaction.category,
+              categoryConfidence: transaction.categoryConfidence,
+            })
+          )
+        )
+      }
+
+      state.setTransactions(
+        state.transactions.map((transaction) => {
+          const categorized = categorizedTransactions.find(
+            (entry) => entry.id === transaction.id
+          )
+
+          if (!categorized) {
+            return transaction
+          }
+
+          return {
+            ...transaction,
+            category: categorized.category,
+            categoryConfidence: categorized.categoryConfidence,
+          }
+        })
+      )
+      setAuthError('')
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudieron auto-categorizar las transacciones'
       )
     }
   }
@@ -703,6 +1001,7 @@ function App() {
             transactions={transactions}
             onUpdateTransaction={handleUpdateTransaction}
             onDeleteTransaction={handleDeleteTransaction}
+            onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
           />
         )}
         {currentView === 'charts' && <Charts transactions={transactions} />}

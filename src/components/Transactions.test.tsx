@@ -71,6 +71,100 @@ describe('Transactions', () => {
     expect(screen.queryByText('supermarket')).not.toBeInTheDocument()
   })
 
+  it('filters transactions by description, date range, category and account', () => {
+    const transactions: Transaction[] = [
+      {
+        ...makeTransaction(1, 'Alpha Market'),
+        date: new Date(2026, 0, 10),
+        category: 'groceries',
+        source: 'bank_account',
+      },
+      {
+        ...makeTransaction(2, 'Alpha Card'),
+        date: new Date(2026, 0, 15),
+        category: 'groceries',
+        source: 'credit_card',
+      },
+      {
+        ...makeTransaction(3, 'Utilities Payment'),
+        date: new Date(2026, 0, 20),
+        category: 'utilities',
+        source: 'bank_account',
+      },
+    ]
+
+    render(<Transactions transactions={transactions} />)
+
+    fireEvent.change(
+      screen.getByLabelText('Filtro descripción'),
+      { target: { value: 'alpha' } }
+    )
+    fireEvent.change(
+      screen.getByLabelText('Filtro fecha desde'),
+      { target: { value: '2026-01-12' } }
+    )
+    fireEvent.change(
+      screen.getByLabelText('Filtro fecha hasta'),
+      { target: { value: '2026-01-18' } }
+    )
+    fireEvent.change(
+      screen.getByLabelText('Filtro categoría'),
+      { target: { value: 'groceries' } }
+    )
+    fireEvent.change(
+      screen.getByLabelText('Filtro cuenta'),
+      { target: { value: 'credit_card' } }
+    )
+
+    expect(screen.getAllByText('Alpha Card').length).toBeGreaterThan(0)
+    expect(screen.queryByText('Alpha Market')).not.toBeInTheDocument()
+    expect(screen.queryByText('Utilities Payment')).not.toBeInTheDocument()
+    expect(screen.getByText('Mostrando 1-1 de 1')).toBeInTheDocument()
+  })
+
+  it('shows filter-specific empty state when structured filters remove all matches', () => {
+    render(
+      <Transactions
+        transactions={[
+          {
+            ...makeTransaction(1, 'Alpha Market'),
+            category: 'groceries',
+            source: 'bank_account',
+          },
+        ]}
+      />
+    )
+
+    fireEvent.change(
+      screen.getByLabelText('Filtro cuenta'),
+      { target: { value: 'credit_card' } }
+    )
+
+    expect(
+      screen.getAllByText('No hay transacciones que coincidan con los filtros')
+        .length
+    ).toBeGreaterThan(0)
+    expect(screen.getByText('Mostrando 0 de 0')).toBeInTheDocument()
+  })
+
+  it('shows display description when present', () => {
+    render(
+      <Transactions
+        transactions={[
+          {
+            ...makeTransaction(1, 'AUT 998877 DEVOTO'),
+            displayDescription: 'Devoto',
+          },
+        ]}
+      />
+    )
+
+    expect(screen.getAllByText('Devoto').length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByText('Original: AUT 998877 DEVOTO').length
+    ).toBeGreaterThan(0)
+  })
+
   it('opens modal editor when clicking edit', () => {
     render(<Transactions transactions={[makeTransaction(1, 'merchant')]} />)
 
@@ -80,6 +174,35 @@ describe('Transactions', () => {
 
     expect(screen.getByText('Editar transacción')).toBeInTheDocument()
     expect(screen.getByLabelText('Descripción edición')).toBeInTheDocument()
+  })
+
+  it('allows selecting transactions and triggering auto-categorization', async () => {
+    const onAutoCategorizeTransactions = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <Transactions
+        transactions={[
+          makeTransaction(1, 'Devoto Supermercado'),
+          makeTransaction(2, 'Netflix'),
+        ]}
+        onAutoCategorizeTransactions={onAutoCategorizeTransactions}
+      />
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', {
+        name: 'Seleccionar Devoto Supermercado',
+      })[0]
+    )
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Auto-categorizar seleccionadas',
+      })
+    )
+
+    await waitFor(() =>
+      expect(onAutoCategorizeTransactions).toHaveBeenCalledWith(['tx-1'])
+    )
   })
 
   it('triggers transaction update from modal edit', async () => {
@@ -126,9 +249,72 @@ describe('Transactions', () => {
 
     await waitFor(() =>
       expect(onUpdateTransaction).toHaveBeenCalledWith('tx-1', {
-        description: 'Edited merchant',
+        displayDescription: 'Edited merchant',
         category: 'services',
         tags: ['old', 'monthly', 'recurring'],
+        applyScope: 'single',
+      })
+    )
+  })
+
+  it('sends matching scope when selected in editor', async () => {
+    const onUpdateTransaction = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <Transactions
+        transactions={[makeTransaction(1, 'AUT 998877 DEVOTO')]}
+        onUpdateTransaction={onUpdateTransaction}
+      />
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Editar AUT 998877 DEVOTO' })[0]
+    )
+    fireEvent.click(
+      screen.getByLabelText('Aplicar a todas las transacciones similares')
+    )
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() =>
+      expect(onUpdateTransaction).toHaveBeenCalledWith('tx-1', {
+        displayDescription: 'Devoto',
+        category: undefined,
+        tags: [],
+        applyScope: 'matching_past_and_future',
+      })
+    )
+  })
+
+  it('sends future scope when selected in editor', async () => {
+    const onUpdateTransaction = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <Transactions
+        transactions={[makeTransaction(1, 'AUT 998877 DEVOTO')]}
+        onUpdateTransaction={onUpdateTransaction}
+      />
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Editar AUT 998877 DEVOTO' })[0]
+    )
+    fireEvent.click(
+      screen.getByLabelText('Aplicar a transacciones futuras similares')
+    )
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() =>
+      expect(onUpdateTransaction).toHaveBeenCalledWith('tx-1', {
+        displayDescription: 'Devoto',
+        category: undefined,
+        tags: [],
+        applyScope: 'future_matching_only',
       })
     )
   })
@@ -179,7 +365,7 @@ describe('Transactions', () => {
 
     fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     expect(screen.getAllByText('Servicios').length).toBeGreaterThan(0)
-    expect(screen.getByText('custom-category')).toBeInTheDocument()
+    expect(screen.getAllByText('custom-category').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByLabelText('Tags dropdown'))
     expect(screen.getAllByText('monthly').length).toBeGreaterThan(0)

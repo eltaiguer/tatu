@@ -6,6 +6,7 @@ interface TransactionRow {
   transaction_id: string
   date: string
   description: string
+  display_description?: string | null
   amount: number
   currency: string
   type: string
@@ -26,6 +27,7 @@ function transactionToRow(userId: string, tx: Transaction): TransactionRow {
     transaction_id: tx.id,
     date: tx.date.toISOString(),
     description: tx.description,
+    display_description: tx.displayDescription ?? null,
     amount: tx.amount,
     currency: tx.currency,
     type: tx.type,
@@ -43,6 +45,7 @@ function rowToTransaction(row: TransactionRow): Transaction {
     id: row.transaction_id,
     date: new Date(row.date),
     description: row.description,
+    displayDescription: row.display_description ?? undefined,
     amount: Number(row.amount),
     currency: row.currency as Transaction['currency'],
     type: row.type as Transaction['type'],
@@ -136,7 +139,9 @@ export async function restoreTransaction(
 
 export interface UpdateTransactionInput {
   description?: string
+  displayDescription?: string
   category?: string
+  categoryConfidence?: number
   tags?: string[]
 }
 
@@ -151,8 +156,16 @@ export async function updateTransaction(
     payload.description = updates.description
   }
 
+  if (updates.displayDescription !== undefined) {
+    payload.display_description = updates.displayDescription || null
+  }
+
   if (updates.category !== undefined) {
     payload.category = updates.category || null
+  }
+
+  if (updates.categoryConfidence !== undefined) {
+    payload.category_confidence = updates.categoryConfidence
   }
 
   if (updates.tags !== undefined) {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
 import { transactionStore } from './stores/transaction-store'
 
@@ -44,6 +44,46 @@ describe('App', () => {
 
     expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
     expect(screen.getByText(/transacciones encontradas/)).toBeInTheDocument()
+  })
+
+  it('auto-categorizes selected transactions from the transactions view', async () => {
+    transactionStore.getState().addTransactions([
+      {
+        id: 'tx-1',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        description: 'Devoto Supermercado',
+        amount: 100,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+    ])
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole('checkbox', {
+          name: 'Seleccionar Devoto Supermercado',
+        })[0]
+      )
+    })
+
+    const autoCategorizeButton = screen.getByRole('button', {
+      name: 'Auto-categorizar seleccionadas',
+    })
+    await waitFor(() => expect(autoCategorizeButton).not.toBeDisabled())
+
+    await act(async () => {
+      fireEvent.click(autoCategorizeButton)
+    })
+
+    await waitFor(() =>
+      expect(transactionStore.getState().transactions[0].category).toBe('groceries')
+    )
+    expect(transactionStore.getState().transactions[0].categoryConfidence).toBeGreaterThan(0)
+    expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0)
   })
 
   it('switches to tools view from navigation', () => {
