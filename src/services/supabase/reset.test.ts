@@ -40,7 +40,7 @@ describe('supabase reset service', () => {
     const { resetUserSupabaseData } = await import('./reset')
     await resetUserSupabaseData(session)
 
-    expect(fromMock).toHaveBeenCalledTimes(4)
+    expect(fromMock).toHaveBeenCalledTimes(5)
     expect(eqMock).toHaveBeenCalledWith('user_id', 'user-1')
   })
 })

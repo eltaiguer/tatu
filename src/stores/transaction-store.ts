@@ -1,6 +1,7 @@
 import { createStore } from 'zustand/vanilla'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import type { Transaction } from '../models'
+import { inferInternalTransfers } from '../services/transfers/internal-transfers'
 
 export const DEFAULT_TRANSACTION_STORAGE_KEY = 'tatu:transactions'
 
@@ -39,11 +40,13 @@ function hasLocalStorage(): boolean {
 }
 
 function normalizeTransactions(transactions: Transaction[]): Transaction[] {
-  return transactions.map((tx) => {
-    const date =
-      tx.date instanceof Date ? tx.date : new Date(tx.date as unknown as string)
-    return { ...tx, date }
-  })
+  return inferInternalTransfers(
+    transactions.map((tx) => {
+      const date =
+        tx.date instanceof Date ? tx.date : new Date(tx.date as unknown as string)
+      return { ...tx, date }
+    })
+  )
 }
 
 function createTransactionStoreState(
@@ -54,7 +57,10 @@ function createTransactionStoreState(
     transactions: [],
     addTransaction: (transaction) =>
       set((state) => ({
-        transactions: [...state.transactions, transaction],
+        transactions: inferInternalTransfers([
+          ...state.transactions,
+          transaction,
+        ]),
       })),
     addTransactions: (transactions) => {
       const added: Transaction[] = []
@@ -74,15 +80,17 @@ function createTransactionStoreState(
           }
         })
 
-        return { transactions: next }
+        return { transactions: inferInternalTransfers(next) }
       })
 
       return { added, duplicates }
     },
     updateTransaction: (id, updates) =>
       set((state) => ({
-        transactions: state.transactions.map((tx) =>
-          tx.id === id ? { ...tx, ...updates } : tx
+        transactions: inferInternalTransfers(
+          state.transactions.map((tx) =>
+            tx.id === id ? { ...tx, ...updates } : tx
+          )
         ),
       })),
     removeTransaction: (id) =>
@@ -95,7 +103,7 @@ function createTransactionStoreState(
       })),
     setTransactions: (transactions) =>
       set(() => ({
-        transactions,
+        transactions: inferInternalTransfers(transactions),
       })),
     findDuplicateIds: (transactions) => {
       const existingIds = new Set(get().transactions.map((tx) => tx.id))
@@ -127,7 +135,7 @@ function createTransactionStoreState(
           }
         })
 
-        return { transactions: next }
+        return { transactions: inferInternalTransfers(next) }
       })
 
       return { added, duplicates }

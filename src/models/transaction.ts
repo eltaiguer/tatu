@@ -26,6 +26,9 @@ export interface Transaction {
   /** Transaction description/merchant name */
   description: string
 
+  /** Optional user-friendly description shown in the UI */
+  displayDescription?: string
+
   /** Transaction amount (always positive, type determines debit/credit) */
   amount: number
 

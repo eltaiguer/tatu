@@ -6,6 +6,7 @@ import type { Transaction, Currency } from '../models';
 import { useMemo, useState } from 'react';
 import { filterByPeriod, generatePeriodOptions } from '../utils/date-utils';
 import { getCategoryDisplay } from '../utils/category-display';
+import { isTransferCategory } from '../services/transfers/internal-transfers';
 
 function toSafeNumber(value: number): number {
   return Number.isFinite(value) ? value : 0;
@@ -28,11 +29,11 @@ function calculateSummary(transactions: Transaction[], currency?: Currency) {
     : transactions;
 
   const income = filtered
-    .filter((tx) => tx.type === 'credit')
+    .filter((tx) => tx.type === 'credit' && !isTransferCategory(tx.category))
     .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0);
 
   const expenses = filtered
-    .filter((tx) => tx.type === 'debit')
+    .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
     .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0);
 
   return {
@@ -45,7 +46,10 @@ function calculateSummary(transactions: Transaction[], currency?: Currency) {
 
 function findTopExpense(transactions: Transaction[]): Transaction | null {
   const debits = transactions.filter(
-    (tx) => tx.type === 'debit' && Number.isFinite(tx.amount)
+    (tx) =>
+      tx.type === 'debit' &&
+      Number.isFinite(tx.amount) &&
+      !isTransferCategory(tx.category)
   );
 
   if (debits.length === 0) {
@@ -61,7 +65,10 @@ function getTopCategory(transactions: Transaction[]): {
   percentage: number;
 } | null {
   const debits = transactions.filter(
-    (tx) => tx.type === 'debit' && Number.isFinite(tx.amount)
+    (tx) =>
+      tx.type === 'debit' &&
+      Number.isFinite(tx.amount) &&
+      !isTransferCategory(tx.category)
   );
 
   if (debits.length === 0) {
@@ -149,7 +156,9 @@ export function Dashboard({ transactions }: DashboardProps) {
       ? uyuSummary
       : usdSummary;
 
-  const debitCount = currencyFilteredTransactions.filter((tx) => tx.type === 'debit').length;
+  const debitCount = currencyFilteredTransactions.filter(
+    (tx) => tx.type === 'debit' && !isTransferCategory(tx.category)
+  ).length;
   const averageExpense = debitCount > 0 ? summary.expenses / debitCount : 0;
   const currencyLabel = selectedCurrency === 'all' ? 'multimoneda' : selectedCurrency;
 

@@ -1,5 +1,6 @@
 import type { Currency, Transaction } from '../../models'
 import { Category } from '../../models'
+import { isTransferCategory } from '../transfers/internal-transfers'
 
 export interface CategorySpendingDatum {
   category: string
@@ -32,7 +33,11 @@ export function buildCategorySpending(
   const grouped = new Map<string, number>()
 
   transactions.forEach((tx) => {
-    if (tx.currency !== currency || tx.type !== 'debit') {
+    if (
+      tx.currency !== currency ||
+      tx.type !== 'debit' ||
+      isTransferCategory(tx.category)
+    ) {
       return
     }
 
@@ -66,6 +71,10 @@ export function buildMonthlyTrends(
       return
     }
 
+    if (isTransferCategory(tx.category)) {
+      return
+    }
+
     if (tx.type === 'credit') {
       entry.income += tx.amount
       entry.net += tx.amount
@@ -87,6 +96,10 @@ export function buildIncomeExpenseSummary(
   return transactions.reduce<IncomeExpenseSummary>(
     (summary, tx) => {
       if (tx.currency !== currency) {
+        return summary
+      }
+
+      if (isTransferCategory(tx.category)) {
         return summary
       }
 

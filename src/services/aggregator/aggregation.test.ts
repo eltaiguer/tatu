@@ -129,6 +129,36 @@ describe('Aggregation - totals', () => {
     expect(totals.net.USD).toBe(-5)
     expect(totals.income.UYU).toBe(7)
   })
+
+  it('excludes transfer category from income and expense totals', () => {
+    const transactions = [
+      makeTransaction('tx-1', {
+        amount: 20,
+        type: 'debit',
+        currency: 'USD',
+        category: Category.Transfer,
+      }),
+      makeTransaction('tx-2', {
+        amount: 20,
+        type: 'credit',
+        currency: 'USD',
+        category: Category.Transfer,
+      }),
+      makeTransaction('tx-3', {
+        amount: 5,
+        type: 'debit',
+        currency: 'USD',
+        category: Category.Utilities,
+      }),
+    ]
+
+    const totals = calculateTotals(transactions)
+
+    expect(totals.expense.USD).toBe(5)
+    expect(totals.income.USD).toBe(0)
+    expect(totals.net.USD).toBe(-5)
+    expect(totals.count).toBe(3)
+  })
 })
 
 describe('Aggregation - currency conversion', () => {

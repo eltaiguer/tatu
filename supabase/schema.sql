@@ -36,6 +36,7 @@ create table if not exists public.transactions (
   transaction_id text not null,
   date timestamptz not null,
   description text not null check (length(trim(description)) > 0),
+  display_description text,
   amount numeric(14,2) not null check (amount >= 0),
   currency text not null check (currency in ('USD', 'UYU')),
   type text not null check (type in ('debit', 'credit')),
@@ -60,6 +61,7 @@ create table if not exists public.transactions (
 alter table public.transactions
   add column if not exists import_id uuid references public.import_runs(id) on delete set null,
   add column if not exists tags text[] not null default '{}'::text[],
+  add column if not exists display_description text,
   add column if not exists is_deleted boolean not null default false,
   add column if not exists deleted_at timestamptz,
   add column if not exists created_at timestamptz not null default timezone('utc', now()),
@@ -99,6 +101,30 @@ create table if not exists public.category_overrides (
 alter table public.category_overrides
   add column if not exists created_at timestamptz not null default timezone('utc', now()),
   add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
+create table if not exists public.description_overrides (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  description_normalized text not null,
+  description_original text,
+  friendly_description text not null check (length(trim(friendly_description)) > 0),
+  category text,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  primary key (user_id, description_normalized)
+);
+
+alter table public.description_overrides
+  add column if not exists description_original text,
+  add column if not exists friendly_description text,
+  add column if not exists category text,
+  add column if not exists created_at timestamptz not null default timezone('utc', now()),
+  add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
+update public.description_overrides
+set friendly_description = coalesce(friendly_description, description_normalized);
+
+alter table public.description_overrides
+  alter column friendly_description set not null;
 
 create table if not exists public.custom_categories (
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -143,6 +169,9 @@ create index if not exists idx_import_runs_user_checksum
 
 create index if not exists idx_category_overrides_user_updated
   on public.category_overrides (user_id, updated_at desc);
+
+create index if not exists idx_description_overrides_user_updated
+  on public.description_overrides (user_id, updated_at desc);
 
 create index if not exists idx_custom_categories_user_active
   on public.custom_categories (user_id, is_archived, label);
@@ -190,6 +219,12 @@ before update on public.category_overrides
 for each row
 execute function public.set_updated_at_timestamp();
 
+drop trigger if exists set_description_overrides_updated_at on public.description_overrides;
+create trigger set_description_overrides_updated_at
+before update on public.description_overrides
+for each row
+execute function public.set_updated_at_timestamp();
+
 drop trigger if exists set_custom_categories_updated_at on public.custom_categories;
 create trigger set_custom_categories_updated_at
 before update on public.custom_categories
@@ -199,11 +234,13 @@ execute function public.set_updated_at_timestamp();
 alter table public.transactions enable row level security;
 alter table public.import_runs enable row level security;
 alter table public.category_overrides enable row level security;
+alter table public.description_overrides enable row level security;
 alter table public.custom_categories enable row level security;
 
 grant select, insert, update, delete on table public.transactions to authenticated;
 grant select, insert, update, delete on table public.import_runs to authenticated;
 grant select, insert, update, delete on table public.category_overrides to authenticated;
+grant select, insert, update, delete on table public.description_overrides to authenticated;
 grant select, insert, update, delete on table public.custom_categories to authenticated;
 
 drop policy if exists "transactions_select_own" on public.transactions;
@@ -289,6 +326,35 @@ with check (auth.uid() = user_id);
 drop policy if exists "category_overrides_delete_own" on public.category_overrides;
 create policy "category_overrides_delete_own"
 on public.category_overrides
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "description_overrides_select_own" on public.description_overrides;
+create policy "description_overrides_select_own"
+on public.description_overrides
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "description_overrides_insert_own" on public.description_overrides;
+create policy "description_overrides_insert_own"
+on public.description_overrides
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "description_overrides_update_own" on public.description_overrides;
+create policy "description_overrides_update_own"
+on public.description_overrides
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "description_overrides_delete_own" on public.description_overrides;
+create policy "description_overrides_delete_own"
+on public.description_overrides
 for delete
 to authenticated
 using (auth.uid() = user_id);

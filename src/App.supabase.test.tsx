@@ -17,6 +17,8 @@ const {
   updateTransactionMock,
   listCategoryOverridesMock,
   upsertCategoryOverrideMock,
+  listDescriptionOverridesMock,
+  upsertDescriptionOverrideMock,
   listCustomCategoriesMock,
   upsertCustomCategoryMock,
 } = vi.hoisted(() => ({
@@ -34,6 +36,8 @@ const {
   updateTransactionMock: vi.fn(),
   listCategoryOverridesMock: vi.fn(),
   upsertCategoryOverrideMock: vi.fn(),
+  listDescriptionOverridesMock: vi.fn(),
+  upsertDescriptionOverrideMock: vi.fn(),
   listCustomCategoriesMock: vi.fn(),
   upsertCustomCategoryMock: vi.fn(),
 }))
@@ -64,6 +68,11 @@ vi.mock('./services/supabase/category-overrides', () => ({
   upsertCategoryOverride: upsertCategoryOverrideMock,
 }))
 
+vi.mock('./services/supabase/description-overrides', () => ({
+  listDescriptionOverrides: listDescriptionOverridesMock,
+  upsertDescriptionOverride: upsertDescriptionOverrideMock,
+}))
+
 vi.mock('./services/supabase/custom-categories', () => ({
   listCustomCategories: listCustomCategoriesMock,
   upsertCustomCategory: upsertCustomCategoryMock,
@@ -90,6 +99,8 @@ describe('App with supabase enabled', () => {
     updateTransactionMock.mockResolvedValue(undefined)
     listCategoryOverridesMock.mockResolvedValue([])
     upsertCategoryOverrideMock.mockResolvedValue(undefined)
+    listDescriptionOverridesMock.mockResolvedValue([])
+    upsertDescriptionOverrideMock.mockResolvedValue(undefined)
     listCustomCategoriesMock.mockResolvedValue([])
     upsertCustomCategoryMock.mockResolvedValue(undefined)
     requestPasswordResetMock.mockResolvedValue(undefined)
@@ -195,6 +206,29 @@ describe('App with supabase enabled', () => {
 
   it('keeps user in reset screen during recovery even with active session', async () => {
     window.history.replaceState({}, '', '/?mode=reset-password')
+    getCurrentSessionMock.mockReturnValue({
+      access_token: 'access',
+      refresh_token: 'refresh',
+      token_type: 'bearer',
+      expires_in: 3600,
+      expires_at: 9999,
+      user: { id: 'user-1', email: 'test@example.com' },
+    })
+
+    const { default: App } = await import('./App')
+    render(<App />)
+
+    expect(
+      screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Bienvenido a Tatú' })
+    ).not.toBeInTheDocument()
+    expect(loadUserTransactionsMock).not.toHaveBeenCalled()
+  })
+
+  it('starts in reset mode for hash recovery links without query mode', async () => {
+    window.history.replaceState({}, '', '/#access_token=abc&type=recovery')
     getCurrentSessionMock.mockReturnValue({
       access_token: 'access',
       refresh_token: 'refresh',
@@ -390,7 +424,7 @@ describe('App with supabase enabled', () => {
         }),
         'tx-10',
         {
-          description: 'New merchant',
+          displayDescription: 'New merchant',
           category: 'services',
           tags: ['monthly', 'fixed'],
         }
@@ -412,4 +446,76 @@ describe('App with supabase enabled', () => {
     },
     15000
   )
+
+  it('applies edit to future matching transactions only', async () => {
+    getCurrentSessionMock.mockReturnValue({
+      access_token: 'access',
+      refresh_token: 'refresh',
+      token_type: 'bearer',
+      expires_in: 3600,
+      expires_at: 9999,
+      user: { id: 'user-1', email: 'test@example.com' },
+    })
+    loadUserTransactionsMock.mockResolvedValue([
+      {
+        id: 'tx-10',
+        date: new Date('2026-02-10T00:00:00.000Z'),
+        description: 'AUT 998877 DEVOTO',
+        amount: 120,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+      {
+        id: 'tx-11',
+        date: new Date('2026-02-11T00:00:00.000Z'),
+        description: 'AUT 123456 DEVOTO',
+        amount: 90,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+    ])
+
+    const { default: App } = await import('./App')
+    render(<App />)
+
+    await waitFor(() =>
+      expect(loadUserTransactionsMock).toHaveBeenCalledTimes(1)
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Editar AUT 998877 DEVOTO' })[0]
+    )
+    fireEvent.click(
+      screen.getByLabelText('Aplicar a transacciones futuras similares')
+    )
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    await waitFor(() =>
+      expect(updateTransactionMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user: expect.objectContaining({ id: 'user-1' }),
+        }),
+        'tx-10',
+        {
+          displayDescription: 'Devoto',
+          category: undefined,
+          tags: [],
+        }
+      )
+    )
+
+    expect(
+      updateTransactionMock.mock.calls.filter((call) => call[1] === 'tx-11')
+        .length
+    ).toBe(0)
+    expect(upsertDescriptionOverrideMock).toHaveBeenCalledTimes(1)
+  })
 })

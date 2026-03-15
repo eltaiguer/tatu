@@ -4,11 +4,16 @@ import {
   clearAllCategoryOverrides,
   setMerchantCategoryOverride,
 } from './category-overrides'
+import {
+  clearAllDescriptionOverrides,
+  setDescriptionOverride,
+} from '../descriptions/description-overrides'
 import { Category } from '../../models'
 
 describe('Transaction Categorizer', () => {
   beforeEach(() => {
     clearAllCategoryOverrides()
+    clearAllDescriptionOverrides()
   })
   it('should categorize fees with high confidence', () => {
     const result = categorizeTransaction(
@@ -106,6 +111,30 @@ describe('Transaction Categorizer', () => {
 
   it('should use manual overrides when available', () => {
     setMerchantCategoryOverride('Devoto Supermercado', Category.Shopping)
+
+    const result = categorizeTransaction('Devoto Supermercado', 'debit')
+    expect(result.category).toBe(Category.Shopping)
+    expect(result.confidence).toBe(1)
+  })
+
+  it('should use description override category for noisy descriptions', () => {
+    setDescriptionOverride({
+      description: 'AUT 998877 DEVOTO',
+      friendlyDescription: 'Devoto',
+      category: Category.Groceries,
+    })
+
+    const result = categorizeTransaction('AUT 123456 DEVOTO', 'debit')
+    expect(result.category).toBe(Category.Groceries)
+    expect(result.confidence).toBe(1)
+  })
+
+  it('should keep using merchant override when description override has no category', () => {
+    setMerchantCategoryOverride('Devoto Supermercado', Category.Shopping)
+    setDescriptionOverride({
+      description: 'Devoto Supermercado',
+      friendlyDescription: 'Devoto',
+    })
 
     const result = categorizeTransaction('Devoto Supermercado', 'debit')
     expect(result.category).toBe(Category.Shopping)

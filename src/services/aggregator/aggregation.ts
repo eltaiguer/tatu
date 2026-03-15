@@ -1,5 +1,6 @@
 import type { Currency, Transaction } from '../../models'
 import { Category } from '../../models'
+import { isTransferCategory } from '../transfers/internal-transfers'
 
 export interface CurrencyTotals {
   USD: number
@@ -40,6 +41,11 @@ function toMonthKey(date: Date): string {
 }
 
 function applyTransaction(summary: SummaryTotals, tx: Transaction): void {
+  if (isTransferCategory(tx.category)) {
+    summary.count += 1
+    return
+  }
+
   const currency = tx.currency
   if (tx.type === 'credit') {
     summary.income[currency] += tx.amount

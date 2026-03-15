@@ -113,4 +113,37 @@ describe('chart-data', () => {
       net: 25,
     })
   })
+
+  it('excludes transfer category from spending and summary metrics', () => {
+    const transactions = [
+      makeTransaction('tx-1', {
+        amount: 200,
+        type: 'debit',
+        currency: 'USD',
+        category: Category.Transfer,
+      }),
+      makeTransaction('tx-2', {
+        amount: 100,
+        type: 'credit',
+        currency: 'USD',
+        category: Category.Transfer,
+      }),
+      makeTransaction('tx-3', {
+        amount: 80,
+        type: 'debit',
+        currency: 'USD',
+        category: Category.Groceries,
+      }),
+    ]
+
+    expect(buildCategorySpending(transactions, 'USD')).toEqual([
+      { category: Category.Groceries, total: 80 },
+    ])
+
+    expect(buildIncomeExpenseSummary(transactions, 'USD')).toEqual({
+      income: 0,
+      expense: 80,
+      net: -80,
+    })
+  })
 })

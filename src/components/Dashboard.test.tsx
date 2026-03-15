@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { Dashboard } from './Dashboard'
 import type { Transaction } from '../models'
+import { Category } from '../models'
 
 function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -60,5 +61,33 @@ describe('Dashboard', () => {
 
     expect(screen.getByText('US$ 200,00')).toBeInTheDocument()
     expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
+  })
+
+  it('does not count transfer debits as expenses', () => {
+    const transactions = [
+      makeTransaction({
+        id: 'normal-expense',
+        currency: 'USD',
+        type: 'debit',
+        amount: 50,
+        category: Category.Groceries,
+      }),
+      makeTransaction({
+        id: 'internal-transfer',
+        currency: 'USD',
+        type: 'debit',
+        amount: 100,
+        category: Category.Transfer,
+      }),
+    ]
+
+    render(<Dashboard transactions={transactions} />)
+
+    const selects = screen.getAllByRole('combobox')
+    const currencySelect = selects[1]
+    fireEvent.change(currencySelect, { target: { value: 'USD' } })
+
+    expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
+    expect(screen.queryByText('US$ 150,00')).not.toBeInTheDocument()
   })
 })

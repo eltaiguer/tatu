@@ -74,6 +74,8 @@ npm test
 
 # Run tests (single run)
 npm test -- --run
+# or
+npm run test:run
 
 # Run tests with UI
 npm run test:ui
@@ -83,6 +85,9 @@ npm run test:coverage
 
 # Lint code
 npm run lint
+
+# TDD verification (tests + lint)
+npm run tdd:verify
 
 # Format code
 npm run format

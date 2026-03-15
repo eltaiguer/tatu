@@ -1,6 +1,7 @@
 import { Category, TransactionType } from '../../models'
 import { getMerchantCategory, normalizeMerchantName } from './merchant-patterns'
 import { getMerchantCategoryOverride } from './category-overrides'
+import { getDescriptionOverride } from '../descriptions/description-overrides'
 
 const FEE_KEYWORDS = [
   'comision',
@@ -25,6 +26,11 @@ const TRANSFER_KEYWORDS = [
   'pago supernet',
   'pago electronico tarjeta credito',
   'pago tarjeta credito',
+  'compra dolares',
+  'venta dolares',
+  'compra divisas',
+  'venta divisas',
+  'cambio moneda',
 ]
 
 const INCOME_KEYWORDS = [
@@ -56,6 +62,14 @@ export function categorizeTransaction(
     return {
       category: Category.Uncategorized,
       confidence: 0,
+    }
+  }
+
+  const descriptionOverride = getDescriptionOverride(description)
+  if (descriptionOverride?.category) {
+    return {
+      category: descriptionOverride.category,
+      confidence: 1,
     }
   }
 

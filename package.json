@@ -8,8 +8,12 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",
+    "test:run": "vitest --run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
+    "tdd:watch": "vitest",
+    "tdd:verify": "npm run test:run && npm run lint",
+    "ci:check": "npm run test:run && npm run lint && npm run build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css,md}\"",
     "deploy:firebase": "npm run build && npx firebase-tools deploy"

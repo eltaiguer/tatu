@@ -21,12 +21,13 @@ import {
 import type { TooltipProps } from 'recharts';
 import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
 import { getCategoryDisplay } from '../utils/category-display';
+import { isTransferCategory } from '../services/transfers/internal-transfers';
 
 function groupByCategory(transactions: Transaction[]) {
   const grouped: Record<string, number> = {};
 
   transactions
-    .filter((tx) => tx.type === 'debit')
+    .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
     .forEach((tx) => {
       const category = tx.category || Category.Uncategorized;
       grouped[category] = (grouped[category] || 0) + tx.amount;
@@ -39,6 +40,10 @@ function groupByMonth(transactions: Transaction[]) {
   const grouped: Record<string, { income: number; expenses: number }> = {};
 
   transactions.forEach((tx) => {
+    if (isTransferCategory(tx.category)) {
+      return;
+    }
+
     const month = new Intl.DateTimeFormat('es-UY', {
       year: 'numeric',
       month: 'short',
