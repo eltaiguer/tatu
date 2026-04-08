@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { Tools } from './Tools'
 import type { Transaction } from '../models'
+import { addCustomCategory, listCustomCategories } from '../services/categories/category-store'
 
 function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -20,6 +21,11 @@ function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 describe('Tools', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
   it('shows active filters count and clears filters', () => {
     render(<Tools transactions={[]} />)
 
@@ -96,5 +102,33 @@ describe('Tools', () => {
     expect(confirmSpy).toHaveBeenCalledTimes(1)
     expect(onResetAllData).toHaveBeenCalledTimes(1)
     confirmSpy.mockRestore()
+  })
+
+  it('edits custom category color and icon from the categories tab', async () => {
+    const customCategory = addCustomCategory({
+      label: 'Coffee',
+      color: '#ff0000',
+      icon: '☕',
+    })
+
+    render(<Tools transactions={[makeTransaction({ category: customCategory.id })]} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Categorías' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: `Editar categoría ${customCategory.label}` })
+    )
+
+    fireEvent.change(screen.getByLabelText('Color de categoría'), {
+      target: { value: '#00ff00' },
+    })
+    fireEvent.change(screen.getByLabelText('Icono de categoría'), {
+      target: { value: '🫖' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar categoría' }))
+
+    expect(listCustomCategories()[0].color).toBe('#00ff00')
+    expect(listCustomCategories()[0].icon).toBe('🫖')
+    expect(screen.getAllByText('🫖').length).toBeGreaterThan(0)
   })
 })

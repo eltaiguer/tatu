@@ -22,8 +22,16 @@ describe('getCategoryDisplay', () => {
   it('falls back to uncategorized for unknown ids', () => {
     const result = getCategoryDisplay('non-existent-category');
 
-    expect(result.id).toBe('uncategorized');
-    expect(result.label).toBe('Sin categoría');
+    expect(result.id).toBe('non-existent-category');
+    expect(result.label).toBe('Non existent category');
+    expect(result.icon).toBe('uncategorized');
+  });
+
+  it('humanizes unknown category ids with underscores', () => {
+    const result = getCategoryDisplay('home_office');
+
+    expect(result.id).toBe('home_office');
+    expect(result.label).toBe('Home office');
     expect(result.icon).toBe('uncategorized');
   });
 

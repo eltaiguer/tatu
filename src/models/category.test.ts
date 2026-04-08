@@ -82,21 +82,19 @@ describe('Category System', () => {
     })
 
     it('should have user-friendly label for Groceries', () => {
-      expect(CATEGORY_LABELS[Category.Groceries]).toBe('Groceries')
+      expect(CATEGORY_LABELS[Category.Groceries]).toBe('Alimentación')
     })
 
     it('should have user-friendly label for Restaurants', () => {
-      expect(CATEGORY_LABELS[Category.Restaurants]).toBe('Restaurants & Dining')
+      expect(CATEGORY_LABELS[Category.Restaurants]).toBe('Restaurantes')
     })
 
     it('should have user-friendly label for Software', () => {
-      expect(CATEGORY_LABELS[Category.Software]).toBe(
-        'Software & Subscriptions'
-      )
+      expect(CATEGORY_LABELS[Category.Software]).toBe('Software y suscripciones')
     })
 
     it('should have user-friendly label for Uncategorized', () => {
-      expect(CATEGORY_LABELS[Category.Uncategorized]).toBe('Uncategorized')
+      expect(CATEGORY_LABELS[Category.Uncategorized]).toBe('Sin categoría')
     })
   })
 

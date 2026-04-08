@@ -84,6 +84,51 @@ describe('App', () => {
     )
     expect(transactionStore.getState().transactions[0].categoryConfidence).toBeGreaterThan(0)
     expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0)
+    expect(
+      screen.getByText('1 transacción auto-categorizada')
+    ).toBeInTheDocument()
+  })
+
+  it('shows a notice when auto-categorization finds no category matches', async () => {
+    transactionStore.getState().addTransactions([
+      {
+        id: 'tx-1',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        description: 'Comercio Inventado XYZ',
+        amount: 100,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+    ])
+
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole('checkbox', {
+          name: 'Seleccionar Comercio Inventado XYZ',
+        })[0]
+      )
+    })
+
+    const autoCategorizeButton = screen.getByRole('button', {
+      name: 'Auto-categorizar seleccionadas',
+    })
+    await waitFor(() => expect(autoCategorizeButton).not.toBeDisabled())
+
+    await act(async () => {
+      fireEvent.click(autoCategorizeButton)
+    })
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('No se encontraron categorías automáticas para las transacciones seleccionadas')
+      ).toBeInTheDocument()
+    )
+    expect(transactionStore.getState().transactions[0].category).toBe('uncategorized')
   })
 
   it('switches to tools view from navigation', () => {

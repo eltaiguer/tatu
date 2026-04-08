@@ -44,11 +44,16 @@ describe('Custom category store', () => {
   })
 
   it('updates a custom category', () => {
-    const category = addCustomCategory({ label: 'Coffee', color: '#ff0000' })
-    updateCustomCategory(category.id, { color: '#00ff00' })
+    const category = addCustomCategory({
+      label: 'Coffee',
+      color: '#ff0000',
+      icon: '☕',
+    })
+    updateCustomCategory(category.id, { color: '#00ff00', icon: '🫖' })
 
     const updated = listCustomCategories()[0]
     expect(updated.color).toBe('#00ff00')
+    expect(updated.icon).toBe('🫖')
   })
 
   it('removes a custom category', () => {

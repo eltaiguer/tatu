@@ -1,4 +1,4 @@
-import { Category, CATEGORY_COLORS } from '../models';
+import { Category, CATEGORY_COLORS, CATEGORY_LABELS } from '../models';
 import { categories as legacyCategories } from './figma-data';
 
 export type CategoryIconName =
@@ -29,90 +29,73 @@ export interface CategoryDisplay {
 
 const MODERN_META: Record<
   Category,
-  { label: string; icon: CategoryIconName; color: string }
+  { icon: CategoryIconName; color: string }
 > = {
   [Category.Groceries]: {
-    label: 'Alimentación',
     icon: 'groceries',
     color: CATEGORY_COLORS[Category.Groceries],
   },
   [Category.Restaurants]: {
-    label: 'Restaurantes',
     icon: 'restaurants',
     color: CATEGORY_COLORS[Category.Restaurants],
   },
   [Category.Transport]: {
-    label: 'Transporte',
     icon: 'transport',
     color: CATEGORY_COLORS[Category.Transport],
   },
   [Category.Utilities]: {
-    label: 'Servicios',
     icon: 'utilities',
     color: CATEGORY_COLORS[Category.Utilities],
   },
   [Category.Healthcare]: {
-    label: 'Salud',
     icon: 'healthcare',
     color: CATEGORY_COLORS[Category.Healthcare],
   },
   [Category.Shopping]: {
-    label: 'Compras',
     icon: 'shopping',
     color: CATEGORY_COLORS[Category.Shopping],
   },
   [Category.Entertainment]: {
-    label: 'Entretenimiento',
     icon: 'entertainment',
     color: CATEGORY_COLORS[Category.Entertainment],
   },
   [Category.Software]: {
-    label: 'Software',
     icon: 'software',
     color: CATEGORY_COLORS[Category.Software],
   },
   [Category.Education]: {
-    label: 'Educación',
     icon: 'education',
     color: CATEGORY_COLORS[Category.Education],
   },
   [Category.Automotive]: {
-    label: 'Automotor',
     icon: 'automotive',
     color: CATEGORY_COLORS[Category.Automotive],
   },
   [Category.Housing]: {
-    label: 'Vivienda',
     icon: 'housing',
     color: CATEGORY_COLORS[Category.Housing],
   },
   [Category.Personal]: {
-    label: 'Personal',
     icon: 'personal',
     color: CATEGORY_COLORS[Category.Personal],
   },
   [Category.Insurance]: {
-    label: 'Seguros',
     icon: 'insurance',
     color: CATEGORY_COLORS[Category.Insurance],
   },
   [Category.Income]: {
-    label: 'Ingresos',
     icon: 'income',
     color: CATEGORY_COLORS[Category.Income],
   },
   [Category.Transfer]: {
-    label: 'Transferencias',
     icon: 'transfer',
     color: CATEGORY_COLORS[Category.Transfer],
   },
   [Category.Fees]: {
-    label: 'Comisiones',
     icon: 'fees',
     color: CATEGORY_COLORS[Category.Fees],
   },
   [Category.Uncategorized]: {
-    label: 'Sin categoría',
     icon: 'uncategorized',
     color: CATEGORY_COLORS[Category.Uncategorized],
   },
@@ -131,6 +114,22 @@ function isModernCategory(id: string): id is Category {
   return Object.values(Category).includes(id as Category);
 }
 
+function humanizeCategoryId(categoryId: string): string {
+  const words = categoryId
+    .trim()
+    .replace(/[_-]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
+
+  if (words.length === 0) {
+    return CATEGORY_LABELS[Category.Uncategorized];
+  }
+
+  const humanized = words.join(' ');
+  return humanized.charAt(0).toUpperCase() + humanized.slice(1);
+}
+
 export function getCategoryDisplay(categoryId?: string | null): CategoryDisplay {
   const normalizedId = (categoryId || Category.Uncategorized).toLowerCase();
 
@@ -139,7 +138,7 @@ export function getCategoryDisplay(categoryId?: string | null): CategoryDisplay 
     const meta = MODERN_META[modernId];
     return {
       id: modernId,
-      label: meta.label,
+      label: CATEGORY_LABELS[modernId],
       color: meta.color,
       icon: meta.icon,
     };
@@ -156,8 +155,8 @@ export function getCategoryDisplay(categoryId?: string | null): CategoryDisplay 
   }
 
   return {
-    id: Category.Uncategorized,
-    label: MODERN_META[Category.Uncategorized].label,
+    id: normalizedId,
+    label: humanizeCategoryId(normalizedId),
     color: MODERN_META[Category.Uncategorized].color,
     icon: MODERN_META[Category.Uncategorized].icon,
   };

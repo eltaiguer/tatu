@@ -1,5 +1,6 @@
 import type { Transaction } from '../../models'
 import { applyFilters } from '../filters/filters'
+import { getCategoryDisplay } from '../../utils/category-display'
 
 export type ExportFormat = 'csv' | 'pdf'
 
@@ -13,6 +14,10 @@ export interface ExportOptions {
 export interface PdfReportOptions {
   title?: string
   generatedAt?: Date
+}
+
+function getExportCategoryLabel(category: string | undefined): string {
+  return getCategoryDisplay(category).label
 }
 
 function csvEscape(value: string): string {
@@ -34,7 +39,7 @@ export function buildCsv(transactions: Transaction[]): string {
     tx.amount.toFixed(2),
     tx.currency,
     tx.type,
-    tx.category ?? 'Uncategorized',
+    getExportCategoryLabel(tx.category),
   ])
 
   return [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n')
@@ -66,7 +71,7 @@ export function buildPdfReportHtml(
           <td>${tx.amount.toFixed(2)}</td>
           <td>${tx.currency}</td>
           <td>${tx.type}</td>
-          <td>${tx.category ?? 'Uncategorized'}</td>
+          <td>${getExportCategoryLabel(tx.category)}</td>
         </tr>
       `
     )

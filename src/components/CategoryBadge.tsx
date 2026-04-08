@@ -18,6 +18,7 @@ import {
   Ellipsis
 } from 'lucide-react';
 import { getCategoryDisplay } from '../utils/category-display';
+import { getCategoryDefinition } from '../services/categories/category-registry';
 
 interface CategoryBadgeProps {
   categoryId: string;
@@ -47,22 +48,33 @@ const iconMap = {
 
 export function CategoryBadge({ categoryId, showIcon = true, size = 'md' }: CategoryBadgeProps) {
   const category = getCategoryDisplay(categoryId);
+  const categoryDefinition = getCategoryDefinition(categoryId);
 
   const Icon = iconMap[category.icon];
   const iconSize = size === 'sm' ? 12 : 14;
   const padding = size === 'sm' ? 'px-2 py-0.5' : 'px-2.5 py-1';
   const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
+  const label = categoryDefinition.isCustom ? categoryDefinition.label : category.label;
+  const color = categoryDefinition.isCustom ? categoryDefinition.color : category.color;
+  const customIcon = categoryDefinition.isCustom ? categoryDefinition.icon : null;
 
   return (
     <span
       className={`inline-flex items-center gap-1.5 ${padding} ${textSize} rounded-full font-medium transition-colors`}
       style={{
-        backgroundColor: `color-mix(in srgb, ${category.color} 15%, transparent)`,
-        color: category.color,
+        backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+        color,
       }}
     >
-      {showIcon && Icon && <Icon size={iconSize} />}
-      <span>{category.label}</span>
+      {showIcon &&
+        (customIcon ? (
+          <span aria-hidden="true" className="leading-none">
+            {customIcon}
+          </span>
+        ) : (
+          Icon && <Icon size={iconSize} />
+        ))}
+      <span>{label}</span>
     </span>
   );
 }

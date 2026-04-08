@@ -1,10 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CategoryBadge } from './CategoryBadge';
 import { Category } from '../models';
 import { getCategoryDisplay } from '../utils/category-display';
+import { addCustomCategory } from '../services/categories/category-store';
 
 describe('CategoryBadge', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   it('renders readable label for modern categories', () => {
     render(<CategoryBadge categoryId="groceries" />);
 
@@ -20,7 +25,7 @@ describe('CategoryBadge', () => {
   it('falls back to uncategorized label for unknown categories', () => {
     render(<CategoryBadge categoryId="unknown-category" />);
 
-    expect(screen.getByText('Sin categoría')).toBeInTheDocument();
+    expect(screen.getByText('Unknown category')).toBeInTheDocument();
   });
 
   it('renders all built-in categories with a label', () => {
@@ -30,5 +35,18 @@ describe('CategoryBadge', () => {
       expect(screen.getByText(label)).toBeInTheDocument();
       unmount();
     });
+  });
+
+  it('renders custom category icon and color', () => {
+    const custom = addCustomCategory({
+      label: 'Coffee',
+      color: '#123456',
+      icon: '☕',
+    });
+
+    render(<CategoryBadge categoryId={custom.id} />);
+
+    expect(screen.getByText('Coffee')).toBeInTheDocument();
+    expect(screen.getByText('☕')).toBeInTheDocument();
   });
 });

@@ -30,7 +30,7 @@ describe('Export helpers', () => {
       makeTransaction('tx-1', {
         description: 'Netflix',
         amount: 12.5,
-        category: 'Entertainment',
+        category: 'entertainment',
       }),
     ]
 
@@ -40,8 +40,19 @@ describe('Export helpers', () => {
       '"Date","Description","Amount","Currency","Type","Category"'
     )
     expect(csv).toContain(
-      '"2025-01-01","Netflix","12.50","USD","debit","Entertainment"'
+      '"2025-01-01","Netflix","12.50","USD","debit","Entretenimiento"'
     )
+  })
+
+  it('humanizes unknown category labels in printable exports', () => {
+    const html = buildPdfReportHtml([
+      makeTransaction('tx-1', {
+        description: 'Desk lamp',
+        category: 'home_office',
+      }),
+    ])
+
+    expect(html).toContain('Home office')
   })
 
   it('filters transactions by date range for export', () => {

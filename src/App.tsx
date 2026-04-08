@@ -771,6 +771,10 @@ function App() {
         }
       })
 
+    const matchedTransactions = categorizedTransactions.filter(
+      (transaction) => transaction.category !== 'uncategorized'
+    )
+
     if (categorizedTransactions.length === 0) {
       return
     }
@@ -805,12 +809,23 @@ function App() {
         })
       )
       setAuthError('')
+      if (matchedTransactions.length === 0) {
+        setAuthNotice(
+          'No se encontraron categorías automáticas para las transacciones seleccionadas'
+        )
+        return
+      }
+
+      setAuthNotice(
+        `${matchedTransactions.length} transacción${matchedTransactions.length === 1 ? '' : 'es'} auto-categorizada${matchedTransactions.length === 1 ? '' : 's'}`
+      )
     } catch (error) {
       setAuthError(
         error instanceof Error
           ? error.message
           : 'No se pudieron auto-categorizar las transacciones'
       )
+      setAuthNotice('')
     }
   }
 

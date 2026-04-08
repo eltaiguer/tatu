@@ -27,6 +27,12 @@ interface ToolsProps {
 export function Tools({ transactions, onResetAllData }: ToolsProps) {
   const [activeTab, setActiveTab] = useState<'filters' | 'export' | 'categories' | 'settings'>('filters');
   const [, setCategoriesVersion] = useState(0);
+  const [customCategoryForm, setCustomCategoryForm] = useState({
+    id: '',
+    label: '',
+    color: '#0ea5e9',
+    icon: '🏷️',
+  });
 
   // Filter states
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -61,36 +67,63 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
     setCategoriesVersion((value) => value + 1);
   };
 
-  const customCategoryColor = '#0ea5e9';
+  const isEditingCustomCategory = customCategoryForm.id.length > 0;
+
+  const resetCustomCategoryForm = () => {
+    setCustomCategoryForm({
+      id: '',
+      label: '',
+      color: '#0ea5e9',
+      icon: '🏷️',
+    })
+  }
 
   const handleCreateCustomCategory = async () => {
-    const label = window.prompt('Nombre de la categoría')
-    if (!label || !label.trim()) {
+    if (!customCategoryForm.label.trim()) {
       return
     }
 
     await addCustomCategoryWithSync({
-      label: label.trim(),
-      color: customCategoryColor,
-      icon: '🏷️',
+      label: customCategoryForm.label.trim(),
+      color: customCategoryForm.color,
+      icon: customCategoryForm.icon.trim() || '🏷️',
     })
+    resetCustomCategoryForm()
     refreshCategoryDefinitions()
   };
 
-  const handleEditCustomCategory = async (categoryId: string, currentLabel: string) => {
-    const nextLabel = window.prompt('Editar nombre de la categoría', currentLabel)
-    if (!nextLabel || !nextLabel.trim()) {
+  const startEditingCustomCategory = (categoryId: string) => {
+    const category = categoryDefinitions.find((entry) => entry.id === categoryId)
+    if (!category || !category.isCustom) {
       return
     }
 
-    await updateCustomCategoryWithSync(categoryId, {
-      label: nextLabel.trim(),
+    setCustomCategoryForm({
+      id: category.id,
+      label: category.label,
+      color: category.color,
+      icon: category.icon || '🏷️',
     })
+  }
+
+  const handleEditCustomCategory = async () => {
+    if (!customCategoryForm.id || !customCategoryForm.label.trim()) {
+      return
+    }
+    await updateCustomCategoryWithSync(customCategoryForm.id, {
+      label: customCategoryForm.label.trim(),
+      color: customCategoryForm.color,
+      icon: customCategoryForm.icon.trim() || '🏷️',
+    })
+    resetCustomCategoryForm()
     refreshCategoryDefinitions()
   };
 
   const handleDeleteCustomCategory = async (categoryId: string) => {
     await removeCustomCategoryWithSync(categoryId)
+    if (customCategoryForm.id === categoryId) {
+      resetCustomCategoryForm()
+    }
     refreshCategoryDefinitions()
   };
 
@@ -468,11 +501,119 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h3>Gestión de Categorías</h3>
-            <Button onClick={() => void handleCreateCustomCategory()}>
+            <Button
+              onClick={() => {
+                resetCustomCategoryForm()
+              }}
+            >
               <Plus size={18} className="mr-2" />
               Nueva Categoría
             </Button>
           </div>
+
+          <Card className="p-6 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h4>{isEditingCustomCategory ? 'Editar categoría' : 'Nueva categoría'}</h4>
+                <p className="text-sm text-muted-foreground">
+                  Definí el nombre, color e icono de tus categorías personalizadas.
+                </p>
+              </div>
+              {isEditingCustomCategory && (
+                <Button variant="ghost" onClick={resetCustomCategoryForm}>
+                  Cancelar
+                </Button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-[1.5fr_140px_140px] gap-4">
+              <div>
+                <label htmlFor="tools-category-label" className="block text-sm mb-2">
+                  Nombre de la categoría
+                </label>
+                <Input
+                  id="tools-category-label"
+                  aria-label="Nombre de categoría"
+                  value={customCategoryForm.label}
+                  onChange={(event) =>
+                    setCustomCategoryForm((current) => ({
+                      ...current,
+                      label: event.target.value,
+                    }))
+                  }
+                  placeholder="Ej. Café"
+                />
+              </div>
+              <div>
+                <label htmlFor="tools-category-color" className="block text-sm mb-2">
+                  Color
+                </label>
+                <Input
+                  id="tools-category-color"
+                  aria-label="Color de categoría"
+                  type="color"
+                  value={customCategoryForm.color}
+                  onChange={(event) =>
+                    setCustomCategoryForm((current) => ({
+                      ...current,
+                      color: event.target.value,
+                    }))
+                  }
+                  className="h-11"
+                />
+              </div>
+              <div>
+                <label htmlFor="tools-category-icon" className="block text-sm mb-2">
+                  Icono
+                </label>
+                <Input
+                  id="tools-category-icon"
+                  aria-label="Icono de categoría"
+                  value={customCategoryForm.icon}
+                  onChange={(event) =>
+                    setCustomCategoryForm((current) => ({
+                      ...current,
+                      icon: event.target.value,
+                    }))
+                  }
+                  placeholder="🏷️"
+                  maxLength={2}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4 bg-muted/20">
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Vista previa</p>
+                <CategoryBadge
+                  categoryId={
+                    isEditingCustomCategory && customCategoryForm.id
+                      ? customCategoryForm.id
+                      : 'custom-category-preview'
+                  }
+                  showIcon={false}
+                />
+                <span
+                  className="ml-3 inline-flex items-center gap-2 text-sm font-medium"
+                  style={{ color: customCategoryForm.color }}
+                >
+                  <span>{customCategoryForm.icon || '🏷️'}</span>
+                  <span>{customCategoryForm.label.trim() || 'Nueva categoría'}</span>
+                </span>
+              </div>
+              <Button
+                onClick={() =>
+                  void (isEditingCustomCategory
+                    ? handleEditCustomCategory()
+                    : handleCreateCustomCategory())
+                }
+                disabled={!customCategoryForm.label.trim()}
+                aria-label="Guardar categoría"
+              >
+                {isEditingCustomCategory ? 'Guardar cambios' : 'Guardar categoría'}
+              </Button>
+            </div>
+          </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {categoryDefinitions.map(category => (
@@ -484,9 +625,10 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                       variant="ghost"
                       size="sm"
                       disabled={!category.isCustom}
-                      onClick={() =>
-                        void handleEditCustomCategory(category.id, category.label)
-                      }
+                      aria-label={`Editar categoría ${category.label}`}
+                      onClick={() => {
+                        startEditingCustomCategory(category.id)
+                      }}
                     >
                       <Pencil size={14} />
                     </Button>
@@ -494,6 +636,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                       variant="ghost"
                       size="sm"
                       disabled={!category.isCustom}
+                      aria-label={`Eliminar categoría ${category.label}`}
                       onClick={() => void handleDeleteCustomCategory(category.id)}
                     >
                       <Trash size={14} className="text-destructive" />

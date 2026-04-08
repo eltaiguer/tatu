@@ -25,6 +25,7 @@ import { ConfidenceBadge } from './ConfidenceBadge'
 import { Category } from '../models'
 import type { Currency, Transaction } from '../models'
 import { getDescriptionOverride } from '../services/descriptions/description-overrides'
+import { getCategoryDisplay } from '../utils/category-display'
 
 interface TransactionsProps {
   transactions: Transaction[]
@@ -74,10 +75,6 @@ function formatDate(date: Date): string {
     month: '2-digit',
     year: 'numeric',
   }).format(date)
-}
-
-function isKnownCategory(categoryId: string): boolean {
-  return Object.values(Category).includes(categoryId as Category)
 }
 
 export function Transactions({
@@ -197,7 +194,9 @@ export function Transactions({
           .map((transaction) => transaction.category?.trim() ?? '')
           .filter(Boolean)
       )
-    ).sort((a, b) => a.localeCompare(b, 'es'))
+    ).sort((a, b) =>
+      getCategoryDisplay(a).label.localeCompare(getCategoryDisplay(b).label, 'es')
+    )
   }, [transactions])
 
   const hasActiveFilters =
@@ -219,7 +218,9 @@ export function Transactions({
           .map((value) => value.trim())
           .filter(Boolean)
       )
-    ).sort((a, b) => a.localeCompare(b, 'es'))
+    ).sort((a, b) =>
+      getCategoryDisplay(a).label.localeCompare(getCategoryDisplay(b).label, 'es')
+    )
   }, [transactions, editCategory])
 
   const filteredCategorySuggestions = useMemo(() => {
@@ -228,9 +229,10 @@ export function Transactions({
       return categorySuggestions
     }
 
-    return categorySuggestions.filter((category) =>
-      category.toLowerCase().includes(query)
-    )
+    return categorySuggestions.filter((category) => {
+      const label = getCategoryDisplay(category).label.toLowerCase()
+      return category.toLowerCase().includes(query) || label.includes(query)
+    })
   }, [categorySuggestions, newCategoryInput])
 
   const tagSuggestions = useMemo(() => {
@@ -272,6 +274,12 @@ export function Transactions({
   const paginatedTransactions = filteredTransactions.slice(
     startIndex,
     startIndex + itemsPerPage
+  )
+  const paginatedTransactionIds = paginatedTransactions.map(
+    (transaction) => transaction.id
+  )
+  const filteredTransactionIds = filteredTransactions.map(
+    (transaction) => transaction.id
   )
 
   const handleSort = (field: SortField) => {
@@ -392,6 +400,26 @@ export function Transactions({
     })
   }
 
+  function mergeSelectedTransactionIds(transactionIds: string[]) {
+    setSelectedTransactionIds((current) => {
+      const next = new Set(current)
+      transactionIds.forEach((transactionId) => next.add(transactionId))
+      return Array.from(next)
+    })
+  }
+
+  function handleSelectCurrentPage() {
+    mergeSelectedTransactionIds(paginatedTransactionIds)
+  }
+
+  function handleSelectAllResults() {
+    mergeSelectedTransactionIds(filteredTransactionIds)
+  }
+
+  function handleClearSelection() {
+    setSelectedTransactionIds([])
+  }
+
   async function handleAutoCategorizeSelected() {
     if (
       !onAutoCategorizeTransactions ||
@@ -418,18 +446,49 @@ export function Transactions({
           <p className="text-muted-foreground">
             {filteredTransactions.length} transacciones encontradas
           </p>
+          {selectedTransactionIds.length > 0 && (
+            <p className="text-sm text-muted-foreground" role="status">
+              {selectedTransactionIds.length} seleccionada
+              {selectedTransactionIds.length === 1 ? '' : 's'}
+            </p>
+          )}
         </div>
-        {onAutoCategorizeTransactions && (
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
-            disabled={selectedTransactionIds.length === 0 || isAutoCategorizing}
-            onClick={() => {
-              void handleAutoCategorizeSelected()
-            }}
+            disabled={paginatedTransactionIds.length === 0 || isAutoCategorizing}
+            onClick={handleSelectCurrentPage}
           >
-            Auto-categorizar seleccionadas
+            Seleccionar página
           </Button>
-        )}
+          <Button
+            variant="outline"
+            disabled={filteredTransactionIds.length === 0 || isAutoCategorizing}
+            onClick={handleSelectAllResults}
+          >
+            Seleccionar resultados
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={selectedTransactionIds.length === 0 || isAutoCategorizing}
+            onClick={handleClearSelection}
+          >
+            Limpiar selección
+          </Button>
+          {onAutoCategorizeTransactions && (
+            <Button
+              variant="outline"
+              disabled={selectedTransactionIds.length === 0 || isAutoCategorizing}
+              onClick={() => {
+                void handleAutoCategorizeSelected()
+              }}
+            >
+              {isAutoCategorizing
+                ? 'Auto-categorizando...'
+                : 'Auto-categorizar seleccionadas'}
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className="p-4">
@@ -512,10 +571,10 @@ export function Transactions({
               >
                 <option value="">Todas</option>
                 {availableCategories.map((category) => (
-                  <option key={category} value={category}>
-                    {category}
-                  </option>
-                ))}
+                <option key={category} value={category}>
+                    {getCategoryDisplay(category).label}
+                </option>
+              ))}
               </select>
             </div>
 
@@ -894,18 +953,9 @@ export function Transactions({
                   >
                     <div className="flex items-center justify-between gap-2">
                       <CategoryBadge
-                        categoryId={
-                          isKnownCategory(editCategory)
-                            ? editCategory
-                            : Category.Uncategorized
-                        }
+                        categoryId={editCategory || Category.Uncategorized}
                         size="sm"
                       />
-                      {editCategory && !isKnownCategory(editCategory) && (
-                        <span className="text-xs text-muted-foreground">
-                          {editCategory}
-                        </span>
-                      )}
                     </div>
                   </button>
                 </PopoverTrigger>
@@ -948,18 +998,9 @@ export function Transactions({
                           >
                             <div className="flex items-center justify-between gap-2">
                               <CategoryBadge
-                                categoryId={
-                                  isKnownCategory(category)
-                                    ? category
-                                    : Category.Uncategorized
-                                }
+                                categoryId={category}
                                 size="sm"
                               />
-                              {!isKnownCategory(category) && (
-                                <span className="text-xs text-muted-foreground">
-                                  {category}
-                                </span>
-                              )}
                             </div>
                           </button>
                         ))}

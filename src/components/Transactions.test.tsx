@@ -122,6 +122,33 @@ describe('Transactions', () => {
     expect(screen.getByText('Mostrando 1-1 de 1')).toBeInTheDocument()
   })
 
+  it('shows translated and humanized category labels in filters', () => {
+    render(
+      <Transactions
+        transactions={[
+          {
+            ...makeTransaction(1, 'Alpha Market'),
+            category: 'groceries',
+          },
+          {
+            ...makeTransaction(2, 'Home Office Expense'),
+            category: 'home_office',
+          },
+        ]}
+      />
+    )
+
+    expect(
+      screen.getByRole('option', { name: 'Alimentación' })
+    ).toHaveValue('groceries')
+    expect(
+      screen.getByRole('option', { name: 'Home office' })
+    ).toHaveValue('home_office')
+    expect(
+      screen.queryByRole('option', { name: 'groceries' })
+    ).not.toBeInTheDocument()
+  })
+
   it('shows filter-specific empty state when structured filters remove all matches', () => {
     render(
       <Transactions
@@ -203,6 +230,92 @@ describe('Transactions', () => {
     await waitFor(() =>
       expect(onAutoCategorizeTransactions).toHaveBeenCalledWith(['tx-1'])
     )
+  })
+
+  it('shows selected count and pending state while auto-categorizing', async () => {
+    let resolveAutoCategorize: (() => void) | undefined
+    const onAutoCategorizeTransactions = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveAutoCategorize = resolve
+        })
+    )
+
+    render(
+      <Transactions
+        transactions={[makeTransaction(1, 'Devoto Supermercado')]}
+        onAutoCategorizeTransactions={onAutoCategorizeTransactions}
+      />
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', {
+        name: 'Seleccionar Devoto Supermercado',
+      })[0]
+    )
+
+    expect(screen.getAllByText('1 seleccionada').length).toBeGreaterThan(0)
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Auto-categorizar seleccionadas',
+      })
+    )
+
+    expect(
+      screen.getByRole('button', { name: 'Auto-categorizando...' })
+    ).toBeDisabled()
+
+    resolveAutoCategorize?.()
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Auto-categorizar seleccionadas' })
+      ).toBeDisabled()
+    )
+  })
+
+  it('selects all transactions from the current page only', () => {
+    const transactions = Array.from({ length: 25 }, (_, index) =>
+      makeTransaction(index, `merchant ${index}`)
+    )
+
+    render(<Transactions transactions={transactions} />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Seleccionar página' })
+    )
+
+    expect(screen.getAllByText('20 seleccionadas').length).toBeGreaterThan(0)
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar merchant 24' })[0]
+    ).toHaveAttribute('aria-checked', 'true')
+    expect(
+      screen.queryByRole('checkbox', { name: 'Seleccionar merchant 4' })
+    ).toBeNull()
+  })
+
+  it('selects all filtered results across pages', () => {
+    const transactions = Array.from({ length: 25 }, (_, index) =>
+      makeTransaction(index, `merchant ${index}`)
+    )
+
+    render(<Transactions transactions={transactions} />)
+
+    fireEvent.change(
+      screen.getByLabelText('Filtro descripción'),
+      { target: { value: 'merchant' } }
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Seleccionar resultados' })
+    )
+
+    expect(screen.getAllByText('25 seleccionadas').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar merchant 4' })[0]
+    ).toHaveAttribute('aria-checked', 'true')
   })
 
   it('triggers transaction update from modal edit', async () => {
@@ -365,7 +478,7 @@ describe('Transactions', () => {
 
     fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     expect(screen.getAllByText('Servicios').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('custom-category').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Custom category').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByLabelText('Tags dropdown'))
     expect(screen.getAllByText('monthly').length).toBeGreaterThan(0)
