@@ -1,7 +1,8 @@
 // Dashboard - Main overview with summary cards
 
 import { Card } from './ui/card';
-import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign } from 'lucide-react';
+import { Button } from './ui/button';
+import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign, Landmark, Upload } from 'lucide-react';
 import type { Transaction, Currency } from '../models';
 import { useMemo, useState } from 'react';
 import { filterByPeriod, generatePeriodOptions } from '../utils/date-utils';
@@ -100,9 +101,10 @@ function getTopCategory(transactions: Transaction[]): {
 
 interface DashboardProps {
   transactions: Transaction[];
+  onNavigateToImport?: () => void;
 }
 
-export function Dashboard({ transactions }: DashboardProps) {
+export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) {
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | 'all'>('all');
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('all');
 
@@ -195,6 +197,17 @@ export function Dashboard({ transactions }: DashboardProps) {
     (tx) => tx.currency === 'USD'
   ).length;
 
+  const uyuBankTransactions = useMemo(
+    () => filteredTransactions.filter((tx) => tx.source === 'bank_account' && tx.currency === 'UYU'),
+    [filteredTransactions]
+  );
+  const uyuBankSummary = useMemo(
+    () => calculateSummary(uyuBankTransactions, 'UYU'),
+    [uyuBankTransactions]
+  );
+
+  const hasTransactions = transactions.length > 0;
+
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 rounded-2xl p-6 md:p-8 border border-primary/20">
@@ -205,6 +218,27 @@ export function Dashboard({ transactions }: DashboardProps) {
         </p>
       </div>
 
+      {!hasTransactions && (
+        <Card className="p-8 text-center space-y-4">
+          <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <Upload className="text-primary" size={28} />
+          </div>
+          <div>
+            <h2 className="mb-2">Empezá importando tu extracto</h2>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Arrastrá tu archivo CSV de Santander Uruguay para ver tu dashboard con ingresos, gastos y estadísticas.
+            </p>
+          </div>
+          {onNavigateToImport && (
+            <Button size="lg" onClick={onNavigateToImport}>
+              <Upload size={18} className="mr-2" />
+              Importar extracto CSV
+            </Button>
+          )}
+        </Card>
+      )}
+
+      {hasTransactions && (<>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h2 className="mb-1">Panel General</h2>
@@ -214,7 +248,7 @@ export function Dashboard({ transactions }: DashboardProps) {
         <div className="flex gap-3">
           <select
             aria-label="Período"
-            className="px-4 py-2 rounded-lg border border-input bg-input-background"
+            className="px-4 py-2 rounded-lg border border-input bg-input-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1rem] bg-[right_0.5rem_center] bg-no-repeat pr-8"
             value={selectedPeriodId}
             onChange={(event) => setSelectedPeriodId(event.target.value)}
           >
@@ -227,11 +261,11 @@ export function Dashboard({ transactions }: DashboardProps) {
 
           <select
             aria-label="Moneda"
-            className="px-4 py-2 rounded-lg border border-input bg-input-background"
+            className="px-4 py-2 rounded-lg border border-input bg-input-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1rem] bg-[right_0.5rem_center] bg-no-repeat pr-8"
             value={selectedCurrency}
             onChange={(event) => setSelectedCurrency(event.target.value as Currency | 'all')}
           >
-            <option value="all">Todas las monedas</option>
+            <option value="all">Todas</option>
             <option value="UYU">Pesos (UYU)</option>
             <option value="USD">Dólares (USD)</option>
           </select>
@@ -312,14 +346,14 @@ export function Dashboard({ transactions }: DashboardProps) {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-accent-50 dark:bg-accent-900/20">
               <CreditCard className="text-accent" size={20} />
             </div>
             <div>
-              <h4>Tarjeta de Crédito</h4>
+              <h3 className="text-base font-semibold">Tarjeta de Crédito</h3>
               <p className="text-xs text-muted-foreground">Santander Mastercard</p>
             </div>
           </div>
@@ -356,7 +390,7 @@ export function Dashboard({ transactions }: DashboardProps) {
               <DollarSign className="text-primary" size={20} />
             </div>
             <div>
-              <h4>Cuenta en Dólares</h4>
+              <h3 className="text-base font-semibold">Cuenta en Dólares</h3>
               <p className="text-xs text-muted-foreground">Caja de ahorro USD</p>
             </div>
           </div>
@@ -371,10 +405,32 @@ export function Dashboard({ transactions }: DashboardProps) {
             </div>
           </div>
         </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-success-50 dark:bg-success-900/20">
+              <Landmark className="text-success-600" size={20} />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold">Cuenta en Pesos</h3>
+              <p className="text-xs text-muted-foreground">Caja de ahorro UYU</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-baseline">
+              <span className="text-sm text-muted-foreground">Saldo disponible</span>
+              <span className="font-mono">{formatCurrency(uyuBankSummary.balance, 'UYU')}</span>
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground mt-3">
+              <span>{uyuBankTransactions.length} movimientos UYU</span>
+              <span>{filteredTransactions.length} totales</span>
+            </div>
+          </div>
+        </Card>
       </div>
 
       <Card className="p-6">
-        <h4 className="mb-4">Estadísticas Rápidas</h4>
+        <h3 className="mb-4">Estadísticas Rápidas</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div>
             <p className="text-sm text-muted-foreground mb-1">Transacciones</p>
@@ -409,6 +465,7 @@ export function Dashboard({ transactions }: DashboardProps) {
           </div>
         </div>
       </Card>
+      </>)}
     </div>
   );
 }

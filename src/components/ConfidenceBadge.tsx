@@ -1,34 +1,36 @@
 // Confidence indicator for auto-categorization
 
 interface ConfidenceBadgeProps {
-  confidence: number;
-  manualOverride?: boolean;
+  confidence: number
+  manualOverride?: boolean
 }
 
-export function ConfidenceBadge({ confidence, manualOverride }: ConfidenceBadgeProps) {
+export function ConfidenceBadge({
+  confidence,
+  manualOverride,
+}: ConfidenceBadgeProps) {
   if (manualOverride) {
-    return (
-      <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-md bg-muted/50">
-        Manual
-      </span>
-    );
+    return null
   }
 
-  const getConfidenceColor = (conf: number) => {
-    if (conf >= 0.9) return 'text-success-600 bg-success-50 dark:bg-success-900/20';
-    if (conf >= 0.7) return 'text-primary-600 bg-primary-50 dark:bg-primary-900/20';
-    return 'text-warning-600 bg-warning-50 dark:bg-warning-900/20';
-  };
+  if (confidence === 0) return null
 
-  const getConfidenceLabel = (conf: number) => {
-    if (conf >= 0.9) return 'Alta';
-    if (conf >= 0.7) return 'Media';
-    return 'Baja';
-  };
+  const getColor = (conf: number) => {
+    if (conf >= 0.9) return 'bg-success-600'
+    if (conf >= 0.7) return 'bg-primary-600'
+    return 'bg-warning-500'
+  }
+
+  const getLabel = (conf: number) => {
+    if (conf >= 0.9) return 'Confianza alta'
+    if (conf >= 0.7) return 'Confianza media'
+    return 'Confianza baja'
+  }
 
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-md ${getConfidenceColor(confidence)}`}>
-      {getConfidenceLabel(confidence)}
-    </span>
-  );
+    <span
+      className={`inline-block w-1.5 h-1.5 rounded-full ${getColor(confidence)} shrink-0`}
+      title={`${getLabel(confidence)} (${Math.round(confidence * 100)}%)`}
+    />
+  )
 }

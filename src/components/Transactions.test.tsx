@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Transactions } from './Transactions'
 import type { Transaction } from '../models'
 
@@ -96,7 +96,7 @@ describe('Transactions', () => {
     render(<Transactions transactions={transactions} />)
 
     fireEvent.change(
-      screen.getByLabelText('Filtro descripción'),
+      screen.getByPlaceholderText('Buscar por comercio o descripción...'),
       { target: { value: 'alpha' } }
     )
     fireEvent.change(
@@ -223,7 +223,7 @@ describe('Transactions', () => {
     )
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Auto-categorizar seleccionadas',
+        name: /Auto-categorizar/,
       })
     )
 
@@ -258,64 +258,76 @@ describe('Transactions', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Auto-categorizar seleccionadas',
+        name: /Auto-categorizar/,
       })
     )
 
     expect(
-      screen.getByRole('button', { name: 'Auto-categorizando...' })
+      screen.getByRole('button', { name: /Auto-categorizando/ })
     ).toBeDisabled()
 
     resolveAutoCategorize?.()
 
     await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: 'Auto-categorizar seleccionadas' })
-      ).toBeDisabled()
+      expect(screen.queryByText(/seleccionada/)).not.toBeInTheDocument()
     )
   })
 
-  it('selects all transactions from the current page only', () => {
+  it('selects all page transactions via header checkbox', () => {
     const transactions = Array.from({ length: 25 }, (_, index) =>
       makeTransaction(index, `merchant ${index}`)
     )
 
     render(<Transactions transactions={transactions} />)
 
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Seleccionar página' })
-    )
+    const headerCheckboxes = screen.getAllByRole('checkbox', {
+      name: 'Seleccionar todas',
+    })
+    fireEvent.click(headerCheckboxes[0])
 
     expect(screen.getAllByText('20 seleccionadas').length).toBeGreaterThan(0)
     expect(
       screen.getAllByRole('checkbox', { name: 'Seleccionar merchant 24' })[0]
     ).toHaveAttribute('aria-checked', 'true')
-    expect(
-      screen.queryByRole('checkbox', { name: 'Seleccionar merchant 4' })
-    ).toBeNull()
   })
 
-  it('selects all filtered results across pages', () => {
+  it('deselects all via header checkbox when all are selected', () => {
+    const transactions = [
+      makeTransaction(1, 'Merchant A'),
+      makeTransaction(2, 'Merchant B'),
+    ]
+
+    render(<Transactions transactions={transactions} />)
+
+    const headerCheckboxes = screen.getAllByRole('checkbox', {
+      name: 'Seleccionar todas',
+    })
+    fireEvent.click(headerCheckboxes[0])
+    expect(screen.getAllByText('2 seleccionadas').length).toBeGreaterThan(0)
+
+    fireEvent.click(headerCheckboxes[0])
+    expect(screen.queryByText(/seleccionada/)).not.toBeInTheDocument()
+  })
+
+  it('shows select-all link after selecting full page on multi-page results', () => {
     const transactions = Array.from({ length: 25 }, (_, index) =>
       makeTransaction(index, `merchant ${index}`)
     )
 
     render(<Transactions transactions={transactions} />)
 
-    fireEvent.change(
-      screen.getByLabelText('Filtro descripción'),
-      { target: { value: 'merchant' } }
-    )
+    const headerCheckboxes = screen.getAllByRole('checkbox', {
+      name: 'Seleccionar todas',
+    })
+    fireEvent.click(headerCheckboxes[0])
+
+    expect(screen.getAllByText('20 seleccionadas').length).toBeGreaterThan(0)
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'Seleccionar resultados' })
+      screen.getByText('Seleccionar las 25 transacciones')
     )
 
     expect(screen.getAllByText('25 seleccionadas').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
-    expect(
-      screen.getAllByRole('checkbox', { name: 'Seleccionar merchant 4' })[0]
-    ).toHaveAttribute('aria-checked', 'true')
   })
 
   it('triggers transaction update from modal edit', async () => {
@@ -522,5 +534,173 @@ describe('Transactions', () => {
     )
 
     expect(onDeleteTransaction).not.toHaveBeenCalled()
+  })
+
+  it('bulk categorizes selected transactions', async () => {
+    const onBulkCategorize = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <Transactions
+        transactions={[
+          makeTransaction(1, 'Devoto'),
+          makeTransaction(2, 'Netflix'),
+        ]}
+        onBulkCategorize={onBulkCategorize}
+      />
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+    )
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Netflix' })[0]
+    )
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole('button', { name: /Editar/ })[0]
+      )
+    })
+
+    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+
+    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
+      target: { value: 'entretenimiento' },
+    })
+
+    const popoverButtons = screen.getAllByText('Entretenimiento')
+    fireEvent.click(popoverButtons[popoverButtons.length - 1])
+
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+
+    await waitFor(() =>
+      expect(onBulkCategorize).toHaveBeenCalledWith(
+        ['tx-1', 'tx-2'],
+        'entertainment'
+      )
+    )
+  })
+
+  it('bulk deletes selected transactions after confirmation', async () => {
+    const onBulkDelete = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(
+      <Transactions
+        transactions={[
+          makeTransaction(1, 'Merchant A'),
+          makeTransaction(2, 'Merchant B'),
+        ]}
+        onBulkDelete={onBulkDelete}
+      />
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
+    )
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant B' })[0]
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /^Eliminar$/ })
+    )
+
+    await waitFor(() =>
+      expect(onBulkDelete).toHaveBeenCalledWith(['tx-1', 'tx-2'])
+    )
+  })
+
+  it('does not bulk delete when confirmation is rejected', () => {
+    const onBulkDelete = vi.fn()
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+
+    render(
+      <Transactions
+        transactions={[makeTransaction(1, 'Merchant A')]}
+        onBulkDelete={onBulkDelete}
+      />
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /^Eliminar$/ })
+    )
+
+    expect(onBulkDelete).not.toHaveBeenCalled()
+  })
+
+  it('bulk tags selected transactions', async () => {
+    const onBulkTag = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <Transactions
+        transactions={[
+          { ...makeTransaction(1, 'Devoto'), tags: ['monthly'] },
+          makeTransaction(2, 'Netflix'),
+        ]}
+        onBulkTag={onBulkTag}
+      />
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+    )
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Netflix' })[0]
+    )
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole('button', { name: /Editar/ })[0]
+      )
+    })
+
+    fireEvent.click(screen.getByLabelText('Tags bulk dropdown'))
+
+    const tagButtons = screen.getAllByText('#monthly')
+    fireEvent.click(tagButtons[tagButtons.length - 1])
+
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+
+    await waitFor(() =>
+      expect(onBulkTag).toHaveBeenCalledWith(['tx-1', 'tx-2'], 'monthly')
+    )
+  })
+
+  it('bulk tags with a new tag via create button', async () => {
+    const onBulkTag = vi.fn().mockResolvedValue(undefined)
+
+    render(
+      <Transactions
+        transactions={[makeTransaction(1, 'Devoto')]}
+        onBulkTag={onBulkTag}
+      />
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /Editar/ })[0]
+    )
+
+    fireEvent.click(screen.getByLabelText('Tags bulk dropdown'))
+
+    fireEvent.change(screen.getByLabelText('Buscar o crear tag'), {
+      target: { value: 'new-tag' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Crear tag "new-tag"/ }))
+
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+
+    await waitFor(() =>
+      expect(onBulkTag).toHaveBeenCalledWith(['tx-1'], 'new-tag')
+    )
   })
 })

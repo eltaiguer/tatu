@@ -1,26 +1,20 @@
-# TDD Workflow
+# Testing Workflow
 
-This project follows strict Test-Driven Development.
+This project uses behavior testing — tests verify what the system does, not how it does it.
 
 ## Rule
 
-Every behavior change must follow:
-
-1. `RED`: Write or update a test that fails for the new behavior.
-2. `GREEN`: Implement the minimal code needed to pass.
-3. `REFACTOR`: Clean up while keeping tests green.
-
-Do not skip the failing-test step.
+Every feature and bug fix should include tests that cover the observable behavior. Tests are written alongside implementation, not strictly test-first.
 
 ## Local Commands
 
-- Start TDD loop: `npm run tdd:watch`
+- Watch tests: `npm run tdd:watch`
 - Verify before commit: `npm run tdd:verify`
 - Full CI-equivalent check: `npm run ci:check`
 
 ## Pull Request Expectations
 
-- Include test changes for behavior changes.
-- Describe `RED -> GREEN -> REFACTOR` in the PR description.
+- Include tests for behavior changes.
+- Bug fixes should include a regression test.
 - Keep changes small and logically scoped.
 

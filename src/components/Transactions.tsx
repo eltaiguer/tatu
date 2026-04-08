@@ -4,6 +4,7 @@ import {
   CreditCard,
   Pencil,
   Search,
+  Sparkles,
   Trash2,
   Wallet,
 } from 'lucide-react'
@@ -40,6 +41,9 @@ interface TransactionsProps {
   ) => Promise<void> | void
   onDeleteTransaction?: (transactionId: string) => Promise<void> | void
   onAutoCategorizeTransactions?: (transactionIds: string[]) => Promise<void> | void
+  onBulkCategorize?: (transactionIds: string[], category: string) => Promise<void> | void
+  onBulkDelete?: (transactionIds: string[]) => Promise<void> | void
+  onBulkTag?: (transactionIds: string[], tag: string) => Promise<void> | void
 }
 
 type SortField = 'date' | 'amount' | 'description' | 'category'
@@ -82,9 +86,11 @@ export function Transactions({
   onUpdateTransaction,
   onDeleteTransaction,
   onAutoCategorizeTransactions,
+  onBulkCategorize,
+  onBulkDelete,
+  onBulkTag,
 }: TransactionsProps) {
   const [searchTerm, setSearchTerm] = useState('')
-  const [descriptionFilter, setDescriptionFilter] = useState('')
   const [dateFromFilter, setDateFromFilter] = useState('')
   const [dateToFilter, setDateToFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -97,6 +103,14 @@ export function Transactions({
   )
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
+  const [isBulkOperating, setIsBulkOperating] = useState(false)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
+  const [bulkEditCategory, setBulkEditCategory] = useState('')
+  const [bulkEditTagList, setBulkEditTagList] = useState<string[]>([])
+  const [bulkCategoryPickerOpen, setBulkCategoryPickerOpen] = useState(false)
+  const [bulkCategorySearch, setBulkCategorySearch] = useState('')
+  const [bulkTagPickerOpen, setBulkTagPickerOpen] = useState(false)
+  const [bulkTagSearch, setBulkTagSearch] = useState('')
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
@@ -116,7 +130,6 @@ export function Transactions({
 
   const filteredTransactions = useMemo(() => {
     const query = searchTerm.toLowerCase()
-    const descriptionQuery = descriptionFilter.trim().toLowerCase()
     const categoryQuery = categoryFilter.trim()
     const dateFrom = dateFromFilter ? new Date(`${dateFromFilter}T00:00:00`) : null
     const dateTo = dateToFilter ? new Date(`${dateToFilter}T23:59:59.999`) : null
@@ -125,12 +138,6 @@ export function Transactions({
       const searchable =
         `${getDisplayDescription(transaction)} ${transaction.description} ${(transaction.tags ?? []).join(' ')}`.toLowerCase()
       if (!searchable.includes(query)) {
-        return false
-      }
-
-      const descriptionSearchable =
-        `${getDisplayDescription(transaction)} ${transaction.description}`.toLowerCase()
-      if (descriptionQuery && !descriptionSearchable.includes(descriptionQuery)) {
         return false
       }
 
@@ -178,7 +185,6 @@ export function Transactions({
   }, [
     transactions,
     searchTerm,
-    descriptionFilter,
     dateFromFilter,
     dateToFilter,
     categoryFilter,
@@ -201,7 +207,6 @@ export function Transactions({
 
   const hasActiveFilters =
     Boolean(searchTerm.trim()) ||
-    Boolean(descriptionFilter.trim()) ||
     Boolean(dateFromFilter) ||
     Boolean(dateToFilter) ||
     Boolean(categoryFilter) ||
@@ -412,13 +417,30 @@ export function Transactions({
     mergeSelectedTransactionIds(paginatedTransactionIds)
   }
 
-  function handleSelectAllResults() {
+  function handleSelectAllFiltered() {
     mergeSelectedTransactionIds(filteredTransactionIds)
   }
 
   function handleClearSelection() {
     setSelectedTransactionIds([])
   }
+
+  const bulkFilteredCategories = useMemo(() => {
+    const query = bulkCategorySearch.trim().toLowerCase()
+    if (!query) return categorySuggestions
+    return categorySuggestions.filter((category) => {
+      const label = getCategoryDisplay(category).label.toLowerCase()
+      return category.toLowerCase().includes(query) || label.includes(query)
+    })
+  }, [categorySuggestions, bulkCategorySearch])
+
+  const bulkFilteredTags = useMemo(() => {
+    const query = bulkTagSearch.trim().toLowerCase()
+    if (!query) return tagSuggestions
+    return tagSuggestions.filter((tag) => tag.toLowerCase().includes(query))
+  }, [tagSuggestions, bulkTagSearch])
+
+  const isBusy = isAutoCategorizing || isBulkOperating
 
   async function handleAutoCategorizeSelected() {
     if (
@@ -438,57 +460,88 @@ export function Transactions({
     }
   }
 
+
+  async function handleBulkDelete() {
+    if (!onBulkDelete || selectedTransactionIds.length === 0 || isBulkOperating) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      `¿Eliminar ${selectedTransactionIds.length} transacción${selectedTransactionIds.length === 1 ? '' : 'es'}?`
+    )
+    if (!confirmed) return
+
+    setIsBulkOperating(true)
+    try {
+      await onBulkDelete(selectedTransactionIds)
+      setSelectedTransactionIds([])
+    } finally {
+      setIsBulkOperating(false)
+    }
+  }
+
+
+  function openBulkEdit() {
+    setBulkEditCategory('')
+    setBulkEditTagList([])
+    setBulkCategorySearch('')
+    setBulkTagSearch('')
+    setBulkEditOpen(true)
+  }
+
+  function closeBulkEdit() {
+    setBulkEditOpen(false)
+    setBulkCategoryPickerOpen(false)
+    setBulkTagPickerOpen(false)
+    setBulkCategorySearch('')
+    setBulkTagSearch('')
+  }
+
+  async function handleBulkEditSave() {
+    if (selectedTransactionIds.length === 0 || isBulkOperating) return
+
+    setIsBulkOperating(true)
+    try {
+      if (bulkEditCategory && onBulkCategorize) {
+        await onBulkCategorize(selectedTransactionIds, bulkEditCategory)
+      }
+      for (const tag of bulkEditTagList) {
+        if (onBulkTag) {
+          await onBulkTag(selectedTransactionIds, tag)
+        }
+      }
+      setSelectedTransactionIds([])
+      closeBulkEdit()
+    } finally {
+      setIsBulkOperating(false)
+    }
+  }
+
+  const selectionCount = selectedTransactionIds.length
+  const hasSelection = selectionCount > 0
+
+  const allPageSelected =
+    paginatedTransactionIds.length > 0 &&
+    paginatedTransactionIds.every((id) => selectedTransactionIds.includes(id))
+  const somePageSelected =
+    !allPageSelected &&
+    paginatedTransactionIds.some((id) => selectedTransactionIds.includes(id))
+
+  function handleHeaderCheckboxChange(checked: boolean) {
+    if (checked) {
+      handleSelectCurrentPage()
+    } else {
+      handleClearSelection()
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="mb-1">Transacciones</h2>
-          <p className="text-muted-foreground">
-            {filteredTransactions.length} transacciones encontradas
-          </p>
-          {selectedTransactionIds.length > 0 && (
-            <p className="text-sm text-muted-foreground" role="status">
-              {selectedTransactionIds.length} seleccionada
-              {selectedTransactionIds.length === 1 ? '' : 's'}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            disabled={paginatedTransactionIds.length === 0 || isAutoCategorizing}
-            onClick={handleSelectCurrentPage}
-          >
-            Seleccionar página
-          </Button>
-          <Button
-            variant="outline"
-            disabled={filteredTransactionIds.length === 0 || isAutoCategorizing}
-            onClick={handleSelectAllResults}
-          >
-            Seleccionar resultados
-          </Button>
-          <Button
-            variant="ghost"
-            disabled={selectedTransactionIds.length === 0 || isAutoCategorizing}
-            onClick={handleClearSelection}
-          >
-            Limpiar selección
-          </Button>
-          {onAutoCategorizeTransactions && (
-            <Button
-              variant="outline"
-              disabled={selectedTransactionIds.length === 0 || isAutoCategorizing}
-              onClick={() => {
-                void handleAutoCategorizeSelected()
-              }}
-            >
-              {isAutoCategorizing
-                ? 'Auto-categorizando...'
-                : 'Auto-categorizar seleccionadas'}
-            </Button>
-          )}
-        </div>
+      <div>
+        <h2 className="mb-1">Transacciones</h2>
+        <p className="text-muted-foreground">
+          {filteredTransactions.length} transacciones encontradas
+        </p>
       </div>
 
       <Card className="p-4">
@@ -506,23 +559,7 @@ export function Transactions({
             />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <div className="space-y-1">
-              <label
-                htmlFor="transactions-description-filter"
-                className="text-sm font-medium"
-              >
-                Descripción
-              </label>
-              <Input
-                id="transactions-description-filter"
-                aria-label="Filtro descripción"
-                placeholder="Filtrar por descripción"
-                value={descriptionFilter}
-                onChange={(event) => setDescriptionFilter(event.target.value)}
-              />
-            </div>
-
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-1">
               <label
                 htmlFor="transactions-date-from-filter"
@@ -605,13 +642,77 @@ export function Transactions({
         </div>
       </Card>
 
+      {hasSelection && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium" role="status">
+            {selectionCount} seleccionada{selectionCount === 1 ? '' : 's'}
+          </span>
+
+          {allPageSelected && selectionCount < filteredTransactions.length && (
+            <button
+              type="button"
+              className="text-sm text-primary hover:underline"
+              disabled={isBusy}
+              onClick={handleSelectAllFiltered}
+            >
+              Seleccionar las {filteredTransactions.length} transacciones
+            </button>
+          )}
+
+          <span className="hidden md:inline text-border">|</span>
+
+          {(onBulkCategorize || onBulkTag) && (
+            <Button variant="outline" size="sm" disabled={isBusy} onClick={openBulkEdit}>
+              <Pencil size={14} className="mr-1.5" />
+              Editar
+            </Button>
+          )}
+
+          {onAutoCategorizeTransactions && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isBusy}
+              onClick={() => {
+                void handleAutoCategorizeSelected()
+              }}
+            >
+              <Sparkles size={14} className="mr-1.5" />
+              {isAutoCategorizing ? 'Auto-categorizando...' : 'Auto-categorizar'}
+            </Button>
+          )}
+
+          {onBulkDelete && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isBusy}
+              className="text-destructive hover:text-destructive"
+              onClick={() => {
+                void handleBulkDelete()
+              }}
+            >
+              <Trash2 size={14} className="mr-1.5" />
+              Eliminar
+            </Button>
+          )}
+        </div>
+      )}
+
       <Card className="overflow-hidden">
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-muted/50 border-b border-border">
               <tr>
-                <th className="text-left p-4 text-sm font-medium w-12">
-                  <span className="sr-only">Selección</span>
+                <th className="p-4 w-12">
+                  <Checkbox
+                    aria-label="Seleccionar todas"
+                    checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
+                    onCheckedChange={(checked) =>
+                      handleHeaderCheckboxChange(checked === true)
+                    }
+                    disabled={paginatedTransactionIds.length === 0 || isBusy}
+                  />
                 </th>
                 <th className="text-left p-4 text-sm font-medium">
                   <button
@@ -640,7 +741,6 @@ export function Transactions({
                     {sortField === 'category' && <ArrowUpDown size={14} />}
                   </button>
                 </th>
-                <th className="text-left p-4 text-sm font-medium">Confianza</th>
                 <th className="text-left p-4 text-sm font-medium">Cuenta</th>
                 <th className="text-right p-4 text-sm font-medium">
                   <button
@@ -681,7 +781,7 @@ export function Transactions({
                       onCheckedChange={(checked) =>
                         toggleTransactionSelection(transaction.id, checked === true)
                       }
-                      disabled={isAutoCategorizing}
+                      disabled={isBusy}
                     />
                   </td>
                   <td className="p-4">
@@ -717,16 +817,15 @@ export function Transactions({
                     )}
                   </td>
                   <td className="p-4">
-                    <CategoryBadge
-                      categoryId={transaction.category || Category.Uncategorized}
-                      size="sm"
-                    />
-                  </td>
-                  <td className="p-4">
-                    <ConfidenceBadge
-                      confidence={transaction.categoryConfidence || 0}
-                      manualOverride={false}
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <CategoryBadge
+                        categoryId={transaction.category || Category.Uncategorized}
+                        size="sm"
+                      />
+                      <ConfidenceBadge
+                        confidence={transaction.categoryConfidence || 0}
+                      />
+                    </div>
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -779,6 +878,19 @@ export function Transactions({
         </div>
 
         <div className="md:hidden divide-y divide-border">
+          {paginatedTransactions.length > 0 && (
+            <div className="p-4 flex items-center gap-3 bg-muted/30">
+              <Checkbox
+                aria-label="Seleccionar todas"
+                checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
+                onCheckedChange={(checked) =>
+                  handleHeaderCheckboxChange(checked === true)
+                }
+                disabled={isBusy}
+              />
+              <span className="text-sm text-muted-foreground">Seleccionar todas</span>
+            </div>
+          )}
           {paginatedTransactions.length === 0 && (
             <div className="p-6 text-center text-sm text-muted-foreground">
               {hasActiveFilters
@@ -800,7 +912,7 @@ export function Transactions({
                   onCheckedChange={(checked) =>
                     toggleTransactionSelection(transaction.id, checked === true)
                   }
-                  disabled={isAutoCategorizing}
+                  disabled={isBusy}
                 />
                 <div className="flex-1">
                   <div className="font-medium mb-1">{displayDescription}</div>
@@ -830,6 +942,9 @@ export function Transactions({
                   categoryId={transaction.category || Category.Uncategorized}
                   size="sm"
                 />
+                <ConfidenceBadge
+                  confidence={transaction.categoryConfidence || 0}
+                />
                 {(transaction.tags ?? []).map((tag) => (
                   <span
                     key={`${transaction.id}-${tag}`}
@@ -838,10 +953,6 @@ export function Transactions({
                     #{tag}
                   </span>
                 ))}
-                <ConfidenceBadge
-                  confidence={transaction.categoryConfidence || 0}
-                  manualOverride={false}
-                />
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   {getAccountIcon(transaction.source)}
                   {getAccountLabel(transaction.source)}
@@ -1119,6 +1230,189 @@ export function Transactions({
                 void handleSaveEditTransaction()
               }}
               disabled={Boolean(editingTransaction && pendingTransactionId === editingTransaction.id)}
+            >
+              Guardar cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkEditOpen} onOpenChange={(open) => !open && closeBulkEdit()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar {selectionCount} transacción{selectionCount === 1 ? '' : 'es'}</DialogTitle>
+            <DialogDescription>
+              Cambiá categoría y tags de las transacciones seleccionadas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {onBulkCategorize && (
+              <div>
+                <label className="text-sm font-medium">Categoría</label>
+                <Popover open={bulkCategoryPickerOpen} onOpenChange={setBulkCategoryPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Categoría bulk dropdown"
+                      className="mt-1 w-full min-h-9 rounded-md border border-input bg-input-background px-2 py-1 text-left hover:bg-muted/50"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        {bulkEditCategory ? (
+                          <CategoryBadge
+                            categoryId={bulkEditCategory}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            Sin cambios
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-[320px]" align="start">
+                    <div className="p-2 space-y-2">
+                      <Input
+                        aria-label="Buscar categoría"
+                        value={bulkCategorySearch}
+                        onChange={(event) => setBulkCategorySearch(event.target.value)}
+                        placeholder="Buscar categoría..."
+                      />
+                      <div
+                        className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2"
+                        style={{ WebkitOverflowScrolling: 'touch' }}
+                        onWheel={(event) => event.stopPropagation()}
+                        onTouchMove={(event) => event.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className="w-full text-left rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+                          onClick={() => {
+                            setBulkEditCategory('')
+                            setBulkCategoryPickerOpen(false)
+                          }}
+                        >
+                          <span className="text-muted-foreground">Sin cambios</span>
+                        </button>
+                        {bulkFilteredCategories.map((category) => (
+                          <button
+                            key={category}
+                            type="button"
+                            className="w-full text-left rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+                            onClick={() => {
+                              setBulkEditCategory(category)
+                              setBulkCategoryPickerOpen(false)
+                            }}
+                          >
+                            <CategoryBadge categoryId={category} size="sm" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            )}
+
+            {onBulkTag && (
+              <div>
+                <label className="text-sm font-medium">Tags</label>
+                <Popover open={bulkTagPickerOpen} onOpenChange={setBulkTagPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="Tags bulk dropdown"
+                      className="mt-1 w-full h-9 rounded-md border border-input bg-input-background px-3 text-sm text-left hover:bg-muted/50"
+                    >
+                      {bulkEditTagList.length > 0
+                        ? `${bulkEditTagList.length} tag${bulkEditTagList.length === 1 ? '' : 's'} a agregar`
+                        : 'Sin cambios'}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="p-0 w-[320px]" align="start">
+                    <div className="p-2 space-y-2">
+                      <Input
+                        aria-label="Buscar o crear tag"
+                        value={bulkTagSearch}
+                        onChange={(event) => setBulkTagSearch(event.target.value)}
+                        placeholder="Buscar o crear tag..."
+                      />
+                      <div
+                        className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2"
+                        style={{ WebkitOverflowScrolling: 'touch' }}
+                        onWheel={(event) => event.stopPropagation()}
+                        onTouchMove={(event) => event.stopPropagation()}
+                      >
+                        {bulkFilteredTags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            className={`w-full text-left rounded-sm px-2 py-1.5 text-sm hover:bg-accent ${bulkEditTagList.includes(tag) ? 'bg-accent' : ''}`}
+                            onClick={() => {
+                              setBulkEditTagList((prev) =>
+                                prev.includes(tag)
+                                  ? prev.filter((t) => t !== tag)
+                                  : [...prev, tag]
+                              )
+                            }}
+                          >
+                            #{tag}
+                            {bulkEditTagList.includes(tag) && ' ✓'}
+                          </button>
+                        ))}
+                      </div>
+                      {bulkTagSearch.trim() && !tagSuggestions.includes(bulkTagSearch.trim()) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => {
+                            const newTag = bulkTagSearch.trim()
+                            setBulkEditTagList((prev) =>
+                              prev.includes(newTag) ? prev : [...prev, newTag]
+                            )
+                            setBulkTagSearch('')
+                          }}
+                        >
+                          Crear tag &quot;{bulkTagSearch.trim()}&quot;
+                        </Button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {bulkEditTagList.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {bulkEditTagList.map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        aria-label={`Quitar tag ${tag}`}
+                        onClick={() =>
+                          setBulkEditTagList((prev) => prev.filter((t) => t !== tag))
+                        }
+                        className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs"
+                      >
+                        #{tag} ×
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeBulkEdit} disabled={isBulkOperating}>
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                void handleBulkEditSave()
+              }}
+              disabled={isBulkOperating || (!bulkEditCategory && bulkEditTagList.length === 0)}
             >
               Guardar cambios
             </Button>

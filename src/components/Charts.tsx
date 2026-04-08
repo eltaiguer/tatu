@@ -1,6 +1,7 @@
 // Charts - Data visualization and insights
 
 import { Card } from './ui/card';
+import { ChartPie } from 'lucide-react';
 import type { Transaction } from '../models';
 import { Category } from '../models';
 import {
@@ -115,6 +116,31 @@ export function Charts({ transactions }: ChartsProps) {
     return null;
   };
 
+  const hasData = transactions.length > 0;
+
+  if (!hasData) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="mb-1">Insights y Análisis</h2>
+          <p className="text-muted-foreground">Visualización de tus patrones de gasto</p>
+        </div>
+
+        <Card className="p-12 text-center space-y-4">
+          <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <ChartPie className="text-primary" size={28} />
+          </div>
+          <div>
+            <h3 className="mb-2">Sin datos para visualizar</h3>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Importá transacciones desde la pestaña Importar para ver gráficos de gastos por categoría, tendencias mensuales y más.
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -154,7 +180,7 @@ export function Charts({ transactions }: ChartsProps) {
           </div>
 
           <div className="space-y-3">
-            <h4 className="mb-4">Desglose Detallado</h4>
+            <h4 className="text-base font-semibold mb-4">Desglose Detallado</h4>
             {categoryData.map((cat, index) => {
               const percentage = hasExpenseData
                 ? (cat.value / totalExpenses) * 100

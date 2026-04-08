@@ -323,18 +323,10 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ## Development Guidelines
 
-### TDD Workflow (MANDATORY)
-1. 🔴 **RED**: Write failing test first
-2. 🟢 **GREEN**: Write minimal code to pass
-3. 🔵 **REFACTOR**: Clean up code
-4. ♻️ **REPEAT**: Next test
-
-### Testing Requirements
-- Unit tests for all business logic
-- Integration tests for data flow
-- Component tests for UI
-- E2E tests for critical paths
-- Minimum 90% code coverage
+### Testing
+- Behavior tests for all features and bug fixes
+- Tests verify observable outcomes, not implementation details
+- Unit tests for business logic, integration tests for data flow, component tests for UI
 
 ### Commit Convention
 - `test:` for test files

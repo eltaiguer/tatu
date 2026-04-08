@@ -19,14 +19,15 @@ function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 describe('Dashboard', () => {
-  it('does not render NaN/Infinity when there are no transactions', () => {
+  it('shows empty state with import CTA when there are no transactions', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-02-20T12:00:00.000Z'))
 
     render(<Dashboard transactions={[]} />)
 
     expect(screen.queryByText(/NaN|Infinity/)).not.toBeInTheDocument()
-    expect(screen.getByText('0')).toBeInTheDocument()
+    expect(screen.getByText('Empezá importando tu extracto')).toBeInTheDocument()
+    expect(screen.queryByText('Panel General')).not.toBeInTheDocument()
 
     vi.useRealTimers()
   })

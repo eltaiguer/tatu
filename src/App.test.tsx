@@ -17,7 +17,7 @@ describe('App', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Bienvenido a Tatú' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Panel General' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Empezá importando tu extracto' })).toBeInTheDocument()
   })
 
   it('switches to import view from navigation', () => {
@@ -71,7 +71,7 @@ describe('App', () => {
     })
 
     const autoCategorizeButton = screen.getByRole('button', {
-      name: 'Auto-categorizar seleccionadas',
+      name: /Auto-categorizar/,
     })
     await waitFor(() => expect(autoCategorizeButton).not.toBeDisabled())
 
@@ -97,7 +97,7 @@ describe('App', () => {
         description: 'Comercio Inventado XYZ',
         amount: 100,
         currency: 'UYU',
-        type: 'debit',
+        type: 'credit',
         source: 'bank_account',
         rawData: {},
       },
@@ -115,7 +115,7 @@ describe('App', () => {
     })
 
     const autoCategorizeButton = screen.getByRole('button', {
-      name: 'Auto-categorizar seleccionadas',
+      name: /Auto-categorizar/,
     })
     await waitFor(() => expect(autoCategorizeButton).not.toBeDisabled())
 

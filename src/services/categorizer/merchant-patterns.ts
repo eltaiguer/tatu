@@ -1,4 +1,5 @@
 import { Category } from '../../models'
+import { tokenize, fuzzyTokenSimilarity } from './tokenizer'
 
 /**
  * Pattern matching result
@@ -264,6 +265,32 @@ export function matchMerchantPattern(
             category: merchantPattern.category,
             confidence,
             matchedPattern: pattern,
+          }
+        }
+      }
+    }
+  }
+
+  // Fuzzy fallback: if no substring match, try token-based similarity
+  if (!bestMatch) {
+    const inputTokens = tokenize(normalized)
+    if (inputTokens.length > 0) {
+      for (const merchantPattern of MERCHANT_PATTERNS) {
+        for (const pattern of merchantPattern.patterns) {
+          const patternTokens = tokenize(pattern)
+          if (patternTokens.length === 0) continue
+
+          const score = fuzzyTokenSimilarity(inputTokens, patternTokens)
+          if (score >= 0.5) {
+            const confidence = merchantPattern.confidence * score * 0.9
+            if (confidence > highestConfidence) {
+              highestConfidence = confidence
+              bestMatch = {
+                category: merchantPattern.category,
+                confidence,
+                matchedPattern: pattern,
+              }
+            }
           }
         }
       }

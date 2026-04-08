@@ -267,6 +267,35 @@ describe('Merchant Pattern Matcher', () => {
     })
   })
 
+  describe('matchMerchantPattern - Fuzzy matching', () => {
+    it('should fuzzy match truncated merchant names', () => {
+      const result = matchMerchantPattern('Devoto Sup')
+      expect(result?.category).toBe(Category.Groceries)
+      expect(result?.confidence).toBeGreaterThan(0)
+    })
+
+    it('should fuzzy match reordered tokens', () => {
+      const result = matchMerchantPattern('Supermercado Devoto')
+      // substring match still works here since both tokens exist
+      expect(result?.category).toBe(Category.Groceries)
+    })
+
+    it('should not fuzzy match completely unrelated merchants', () => {
+      const result = matchMerchantPattern('Xyzzy Plugh Nothing')
+      expect(result).toBeNull()
+    })
+
+    it('should fuzzy match abbreviated pattern tokens', () => {
+      // "super" is a prefix of "supermercado" in the Groceries pattern
+      // but "super" alone is not a substring of any full pattern string
+      const result = matchMerchantPattern('Super Devot')
+      expect(result?.category).toBe(Category.Groceries)
+      // confidence should be lower than a direct substring match
+      const direct = matchMerchantPattern('Devoto Supermercado')
+      expect(result!.confidence).toBeLessThan(direct!.confidence)
+    })
+  })
+
   describe('getMerchantCategory', () => {
     it('should return category and confidence for known merchant', () => {
       const result = getMerchantCategory('Devoto Supermercado')

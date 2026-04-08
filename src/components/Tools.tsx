@@ -8,6 +8,7 @@ import { Badge } from './ui/badge';
 import { CategoryBadge } from './CategoryBadge';
 import { ListFilter, Download, Plus, Pencil, Trash, FileText, Settings } from 'lucide-react';
 import type { Transaction } from '../models';
+import { Category } from '../models';
 import { categories } from '../utils/figma-data';
 import { useState } from 'react';
 import { getCategoryDefinitions } from '../services/categories/category-registry';
@@ -17,6 +18,13 @@ import {
   updateCustomCategoryWithSync,
 } from '../services/categories/category-store';
 import { getCategoryDisplay } from '../utils/category-display';
+import {
+  addCustomPattern,
+  listCustomPatterns,
+  removeCustomPattern,
+  type MatchType,
+} from '../services/categorizer/custom-patterns';
+import { CATEGORY_LABELS, CATEGORY_ICONS } from '../models/category';
 
 
 interface ToolsProps {
@@ -33,6 +41,30 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
     color: '#0ea5e9',
     icon: '🏷️',
   });
+
+  // Custom pattern states
+  const [customPatterns, setCustomPatterns] = useState(() => listCustomPatterns());
+  const [patternForm, setPatternForm] = useState({
+    pattern: '',
+    matchType: 'contains' as MatchType,
+    category: Category.Groceries as string,
+  });
+
+  const handleAddPattern = () => {
+    if (!patternForm.pattern.trim()) return;
+    addCustomPattern({
+      pattern: patternForm.pattern,
+      matchType: patternForm.matchType,
+      category: patternForm.category,
+    });
+    setPatternForm({ pattern: '', matchType: 'contains', category: Category.Groceries });
+    setCustomPatterns(listCustomPatterns());
+  };
+
+  const handleRemovePattern = (id: string) => {
+    removeCustomPattern(id);
+    setCustomPatterns(listCustomPatterns());
+  };
 
   // Filter states
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -730,6 +762,114 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                 </div>
                 <Switch defaultChecked />
               </div>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h4 className="mb-4">Reglas de Categorización</h4>
+            <p className="text-sm text-muted-foreground mb-4">
+              Creá reglas personalizadas para categorizar transacciones automáticamente.
+            </p>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto_auto] gap-3 items-end">
+                <div>
+                  <label htmlFor="tools-pattern-text" className="block text-sm mb-2">
+                    Patrón
+                  </label>
+                  <Input
+                    id="tools-pattern-text"
+                    value={patternForm.pattern}
+                    onChange={(e) => setPatternForm(prev => ({ ...prev, pattern: e.target.value }))}
+                    placeholder='Ej. "farmacia"'
+                  />
+                </div>
+                <div>
+                  <label htmlFor="tools-pattern-match" className="block text-sm mb-2">
+                    Tipo
+                  </label>
+                  <select
+                    id="tools-pattern-match"
+                    value={patternForm.matchType}
+                    onChange={(e) => setPatternForm(prev => ({ ...prev, matchType: e.target.value as MatchType }))}
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-input-background h-10"
+                  >
+                    <option value="contains">Contiene</option>
+                    <option value="starts_with">Empieza con</option>
+                    <option value="exact">Exacto</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="tools-pattern-category" className="block text-sm mb-2">
+                    Categoría
+                  </label>
+                  <select
+                    id="tools-pattern-category"
+                    value={patternForm.category}
+                    onChange={(e) => setPatternForm(prev => ({ ...prev, category: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg border border-input bg-input-background h-10"
+                  >
+                    {Object.values(Category)
+                      .filter(c => c !== Category.Uncategorized)
+                      .map(cat => (
+                        <option key={cat} value={cat}>
+                          {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <Button
+                  onClick={handleAddPattern}
+                  disabled={!patternForm.pattern.trim()}
+                  aria-label="Agregar regla"
+                >
+                  <Plus size={18} />
+                </Button>
+              </div>
+
+              {customPatterns.length > 0 && (
+                <div className="space-y-2">
+                  {customPatterns.map(cp => {
+                    const catDisplay = getCategoryDisplay(cp.category);
+                    const matchLabel =
+                      cp.matchType === 'contains'
+                        ? 'contiene'
+                        : cp.matchType === 'starts_with'
+                          ? 'empieza con'
+                          : 'exacto';
+                    return (
+                      <div
+                        key={cp.id}
+                        className="flex items-center justify-between gap-3 p-3 bg-muted/30 rounded-lg"
+                      >
+                        <div className="flex items-center gap-2 text-sm min-w-0">
+                          <Badge variant="outline">{matchLabel}</Badge>
+                          <span className="font-mono truncate">&quot;{cp.pattern}&quot;</span>
+                          <span className="text-muted-foreground">&rarr;</span>
+                          <Badge style={{ backgroundColor: catDisplay.color + '20', color: catDisplay.color }}>
+                            {catDisplay.icon} {catDisplay.label}
+                          </Badge>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemovePattern(cp.id)}
+                          aria-label={`Eliminar regla ${cp.pattern}`}
+                        >
+                          <Trash size={14} className="text-destructive" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {customPatterns.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No hay reglas personalizadas. Creá una para categorizar
+                  automáticamente transacciones que contengan un patrón.
+                </p>
+              )}
             </div>
           </Card>
 

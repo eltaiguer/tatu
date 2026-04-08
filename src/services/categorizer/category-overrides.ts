@@ -1,4 +1,5 @@
 import { normalizeMerchantName } from './merchant-patterns'
+import { invalidateLearnedPatternsCache } from './learned-patterns'
 
 const STORAGE_KEY = 'tatu:categoryOverrides'
 
@@ -70,6 +71,7 @@ export function setMerchantCategoryOverride(
     updatedAt: new Date().toISOString(),
   }
   saveOverrides(overrides)
+  invalidateLearnedPatternsCache()
 }
 
 export async function setMerchantCategoryOverrideWithSync(
@@ -110,6 +112,7 @@ export function clearMerchantCategoryOverride(merchantName: string): void {
   if (overrides[normalized]) {
     delete overrides[normalized]
     saveOverrides(overrides)
+    invalidateLearnedPatternsCache()
   }
 }
 

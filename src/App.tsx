@@ -79,7 +79,11 @@ import {
 } from './services/supabase/import-runs'
 import { setActiveSupabaseSession } from './services/supabase/runtime'
 import { resetUserSupabaseData } from './services/supabase/reset'
-import { categorizeTransaction } from './services/categorizer/transaction-categorizer'
+import {
+  categorizeTransaction,
+  type CategorizationContext,
+} from './services/categorizer/transaction-categorizer'
+import { analyzeTemporalPatterns } from './services/categorizer/temporal-patterns'
 
 type View = 'dashboard' | 'transactions' | 'charts' | 'tools' | 'import'
 const CATEGORY_OVERRIDES_MIGRATION_KEY =
@@ -139,7 +143,6 @@ function App() {
   const [session, setSession] = useState<SupabaseSession | null>(() =>
     supabaseEnabled ? getCurrentSession() : null
   )
-  const [authLoading, setAuthLoading] = useState(supabaseEnabled)
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
@@ -193,21 +196,17 @@ function App() {
 
     async function syncTransactions() {
       if (!supabaseEnabled) {
-        setAuthLoading(false)
         return
       }
 
       if (authMode === 'reset') {
-        setAuthLoading(false)
         return
       }
 
       if (!session) {
-        setAuthLoading(false)
         return
       }
 
-      setAuthLoading(true)
       setAuthError('')
       setAuthNotice('')
 
@@ -362,9 +361,7 @@ function App() {
           )
         }
       } finally {
-        if (!cancelled) {
-          setAuthLoading(false)
-        }
+        // sync complete
       }
     }
 
@@ -749,6 +746,136 @@ function App() {
     }
   }
 
+  async function handleBulkCategorizeTransactions(
+    transactionIds: string[],
+    category: string
+  ) {
+    if (transactionIds.length === 0 || !category.trim()) {
+      return
+    }
+
+    const state = transactionStore.getState()
+    const targetIds = new Set(transactionIds)
+
+    try {
+      if (supabaseEnabled && session) {
+        await Promise.all(
+          transactionIds.map((id) =>
+            updateRemoteTransaction(session, id, { category })
+          )
+        )
+      }
+
+      state.setTransactions(
+        state.transactions.map((transaction) => {
+          if (!targetIds.has(transaction.id)) {
+            return transaction
+          }
+          return { ...transaction, category }
+        })
+      )
+      setAuthError('')
+      setAuthNotice(
+        `${transactionIds.length} transacción${transactionIds.length === 1 ? '' : 'es'} categorizada${transactionIds.length === 1 ? '' : 's'}`
+      )
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudieron categorizar las transacciones'
+      )
+      setAuthNotice('')
+    }
+  }
+
+  async function handleBulkDeleteTransactions(transactionIds: string[]) {
+    if (transactionIds.length === 0) {
+      return
+    }
+
+    const state = transactionStore.getState()
+
+    try {
+      if (supabaseEnabled && session) {
+        await Promise.all(
+          transactionIds.map((id) => softDeleteTransaction(session, id))
+        )
+      }
+
+      const targetIds = new Set(transactionIds)
+      state.setTransactions(
+        state.transactions.filter(
+          (transaction) => !targetIds.has(transaction.id)
+        )
+      )
+      setAuthError('')
+      setAuthNotice(
+        `${transactionIds.length} transacción${transactionIds.length === 1 ? '' : 'es'} eliminada${transactionIds.length === 1 ? '' : 's'}`
+      )
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudieron eliminar las transacciones'
+      )
+      setAuthNotice('')
+    }
+  }
+
+  async function handleBulkTagTransactions(
+    transactionIds: string[],
+    tag: string
+  ) {
+    if (transactionIds.length === 0 || !tag.trim()) {
+      return
+    }
+
+    const trimmedTag = tag.trim()
+    const state = transactionStore.getState()
+    const targetIds = new Set(transactionIds)
+
+    try {
+      if (supabaseEnabled && session) {
+        await Promise.all(
+          transactionIds.map((id) => {
+            const transaction = state.transactions.find((tx) => tx.id === id)
+            const currentTags = transaction?.tags ?? []
+            if (currentTags.includes(trimmedTag)) {
+              return Promise.resolve()
+            }
+            return updateRemoteTransaction(session, id, {
+              tags: [...currentTags, trimmedTag],
+            })
+          })
+        )
+      }
+
+      state.setTransactions(
+        state.transactions.map((transaction) => {
+          if (!targetIds.has(transaction.id)) {
+            return transaction
+          }
+          const currentTags = transaction.tags ?? []
+          if (currentTags.includes(trimmedTag)) {
+            return transaction
+          }
+          return { ...transaction, tags: [...currentTags, trimmedTag] }
+        })
+      )
+      setAuthError('')
+      setAuthNotice(
+        `Tag "${trimmedTag}" agregado a ${transactionIds.length} transacción${transactionIds.length === 1 ? '' : 'es'}`
+      )
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo agregar el tag'
+      )
+      setAuthNotice('')
+    }
+  }
+
   async function handleAutoCategorizeTransactions(transactionIds: string[]) {
     if (transactionIds.length === 0) {
       return
@@ -756,12 +883,47 @@ function App() {
 
     const state = transactionStore.getState()
     const targetIds = new Set(transactionIds)
+
+    // Build smart categorization context
+    const overrides = listMerchantCategoryOverrides()
+    const categorizedMerchants = [
+      ...Object.entries(overrides).map(([name, o]) => ({
+        name,
+        category: o.category,
+      })),
+      ...state.transactions
+        .filter(
+          (t) =>
+            t.category && t.category !== 'uncategorized'
+        )
+        .map((t) => ({ name: t.description, category: t.category! })),
+    ]
+
+    const temporalPatterns = analyzeTemporalPatterns(
+      state.transactions.map((t) => ({
+        description: t.description,
+        amount: t.amount,
+        currency: t.currency,
+        date: t.date instanceof Date ? t.date : new Date(t.date),
+      }))
+    )
+
+    const context: CategorizationContext = {
+      categorizedMerchants,
+      temporalPatterns,
+    }
+
     const categorizedTransactions = state.transactions
       .filter((transaction) => targetIds.has(transaction.id))
       .map((transaction) => {
         const result = categorizeTransaction(
           transaction.description,
-          transaction.type
+          transaction.type,
+          {
+            ...context,
+            amount: transaction.amount,
+            currency: transaction.currency,
+          }
         )
 
         return {
@@ -919,7 +1081,7 @@ function App() {
 
             {/* Right Actions */}
             <div className="flex items-center gap-2">
-              {supabaseEnabled && (
+              {supabaseEnabled && session && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -938,6 +1100,7 @@ function App() {
                 size="sm"
                 onClick={() => setIsDark(!isDark)}
                 className="hidden sm:flex"
+                aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
               >
                 {isDark ? <Sun size={18} /> : <Moon size={18} />}
               </Button>
@@ -955,49 +1118,53 @@ function App() {
           </div>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile Menu Overlay */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-border bg-card">
-            <nav className="px-4 py-4 space-y-1">
-              {navItems.map((item) => {
-                const Icon = item.icon
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setCurrentView(item.id)
-                      setMobileMenuOpen(false)
-                    }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                      currentView === item.id
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                    }`}
-                  >
-                    <Icon size={18} />
-                    <span>{item.label}</span>
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => setIsDark(!isDark)}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                {isDark ? <Sun size={18} /> : <Moon size={18} />}
-                <span>{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
-              </button>
-            </nav>
-          </div>
+          <>
+            <div
+              className="md:hidden fixed inset-0 top-16 bg-black/40 z-40"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <div className="md:hidden fixed inset-x-0 top-16 z-50 bg-card border-b border-border shadow-lg animate-in slide-in-from-top-2 duration-200">
+              <nav className="px-4 py-4 space-y-1">
+                {navItems.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setCurrentView(item.id)
+                        setMobileMenuOpen(false)
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                        currentView === item.id
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <Icon size={18} />
+                      <span>{item.label}</span>
+                    </button>
+                  )
+                })}
+                <button
+                  onClick={() => {
+                    setIsDark(!isDark)
+                    setMobileMenuOpen(false)
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  {isDark ? <Sun size={18} /> : <Moon size={18} />}
+                  <span>{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
+                </button>
+              </nav>
+            </div>
+          </>
         )}
       </header>
 
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {authLoading && (
-          <p className="text-sm text-muted-foreground mb-4">
-            Cargando transacciones...
-          </p>
-        )}
         {authError && (
           <p className="text-sm text-destructive mb-4" role="alert">
             {authError}
@@ -1009,7 +1176,7 @@ function App() {
           </p>
         )}
         {currentView === 'dashboard' && (
-          <Dashboard transactions={transactions} />
+          <Dashboard transactions={transactions} onNavigateToImport={() => setCurrentView('import')} />
         )}
         {currentView === 'transactions' && (
           <Transactions
@@ -1017,6 +1184,9 @@ function App() {
             onUpdateTransaction={handleUpdateTransaction}
             onDeleteTransaction={handleDeleteTransaction}
             onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
+            onBulkCategorize={handleBulkCategorizeTransactions}
+            onBulkDelete={handleBulkDeleteTransactions}
+            onBulkTag={handleBulkTagTransactions}
           />
         )}
         {currentView === 'charts' && <Charts transactions={transactions} />}
@@ -1046,45 +1216,15 @@ function App() {
               </p>
             </div>
             <div>
-              <h4 className="mb-3">Enlaces</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>
-                  <a href="#" className="hover:text-primary transition-colors">
-                    Cómo funciona
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-primary transition-colors">
-                    Privacidad
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-primary transition-colors">
-                    Términos de uso
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-primary transition-colors">
-                    Soporte
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="mb-3">Contacto</h4>
+              <h3 className="text-base font-semibold mb-3">Contacto</h3>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>hola@tatu.uy</li>
                 <li>Montevideo, Uruguay</li>
-                <li className="pt-2">
-                  <a href="#" className="text-primary hover:underline">
-                    Ver en GitHub →
-                  </a>
-                </li>
               </ul>
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>© 2025 Tatú. Hecho con ❤️ en Uruguay.</p>
+            <p>© {new Date().getFullYear()} Tatú. Hecho con ❤️ en Uruguay.</p>
           </div>
         </div>
       </footer>

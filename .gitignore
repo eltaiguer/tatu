@@ -28,5 +28,8 @@ dist-ssr
 # Test coverage
 coverage
 
+# Playwright MCP
+.playwright-mcp
+
 # Designs
 figma-designs

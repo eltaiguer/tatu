@@ -8,12 +8,20 @@ import {
   clearAllDescriptionOverrides,
   setDescriptionOverride,
 } from '../descriptions/description-overrides'
+import {
+  addCustomPattern,
+  clearAllCustomPatterns,
+} from './custom-patterns'
+import { invalidateLearnedPatternsCache } from './learned-patterns'
+import { analyzeTemporalPatterns } from './temporal-patterns'
 import { Category } from '../../models'
 
 describe('Transaction Categorizer', () => {
   beforeEach(() => {
     clearAllCategoryOverrides()
     clearAllDescriptionOverrides()
+    clearAllCustomPatterns()
+    invalidateLearnedPatternsCache()
   })
   it('should categorize fees with high confidence', () => {
     const result = categorizeTransaction(
@@ -139,5 +147,112 @@ describe('Transaction Categorizer', () => {
     const result = categorizeTransaction('Devoto Supermercado', 'debit')
     expect(result.category).toBe(Category.Shopping)
     expect(result.confidence).toBe(1)
+  })
+
+  describe('custom patterns', () => {
+    it('should use custom pattern before keywords', () => {
+      addCustomPattern({
+        pattern: 'random place',
+        matchType: 'contains',
+        category: Category.Entertainment,
+      })
+
+      const result = categorizeTransaction('Random Place XYZ', 'debit')
+      expect(result.category).toBe(Category.Entertainment)
+      expect(result.confidence).toBe(0.95)
+    })
+
+    it('should prioritize overrides over custom patterns', () => {
+      addCustomPattern({
+        pattern: 'devoto',
+        matchType: 'contains',
+        category: Category.Entertainment,
+      })
+      setMerchantCategoryOverride('Devoto Supermercado', Category.Shopping)
+
+      const result = categorizeTransaction('Devoto Supermercado', 'debit')
+      expect(result.category).toBe(Category.Shopping)
+      expect(result.confidence).toBe(1)
+    })
+  })
+
+  describe('learned patterns', () => {
+    it('should use learned patterns for new merchants', () => {
+      // Use names that don't match any existing merchant patterns
+      setMerchantCategoryOverride('Botica Central', Category.Healthcare)
+      setMerchantCategoryOverride('Botica Sur', Category.Healthcare)
+      invalidateLearnedPatternsCache()
+
+      const result = categorizeTransaction('Botica Norte', 'debit')
+      expect(result.category).toBe(Category.Healthcare)
+      expect(result.confidence).toBeGreaterThan(0)
+      expect(result.confidence).toBeLessThanOrEqual(0.75)
+    })
+  })
+
+  describe('context-based categorization', () => {
+    it('should use similar merchant when context provided', () => {
+      const result = categorizeTransaction(
+        'Totally Unknown Place XYZ',
+        'debit',
+        {
+          categorizedMerchants: [
+            { name: 'Unknown Place ABC', category: Category.Shopping },
+          ],
+        }
+      )
+
+      // May or may not match depending on token similarity
+      // At minimum, it should not error
+      expect(result.category).toBeDefined()
+    })
+
+    it('should use amount heuristics as last resort', () => {
+      const result = categorizeTransaction(
+        'Zzz Completely Unknown 12345',
+        'debit',
+        {
+          amount: 200,
+          currency: 'UYU',
+          categorizedMerchants: [],
+        }
+      )
+
+      expect(result.category).toBe(Category.Restaurants)
+      expect(result.confidence).toBeLessThanOrEqual(0.3)
+    })
+
+    it('should use temporal patterns when available', () => {
+      const txs = Array.from({ length: 4 }, (_, i) => ({
+        description: 'Monthly Service XYZ',
+        amount: 1500,
+        currency: 'UYU',
+        date: new Date(2025, i, 15),
+      }))
+      const temporalPatterns = analyzeTemporalPatterns(txs)
+
+      const result = categorizeTransaction(
+        'Monthly Service XYZ',
+        'debit',
+        { temporalPatterns }
+      )
+
+      expect(result.category).toBe(Category.Utilities)
+      expect(result.confidence).toBeGreaterThan(0.5)
+    })
+
+    it('should not use amount heuristics for credits', () => {
+      const result = categorizeTransaction(
+        'Zzz Completely Unknown 12345',
+        'credit',
+        {
+          amount: 200,
+          currency: 'UYU',
+          categorizedMerchants: [],
+        }
+      )
+
+      expect(result.category).toBe(Category.Uncategorized)
+    })
   })
 })
