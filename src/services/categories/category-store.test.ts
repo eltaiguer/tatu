@@ -5,6 +5,7 @@ import {
   listCustomCategories,
   removeCustomCategory,
   removeCustomCategoryWithSync,
+  replaceCustomCategories,
   updateCustomCategory,
   updateCustomCategoryWithSync,
 } from './category-store'
@@ -30,7 +31,7 @@ vi.mock('../supabase/custom-categories', () => ({
 
 describe('Custom category store', () => {
   beforeEach(() => {
-    window.localStorage.clear()
+    replaceCustomCategories([])
     vi.clearAllMocks()
   })
 

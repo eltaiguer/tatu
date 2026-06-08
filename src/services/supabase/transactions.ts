@@ -112,7 +112,7 @@ export async function softDeleteTransaction(
   const client = getSupabaseClient()
   const { error } = await client
     .from('transactions')
-    .update({ is_deleted: true })
+    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq('user_id', session.user.id)
     .eq('transaction_id', transactionId)
 
@@ -128,7 +128,7 @@ export async function restoreTransaction(
   const client = getSupabaseClient()
   const { error } = await client
     .from('transactions')
-    .update({ is_deleted: false })
+    .update({ is_deleted: false, deleted_at: null })
     .eq('user_id', session.user.id)
     .eq('transaction_id', transactionId)
 

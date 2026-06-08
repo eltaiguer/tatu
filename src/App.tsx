@@ -61,16 +61,13 @@ import {
   setDescriptionOverrideWithSync,
 } from './services/descriptions/description-overrides'
 import { buildDescriptionOverrideKey } from './services/descriptions/normalization'
-import {
-  listCustomCategories as listLocalCustomCategories,
-  replaceCustomCategories,
-} from './services/categories/category-store'
+import { replaceCustomCategories } from './services/categories/category-store'
 import { listCategoryOverrides, upsertCategoryOverride } from './services/supabase/category-overrides'
 import {
   listDescriptionOverrides as listRemoteDescriptionOverrides,
   upsertDescriptionOverride,
 } from './services/supabase/description-overrides'
-import { listCustomCategories, upsertCustomCategory } from './services/supabase/custom-categories'
+import { listCustomCategories } from './services/supabase/custom-categories'
 import {
   completeImportRun,
   createImportRun,
@@ -90,7 +87,6 @@ const CATEGORY_OVERRIDES_MIGRATION_KEY =
   'tatu:migration:category-overrides:v1'
 const DESCRIPTION_OVERRIDES_MIGRATION_KEY =
   'tatu:migration:description-overrides:v1'
-const CUSTOM_CATEGORIES_MIGRATION_KEY = 'tatu:migration:custom-categories:v1'
 
 function isPasswordResetMode(): boolean {
   if (typeof window === 'undefined') {
@@ -310,26 +306,6 @@ function App() {
           )
         )
 
-        const shouldMigrateCustomCategories =
-          localStorage.getItem(CUSTOM_CATEGORIES_MIGRATION_KEY) !== 'done'
-        if (shouldMigrateCustomCategories) {
-          const localCustomCategories = listLocalCustomCategories()
-          for (const category of localCustomCategories) {
-            await upsertCustomCategory(session, {
-              id: category.id,
-              label: category.label,
-              color: category.color,
-              icon: category.icon,
-              isArchived: false,
-            })
-          }
-
-          localStorage.setItem(CUSTOM_CATEGORIES_MIGRATION_KEY, 'done')
-          if (localCustomCategories.length > 0) {
-            notices.push('Categorías personalizadas migradas a la nube')
-          }
-        }
-
         const remoteCustomCategories = await listCustomCategories(session)
         replaceCustomCategories(
           remoteCustomCategories.map((category) => ({
@@ -524,12 +500,10 @@ function App() {
     clearAllDescriptionOverrides()
     replaceCustomCategories([])
     localStorage.removeItem('tatu:transactions')
-    localStorage.removeItem('tatu:customCategories')
     localStorage.removeItem('tatu:categoryOverrides')
     localStorage.removeItem('tatu:descriptionOverrides')
     localStorage.removeItem(CATEGORY_OVERRIDES_MIGRATION_KEY)
     localStorage.removeItem(DESCRIPTION_OVERRIDES_MIGRATION_KEY)
-    localStorage.removeItem(CUSTOM_CATEGORIES_MIGRATION_KEY)
 
     if (supabaseEnabled && session) {
       await resetUserSupabaseData(session)

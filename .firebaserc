@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "tatu-fdba8"
-  }
+    "default": "tatu-fdba8",
+    "tatu": "tatu-cbee5"
+  },
+  "targets": {},
+  "etags": {}
 }

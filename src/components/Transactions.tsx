@@ -27,6 +27,11 @@ import { Category } from '../models'
 import type { Currency, Transaction } from '../models'
 import { getDescriptionOverride } from '../services/descriptions/description-overrides'
 import { getCategoryDisplay } from '../utils/category-display'
+import {
+  addCustomCategory,
+  listCustomCategories,
+  syncCustomCategoryToCloud,
+} from '../services/categories/category-store'
 
 interface TransactionsProps {
   transactions: Transaction[]
@@ -217,6 +222,7 @@ export function Transactions({
       new Set(
         [
           ...Object.values(Category),
+          ...listCustomCategories().map((c) => c.id),
           ...transactions.map((tx) => tx.category ?? ''),
           editCategory,
         ]
@@ -335,8 +341,10 @@ export function Transactions({
   function handleAddCategory() {
     const value = newCategoryInput.trim()
     if (!value) return
-    setEditCategory(value)
+    const created = addCustomCategory({ label: value, color: '#0ea5e9', icon: '🏷️' })
+    setEditCategory(created.id)
     setNewCategoryInput('')
+    void syncCustomCategoryToCloud(created.id)
   }
 
   function handleAddTag(tag: string) {
