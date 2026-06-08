@@ -2,6 +2,8 @@
 // A modern, trustworthy fintech app for managing Santander Uruguay statements
 
 import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
+import { Toaster } from './components/ui/sonner'
 import { TatuLogo } from './components/TatuLogo'
 import { Dashboard } from './components/Dashboard'
 import { Transactions } from './components/Transactions'
@@ -359,6 +361,7 @@ function App() {
           ? await signInWithPassword(email, password)
           : await signUpWithPassword(email, password)
       setSession(nextSession)
+      toast.success('Sesión iniciada')
     } catch (error) {
       setAuthError(
         error instanceof Error ? error.message : 'Error de autenticación'
@@ -374,6 +377,7 @@ function App() {
       await signOut(session)
       setSession(null)
       setAuthMode('signin')
+      toast('Sesión cerrada')
       transactionStore.getState().clearTransactions()
       setCurrentView('dashboard')
       setMobileMenuOpen(false)
@@ -1085,6 +1089,8 @@ function App() {
                 size="sm"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="md:hidden"
+                aria-label="Abrir menú de navegación"
+                aria-expanded={mobileMenuOpen}
               >
                 {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
               </Button>
@@ -1202,6 +1208,7 @@ function App() {
           </div>
         </div>
       </footer>
+      <Toaster />
     </div>
   )
 }

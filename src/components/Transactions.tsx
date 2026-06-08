@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import {
   ArrowUpDown,
   CreditCard,
+  Loader2,
   Pencil,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Wallet,
+  X,
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
@@ -136,8 +140,16 @@ export function Transactions({
   const filteredTransactions = useMemo(() => {
     const query = searchTerm.toLowerCase()
     const categoryQuery = categoryFilter.trim()
-    const dateFrom = dateFromFilter ? new Date(`${dateFromFilter}T00:00:00`) : null
-    const dateTo = dateToFilter ? new Date(`${dateToFilter}T23:59:59.999`) : null
+    const invalidDateRange =
+      dateFromFilter && dateToFilter && dateToFilter < dateFromFilter
+    const dateFrom =
+      !invalidDateRange && dateFromFilter
+        ? new Date(`${dateFromFilter}T00:00:00`)
+        : null
+    const dateTo =
+      !invalidDateRange && dateToFilter
+        ? new Date(`${dateToFilter}T23:59:59.999`)
+        : null
 
     const filtered = transactions.filter((transaction) => {
       const searchable =
@@ -216,6 +228,19 @@ export function Transactions({
     Boolean(dateToFilter) ||
     Boolean(categoryFilter) ||
     accountFilter !== 'all'
+
+  const dateRangeError =
+    dateFromFilter && dateToFilter && dateToFilter < dateFromFilter
+      ? 'La fecha "hasta" debe ser posterior a la fecha "desde"'
+      : null
+
+  function clearAllFilters() {
+    setSearchTerm('')
+    setDateFromFilter('')
+    setDateToFilter('')
+    setCategoryFilter('')
+    setAccountFilter('all')
+  }
 
   const categorySuggestions = useMemo(() => {
     return Array.from(
@@ -379,6 +404,7 @@ export function Transactions({
         tags: editTagList,
         applyScope,
       })
+      toast.success('Cambios guardados')
       resetEditState()
     } finally {
       setPendingTransactionId(null)
@@ -459,10 +485,12 @@ export function Transactions({
       return
     }
 
+    const count = selectedTransactionIds.length
     setIsAutoCategorizing(true)
     try {
       await onAutoCategorizeTransactions(selectedTransactionIds)
       setSelectedTransactionIds([])
+      toast.success(`${count} transacción${count === 1 ? '' : 'es'} categorizad${count === 1 ? 'a' : 'as'}`)
     } finally {
       setIsAutoCategorizing(false)
     }
@@ -479,10 +507,12 @@ export function Transactions({
     )
     if (!confirmed) return
 
+    const count = selectedTransactionIds.length
     setIsBulkOperating(true)
     try {
       await onBulkDelete(selectedTransactionIds)
       setSelectedTransactionIds([])
+      toast.success(`${count} transacción${count === 1 ? '' : 'es'} eliminada${count === 1 ? '' : 's'}`)
     } finally {
       setIsBulkOperating(false)
     }
@@ -508,6 +538,7 @@ export function Transactions({
   async function handleBulkEditSave() {
     if (selectedTransactionIds.length === 0 || isBulkOperating) return
 
+    const count = selectedTransactionIds.length
     setIsBulkOperating(true)
     try {
       if (bulkEditCategory && onBulkCategorize) {
@@ -520,6 +551,7 @@ export function Transactions({
       }
       setSelectedTransactionIds([])
       closeBulkEdit()
+      toast.success(`${count} transacción${count === 1 ? '' : 'es'} actualizada${count === 1 ? '' : 's'}`)
     } finally {
       setIsBulkOperating(false)
     }
@@ -554,17 +586,30 @@ export function Transactions({
 
       <Card className="p-4">
         <div className="space-y-4">
-          <div className="relative">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              size={20}
-            />
-            <Input
-              placeholder="Buscar por comercio o descripción..."
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              className="pl-10"
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                size={20}
+              />
+              <Input
+                placeholder="Buscar por comercio o descripción..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="pl-10"
+              />
+            </div>
+            {hasActiveFilters && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={clearAllFilters}
+                className="shrink-0 gap-1.5"
+              >
+                <X size={14} />
+                Limpiar filtros
+              </Button>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -597,7 +642,11 @@ export function Transactions({
                 type="date"
                 value={dateToFilter}
                 onChange={(event) => setDateToFilter(event.target.value)}
+                className={dateRangeError ? 'border-destructive' : ''}
               />
+              {dateRangeError && (
+                <p className="text-xs text-destructive">{dateRangeError}</p>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -652,7 +701,7 @@ export function Transactions({
 
       {hasSelection && (
         <div className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium" role="status">
+          <span className="text-sm font-medium" role="status" aria-live="polite">
             {selectionCount} seleccionada{selectionCount === 1 ? '' : 's'}
           </span>
 
@@ -685,7 +734,11 @@ export function Transactions({
                 void handleAutoCategorizeSelected()
               }}
             >
-              <Sparkles size={14} className="mr-1.5" />
+              {isAutoCategorizing ? (
+                <Loader2 size={14} className="mr-1.5 animate-spin" />
+              ) : (
+                <Sparkles size={14} className="mr-1.5" />
+              )}
               {isAutoCategorizing ? 'Auto-categorizando...' : 'Auto-categorizar'}
             </Button>
           )}
@@ -722,7 +775,10 @@ export function Transactions({
                     disabled={paginatedTransactionIds.length === 0 || isBusy}
                   />
                 </th>
-                <th className="text-left p-4 text-sm font-medium">
+                <th
+                  className="text-left p-4 text-sm font-medium"
+                  aria-sort={sortField === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
                   <button
                     onClick={() => handleSort('date')}
                     className="flex items-center gap-2 hover:text-primary transition-colors"
@@ -731,7 +787,10 @@ export function Transactions({
                     {sortField === 'date' && <ArrowUpDown size={14} />}
                   </button>
                 </th>
-                <th className="text-left p-4 text-sm font-medium">
+                <th
+                  className="text-left p-4 text-sm font-medium"
+                  aria-sort={sortField === 'description' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
                   <button
                     onClick={() => handleSort('description')}
                     className="flex items-center gap-2 hover:text-primary transition-colors"
@@ -740,7 +799,10 @@ export function Transactions({
                     {sortField === 'description' && <ArrowUpDown size={14} />}
                   </button>
                 </th>
-                <th className="text-left p-4 text-sm font-medium">
+                <th
+                  className="text-left p-4 text-sm font-medium"
+                  aria-sort={sortField === 'category' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
                   <button
                     onClick={() => handleSort('category')}
                     className="flex items-center gap-2 hover:text-primary transition-colors"
@@ -750,7 +812,10 @@ export function Transactions({
                   </button>
                 </th>
                 <th className="text-left p-4 text-sm font-medium">Cuenta</th>
-                <th className="text-right p-4 text-sm font-medium">
+                <th
+                  className="text-right p-4 text-sm font-medium"
+                  aria-sort={sortField === 'amount' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
                   <button
                     onClick={() => handleSort('amount')}
                     className="flex items-center gap-2 ml-auto hover:text-primary transition-colors"
@@ -765,10 +830,24 @@ export function Transactions({
             <tbody>
               {paginatedTransactions.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-muted-foreground">
-                    {hasActiveFilters
-                      ? 'No hay transacciones que coincidan con los filtros'
-                      : 'No hay transacciones para mostrar'}
+                  <td colSpan={8} className="p-10 text-center">
+                    {hasActiveFilters ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <SlidersHorizontal className="text-muted-foreground" size={32} />
+                        <p className="font-medium">Sin resultados</p>
+                        <p className="text-sm text-muted-foreground">
+                          Probá ajustar los filtros o{' '}
+                          <button
+                            onClick={clearAllFilters}
+                            className="text-primary underline-offset-2 hover:underline"
+                          >
+                            limpiá los filtros
+                          </button>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No hay transacciones para mostrar</p>
+                    )}
                   </td>
                 </tr>
               )}
@@ -900,10 +979,24 @@ export function Transactions({
             </div>
           )}
           {paginatedTransactions.length === 0 && (
-            <div className="p-6 text-center text-sm text-muted-foreground">
-              {hasActiveFilters
-                ? 'No hay transacciones que coincidan con los filtros'
-                : 'No hay transacciones para mostrar'}
+            <div className="p-8 text-center">
+              {hasActiveFilters ? (
+                <div className="flex flex-col items-center gap-3">
+                  <SlidersHorizontal className="text-muted-foreground" size={28} />
+                  <p className="font-medium text-sm">Sin resultados</p>
+                  <p className="text-xs text-muted-foreground">
+                    Probá ajustar los filtros o{' '}
+                    <button
+                      onClick={clearAllFilters}
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      limpiá los filtros
+                    </button>
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No hay transacciones para mostrar</p>
+              )}
             </div>
           )}
           {paginatedTransactions.map((transaction) => (
@@ -922,8 +1015,8 @@ export function Transactions({
                   }
                   disabled={isBusy}
                 />
-                <div className="flex-1">
-                  <div className="font-medium mb-1">{displayDescription}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium mb-1 truncate">{displayDescription}</div>
                   {hasFriendlyOverride && (
                     <div className="text-xs text-muted-foreground mb-1">
                       Original: {transaction.description}
@@ -966,28 +1059,27 @@ export function Transactions({
                   {getAccountLabel(transaction.source)}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 justify-end">
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   aria-label={`Editar ${displayDescription}`}
                   disabled={pendingTransactionId === transaction.id}
                   onClick={() => startEditTransaction(transaction)}
                 >
-                  <Pencil size={14} />
-                  Editar
+                  <Pencil size={16} />
                 </Button>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="ghost"
+                  size="icon"
                   aria-label={`Eliminar ${displayDescription}`}
+                  className="text-destructive hover:text-destructive"
                   disabled={pendingTransactionId === transaction.id}
                   onClick={() => {
                     void handleDeleteTransaction(transaction)
                   }}
                 >
-                  <Trash2 size={14} />
-                  Eliminar
+                  <Trash2 size={16} />
                 </Button>
               </div>
             </div>
@@ -1239,6 +1331,9 @@ export function Transactions({
               }}
               disabled={Boolean(editingTransaction && pendingTransactionId === editingTransaction.id)}
             >
+              {editingTransaction && pendingTransactionId === editingTransaction.id && (
+                <Loader2 size={14} className="mr-1.5 animate-spin" />
+              )}
               Guardar cambios
             </Button>
           </DialogFooter>
@@ -1422,6 +1517,7 @@ export function Transactions({
               }}
               disabled={isBulkOperating || (!bulkEditCategory && bulkEditTagList.length === 0)}
             >
+              {isBulkOperating && <Loader2 size={14} className="mr-1.5 animate-spin" />}
               Guardar cambios
             </Button>
           </DialogFooter>
@@ -1447,20 +1543,40 @@ export function Transactions({
             Anterior
           </Button>
           <div className="flex items-center gap-1">
-            {Array.from({ length: Math.min(5, totalPages) }, (_, index) => {
-              const page = index + 1
-              return (
-                <Button
-                  key={page}
-                  variant={currentPage === page ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setCurrentPage(page)}
-                  className="w-10"
-                >
-                  {page}
-                </Button>
+            {(() => {
+              const pages: (number | '...')[] = []
+              if (safeTotalPages <= 7) {
+                for (let i = 1; i <= safeTotalPages; i++) pages.push(i)
+              } else {
+                pages.push(1)
+                if (currentPage > 3) pages.push('...')
+                for (
+                  let i = Math.max(2, currentPage - 1);
+                  i <= Math.min(safeTotalPages - 1, currentPage + 1);
+                  i++
+                )
+                  pages.push(i)
+                if (currentPage < safeTotalPages - 2) pages.push('...')
+                pages.push(safeTotalPages)
+              }
+              return pages.map((p, i) =>
+                p === '...' ? (
+                  <span key={`ellipsis-${i}`} className="px-1 text-muted-foreground">
+                    …
+                  </span>
+                ) : (
+                  <Button
+                    key={p}
+                    variant={currentPage === p ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCurrentPage(p)}
+                    className="w-10"
+                  >
+                    {p}
+                  </Button>
+                )
               )
-            })}
+            })()}
           </div>
           <Button
             variant="outline"

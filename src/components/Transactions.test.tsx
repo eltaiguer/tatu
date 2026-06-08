@@ -168,8 +168,7 @@ describe('Transactions', () => {
     )
 
     expect(
-      screen.getAllByText('No hay transacciones que coincidan con los filtros')
-        .length
+      screen.getAllByText('Sin resultados').length
     ).toBeGreaterThan(0)
     expect(screen.getByText('Mostrando 0 de 0')).toBeInTheDocument()
   })
