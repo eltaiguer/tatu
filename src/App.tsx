@@ -137,6 +137,7 @@ function App() {
     return saved === 'dark'
   })
   const [currentView, setCurrentView] = useState<View>('dashboard')
+  const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [session, setSession] = useState<SupabaseSession | null>(() =>
     supabaseEnabled ? getCurrentSession() : null
@@ -390,6 +391,11 @@ function App() {
     } finally {
       setAuthSubmitting(false)
     }
+  }
+
+  function navigateToTransactions(filter: import('./models').TransactionsFilter) {
+    setPendingTxFilter(filter)
+    setCurrentView('transactions')
   }
 
   async function handleTransactionsImported(
@@ -1045,7 +1051,7 @@ function App() {
               {navItems.map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setCurrentView(item.id)}
+                  onClick={() => { if (item.id === 'transactions') setPendingTxFilter(null); setCurrentView(item.id) }}
                   className={`px-4 py-2 rounded-lg transition-colors ${
                     currentView === item.id
                       ? 'bg-primary text-primary-foreground'
@@ -1072,6 +1078,17 @@ function App() {
                   Salir
                 </Button>
               )}
+              {/* Import Quick-Access */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentView('import')}
+                className="hidden sm:flex gap-1.5"
+                aria-label="Importar CSV"
+              >
+                <Upload size={16} />
+                <span className="hidden lg:inline">Importar</span>
+              </Button>
               {/* Theme Toggle */}
               <Button
                 variant="ghost"
@@ -1113,6 +1130,7 @@ function App() {
                     <button
                       key={item.id}
                       onClick={() => {
+                        if (item.id === 'transactions') setPendingTxFilter(null)
                         setCurrentView(item.id)
                         setMobileMenuOpen(false)
                       }}
@@ -1156,11 +1174,16 @@ function App() {
           </p>
         )}
         {currentView === 'dashboard' && (
-          <Dashboard transactions={transactions} onNavigateToImport={() => setCurrentView('import')} />
+          <Dashboard
+            transactions={transactions}
+            onNavigateToImport={() => setCurrentView('import')}
+            onNavigateToTransactions={navigateToTransactions}
+          />
         )}
         {currentView === 'transactions' && (
           <Transactions
             transactions={transactions}
+            initialFilter={pendingTxFilter ?? undefined}
             onUpdateTransaction={handleUpdateTransaction}
             onDeleteTransaction={handleDeleteTransaction}
             onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
@@ -1169,7 +1192,9 @@ function App() {
             onBulkTag={handleBulkTagTransactions}
           />
         )}
-        {currentView === 'charts' && <Charts transactions={transactions} />}
+        {currentView === 'charts' && (
+          <Charts transactions={transactions} onNavigateToTransactions={navigateToTransactions} />
+        )}
         {currentView === 'tools' && (
           <Tools
             transactions={transactions}

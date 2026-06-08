@@ -36,9 +36,11 @@ import {
   listCustomCategories,
   syncCustomCategoryToCloud,
 } from '../services/categories/category-store'
+import type { TransactionsFilter } from '../models'
 
 interface TransactionsProps {
   transactions: Transaction[]
+  initialFilter?: TransactionsFilter
   onUpdateTransaction?: (
     transactionId: string,
     updates: {
@@ -92,6 +94,7 @@ function formatDate(date: Date): string {
 
 export function Transactions({
   transactions,
+  initialFilter,
   onUpdateTransaction,
   onDeleteTransaction,
   onAutoCategorizeTransactions,
@@ -104,6 +107,16 @@ export function Transactions({
   const [dateToFilter, setDateToFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [accountFilter, setAccountFilter] = useState<'all' | 'credit_card' | 'bank_account'>('all')
+  const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'UYU'>('all')
+
+  useEffect(() => {
+    if (initialFilter) {
+      setCategoryFilter(initialFilter.category ?? '')
+      setAccountFilter(initialFilter.accountType ?? 'all')
+      setCurrencyFilter(initialFilter.currency ?? 'all')
+    }
+  }, [initialFilter])
+
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [currentPage, setCurrentPage] = useState(1)
@@ -174,6 +187,10 @@ export function Transactions({
         return false
       }
 
+      if (currencyFilter !== 'all' && transaction.currency !== currencyFilter) {
+        return false
+      }
+
       return true
     })
 
@@ -206,6 +223,7 @@ export function Transactions({
     dateToFilter,
     categoryFilter,
     accountFilter,
+    currencyFilter,
     sortField,
     sortDirection,
   ])
@@ -227,7 +245,8 @@ export function Transactions({
     Boolean(dateFromFilter) ||
     Boolean(dateToFilter) ||
     Boolean(categoryFilter) ||
-    accountFilter !== 'all'
+    accountFilter !== 'all' ||
+    currencyFilter !== 'all'
 
   const dateRangeError =
     dateFromFilter && dateToFilter && dateToFilter < dateFromFilter
@@ -240,6 +259,7 @@ export function Transactions({
     setDateToFilter('')
     setCategoryFilter('')
     setAccountFilter('all')
+    setCurrencyFilter('all')
   }
 
   const categorySuggestions = useMemo(() => {
@@ -612,7 +632,7 @@ export function Transactions({
             )}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <div className="space-y-1">
               <label
                 htmlFor="transactions-date-from-filter"
@@ -693,6 +713,28 @@ export function Transactions({
                 <option value="all">Todas</option>
                 <option value="bank_account">Cuenta bancaria</option>
                 <option value="credit_card">Tarjeta</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label
+                htmlFor="transactions-currency-filter"
+                className="text-sm font-medium"
+              >
+                Moneda
+              </label>
+              <select
+                id="transactions-currency-filter"
+                aria-label="Filtro moneda"
+                value={currencyFilter}
+                onChange={(event) =>
+                  setCurrencyFilter(event.target.value as 'all' | 'USD' | 'UYU')
+                }
+                className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
+              >
+                <option value="all">Todas</option>
+                <option value="UYU">UYU ($U)</option>
+                <option value="USD">USD (US$)</option>
               </select>
             </div>
           </div>

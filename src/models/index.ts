@@ -22,6 +22,12 @@ export type {
 } from './parsed-data'
 
 export type { ImportRun, ImportRunStatus } from './import-run'
+
+export interface TransactionsFilter {
+  category?: string
+  accountType?: 'all' | 'credit_card' | 'bank_account'
+  currency?: 'all' | 'USD' | 'UYU'
+}
 export type { CategoryOverride } from './category-override'
 export type { CustomCategoryRecord } from './custom-category'
 

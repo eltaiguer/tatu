@@ -6,11 +6,13 @@ import { Input } from './ui/input';
 import { Switch } from './ui/switch';
 import { Badge } from './ui/badge';
 import { CategoryBadge } from './CategoryBadge';
-import { ListFilter, Download, Plus, Pencil, Trash, FileText, Settings } from 'lucide-react';
+import { Download, Plus, Pencil, Trash, FileText, Settings } from 'lucide-react';
 import type { Transaction } from '../models';
 import { Category } from '../models';
 import { categories } from '../utils/figma-data';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { toast } from 'sonner';
+import { exportTransactions } from '../services/export/export';
 import { getCategoryDefinitions } from '../services/categories/category-registry';
 import {
   addCustomCategoryWithSync,
@@ -33,7 +35,7 @@ interface ToolsProps {
 }
 
 export function Tools({ transactions, onResetAllData }: ToolsProps) {
-  const [activeTab, setActiveTab] = useState<'filters' | 'export' | 'categories' | 'settings'>('filters');
+  const [activeTab, setActiveTab] = useState<'export' | 'categories' | 'settings'>('export');
   const [, setCategoriesVersion] = useState(0);
   const [customCategoryForm, setCustomCategoryForm] = useState({
     id: '',
@@ -92,6 +94,40 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
     (dateRange.start || dateRange.end ? 1 : 0) + 
     (amountRange.min || amountRange.max ? 1 : 0) +
     (selectedCurrency !== 'all' ? 1 : 0);
+
+  const filteredForExport = useMemo(() => {
+    let result = transactions
+    if (dateRange.start) {
+      const from = new Date(`${dateRange.start}T00:00:00`)
+      result = result.filter((tx) => tx.date >= from)
+    }
+    if (dateRange.end) {
+      const to = new Date(`${dateRange.end}T23:59:59.999`)
+      result = result.filter((tx) => tx.date <= to)
+    }
+    if (selectedCategories.length > 0) {
+      result = result.filter((tx) => selectedCategories.includes(tx.category ?? ''))
+    }
+    if (selectedCurrency !== 'all') {
+      result = result.filter((tx) => tx.currency === selectedCurrency)
+    }
+    if (amountRange.min) {
+      result = result.filter((tx) => tx.amount >= parseFloat(amountRange.min))
+    }
+    if (amountRange.max) {
+      result = result.filter((tx) => tx.amount <= parseFloat(amountRange.max))
+    }
+    return result
+  }, [transactions, dateRange, selectedCategories, selectedCurrency, amountRange])
+
+  function handleExport(format: 'csv' | 'pdf') {
+    exportTransactions(filteredForExport, { format })
+    toast.success(
+      format === 'csv'
+        ? `CSV exportado: ${filteredForExport.length} transacciones`
+        : 'Reporte PDF generado'
+    )
+  }
 
   const categoryDefinitions = getCategoryDefinitions();
 
@@ -196,29 +232,11 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
       {/* Header */}
       <div>
         <h2 className="mb-1">Herramientas</h2>
-        <p className="text-muted-foreground">Filtros, exportación y configuración</p>
+        <p className="text-muted-foreground">Exportación y configuración</p>
       </div>
 
       {/* Tab Navigation */}
       <div className="flex gap-2 border-b border-border overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('filters')}
-          className={`px-4 py-3 border-b-2 transition-colors whitespace-nowrap ${
-            activeTab === 'filters'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <ListFilter size={18} />
-            <span>Filtros</span>
-            {activeFiltersCount > 0 && (
-              <Badge variant="secondary" className="ml-1">
-                {activeFiltersCount}
-              </Badge>
-            )}
-          </div>
-        </button>
         <button
           onClick={() => setActiveTab('export')}
           className={`px-4 py-3 border-b-2 transition-colors whitespace-nowrap ${
@@ -230,6 +248,11 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
           <div className="flex items-center gap-2">
             <Download size={18} />
             <span>Exportar</span>
+            {activeFiltersCount > 0 && (
+              <Badge variant="secondary" className="ml-1">
+                {activeFiltersCount}
+              </Badge>
+            )}
           </div>
         </button>
         <button
@@ -260,11 +283,11 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
         </button>
       </div>
 
-      {/* Filters Tab */}
-      {activeTab === 'filters' && (
+      {/* Export Tab */}
+      {activeTab === 'export' && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h3>Filtros Avanzados</h3>
+            <h3>Exportar Datos</h3>
             {activeFiltersCount > 0 && (
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 Limpiar todos
@@ -272,7 +295,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
             )}
           </div>
 
-          {/* Active Filters Chips */}
+          {/* Active Filter Chips */}
           {activeFiltersCount > 0 && (
             <Card className="p-4">
               <div className="flex items-center gap-2 flex-wrap">
@@ -280,7 +303,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                 {selectedCategories.map(catId => (
                   <Badge key={catId} variant="secondary" className="gap-1">
                     {categories.find(c => c.id === catId)?.name}
-                    <button 
+                    <button
                       onClick={() => toggleCategory(catId)}
                       className="ml-1 hover:text-destructive"
                     >
@@ -291,7 +314,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                 {(dateRange.start || dateRange.end) && (
                   <Badge variant="secondary">
                     Rango de fechas
-                    <button 
+                    <button
                       onClick={() => setDateRange({ start: '', end: '' })}
                       className="ml-1 hover:text-destructive"
                     >
@@ -302,7 +325,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                 {(amountRange.min || amountRange.max) && (
                   <Badge variant="secondary">
                     Rango de monto
-                    <button 
+                    <button
                       onClick={() => setAmountRange({ min: '', max: '' })}
                       className="ml-1 hover:text-destructive"
                     >
@@ -313,7 +336,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                 {selectedCurrency !== 'all' && (
                   <Badge variant="secondary">
                     {selectedCurrency}
-                    <button 
+                    <button
                       onClick={() => setSelectedCurrency('all')}
                       className="ml-1 hover:text-destructive"
                     >
@@ -345,7 +368,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
             </div>
           </Card>
 
-          {/* Date Range Filter */}
+          {/* Date Range */}
           <Card className="p-6">
             <h4 className="mb-4">Rango de Fechas</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -374,7 +397,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
             </div>
           </Card>
 
-          {/* Amount Range Filter */}
+          {/* Amount Range */}
           <Card className="p-6">
             <h4 className="mb-4">Rango de Monto</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -405,7 +428,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
             </div>
           </Card>
 
-          {/* Currency Filter */}
+          {/* Currency */}
           <Card className="p-6">
             <h4 className="mb-4">Moneda</h4>
             <div className="flex gap-3">
@@ -429,18 +452,15 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
               </Button>
             </div>
           </Card>
-        </div>
-      )}
 
-      {/* Export Tab */}
-      {activeTab === 'export' && (
-        <div className="space-y-6">
-          <h3>Exportar Datos</h3>
-
+          {/* Format & Export */}
           <Card className="p-6">
             <h4 className="mb-4">Formato de Exportación</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button className="p-6 border-2 border-border hover:border-primary rounded-lg transition-all text-left group">
+              <button
+                onClick={() => handleExport('csv')}
+                className="p-6 border-2 border-border hover:border-primary rounded-lg transition-all text-left group"
+              >
                 <div className="flex items-center gap-3 mb-2">
                   <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/20 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                     <FileText size={24} />
@@ -455,7 +475,10 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                 </p>
               </button>
 
-              <button className="p-6 border-2 border-border hover:border-primary rounded-lg transition-all text-left group">
+              <button
+                onClick={() => handleExport('pdf')}
+                className="p-6 border-2 border-border hover:border-primary rounded-lg transition-all text-left group"
+              >
                 <div className="flex items-center gap-3 mb-2">
                   <div className="p-2 rounded-lg bg-accent-50 dark:bg-accent-900/20 group-hover:bg-accent group-hover:text-accent-foreground transition-colors">
                     <FileText size={24} />
@@ -466,54 +489,18 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Generar un reporte en PDF con resúmenes, gráficos y detalles de transacciones.
+                  Generar un reporte en PDF con resúmenes y detalles de transacciones.
                 </p>
               </button>
             </div>
           </Card>
 
-          <Card className="p-6">
-            <h4 className="mb-4">Opciones de Exportación</h4>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="tools-export-start" className="block text-sm mb-2">
-                    Fecha inicial
-                  </label>
-                  <Input id="tools-export-start" type="date" defaultValue="2024-01-01" />
-                </div>
-                <div>
-                  <label htmlFor="tools-export-end" className="block text-sm mb-2">
-                    Fecha final
-                  </label>
-                  <Input id="tools-export-end" type="date" defaultValue="2024-12-29" />
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-                <div>
-                  <p className="font-medium">Incluir gráficos</p>
-                  <p className="text-sm text-muted-foreground">Solo para PDF</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-
-              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-                <div>
-                  <p className="font-medium">Agrupar por categoría</p>
-                  <p className="text-sm text-muted-foreground">Incluir subtotales</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-            </div>
-          </Card>
-
           <div className="flex gap-3">
-            <Button className="flex-1">
+            <Button className="flex-1" onClick={() => handleExport('csv')}>
               <Download size={18} className="mr-2" />
               Exportar como CSV
             </Button>
-            <Button variant="secondary" className="flex-1">
+            <Button variant="secondary" className="flex-1" onClick={() => handleExport('pdf')}>
               <Download size={18} className="mr-2" />
               Exportar como PDF
             </Button>
@@ -521,7 +508,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
 
           <Card className="p-4 bg-primary-50 dark:bg-primary-900/10 border-primary/20">
             <p className="text-sm">
-              <strong>Nota:</strong> La exportación incluirá {transactions.length} transacciones 
+              <strong>Nota:</strong> La exportación incluirá {filteredForExport.length} transacciones
               según los filtros activos. El archivo estará listo en unos segundos.
             </p>
           </Card>

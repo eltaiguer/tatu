@@ -3,7 +3,7 @@
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign, Landmark, Upload, X } from 'lucide-react';
-import type { Transaction, Currency } from '../models';
+import type { Transaction, Currency, TransactionsFilter } from '../models';
 import { useMemo, useState } from 'react';
 import { filterByPeriod, generatePeriodOptions } from '../utils/date-utils';
 import { getCategoryDisplay } from '../utils/category-display';
@@ -102,9 +102,10 @@ function getTopCategory(transactions: Transaction[]): {
 interface DashboardProps {
   transactions: Transaction[];
   onNavigateToImport?: () => void;
+  onNavigateToTransactions?: (filter: TransactionsFilter) => void;
 }
 
-export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) {
+export function Dashboard({ transactions, onNavigateToImport, onNavigateToTransactions }: DashboardProps) {
   const [selectedCurrency, setSelectedCurrency] = useState<Currency | 'all'>('all');
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('all');
 
@@ -370,7 +371,10 @@ export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="p-6">
+        <Card
+          className={`p-6${onNavigateToTransactions ? ' cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all' : ''}`}
+          onClick={onNavigateToTransactions ? () => onNavigateToTransactions({ accountType: 'credit_card' }) : undefined}
+        >
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-accent-50 dark:bg-accent-900/20">
               <CreditCard className="text-accent" size={20} />
@@ -407,7 +411,10 @@ export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) 
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card
+          className={`p-6${onNavigateToTransactions ? ' cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all' : ''}`}
+          onClick={onNavigateToTransactions ? () => onNavigateToTransactions({ accountType: 'bank_account', currency: 'USD' }) : undefined}
+        >
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/20">
               <DollarSign className="text-primary" size={20} />
@@ -429,7 +436,10 @@ export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) 
           </div>
         </Card>
 
-        <Card className="p-6">
+        <Card
+          className={`p-6${onNavigateToTransactions ? ' cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all' : ''}`}
+          onClick={onNavigateToTransactions ? () => onNavigateToTransactions({ accountType: 'bank_account', currency: 'UYU' }) : undefined}
+        >
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-success-50 dark:bg-success-900/20">
               <Landmark className="text-success-600" size={20} />
@@ -479,9 +489,14 @@ export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) 
               {topExpense?.description || 'Sin movimientos en el período'}
             </p>
           </div>
-          <div>
+          <div
+            className={onNavigateToTransactions && topCategory ? 'cursor-pointer group' : ''}
+            onClick={onNavigateToTransactions && topCategory ? () => onNavigateToTransactions({ category: topCategory.category }) : undefined}
+          >
             <p className="text-sm text-muted-foreground mb-1">Categoría top</p>
-            <p className="font-mono">{topCategoryDisplay.label}</p>
+            <p className={`font-mono${onNavigateToTransactions && topCategory ? ' group-hover:text-primary transition-colors' : ''}`}>
+              {topCategoryDisplay.label}
+            </p>
             <p className="text-xs text-muted-foreground">
               {topCategory ? `${topCategory.percentage.toFixed(1)}% del total` : '0.0% del total'}
             </p>

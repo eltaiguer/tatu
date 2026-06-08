@@ -2,7 +2,7 @@
 
 import { Card } from './ui/card';
 import { ChartPie } from 'lucide-react';
-import type { Transaction } from '../models';
+import type { Transaction, TransactionsFilter } from '../models';
 import { Category } from '../models';
 import {
   PieChart,
@@ -66,9 +66,10 @@ function groupByMonth(transactions: Transaction[]) {
 
 interface ChartsProps {
   transactions: Transaction[];
+  onNavigateToTransactions?: (filter: TransactionsFilter) => void;
 }
 
-export function Charts({ transactions }: ChartsProps) {
+export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) {
   const categoryData = Object.entries(groupByCategory(transactions))
     .map(([categoryId, amount]) => {
       const category = getCategoryDisplay(categoryId);
@@ -76,6 +77,7 @@ export function Charts({ transactions }: ChartsProps) {
         name: category.label,
         value: amount,
         color: category.color,
+        categoryId,
       };
     })
     .sort((a, b) => b.value - a.value);
@@ -151,7 +153,7 @@ export function Charts({ transactions }: ChartsProps) {
       <Card className="p-6">
         <h3 className="mb-6">Gastos por Categoría</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="flex items-start justify-center">
+          <div className={`flex items-start justify-center${onNavigateToTransactions ? ' cursor-pointer' : ''}`}>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -162,6 +164,9 @@ export function Charts({ transactions }: ChartsProps) {
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
+                  onClick={onNavigateToTransactions ? (data: { categoryId?: string } | null) => {
+                    if (data?.categoryId) onNavigateToTransactions({ category: data.categoryId })
+                  } : undefined}
                 >
                   {categoryData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
@@ -180,7 +185,11 @@ export function Charts({ transactions }: ChartsProps) {
                 ? (cat.value / totalExpenses) * 100
                 : 0;
               return (
-                <div key={index} className="space-y-1">
+                <div
+                  key={index}
+                  className={`space-y-1${onNavigateToTransactions ? ' cursor-pointer hover:bg-muted/50 rounded p-1 -m-1 transition-colors' : ''}`}
+                  onClick={onNavigateToTransactions ? () => onNavigateToTransactions({ category: cat.categoryId }) : undefined}
+                >
                   <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2">
                       <div

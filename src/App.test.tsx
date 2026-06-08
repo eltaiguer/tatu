@@ -136,7 +136,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Herramientas' }))
 
     expect(screen.getByRole('heading', { name: 'Herramientas' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Filtros Avanzados' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Exportar Datos' })).toBeInTheDocument()
   })
 
   it('applies dark theme from localStorage on initial render', () => {

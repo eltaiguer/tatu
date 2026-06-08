@@ -70,9 +70,10 @@ describe('Tools', () => {
   it('renders export and settings tabs with expected controls', () => {
     render(<Tools transactions={[makeTransaction({ id: 'tx-a' })]} />)
 
+    // Export is the default tab — no click needed, but click is a no-op
     fireEvent.click(screen.getByRole('button', { name: 'Exportar' }))
     expect(screen.getByRole('heading', { name: 'Exportar Datos' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Fecha inicial')).toBeInTheDocument()
+    expect(screen.getByLabelText('Desde')).toBeInTheDocument()
     expect(screen.getByText(/La exportación incluirá 1 transacciones/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Configuración' }))
