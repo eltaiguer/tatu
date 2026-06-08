@@ -313,53 +313,6 @@ describe('App with supabase enabled', () => {
     )
   })
 
-  it('migrates local category data after sign in', async () => {
-    signInWithPasswordMock.mockResolvedValue({
-      access_token: 'access',
-      refresh_token: 'refresh',
-      token_type: 'bearer',
-      expires_in: 3600,
-      expires_at: 9999,
-      user: { id: 'user-1', email: 'test@example.com' },
-    })
-
-    localStorage.setItem(
-      'tatu:categoryOverrides',
-      JSON.stringify({
-        devoto: {
-          merchantName: 'Devoto',
-          category: 'groceries',
-          updatedAt: '2026-02-20T00:00:00.000Z',
-        },
-      })
-    )
-    localStorage.setItem(
-      'tatu:customCategories',
-      JSON.stringify([
-        {
-          id: 'mates',
-          label: 'Mates',
-          color: '#00AA11',
-          icon: '🧉',
-        },
-      ])
-    )
-
-    const { default: App } = await import('./App')
-    render(<App />)
-
-    fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
-      target: { value: 'test@example.com' },
-    })
-    fireEvent.change(screen.getByPlaceholderText('Contraseña'), {
-      target: { value: 'secret123' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-
-    await waitFor(() => expect(upsertCategoryOverrideMock).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(upsertCustomCategoryMock).toHaveBeenCalledTimes(1))
-  })
-
   it(
     'updates and soft-deletes transactions from transactions view',
     async () => {
@@ -442,6 +395,10 @@ describe('App with supabase enabled', () => {
         }),
         'tx-10'
       )
+    )
+
+    await waitFor(() =>
+      expect(screen.queryByText('New merchant')).not.toBeInTheDocument()
     )
     },
     15000

@@ -3,7 +3,7 @@ import { vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { Tools } from './Tools'
 import type { Transaction } from '../models'
-import { addCustomCategory, listCustomCategories } from '../services/categories/category-store'
+import { addCustomCategory, listCustomCategories, replaceCustomCategories } from '../services/categories/category-store'
 
 function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -22,7 +22,7 @@ function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
 
 describe('Tools', () => {
   beforeEach(() => {
-    window.localStorage.clear()
+    replaceCustomCategories([])
     vi.restoreAllMocks()
   })
 

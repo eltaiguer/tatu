@@ -119,7 +119,10 @@ describe('supabase transactions service', () => {
     const { softDeleteTransaction } = await import('./transactions')
     await softDeleteTransaction(session, 'tx-99')
 
-    expect(updateMock).toHaveBeenCalledWith({ is_deleted: true })
+    expect(updateMock).toHaveBeenCalledWith({
+      is_deleted: true,
+      deleted_at: expect.any(String),
+    })
     expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
     expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
   })
@@ -128,7 +131,7 @@ describe('supabase transactions service', () => {
     const { restoreTransaction } = await import('./transactions')
     await restoreTransaction(session, 'tx-99')
 
-    expect(updateMock).toHaveBeenCalledWith({ is_deleted: false })
+    expect(updateMock).toHaveBeenCalledWith({ is_deleted: false, deleted_at: null })
     expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
     expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
   })

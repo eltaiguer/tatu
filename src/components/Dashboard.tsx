@@ -193,9 +193,14 @@ export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) 
     [creditCardTransactions]
   );
 
-  const usdTransactionsCount = filteredTransactions.filter(
-    (tx) => tx.currency === 'USD'
-  ).length;
+  const usdBankTransactions = useMemo(
+    () => filteredTransactions.filter((tx) => tx.source === 'bank_account' && tx.currency === 'USD'),
+    [filteredTransactions]
+  )
+  const usdBankSummary = useMemo(
+    () => calculateSummary(usdBankTransactions, 'USD'),
+    [usdBankTransactions]
+  )
 
   const uyuBankTransactions = useMemo(
     () => filteredTransactions.filter((tx) => tx.source === 'bank_account' && tx.currency === 'UYU'),
@@ -397,10 +402,10 @@ export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) 
           <div className="space-y-2">
             <div className="flex justify-between items-baseline">
               <span className="text-sm text-muted-foreground">Saldo disponible</span>
-              <span className="font-mono">{formatCurrency(usdSummary.balance, 'USD')}</span>
+              <span className="font-mono">{formatCurrency(usdBankSummary.balance, 'USD')}</span>
             </div>
             <div className="flex justify-between text-xs text-muted-foreground mt-3">
-              <span>{usdTransactionsCount} movimientos USD</span>
+              <span>{usdBankTransactions.length} movimientos USD</span>
               <span>{filteredTransactions.length} totales</span>
             </div>
           </div>

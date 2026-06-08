@@ -3,11 +3,11 @@ import { render, screen } from '@testing-library/react';
 import { CategoryBadge } from './CategoryBadge';
 import { Category } from '../models';
 import { getCategoryDisplay } from '../utils/category-display';
-import { addCustomCategory } from '../services/categories/category-store';
+import { addCustomCategory, replaceCustomCategories } from '../services/categories/category-store';
 
 describe('CategoryBadge', () => {
   beforeEach(() => {
-    window.localStorage.clear();
+    replaceCustomCategories([]);
   });
 
   it('renders readable label for modern categories', () => {

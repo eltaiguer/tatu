@@ -5,38 +5,7 @@ export interface CustomCategory {
   icon?: string
 }
 
-const STORAGE_KEY = 'tatu:customCategories'
-
-function hasLocalStorage(): boolean {
-  return (
-    typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-  )
-}
-
-function loadCustomCategories(): CustomCategory[] {
-  if (!hasLocalStorage()) {
-    return []
-  }
-
-  const raw = window.localStorage.getItem(STORAGE_KEY)
-  if (!raw) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as CustomCategory[]
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function saveCustomCategories(categories: CustomCategory[]): void {
-  if (!hasLocalStorage()) {
-    return
-  }
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(categories))
-}
+let _customCategories: CustomCategory[] = []
 
 function slugifyLabel(label: string): string {
   return label
@@ -59,7 +28,11 @@ function ensureUniqueId(base: string, existingIds: Set<string>): string {
 }
 
 export function listCustomCategories(): CustomCategory[] {
-  return loadCustomCategories()
+  return _customCategories
+}
+
+export function replaceCustomCategories(categories: CustomCategory[]): void {
+  _customCategories = categories
 }
 
 export function addCustomCategory(input: {
@@ -67,8 +40,7 @@ export function addCustomCategory(input: {
   color: string
   icon?: string
 }): CustomCategory {
-  const categories = loadCustomCategories()
-  const existingIds = new Set(categories.map((category) => category.id))
+  const existingIds = new Set(_customCategories.map((c) => c.id))
   const baseId = slugifyLabel(input.label) || 'custom-category'
   const id = ensureUniqueId(baseId, existingIds)
   const next: CustomCategory = {
@@ -77,8 +49,7 @@ export function addCustomCategory(input: {
     color: input.color,
     icon: input.icon,
   }
-  const updated = [...categories, next]
-  saveCustomCategories(updated)
+  _customCategories = [..._customCategories, next]
   return next
 }
 
@@ -86,61 +57,18 @@ export function updateCustomCategory(
   id: string,
   updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon'>>
 ): void {
-  const categories = loadCustomCategories()
-  const updated = categories.map((category) =>
-    category.id === id ? { ...category, ...updates } : category
+  _customCategories = _customCategories.map((c) =>
+    c.id === id ? { ...c, ...updates } : c
   )
-  saveCustomCategories(updated)
 }
 
 export function removeCustomCategory(id: string): void {
-  const categories = loadCustomCategories()
-  const updated = categories.filter((category) => category.id !== id)
-  saveCustomCategories(updated)
+  _customCategories = _customCategories.filter((c) => c.id !== id)
 }
 
-export function replaceCustomCategories(categories: CustomCategory[]): void {
-  saveCustomCategories(categories)
-}
-
-export async function addCustomCategoryWithSync(input: {
-  label: string
-  color: string
-  icon?: string
-}): Promise<CustomCategory> {
-  const created = addCustomCategory(input)
-
-  try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { upsertCustomCategory } = await import(
-        '../supabase/custom-categories'
-      )
-      await upsertCustomCategory(session, {
-        id: created.id,
-        label: created.label,
-        color: created.color,
-        icon: created.icon,
-        isArchived: false,
-      })
-    }
-  } catch {
-    // local state is source of truth fallback when cloud sync fails
-  }
-
-  return created
-}
-
-export async function updateCustomCategoryWithSync(
-  id: string,
-  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon'>>
-): Promise<void> {
-  updateCustomCategory(id, updates)
-  const category = listCustomCategories().find((entry) => entry.id === id)
-  if (!category) {
-    return
-  }
+export async function syncCustomCategoryToCloud(id: string): Promise<void> {
+  const category = _customCategories.find((c) => c.id === id)
+  if (!category) return
 
   try {
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
@@ -158,7 +86,45 @@ export async function updateCustomCategoryWithSync(
       })
     }
   } catch {
-    // local update remains applied
+    // in-memory state remains applied
+  }
+}
+
+export async function addCustomCategoryWithSync(input: {
+  label: string
+  color: string
+  icon?: string
+}): Promise<CustomCategory> {
+  const created = addCustomCategory(input)
+  await syncCustomCategoryToCloud(created.id)
+  return created
+}
+
+export async function updateCustomCategoryWithSync(
+  id: string,
+  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon'>>
+): Promise<void> {
+  updateCustomCategory(id, updates)
+  const category = _customCategories.find((c) => c.id === id)
+  if (!category) return
+
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { upsertCustomCategory } = await import(
+        '../supabase/custom-categories'
+      )
+      await upsertCustomCategory(session, {
+        id: category.id,
+        label: category.label,
+        color: category.color,
+        icon: category.icon,
+        isArchived: false,
+      })
+    }
+  } catch {
+    // in-memory update remains applied
   }
 }
 
@@ -175,6 +141,6 @@ export async function removeCustomCategoryWithSync(id: string): Promise<void> {
       await archiveCustomCategory(session, id)
     }
   } catch {
-    // local deletion remains applied
+    // in-memory deletion remains applied
   }
 }
