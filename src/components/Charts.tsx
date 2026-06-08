@@ -151,7 +151,7 @@ export function Charts({ transactions }: ChartsProps) {
       <Card className="p-6">
         <h3 className="mb-6">Gastos por Categoría</h3>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="flex items-center justify-center">
+          <div className="flex items-start justify-center">
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -159,13 +159,6 @@ export function Charts({ transactions }: ChartsProps) {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={(entry) =>
-                    `${entry.name} ${
-                      hasExpenseData
-                        ? ((entry.value / totalExpenses) * 100).toFixed(0)
-                        : '0'
-                    }%`
-                  }
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
@@ -175,6 +168,7 @@ export function Charts({ transactions }: ChartsProps) {
                   ))}
                 </Pie>
                 <Tooltip content={customTooltip} />
+                <Legend />
               </PieChart>
             </ResponsiveContainer>
           </div>

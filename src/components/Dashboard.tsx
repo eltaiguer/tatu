@@ -2,7 +2,7 @@
 
 import { Card } from './ui/card';
 import { Button } from './ui/button';
-import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign, Landmark, Upload } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign, Landmark, Upload, X } from 'lucide-react';
 import type { Transaction, Currency } from '../models';
 import { useMemo, useState } from 'react';
 import { filterByPeriod, generatePeriodOptions } from '../utils/date-utils';
@@ -213,15 +213,33 @@ export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) 
 
   const hasTransactions = transactions.length > 0;
 
+  const [bannerDismissed, setBannerDismissed] = useState(
+    () => localStorage.getItem('tatu:welcomeBannerDismissed') === 'true'
+  )
+
+  function dismissBanner() {
+    localStorage.setItem('tatu:welcomeBannerDismissed', 'true')
+    setBannerDismissed(true)
+  }
+
   return (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 rounded-2xl p-6 md:p-8 border border-primary/20">
-        <h1 className="mb-2">Bienvenido a Tatú</h1>
-        <p className="text-muted-foreground max-w-2xl">
-          Tu gestor de gastos inteligente. Monitoreá tus finanzas, descubrí patrones de gasto y
-          tomá decisiones informadas con datos de tus cuentas Santander Uruguay.
-        </p>
-      </div>
+      {!bannerDismissed && (
+        <div className="relative bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 rounded-2xl p-6 md:p-8 border border-primary/20">
+          <button
+            onClick={dismissBanner}
+            aria-label="Cerrar bienvenida"
+            className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X size={18} />
+          </button>
+          <h1 className="mb-2">Bienvenido a Tatú</h1>
+          <p className="text-muted-foreground max-w-2xl">
+            Tu gestor de gastos inteligente. Monitoreá tus finanzas, descubrí patrones de gasto y
+            tomá decisiones informadas con datos de tus cuentas Santander Uruguay.
+          </p>
+        </div>
+      )}
 
       {!hasTransactions && (
         <Card className="p-8 text-center space-y-4">
@@ -331,7 +349,7 @@ export function Dashboard({ transactions, onNavigateToImport }: DashboardProps) 
             <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/20">
               <Wallet className="text-primary" size={24} />
             </div>
-            <span className="text-xs text-primary bg-primary-50 dark:bg-primary-900/20 px-2 py-1 rounded-full">
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
               Balance
             </span>
           </div>

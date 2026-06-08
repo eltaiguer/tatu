@@ -4,6 +4,7 @@ import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { parseCSV } from '../services/parsers/csv-parser';
 import { transactionStore } from '../stores/transaction-store';
 import type { ParsedData, Transaction } from '../models';
@@ -113,6 +114,9 @@ export function ImportCSV({
       });
 
       setImportState('success');
+      toast.success(
+        `${added.length} nueva${added.length === 1 ? '' : 's'} · ${duplicates.length} duplicada${duplicates.length === 1 ? '' : 's'} omitida${duplicates.length === 1 ? '' : 's'}`
+      );
 
       if (onImportComplete) {
         onImportComplete();

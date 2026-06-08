@@ -385,7 +385,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                 <Input
                   id="tools-amount-min"
                   type="number"
-                  placeholder="0.00"
+                  placeholder="Mínimo"
                   value={amountRange.min}
                   onChange={(e) => setAmountRange(prev => ({ ...prev, min: e.target.value }))}
                 />
@@ -397,7 +397,7 @@ export function Tools({ transactions, onResetAllData }: ToolsProps) {
                 <Input
                   id="tools-amount-max"
                   type="number"
-                  placeholder="999999.99"
+                  placeholder="Máximo"
                   value={amountRange.max}
                   onChange={(e) => setAmountRange(prev => ({ ...prev, max: e.target.value }))}
                 />
