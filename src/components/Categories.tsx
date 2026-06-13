@@ -297,7 +297,6 @@ export function Categories({ transactions }: CategoriesProps) {
           }}
         >
           {categoryDefinitions.map((cat) => {
-            const display = getCategoryDisplay(cat.id)
             const count = getCategoryTransactionCount(transactions, cat.id)
             return (
               <div
@@ -319,14 +318,14 @@ export function Categories({ transactions }: CategoriesProps) {
                     width: 36,
                     height: 36,
                     borderRadius: 10,
-                    background: display.color + '22',
+                    background: cat.color + '22',
                     display: 'grid',
                     placeItems: 'center',
                     fontSize: 18,
                     flexShrink: 0,
                   }}
                 >
-                  {display.icon}
+                  {cat.icon}
                 </span>
 
                 {/* Name + count */}
@@ -341,7 +340,7 @@ export function Categories({ transactions }: CategoriesProps) {
                       textOverflow: 'ellipsis',
                     }}
                   >
-                    {display.label}
+                    {cat.label}
                   </div>
                   <div
                     style={{
