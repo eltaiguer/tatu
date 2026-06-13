@@ -868,7 +868,7 @@ export function Transactions({
           <table className="w-full">
             <thead className="bg-muted/50 border-b border-border">
               <tr>
-                <th className="p-4 w-12">
+                <th className="px-3.5 py-3 w-10">
                   <Checkbox
                     aria-label="Seleccionar todas"
                     checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
@@ -879,7 +879,7 @@ export function Transactions({
                   />
                 </th>
                 <th
-                  className="text-left p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                  className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
                   aria-sort={sortField === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <button
@@ -891,7 +891,7 @@ export function Transactions({
                   </button>
                 </th>
                 <th
-                  className="text-left p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                  className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
                   aria-sort={sortField === 'description' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <button
@@ -903,7 +903,7 @@ export function Transactions({
                   </button>
                 </th>
                 <th
-                  className="text-left p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                  className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
                   aria-sort={sortField === 'category' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <button
@@ -914,9 +914,10 @@ export function Transactions({
                     {sortField === 'category' && <ArrowUpDown size={14} />}
                   </button>
                 </th>
-                <th className="text-left p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground">Cuenta</th>
+                <th className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground">Cuenta</th>
+                <th className="text-center px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-14">Conf.</th>
                 <th
-                  className="text-right p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                  className="text-right px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
                   aria-sort={sortField === 'amount' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <button
@@ -927,7 +928,7 @@ export function Transactions({
                     {sortField === 'amount' && <ArrowUpDown size={14} />}
                   </button>
                 </th>
-                <th className="text-center p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-20">Acción</th>
+                <th className="text-center px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-20">Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -964,7 +965,7 @@ export function Transactions({
                   key={transaction.id}
                   className="group border-b border-border hover:bg-muted/30 transition-colors"
                 >
-                  <td className="p-4 align-top">
+                  <td className="px-3.5 py-3 align-middle">
                     <Checkbox
                       aria-label={`Seleccionar ${displayDescription}`}
                       checked={selectedTransactionIds.includes(transaction.id)}
@@ -974,10 +975,10 @@ export function Transactions({
                       disabled={isBusy}
                     />
                   </td>
-                  <td className="p-4">
+                  <td className="px-3.5 py-3 whitespace-nowrap">
                     <div className="text-sm">{formatDate(transaction.date)}</div>
                   </td>
-                  <td className="p-4">
+                  <td className="px-3.5 py-3">
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                       {(() => {
                         const catId = transaction.category ?? 'uncategorized'
@@ -1004,11 +1005,11 @@ export function Transactions({
                           </span>
                         )
                       })()}
-                      <div>
-                        <div className="font-medium">{displayDescription}</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="font-medium truncate" style={{ maxWidth: 220 }}>{displayDescription}</div>
                         {hasFriendlyOverride && (
-                          <div className="text-xs text-muted-foreground">
-                            Original: {transaction.description}
+                          <div className="text-muted-foreground truncate" style={{ fontSize: 11, maxWidth: 220 }}>
+                            {transaction.description}
                           </div>
                         )}
                         {(transaction.tags ?? []).length > 0 && (
@@ -1026,36 +1027,38 @@ export function Transactions({
                       </div>
                     </div>
                   </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-1.5">
-                      <CategoryBadge
-                        categoryId={transaction.category || Category.Uncategorized}
-                        size="sm"
-                      />
-                      <ConfidenceBadge
-                        confidence={transaction.categoryConfidence || 0}
-                      />
-                    </div>
+                  <td className="px-3.5 py-3">
+                    <CategoryBadge
+                      categoryId={transaction.category || Category.Uncategorized}
+                      size="sm"
+                    />
                   </td>
-                  <td className="p-4">
+                  <td className="px-3.5 py-3">
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       {getAccountIcon(transaction.source)}
                       <span>{getAccountLabel(transaction.source)}</span>
                     </div>
                   </td>
-                  <td className="p-4 text-right">
+                  <td className="px-3.5 py-3 text-center">
+                    <ConfidenceBadge
+                      confidence={transaction.categoryConfidence || 0}
+                    />
+                  </td>
+                  <td className="px-3.5 py-3 text-right whitespace-nowrap">
                     <div
-                      className={`font-mono ${
-                        transaction.type === 'credit'
-                          ? 'text-success-600'
-                          : 'text-foreground'
-                      }`}
+                      className="font-mono"
+                      style={{
+                        color:
+                          transaction.type === 'credit'
+                            ? 'var(--pos)'
+                            : 'var(--text)',
+                      }}
                     >
                       {transaction.type === 'credit' ? '+' : '-'}
                       {formatCurrency(transaction.amount, transaction.currency)}
                     </div>
                   </td>
-                  <td className="p-4 text-center">
+                  <td className="px-3.5 py-3 text-center">
                     <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
                       <Button
                         variant="ghost"

@@ -1,36 +1,36 @@
-// Confidence indicator for auto-categorization
-
 interface ConfidenceBadgeProps {
   confidence: number
-  manualOverride?: boolean
 }
 
-export function ConfidenceBadge({
-  confidence,
-  manualOverride,
-}: ConfidenceBadgeProps) {
-  if (manualOverride) {
-    return null
-  }
+export function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
+  if (!confidence) return null
 
-  if (confidence === 0) return null
-
-  const getColor = (conf: number) => {
-    if (conf >= 0.9) return 'bg-success-600'
-    if (conf >= 0.7) return 'bg-primary-600'
-    return 'bg-warning-500'
-  }
-
-  const getLabel = (conf: number) => {
-    if (conf >= 0.9) return 'Confianza alta'
-    if (conf >= 0.7) return 'Confianza media'
-    return 'Confianza baja'
-  }
+  const filled = confidence >= 0.8 ? 3 : confidence >= 0.55 ? 2 : 1
+  const color =
+    confidence >= 0.8
+      ? 'var(--pos)'
+      : confidence >= 0.55
+        ? 'var(--accent)'
+        : 'var(--neg)'
+  const level =
+    confidence >= 0.8 ? 'alta' : confidence >= 0.55 ? 'media' : 'baja'
 
   return (
     <span
-      className={`inline-block w-1.5 h-1.5 rounded-full ${getColor(confidence)} shrink-0`}
-      title={`${getLabel(confidence)} (${Math.round(confidence * 100)}%)`}
-    />
+      title={`Confianza ${level} · ${Math.round(confidence * 100)}%`}
+      style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}
+    >
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          style={{
+            width: 4,
+            height: 11,
+            borderRadius: 2,
+            background: filled > i ? color : 'var(--surface-3)',
+          }}
+        />
+      ))}
+    </span>
   )
 }
