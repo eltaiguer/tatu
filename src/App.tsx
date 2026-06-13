@@ -7,7 +7,8 @@ import type { View } from './components/AppSidebar'
 import { Dashboard } from './components/Dashboard'
 import { Transactions } from './components/Transactions'
 import { Charts } from './components/Charts'
-import { Tools } from './components/Tools'
+import { Categories } from './components/Categories'
+import { Settings } from './components/Settings'
 import { ImportCSV } from './components/ImportCSV'
 import { AuthCard } from './components/AuthCard'
 import { Sun, Moon } from 'lucide-react'
@@ -125,6 +126,7 @@ function App() {
   })
   const [currentView, setCurrentView] = useState<View>('overview')
   const [importOpen, setImportOpen] = useState(false)
+  const toggleTheme = () => setIsDark((d) => !d)
   const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
   const [session, setSession] = useState<SupabaseSession | null>(() =>
     supabaseEnabled ? getCurrentSession() : null
@@ -1105,9 +1107,18 @@ function App() {
                   onNavigateToTransactions={navigateToTransactions}
                 />
               )}
-              {(currentView === 'categories' ||
-                currentView === 'settings') && (
-                <Tools
+              {currentView === 'categories' && (
+                <Categories transactions={transactions} />
+              )}
+              {currentView === 'settings' && (
+                <Settings
+                  isDark={isDark}
+                  onToggleTheme={toggleTheme}
+                  session={session}
+                  supabaseEnabled={supabaseEnabled}
+                  onSignOut={() => {
+                    void handleSignOut()
+                  }}
                   transactions={transactions}
                   onResetAllData={handleResetAllData}
                 />
@@ -1119,7 +1130,7 @@ function App() {
 
       {/* Floating theme toggle */}
       <button
-        onClick={() => setIsDark(!isDark)}
+        onClick={toggleTheme}
         aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
         style={{
           position: 'fixed',

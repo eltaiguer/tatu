@@ -135,7 +135,7 @@ describe('App', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Categorías' }))
 
-    expect(screen.getByRole('heading', { name: 'Herramientas' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Categorías y reglas' })).toBeInTheDocument()
   })
 
   it('applies dark theme from localStorage on initial render', () => {
