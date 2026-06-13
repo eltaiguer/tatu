@@ -879,55 +879,55 @@ export function Transactions({
                   />
                 </th>
                 <th
-                  className="text-left p-4 text-sm font-medium"
+                  className="text-left p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
                   aria-sort={sortField === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <button
                     onClick={() => handleSort('date')}
-                    className="flex items-center gap-2 hover:text-primary transition-colors"
+                    className="flex items-center gap-2 uppercase tracking-[0.05em] hover:text-primary transition-colors"
                   >
                     Fecha
                     {sortField === 'date' && <ArrowUpDown size={14} />}
                   </button>
                 </th>
                 <th
-                  className="text-left p-4 text-sm font-medium"
+                  className="text-left p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
                   aria-sort={sortField === 'description' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <button
                     onClick={() => handleSort('description')}
-                    className="flex items-center gap-2 hover:text-primary transition-colors"
+                    className="flex items-center gap-2 uppercase tracking-[0.05em] hover:text-primary transition-colors"
                   >
                     Descripción
                     {sortField === 'description' && <ArrowUpDown size={14} />}
                   </button>
                 </th>
                 <th
-                  className="text-left p-4 text-sm font-medium"
+                  className="text-left p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
                   aria-sort={sortField === 'category' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <button
                     onClick={() => handleSort('category')}
-                    className="flex items-center gap-2 hover:text-primary transition-colors"
+                    className="flex items-center gap-2 uppercase tracking-[0.05em] hover:text-primary transition-colors"
                   >
                     Categoría
                     {sortField === 'category' && <ArrowUpDown size={14} />}
                   </button>
                 </th>
-                <th className="text-left p-4 text-sm font-medium">Cuenta</th>
+                <th className="text-left p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground">Cuenta</th>
                 <th
-                  className="text-right p-4 text-sm font-medium"
+                  className="text-right p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
                   aria-sort={sortField === 'amount' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                 >
                   <button
                     onClick={() => handleSort('amount')}
-                    className="flex items-center gap-2 ml-auto hover:text-primary transition-colors"
+                    className="flex items-center gap-2 ml-auto uppercase tracking-[0.05em] hover:text-primary transition-colors"
                   >
                     Monto
                     {sortField === 'amount' && <ArrowUpDown size={14} />}
                   </button>
                 </th>
-                <th className="text-center p-4 text-sm font-medium w-20">Acción</th>
+                <th className="text-center p-4 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-20">Acción</th>
               </tr>
             </thead>
             <tbody>
@@ -962,7 +962,7 @@ export function Transactions({
                   return (
                 <tr
                   key={transaction.id}
-                  className="border-b border-border hover:bg-muted/30 transition-colors"
+                  className="group border-b border-border hover:bg-muted/30 transition-colors"
                 >
                   <td className="p-4 align-top">
                     <Checkbox
@@ -976,12 +976,6 @@ export function Transactions({
                   </td>
                   <td className="p-4">
                     <div className="text-sm">{formatDate(transaction.date)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {transaction.date.toLocaleTimeString('es-UY', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </div>
                   </td>
                   <td className="p-4">
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -1017,9 +1011,6 @@ export function Transactions({
                             Original: {transaction.description}
                           </div>
                         )}
-                        <div className="text-xs text-muted-foreground">
-                          {transaction.type === 'debit' ? 'Débito' : 'Crédito'}
-                        </div>
                         {(transaction.tags ?? []).length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1">
                             {(transaction.tags ?? []).map((tag) => (
@@ -1065,7 +1056,7 @@ export function Transactions({
                     </div>
                   </td>
                   <td className="p-4 text-center">
-                    <div className="flex items-center justify-center gap-1">
+                    <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
                       <Button
                         variant="ghost"
                         size="sm"
