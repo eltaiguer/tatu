@@ -326,13 +326,7 @@ export function Categories({ transactions }: CategoriesProps) {
           Tus categorías
         </h3>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 10,
-          }}
-        >
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
           {categoryDefinitions.map((cat) => {
             const count = getCategoryTransactionCount(transactions, cat.id)
             return (
@@ -460,14 +454,14 @@ export function Categories({ transactions }: CategoriesProps) {
         {/* Add pattern form */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr auto auto auto',
+            display: 'flex',
+            flexWrap: 'wrap',
             gap: 10,
             marginBottom: 16,
             alignItems: 'flex-end',
           }}
         >
-          <div>
+          <div style={{ flex: '1 1 auto', minWidth: 160 }}>
             <label
               htmlFor="pattern-text"
               style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
