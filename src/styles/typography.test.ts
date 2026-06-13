@@ -8,9 +8,9 @@ describe('Typography System', () => {
     styleElement = document.createElement('style')
     styleElement.textContent = `
       :root {
-        --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-        --font-display: 'Space Grotesk', system-ui, -apple-system, sans-serif;
-        --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+        --font-sans: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+        --font-display: 'Spectral', Georgia, serif;
+        --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
         --text-xs: 0.75rem;
         --text-sm: 0.875rem;
@@ -77,8 +77,8 @@ describe('Typography System', () => {
     it('should define font family variables', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
-      expect(rootStyle.getPropertyValue('--font-sans')).toContain('Inter')
-      expect(rootStyle.getPropertyValue('--font-display')).toContain('Space Grotesk')
+      expect(rootStyle.getPropertyValue('--font-sans')).toContain('Hanken Grotesk')
+      expect(rootStyle.getPropertyValue('--font-display')).toContain('Spectral')
       expect(rootStyle.getPropertyValue('--font-mono')).toContain('JetBrains Mono')
     })
 
@@ -114,7 +114,7 @@ describe('Typography System', () => {
 
       const style = getComputedStyle(element)
       // In jsdom, CSS variables are not fully resolved, check for the variable reference
-      expect(style.fontFamily).toMatch(/var\(--font-display\)|Space Grotesk/)
+      expect(style.fontFamily).toMatch(/var\(--font-display\)|Spectral/)
 
       document.body.removeChild(element)
     })
@@ -136,7 +136,7 @@ describe('Typography System', () => {
       const style = getComputedStyle(body)
 
       // In jsdom, CSS variables are not fully resolved, check for the variable reference
-      expect(style.fontFamily).toMatch(/var\(--font-sans\)|Inter/)
+      expect(style.fontFamily).toMatch(/var\(--font-sans\)|Hanken Grotesk/)
     })
   })
 
@@ -147,7 +147,7 @@ describe('Typography System', () => {
 
       const style = getComputedStyle(h1)
       // Check for CSS variable reference (jsdom doesn't fully resolve variables)
-      expect(style.fontFamily).toMatch(/var\(--font-display\)|Space Grotesk/)
+      expect(style.fontFamily).toMatch(/var\(--font-display\)|Spectral/)
       expect(style.fontSize).toMatch(/var\(--text-3xl\)|1\.875rem|30px/)
       expect(style.fontWeight).toMatch(/var\(--font-weight-semibold\)|600/)
       expect(style.lineHeight).toBe('1.2')
@@ -160,7 +160,7 @@ describe('Typography System', () => {
       document.body.appendChild(h2)
 
       const style = getComputedStyle(h2)
-      expect(style.fontFamily).toMatch(/var\(--font-display\)|Space Grotesk/)
+      expect(style.fontFamily).toMatch(/var\(--font-display\)|Spectral/)
       expect(style.fontSize).toMatch(/var\(--text-2xl\)|1\.5rem|24px/)
       expect(style.fontWeight).toMatch(/var\(--font-weight-semibold\)|600/)
       expect(style.lineHeight).toBe('1.3')

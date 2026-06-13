@@ -7,6 +7,32 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Prototype design tokens (warm palette — used by PRs 2-5)
+        bg: 'var(--bg)',
+        surface: {
+          DEFAULT: 'var(--surface)',
+          2: 'var(--surface-2)',
+          3: 'var(--surface-3)',
+        },
+        brand: {
+          DEFAULT: 'var(--brand)',
+          hover: 'var(--brand-hover)',
+          soft: 'var(--brand-soft)',
+          text: 'var(--brand-text)',
+        },
+        'border-strong': 'var(--border-strong)',
+        'text-base': 'var(--text)',
+        'text-muted-warm': 'var(--text-muted)',
+        'text-faint': 'var(--text-faint)',
+        pos: {
+          DEFAULT: 'var(--pos)',
+          soft: 'var(--pos-soft)',
+        },
+        neg: {
+          DEFAULT: 'var(--neg)',
+          soft: 'var(--neg-soft)',
+        },
+        'accent-soft': 'var(--accent-soft)',
         // Semantic colors (theme-aware, adapt to light/dark mode)
         background: 'var(--background)',
         foreground: 'var(--foreground)',

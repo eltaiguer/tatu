@@ -1,10 +1,10 @@
-/* Tatu Brand Typography - Expressive, modern fintech */
+/* Tatu — warm fintech typography */
 
-/* Primary: Inter for UI and data */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Display: Spectral for brand moments and headings */
+@import url('https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&display=swap');
 
-/* Display: Space Grotesk for brand moments */
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
+/* UI: Hanken Grotesk for interface text */
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
 
 /* Monospace: JetBrains Mono for numbers and data */
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
