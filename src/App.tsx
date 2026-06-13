@@ -1,28 +1,16 @@
-// Tatu - Uruguayan Expense Tracker
-// A modern, trustworthy fintech app for managing Santander Uruguay statements
-
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Toaster } from './components/ui/sonner'
 import { TatuLogo } from './components/TatuLogo'
+import { AppSidebar } from './components/AppSidebar'
+import type { View } from './components/AppSidebar'
 import { Dashboard } from './components/Dashboard'
 import { Transactions } from './components/Transactions'
 import { Charts } from './components/Charts'
 import { Tools } from './components/Tools'
 import { ImportCSV } from './components/ImportCSV'
 import { AuthCard } from './components/AuthCard'
-import { Button } from './components/ui/button'
-import {
-  Sun,
-  Moon,
-  Menu,
-  X,
-  Upload,
-  ChartPie,
-  ListFilter,
-  Package,
-  ChartBar,
-} from 'lucide-react'
+import { Sun, Moon } from 'lucide-react'
 import { useStore } from 'zustand'
 import {
   getPersistedTransactionsSnapshot,
@@ -84,7 +72,6 @@ import {
 } from './services/categorizer/transaction-categorizer'
 import { analyzeTemporalPatterns } from './services/categorizer/temporal-patterns'
 
-type View = 'dashboard' | 'transactions' | 'charts' | 'tools' | 'import'
 const CATEGORY_OVERRIDES_MIGRATION_KEY =
   'tatu:migration:category-overrides:v1'
 const DESCRIPTION_OVERRIDES_MIGRATION_KEY =
@@ -136,9 +123,9 @@ function App() {
     const saved = localStorage.getItem('theme')
     return saved === 'dark'
   })
-  const [currentView, setCurrentView] = useState<View>('dashboard')
+  const [currentView, setCurrentView] = useState<View>('overview')
+  const [importOpen, setImportOpen] = useState(false)
   const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [session, setSession] = useState<SupabaseSession | null>(() =>
     supabaseEnabled ? getCurrentSession() : null
   )
@@ -380,8 +367,8 @@ function App() {
       setAuthMode('signin')
       toast('Sesión cerrada')
       transactionStore.getState().clearTransactions()
-      setCurrentView('dashboard')
-      setMobileMenuOpen(false)
+      setCurrentView('overview')
+      setImportOpen(false)
       setAuthError('')
       setAuthNotice('')
     } catch (error) {
@@ -975,14 +962,6 @@ function App() {
     }
   }
 
-  const navItems = [
-    { id: 'dashboard' as View, label: 'Dashboard', icon: ChartBar },
-    { id: 'transactions' as View, label: 'Transacciones', icon: ListFilter },
-    { id: 'charts' as View, label: 'Insights', icon: ChartPie },
-    { id: 'tools' as View, label: 'Herramientas', icon: Package },
-    { id: 'import' as View, label: 'Importar', icon: Upload },
-  ]
-
   if (supabaseEnabled && (!session || authMode === 'reset')) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -1038,201 +1017,142 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-card border-b border-border backdrop-blur-sm">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <TatuLogo size="md" />
+    <div
+      style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}
+    >
+      {/* Sidebar */}
+      <AppSidebar
+        view={currentView}
+        onNavigate={(v) => {
+          if (v === 'transactions') setPendingTxFilter(null)
+          setCurrentView(v)
+        }}
+        onImport={() => setImportOpen(true)}
+        onSignOut={() => {
+          void handleSignOut()
+        }}
+        session={session}
+        txCount={transactions.length}
+        supabaseEnabled={supabaseEnabled}
+      />
 
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => { if (item.id === 'transactions') setPendingTxFilter(null); setCurrentView(item.id) }}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    currentView === item.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
+      {/* Main content */}
+      <main
+        style={{
+          flex: 1,
+          minWidth: 0,
+          marginLeft: 'var(--sidebar-w, 252px)',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1180,
+            margin: '0 auto',
+            padding: '40px 44px 80px',
+          }}
+        >
+          {authError && (
+            <p
+              className="text-sm mb-4"
+              style={{ color: 'var(--neg)' }}
+              role="alert"
+            >
+              {authError}
+            </p>
+          )}
+          {authNotice && (
+            <p
+              className="text-sm mb-4"
+              style={{ color: 'var(--text-muted)' }}
+              role="status"
+            >
+              {authNotice}
+            </p>
+          )}
 
-            {/* Right Actions */}
-            <div className="flex items-center gap-2">
-              {supabaseEnabled && session && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    void handleSignOut()
-                  }}
-                  disabled={authSubmitting}
-                  className="hidden sm:flex"
-                >
-                  Salir
-                </Button>
-              )}
-              {/* Import Quick-Access */}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentView('import')}
-                className="hidden sm:flex gap-1.5"
-                aria-label="Importar CSV"
-              >
-                <Upload size={16} />
-                <span className="hidden lg:inline">Importar</span>
-              </Button>
-              {/* Theme Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsDark(!isDark)}
-                className="hidden sm:flex"
-                aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-              >
-                {isDark ? <Sun size={18} /> : <Moon size={18} />}
-              </Button>
-
-              {/* Mobile Menu Toggle */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden"
-                aria-label="Abrir menú de navegación"
-                aria-expanded={mobileMenuOpen}
-              >
-                {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Menu Overlay */}
-        {mobileMenuOpen && (
-          <>
-            <div
-              className="md:hidden fixed inset-0 top-16 bg-black/40 z-40"
-              onClick={() => setMobileMenuOpen(false)}
+          {importOpen ? (
+            <ImportCSV
+              onImportComplete={() => {
+                setImportOpen(false)
+                setCurrentView('transactions')
+              }}
+              onTransactionsImported={handleTransactionsImported}
             />
-            <div className="md:hidden fixed inset-x-0 top-16 z-50 bg-card border-b border-border shadow-lg animate-in slide-in-from-top-2 duration-200">
-              <nav className="px-4 py-4 space-y-1">
-                {navItems.map((item) => {
-                  const Icon = item.icon
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        if (item.id === 'transactions') setPendingTxFilter(null)
-                        setCurrentView(item.id)
-                        setMobileMenuOpen(false)
-                      }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                        currentView === item.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      <Icon size={18} />
-                      <span>{item.label}</span>
-                    </button>
-                  )
-                })}
-                <button
-                  onClick={() => {
-                    setIsDark(!isDark)
-                    setMobileMenuOpen(false)
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                >
-                  {isDark ? <Sun size={18} /> : <Moon size={18} />}
-                  <span>{isDark ? 'Modo claro' : 'Modo oscuro'}</span>
-                </button>
-              </nav>
-            </div>
-          </>
-        )}
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {authError && (
-          <p className="text-sm text-destructive mb-4" role="alert">
-            {authError}
-          </p>
-        )}
-        {authNotice && (
-          <p className="text-sm text-muted-foreground mb-4" role="status">
-            {authNotice}
-          </p>
-        )}
-        {currentView === 'dashboard' && (
-          <Dashboard
-            transactions={transactions}
-            onNavigateToImport={() => setCurrentView('import')}
-            onNavigateToTransactions={navigateToTransactions}
-          />
-        )}
-        {currentView === 'transactions' && (
-          <Transactions
-            transactions={transactions}
-            initialFilter={pendingTxFilter ?? undefined}
-            onUpdateTransaction={handleUpdateTransaction}
-            onDeleteTransaction={handleDeleteTransaction}
-            onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
-            onBulkCategorize={handleBulkCategorizeTransactions}
-            onBulkDelete={handleBulkDeleteTransactions}
-            onBulkTag={handleBulkTagTransactions}
-          />
-        )}
-        {currentView === 'charts' && (
-          <Charts transactions={transactions} onNavigateToTransactions={navigateToTransactions} />
-        )}
-        {currentView === 'tools' && (
-          <Tools
-            transactions={transactions}
-            onResetAllData={handleResetAllData}
-          />
-        )}
-        {currentView === 'import' && (
-          <ImportCSV
-            onImportComplete={() => setCurrentView('transactions')}
-            onTransactionsImported={handleTransactionsImported}
-          />
-        )}
+          ) : (
+            <>
+              {currentView === 'overview' && (
+                <Dashboard
+                  transactions={transactions}
+                  onNavigateToImport={() => setImportOpen(true)}
+                  onNavigateToTransactions={navigateToTransactions}
+                />
+              )}
+              {currentView === 'transactions' && (
+                <Transactions
+                  transactions={transactions}
+                  initialFilter={pendingTxFilter ?? undefined}
+                  onUpdateTransaction={handleUpdateTransaction}
+                  onDeleteTransaction={handleDeleteTransaction}
+                  onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
+                  onBulkCategorize={handleBulkCategorizeTransactions}
+                  onBulkDelete={handleBulkDeleteTransactions}
+                  onBulkTag={handleBulkTagTransactions}
+                />
+              )}
+              {currentView === 'analysis' && (
+                <Charts
+                  transactions={transactions}
+                  onNavigateToTransactions={navigateToTransactions}
+                />
+              )}
+              {(currentView === 'categories' ||
+                currentView === 'settings') && (
+                <Tools
+                  transactions={transactions}
+                  onResetAllData={handleResetAllData}
+                />
+              )}
+            </>
+          )}
+        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-border mt-20">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div>
-              <TatuLogo size="sm" />
-              <p className="text-sm text-muted-foreground mt-3">
-                Gestión inteligente de gastos para Uruguay. Privado, seguro y
-                fácil de usar.
-              </p>
-            </div>
-            <div>
-              <h3 className="text-base font-semibold mb-3">Contacto</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>hola@tatu.uy</li>
-                <li>Montevideo, Uruguay</li>
-              </ul>
-            </div>
-          </div>
-          <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>© {new Date().getFullYear()} Tatú. Hecho con ❤️ en Uruguay.</p>
-          </div>
-        </div>
-      </footer>
+      {/* Floating theme toggle */}
+      <button
+        onClick={() => setIsDark(!isDark)}
+        aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        style={{
+          position: 'fixed',
+          bottom: 22,
+          right: 22,
+          zIndex: 60,
+          width: 42,
+          height: 42,
+          borderRadius: 999,
+          border: '1px solid var(--border)',
+          background: 'var(--surface)',
+          color: 'var(--text-muted)',
+          display: 'grid',
+          placeItems: 'center',
+          cursor: 'pointer',
+          boxShadow: 'var(--shadow-md)',
+          transition: 'background 0.13s, color 0.13s',
+        }}
+        onMouseOver={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background =
+            'var(--surface-2)'
+          ;(e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'
+        }}
+        onMouseOut={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.background =
+            'var(--surface)'
+          ;(e.currentTarget as HTMLButtonElement).style.color =
+            'var(--text-muted)'
+        }}
+      >
+        {isDark ? <Sun size={18} /> : <Moon size={18} />}
+      </button>
+
       <Toaster />
     </div>
   )

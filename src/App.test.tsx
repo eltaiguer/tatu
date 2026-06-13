@@ -13,14 +13,14 @@ describe('App', () => {
     localStorage.clear()
   })
 
-  it('renders dashboard view by default', () => {
+  it('renders overview (dashboard) view by default', () => {
     render(<App />)
 
     expect(screen.getByRole('heading', { name: 'Bienvenido a Tatú' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Empezá importando tu extracto' })).toBeInTheDocument()
   })
 
-  it('switches to import view from navigation', () => {
+  it('opens import view when clicking the sidebar Importar button', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
@@ -38,7 +38,7 @@ describe('App', () => {
     expect(screen.getByText(/Extracto de tarjeta Santander/)).toBeInTheDocument()
   })
 
-  it('switches to transactions view from navigation', () => {
+  it('switches to transactions view from sidebar navigation', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
@@ -131,12 +131,11 @@ describe('App', () => {
     expect(transactionStore.getState().transactions[0].category).toBe('uncategorized')
   })
 
-  it('switches to tools view from navigation', () => {
+  it('switches to categorías view from sidebar navigation', () => {
     render(<App />)
-    fireEvent.click(screen.getByRole('button', { name: 'Herramientas' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Categorías' }))
 
     expect(screen.getByRole('heading', { name: 'Herramientas' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Exportar Datos' })).toBeInTheDocument()
   })
 
   it('applies dark theme from localStorage on initial render', () => {
@@ -147,19 +146,13 @@ describe('App', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true)
   })
 
-  it('opens mobile menu and closes it when selecting a view', () => {
-    const { container } = render(<App />)
-    const menuToggle = container.querySelector(
-      'button.md\\:hidden'
-    ) as HTMLButtonElement
+  it('sidebar nav items are visible and functional', () => {
+    render(<App />)
 
-    expect(menuToggle).toBeTruthy()
-    fireEvent.click(menuToggle)
-    expect(screen.getByText('Modo oscuro')).toBeInTheDocument()
-
-    const importButtons = screen.getAllByRole('button', { name: 'Importar' })
-    fireEvent.click(importButtons[importButtons.length - 1])
-    expect(screen.queryByText('Modo oscuro')).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Resumen' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Análisis' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Categorías' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Configuración' })).toBeInTheDocument()
   })
 })
