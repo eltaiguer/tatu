@@ -1,133 +1,216 @@
-// Charts - Data visualization and insights
+// Charts - Análisis screen with KPIs, donut, trend, and top merchants
 
-import { Card } from './ui/card';
-import { ChartPie } from 'lucide-react';
-import type { Transaction, TransactionsFilter } from '../models';
-import { Category } from '../models';
+import { Card } from './ui/card'
+import { ChartPie } from 'lucide-react'
+import type { Transaction, Currency, TransactionsFilter } from '../models'
+import { useMemo, useState } from 'react'
 import {
   PieChart,
   Pie,
   Cell,
   BarChart,
   Bar,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
-} from 'recharts';
-import type { TooltipProps } from 'recharts';
-import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent';
-import { getCategoryDisplay } from '../utils/category-display';
-import { isTransferCategory } from '../services/transfers/internal-transfers';
+} from 'recharts'
+import type { TooltipProps } from 'recharts'
+import type {
+  NameType,
+  ValueType,
+} from 'recharts/types/component/DefaultTooltipContent'
+import { getCategoryDisplay } from '../utils/category-display'
+import { getCategoryDefinitions } from '../services/categories/category-registry'
+import { isTransferCategory } from '../services/transfers/internal-transfers'
 
-function groupByCategory(transactions: Transaction[]) {
-  const grouped: Record<string, number> = {};
-
-  transactions
-    .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
-    .forEach((tx) => {
-      const category = tx.category || Category.Uncategorized;
-      grouped[category] = (grouped[category] || 0) + tx.amount;
-    });
-
-  return grouped;
+function formatAmt(amount: number, currency: Currency): string {
+  const formatted = Math.abs(amount).toLocaleString('es-UY', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return currency === 'UYU' ? `$U ${formatted}` : `US$ ${formatted}`
 }
 
-function groupByMonth(transactions: Transaction[]) {
-  const grouped: Record<string, { income: number; expenses: number }> = {};
-
-  transactions.forEach((tx) => {
-    if (isTransferCategory(tx.category)) {
-      return;
-    }
-
-    const month = new Intl.DateTimeFormat('es-UY', {
-      year: 'numeric',
-      month: 'short',
-    }).format(tx.date);
-
-    if (!grouped[month]) {
-      grouped[month] = { income: 0, expenses: 0 };
-    }
-
-    if (tx.type === 'credit') {
-      grouped[month].income += tx.amount;
-    } else {
-      grouped[month].expenses += tx.amount;
-    }
-  });
-
-  return grouped;
+function formatAmtShort(amount: number, currency: Currency): string {
+  const abs = Math.abs(amount)
+  const sym = currency === 'UYU' ? '$U' : 'US$'
+  if (abs >= 1_000_000) return `${sym} ${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `${sym} ${(abs / 1_000).toFixed(0)}k`
+  return formatAmt(amount, currency)
 }
 
 interface ChartsProps {
-  transactions: Transaction[];
-  onNavigateToTransactions?: (filter: TransactionsFilter) => void;
+  transactions: Transaction[]
+  onNavigateToTransactions?: (filter: TransactionsFilter) => void
 }
 
 export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) {
-  const categoryData = Object.entries(groupByCategory(transactions))
-    .map(([categoryId, amount]) => {
-      const category = getCategoryDisplay(categoryId);
-      return {
-        name: category.label,
-        value: amount,
-        color: category.color,
-        categoryId,
-      };
+  const [currency, setCurrency] = useState<Currency>('UYU')
+
+  // Emoji icon lookup from category definitions
+  const emojiLookup = useMemo(() => {
+    const map = new Map<string, string>()
+    getCategoryDefinitions().forEach((d) => map.set(d.id, d.icon))
+    return map
+  }, [])
+
+  const currencyTxs = useMemo(
+    () => transactions.filter((tx) => tx.currency === currency),
+    [transactions, currency],
+  )
+
+  // Category breakdown (expenses only, no transfers)
+  const categoryData = useMemo(() => {
+    const grouped = new Map<string, number>()
+    currencyTxs
+      .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
+      .forEach((tx) => {
+        const cat = tx.category ?? 'uncategorized'
+        grouped.set(cat, (grouped.get(cat) ?? 0) + tx.amount)
+      })
+
+    const total = Array.from(grouped.values()).reduce((s, v) => s + v, 0)
+    return Array.from(grouped.entries())
+      .map(([catId, value]) => {
+        const display = getCategoryDisplay(catId)
+        return {
+          categoryId: catId,
+          label: display.label,
+          color: display.color,
+          emoji: emojiLookup.get(catId) ?? '',
+          value,
+          pct: total > 0 ? (value / total) * 100 : 0,
+        }
+      })
+      .sort((a, b) => b.value - a.value)
+  }, [currencyTxs, emojiLookup])
+
+  const totalExpenses = categoryData.reduce((s, c) => s + c.value, 0)
+  const hasExpenseData = totalExpenses > 0
+
+  // Monthly trend
+  const monthlyTrend = useMemo(() => {
+    const grouped = new Map<string, { income: number; expense: number; key: string }>()
+    currencyTxs.forEach((tx) => {
+      if (isTransferCategory(tx.category)) return
+      const key = `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, '0')}`
+      const label = new Intl.DateTimeFormat('es-UY', {
+        year: 'numeric',
+        month: 'short',
+      }).format(tx.date)
+      if (!grouped.has(key)) grouped.set(key, { income: 0, expense: 0, key: label })
+      const entry = grouped.get(key)!
+      if (tx.type === 'credit') entry.income += tx.amount
+      else entry.expense += tx.amount
     })
-    .sort((a, b) => b.value - a.value);
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, v]) => ({ month: v.key, ingresos: v.income, gastos: v.expense }))
+      .slice(-12)
+  }, [currencyTxs])
 
-  const monthData = Object.entries(groupByMonth(transactions))
-    .map(([month, data]) => ({
-      month,
-      ingresos: data.income,
-      gastos: data.expenses,
-    }))
-    .slice(-6);
+  const totalIncome = monthlyTrend.reduce((s, m) => s + m.ingresos, 0)
+  const totalExpenseTrend = monthlyTrend.reduce((s, m) => s + m.gastos, 0)
+  const savingsRate =
+    totalIncome > 0
+      ? Math.round(((totalIncome - totalExpenseTrend) / totalIncome) * 100)
+      : 0
+  const avgMonthly =
+    monthlyTrend.length > 0
+      ? Math.round(totalExpenseTrend / monthlyTrend.length)
+      : 0
 
-  const totalExpenses = categoryData.reduce((sum, cat) => sum + cat.value, 0);
-  const hasExpenseData = totalExpenses > 0;
-  const topCategory = categoryData[0];
+  // Top merchants by spend
+  const topMerchants = useMemo(() => {
+    const map = new Map<string, { name: string; total: number; count: number; catId: string }>()
+    currencyTxs
+      .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
+      .forEach((tx) => {
+        const key = tx.description
+        const entry = map.get(key) ?? {
+          name: key,
+          total: 0,
+          count: 0,
+          catId: tx.category ?? 'uncategorized',
+        }
+        entry.total += tx.amount
+        entry.count++
+        map.set(key, entry)
+      })
+    return Array.from(map.values())
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 6)
+  }, [currencyTxs])
 
-  const customTooltip = ({ active, payload }: TooltipProps<ValueType, NameType>) => {
-    if (active && payload && payload.length) {
-      const value = Number(payload[0].value ?? 0);
-      return (
-        <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
-          <p className="font-medium mb-1">{payload[0].name}</p>
-          <p className="text-sm text-muted-foreground">
-            $U{' '}
-            {value.toLocaleString('es-UY', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
-          </p>
-          {totalExpenses > 0 && (
-            <p className="text-xs text-muted-foreground mt-1">
-              {((value / totalExpenses) * 100).toFixed(1)}% del total
-            </p>
-          )}
-        </div>
-      );
+  const hasData = transactions.length > 0
+
+  const topCategory = categoryData[0]
+
+  const donutData = useMemo(() => {
+    const top7 = categoryData.slice(0, 7)
+    const otherVal = categoryData
+      .slice(7)
+      .reduce((s, r) => s + r.value, 0)
+    if (otherVal > 0) {
+      return [
+        ...top7,
+        {
+          categoryId: '__other__',
+          label: 'Otros',
+          color: 'var(--surface-3)',
+          emoji: '',
+          value: otherVal,
+          pct: (otherVal / totalExpenses) * 100,
+        },
+      ]
     }
-    return null;
-  };
+    return top7
+  }, [categoryData, totalExpenses])
 
-  const hasData = transactions.length > 0;
+  const customTooltip = ({
+    active,
+    payload,
+  }: TooltipProps<ValueType, NameType>) => {
+    if (active && payload && payload.length) {
+      const value = Number(payload[0].value ?? 0)
+      return (
+        <div
+          style={{
+            background: 'var(--bg)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            padding: '10px 14px',
+            boxShadow: '0 4px 16px rgba(0,0,0,.08)',
+          }}
+        >
+          <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
+            {payload[0].name}
+          </p>
+          <p
+            className="font-mono"
+            style={{ fontSize: 13, color: 'var(--text-faint)' }}
+          >
+            {formatAmt(value, currency)}
+          </p>
+        </div>
+      )
+    }
+    return null
+  }
 
   if (!hasData) {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="mb-1">Insights y Análisis</h2>
-          <p className="text-muted-foreground">Visualización de tus patrones de gasto</p>
+          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
+            Análisis
+          </h1>
+          <p className="text-muted-foreground" style={{ fontSize: 14 }}>
+            Tendencias y patrones de gasto en tus cuentas
+          </p>
         </div>
-
         <Card className="p-12 text-center space-y-4">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <ChartPie className="text-primary" size={28} />
@@ -135,211 +218,470 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
           <div>
             <h3 className="mb-2">Sin datos para visualizar</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Importá transacciones desde la pestaña Importar para ver gráficos de gastos por categoría, tendencias mensuales y más.
+              Importá transacciones desde la pestaña Importar para ver gráficos
+              de gastos por categoría, tendencias mensuales y más.
             </p>
           </div>
         </Card>
       </div>
-    );
+    )
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="mb-1">Insights y Análisis</h2>
-        <p className="text-muted-foreground">Visualización de tus patrones de gasto</p>
+      {/* Page header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
+            Análisis
+          </h1>
+          <p className="text-muted-foreground" style={{ fontSize: 14 }}>
+            Tendencias y patrones de gasto en tus cuentas
+          </p>
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            background: 'var(--surface-2)',
+            borderRadius: 10,
+            padding: 3,
+            gap: 2,
+          }}
+        >
+          {(
+            [
+              { value: 'UYU', label: 'Pesos $U' },
+              { value: 'USD', label: 'Dólares US$' },
+            ] as const
+          ).map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setCurrency(value)}
+              style={{
+                padding: '5px 14px',
+                borderRadius: 7,
+                fontSize: 13,
+                fontWeight: 500,
+                background:
+                  currency === value ? 'var(--bg)' : 'transparent',
+                color:
+                  currency === value ? 'var(--text)' : 'var(--text-faint)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                boxShadow:
+                  currency === value ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <Card className="p-6">
-        <h3 className="mb-6">Gastos por Categoría</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className={`flex items-start justify-center${onNavigateToTransactions ? ' cursor-pointer' : ''}`}>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={categoryData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                  onClick={onNavigateToTransactions ? (data: { categoryId?: string } | null) => {
-                    if (data?.categoryId) onNavigateToTransactions({ category: data.categoryId })
-                  } : undefined}
-                >
-                  {categoryData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip content={customTooltip} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+      {/* KPI tiles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="p-5">
+          <div
+            className="text-muted-foreground"
+            style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
+          >
+            Mayor categoría
           </div>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+            {topCategory?.label ?? '—'}
+          </div>
+          <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+            {topCategory
+              ? `${Math.round(topCategory.pct)}% del gasto`
+              : 'Sin datos'}
+          </div>
+        </Card>
+        <Card className="p-5">
+          <div
+            className="text-muted-foreground"
+            style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
+          >
+            Gasto promedio mensual
+          </div>
+          <div
+            className="font-mono"
+            style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}
+          >
+            {formatAmtShort(avgMonthly, currency)}
+          </div>
+          <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+            Últimos {monthlyTrend.length} meses
+          </div>
+        </Card>
+        <Card className="p-5">
+          <div
+            className="text-muted-foreground"
+            style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
+          >
+            Tasa de ahorro
+          </div>
+          <div
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              marginBottom: 4,
+              color: savingsRate >= 0 ? 'var(--pos)' : 'var(--neg)',
+            }}
+          >
+            {savingsRate}%
+          </div>
+          <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+            Ingresos no gastados
+          </div>
+        </Card>
+        <Card className="p-5">
+          <div
+            className="text-muted-foreground"
+            style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
+          >
+            Categorías activas
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+            {categoryData.length}
+          </div>
+          <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+            Con gasto registrado
+          </div>
+        </Card>
+      </div>
 
-          <div className="space-y-3">
-            <h4 className="text-base font-semibold mb-4">Desglose Detallado</h4>
-            {categoryData.map((cat, index) => {
-              const percentage = hasExpenseData
-                ? (cat.value / totalExpenses) * 100
-                : 0;
-              return (
+      {/* Donut + category breakdown */}
+      <Card className="p-6">
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>
+          Gasto por categoría
+        </h2>
+        {!hasExpenseData ? (
+          <p className="text-muted-foreground" style={{ fontSize: 13 }}>
+            Sin gastos registrados para este período.
+          </p>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '220px 1fr',
+              gap: 36,
+              alignItems: 'center',
+            }}
+          >
+            {/* Donut */}
+            <div style={{ position: 'relative', width: 220, height: 220 }}>
+              <ResponsiveContainer width={220} height={220}>
+                <PieChart>
+                  <Pie
+                    data={donutData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={72}
+                    outerRadius={100}
+                    dataKey="value"
+                    startAngle={90}
+                    endAngle={450}
+                  >
+                    {donutData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={customTooltip} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  textAlign: 'center',
+                  pointerEvents: 'none',
+                }}
+              >
                 <div
-                  key={index}
-                  className={`space-y-1${onNavigateToTransactions ? ' cursor-pointer hover:bg-muted/50 rounded p-1 -m-1 transition-colors' : ''}`}
-                  onClick={onNavigateToTransactions ? () => onNavigateToTransactions({ category: cat.categoryId }) : undefined}
+                  className="text-muted-foreground"
+                  style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em' }}
                 >
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: cat.color }}
-                      />
-                      <span>{cat.name}</span>
-                    </div>
-                    <span className="font-mono">
-                      $U {cat.value.toLocaleString('es-UY', { minimumFractionDigits: 2 })}
+                  TOTAL
+                </div>
+                <div className="font-mono" style={{ fontSize: 15, fontWeight: 700 }}>
+                  {formatAmtShort(totalExpenses, currency)}
+                </div>
+              </div>
+            </div>
+
+            {/* Breakdown list */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+              {categoryData.slice(0, 7).map((row) => (
+                <div
+                  key={row.categoryId}
+                  onClick={() =>
+                    onNavigateToTransactions?.({ category: row.categoryId })
+                  }
+                  style={{
+                    cursor: onNavigateToTransactions ? 'pointer' : 'default',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'baseline',
+                      marginBottom: 5,
+                    }}
+                  >
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        fontSize: 13.5,
+                        fontWeight: 500,
+                      }}
+                    >
+                      {row.emoji ? (
+                        <span style={{ fontSize: 14 }}>{row.emoji}</span>
+                      ) : (
+                        <span
+                          style={{
+                            width: 9,
+                            height: 9,
+                            borderRadius: 3,
+                            background: row.color,
+                            display: 'inline-block',
+                          }}
+                        />
+                      )}
+                      {row.label}
+                    </span>
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        gap: 10,
+                        alignItems: 'baseline',
+                      }}
+                    >
+                      <span className="font-mono" style={{ fontSize: 13 }}>
+                        {formatAmt(row.value, currency)}
+                      </span>
+                      <span
+                        className="font-mono text-muted-foreground"
+                        style={{ fontSize: 11.5, width: 38, textAlign: 'right' }}
+                      >
+                        {row.pct.toFixed(1)}%
+                      </span>
                     </span>
                   </div>
-                  <div className="h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+                  <div
+                    style={{
+                      height: 4,
+                      borderRadius: 2,
+                      background: 'var(--surface-2)',
+                      overflow: 'hidden',
+                    }}
+                  >
                     <div
-                      className="h-full rounded-full transition-all"
                       style={{
-                        width: `${percentage}%`,
-                        backgroundColor: cat.color,
+                        height: '100%',
+                        width: `${row.pct}%`,
+                        background: row.color,
+                        borderRadius: 2,
                       }}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {percentage.toFixed(1)}% del total
-                  </p>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </Card>
 
+      {/* Trend chart */}
       <Card className="p-6">
-        <h3 className="mb-6">Tendencia Mensual</h3>
-        <ResponsiveContainer width="100%" height={350}>
-          <BarChart data={monthData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 20,
+          }}
+        >
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+            Ingresos vs Gastos
+          </h2>
+          <div style={{ display: 'flex', gap: 18 }}>
+            {[
+              { label: 'Ingresos', color: 'var(--pos)' },
+              { label: 'Gastos', color: 'var(--neg)' },
+            ].map(({ label, color }) => (
+              <span
+                key={label}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  fontSize: 12.5,
+                  color: 'var(--text-faint)',
+                }}
+              >
+                <span
+                  style={{
+                    width: 12,
+                    height: 3,
+                    borderRadius: 2,
+                    background: color,
+                    display: 'inline-block',
+                  }}
+                />
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart
+            data={monthlyTrend}
+            margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="month"
-              stroke="var(--muted-foreground)"
-              style={{ fontSize: '0.875rem' }}
+              stroke="var(--text-faint)"
+              tick={{ fontSize: 12 }}
+              axisLine={false}
+              tickLine={false}
             />
             <YAxis
-              stroke="var(--muted-foreground)"
-              style={{ fontSize: '0.875rem' }}
-              tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+              stroke="var(--text-faint)"
+              tick={{ fontSize: 12 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={(v) => formatAmtShort(v, currency)}
+              width={70}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: 'var(--card)',
+                background: 'var(--bg)',
                 border: '1px solid var(--border)',
-                borderRadius: '0.5rem',
-                boxShadow: 'var(--shadow-lg)',
+                borderRadius: 10,
               }}
               formatter={(value: ValueType) =>
-                `$U ${Number(value).toLocaleString('es-UY', {
-                  minimumFractionDigits: 2,
-                })}`
+                formatAmt(Number(value), currency)
               }
             />
-            <Legend />
-            <Bar dataKey="ingresos" fill="var(--chart-3)" name="Ingresos" radius={[8, 8, 0, 0]} />
-            <Bar dataKey="gastos" fill="var(--chart-2)" name="Gastos" radius={[8, 8, 0, 0]} />
+            <Bar
+              dataKey="ingresos"
+              fill="var(--pos)"
+              name="Ingresos"
+              radius={[6, 6, 0, 0]}
+              opacity={0.85}
+            />
+            <Bar
+              dataKey="gastos"
+              fill="var(--neg)"
+              name="Gastos"
+              radius={[6, 6, 0, 0]}
+              opacity={0.85}
+            />
           </BarChart>
         </ResponsiveContainer>
       </Card>
 
-      <Card className="p-6">
-        <h3 className="mb-6">Comparación Ingresos vs Gastos</h3>
-        <ResponsiveContainer width="100%" height={350}>
-          <LineChart data={monthData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-            <XAxis
-              dataKey="month"
-              stroke="var(--muted-foreground)"
-              style={{ fontSize: '0.875rem' }}
-            />
-            <YAxis
-              stroke="var(--muted-foreground)"
-              style={{ fontSize: '0.875rem' }}
-              tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: '0.5rem',
-                boxShadow: 'var(--shadow-lg)',
-              }}
-              formatter={(value: ValueType) =>
-                `$U ${Number(value).toLocaleString('es-UY', {
-                  minimumFractionDigits: 2,
-                })}`
-              }
-            />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="ingresos"
-              stroke="var(--chart-3)"
-              strokeWidth={3}
-              name="Ingresos"
-              dot={{ r: 6 }}
-              activeDot={{ r: 8 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="gastos"
-              stroke="var(--chart-2)"
-              strokeWidth={3}
-              name="Gastos"
-              dot={{ r: 6 }}
-              activeDot={{ r: 8 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Top merchants */}
+      {topMerchants.length > 0 && (
         <Card className="p-6">
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Mayor Categoría</p>
-            <p className="text-2xl font-mono">{topCategory?.name ?? 'Sin datos'}</p>
-            <p className="text-sm text-muted-foreground">
-              {hasExpenseData && topCategory
-                ? `${((topCategory.value / totalExpenses) * 100).toFixed(1)}% del total`
-                : '0.0% del total'}
-            </p>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 18 }}>
+            Mayores comercios
+          </h2>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '0 36px',
+            }}
+          >
+            {topMerchants.map((m, i) => {
+              const display = getCategoryDisplay(m.catId)
+              const emoji = emojiLookup.get(m.catId)
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '11px 0',
+                    borderBottom: '1px solid var(--border)',
+                  }}
+                >
+                  <span
+                    className="font-mono text-muted-foreground"
+                    style={{ fontSize: 12, width: 16 }}
+                  >
+                    {i + 1}
+                  </span>
+                  <span
+                    style={{
+                      width: 30,
+                      height: 30,
+                      borderRadius: 8,
+                      background: display.color + '1f',
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontSize: 14,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {emoji ?? (
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: display.color,
+                          display: 'block',
+                        }}
+                      />
+                    )}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 13.5,
+                        fontWeight: 500,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {m.name}
+                    </div>
+                    <div
+                      className="text-muted-foreground"
+                      style={{ fontSize: 11.5 }}
+                    >
+                      {m.count} {m.count > 1 ? 'movimientos' : 'movimiento'}
+                    </div>
+                  </div>
+                  <span className="font-mono" style={{ fontSize: 13 }}>
+                    {formatAmt(m.total, currency)}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         </Card>
-
-        <Card className="p-6">
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Gasto Promedio Mensual</p>
-            <p className="text-2xl font-mono">
-              $U {(totalExpenses / 6).toLocaleString('es-UY', { maximumFractionDigits: 0 })}
-            </p>
-            <p className="text-sm text-muted-foreground">Últimos 6 meses</p>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Categorías Activas</p>
-            <p className="text-2xl font-mono">{categoryData.length}</p>
-            <p className="text-sm text-muted-foreground">
-              Con transacciones registradas
-            </p>
-          </div>
-        </Card>
-      </div>
+      )}
     </div>
-  );
+  )
 }
