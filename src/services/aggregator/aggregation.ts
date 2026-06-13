@@ -1,6 +1,7 @@
 import type { Currency, Transaction } from '../../models'
 import { Category } from '../../models'
 import { isTransferCategory } from '../transfers/internal-transfers'
+import { isCategoryIgnored } from '../categories/category-registry'
 
 export interface CurrencyTotals {
   USD: number
@@ -41,6 +42,10 @@ function toMonthKey(date: Date): string {
 }
 
 function applyTransaction(summary: SummaryTotals, tx: Transaction): void {
+  if (isCategoryIgnored(tx.category)) {
+    return
+  }
+
   if (isTransferCategory(tx.category)) {
     summary.count += 1
     return

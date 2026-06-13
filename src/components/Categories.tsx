@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Badge } from './ui/badge'
+import { Checkbox } from './ui/checkbox'
 import type { Transaction } from '../models'
 import { Category } from '../models'
 import { getCategoryDefinitions } from '../services/categories/category-registry'
@@ -10,6 +11,7 @@ import {
   addCustomCategoryWithSync,
   removeCustomCategoryWithSync,
   updateCustomCategoryWithSync,
+  upsertBuiltinOverrideWithSync,
 } from '../services/categories/category-store'
 import { getCategoryDisplay } from '../utils/category-display'
 import {
@@ -43,6 +45,7 @@ export function Categories({ transactions }: CategoriesProps) {
     label: '',
     color: '#0ea5e9',
     icon: '🏷️',
+    isIgnored: false,
   })
 
   const [customPatterns, setCustomPatterns] = useState(() =>
@@ -56,37 +59,51 @@ export function Categories({ transactions }: CategoriesProps) {
 
   const categoryDefinitions = getCategoryDefinitions()
   const isEditing = form.id.length > 0
+  const isEditingBuiltin =
+    isEditing &&
+    !categoryDefinitions.find((c) => c.id === form.id)?.isCustom
 
   function resetForm() {
-    setForm({ id: '', label: '', color: '#0ea5e9', icon: '🏷️' })
+    setForm({ id: '', label: '', color: '#0ea5e9', icon: '🏷️', isIgnored: false })
     setShowForm(false)
   }
 
   function openNewForm() {
-    setForm({ id: '', label: '', color: '#0ea5e9', icon: '🏷️' })
+    setForm({ id: '', label: '', color: '#0ea5e9', icon: '🏷️', isIgnored: false })
     setShowForm(true)
   }
 
   function startEdit(categoryId: string) {
     const cat = categoryDefinitions.find((c) => c.id === categoryId)
-    if (!cat?.isCustom) return
-    setForm({ id: cat.id, label: cat.label, color: cat.color, icon: cat.icon || '🏷️' })
+    if (!cat) return
+    setForm({ id: cat.id, label: cat.label, color: cat.color, icon: cat.icon || '🏷️', isIgnored: cat.isIgnored ?? false })
     setShowForm(true)
   }
 
   async function handleSave() {
     if (!form.label.trim()) return
     if (isEditing) {
-      await updateCustomCategoryWithSync(form.id, {
-        label: form.label.trim(),
-        color: form.color,
-        icon: form.icon.trim() || '🏷️',
-      })
+      const cat = categoryDefinitions.find((c) => c.id === form.id)
+      if (cat?.isCustom) {
+        await updateCustomCategoryWithSync(form.id, {
+          label: form.label.trim(),
+          color: form.color,
+          icon: form.icon.trim() || '🏷️',
+          isIgnored: form.isIgnored,
+        })
+      } else {
+        await upsertBuiltinOverrideWithSync(form.id, {
+          label: form.label.trim(),
+          color: form.color,
+          isIgnored: form.isIgnored,
+        })
+      }
     } else {
       await addCustomCategoryWithSync({
         label: form.label.trim(),
         color: form.color,
         icon: form.icon.trim() || '🏷️',
+        isIgnored: form.isIgnored,
       })
     }
     resetForm()
@@ -206,7 +223,7 @@ export function Categories({ transactions }: CategoriesProps) {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: isEditingBuiltin ? '1fr 120px' : '1fr 120px 120px', gap: 12, marginBottom: 16 }}>
             <div>
               <label
                 htmlFor="cat-label"
@@ -238,25 +255,45 @@ export function Categories({ transactions }: CategoriesProps) {
                 className="h-10"
               />
             </div>
-            <div>
-              <label
-                htmlFor="cat-icon"
-                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
-              >
-                Icono
-              </label>
-              <Input
-                id="cat-icon"
-                aria-label="Icono de categoría"
-                value={form.icon}
-                onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
-                placeholder="🏷️"
-                maxLength={2}
-              />
-            </div>
+            {!isEditingBuiltin && (
+              <div>
+                <label
+                  htmlFor="cat-icon"
+                  style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+                >
+                  Icono
+                </label>
+                <Input
+                  id="cat-icon"
+                  aria-label="Icono de categoría"
+                  value={form.icon}
+                  onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
+                  placeholder="🏷️"
+                  maxLength={2}
+                />
+              </div>
+            )}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+            <label
+              htmlFor="cat-ignored"
+              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}
+            >
+              <Checkbox
+                id="cat-ignored"
+                checked={form.isIgnored}
+                onCheckedChange={(checked) =>
+                  setForm((f) => ({ ...f, isIgnored: checked === true }))
+                }
+              />
+              <div>
+                <span style={{ fontSize: 13, fontWeight: 500 }}>Ignorar en totales</span>
+                <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 6 }}>
+                  Las transacciones de esta categoría no suman en gastos ni ingresos
+                </span>
+              </div>
+            </label>
             <Button
               onClick={() => void handleSave()}
               disabled={!form.label.trim()}
@@ -338,9 +375,17 @@ export function Categories({ transactions }: CategoriesProps) {
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
                     }}
                   >
                     {cat.label}
+                    {cat.isIgnored && (
+                      <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-faint)', background: 'var(--border)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>
+                        ignorada
+                      </span>
+                    )}
                   </div>
                   <div
                     style={{
@@ -353,25 +398,25 @@ export function Categories({ transactions }: CategoriesProps) {
                   </div>
                 </div>
 
-                {/* Edit / delete for custom categories */}
-                {cat.isCustom ? (
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button
-                      onClick={() => startEdit(cat.id)}
-                      aria-label={`Editar categoría ${cat.label}`}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--text-faint)',
-                        display: 'grid',
-                        placeItems: 'center',
-                        padding: 4,
-                        borderRadius: 6,
-                      }}
-                    >
-                      <Pencil size={13} />
-                    </button>
+                {/* Edit (all) / delete (custom only) */}
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <button
+                    onClick={() => startEdit(cat.id)}
+                    aria-label={`Editar categoría ${cat.label}`}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-faint)',
+                      display: 'grid',
+                      placeItems: 'center',
+                      padding: 4,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  {cat.isCustom && (
                     <button
                       onClick={() => void handleDelete(cat.id)}
                       aria-label={`Eliminar categoría ${cat.label}`}
@@ -388,26 +433,8 @@ export function Categories({ transactions }: CategoriesProps) {
                     >
                       <Trash size={13} />
                     </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => startEdit(cat.id)}
-                    aria-label={`Editar categoría ${cat.label}`}
-                    disabled
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'default',
-                      color: 'var(--border)',
-                      display: 'grid',
-                      placeItems: 'center',
-                      padding: 4,
-                      borderRadius: 6,
-                    }}
-                  >
-                    <Pencil size={13} />
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
             )
           })}

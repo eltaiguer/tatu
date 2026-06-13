@@ -30,6 +30,7 @@ import { CategoryBadge } from './CategoryBadge'
 import { ConfidenceBadge } from './ConfidenceBadge'
 import { Category } from '../models'
 import type { Currency, Transaction } from '../models'
+import { isCategoryIgnored } from '../services/categories/category-registry'
 import { getDescriptionOverride } from '../services/descriptions/description-overrides'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getCategoryDefinitions } from '../services/categories/category-registry'
@@ -963,7 +964,7 @@ export function Transactions({
                   return (
                 <tr
                   key={transaction.id}
-                  className="group border-b border-border hover:bg-muted/30 transition-colors"
+                  className={`group border-b border-border hover:bg-muted/30 transition-colors${isCategoryIgnored(transaction.category) ? ' opacity-50' : ''}`}
                 >
                   <td className="px-3.5 py-3 align-middle">
                     <Checkbox
@@ -1046,7 +1047,7 @@ export function Transactions({
                   </td>
                   <td className="px-3.5 py-3 text-right whitespace-nowrap">
                     <div
-                      className="font-mono"
+                      className={`font-mono${isCategoryIgnored(transaction.category) ? ' line-through' : ''}`}
                       style={{
                         color:
                           transaction.type === 'credit'
@@ -1131,7 +1132,7 @@ export function Transactions({
               const hasFriendlyOverride = displayDescription !== transaction.description
 
               return (
-            <div key={transaction.id} className="p-4 space-y-3">
+            <div key={transaction.id} className={`p-4 space-y-3${isCategoryIgnored(transaction.category) ? ' opacity-50' : ''}`}>
               <div className="flex items-start justify-between gap-3">
                 <Checkbox
                   aria-label={`Seleccionar ${displayDescription}`}
@@ -1157,7 +1158,7 @@ export function Transactions({
                     transaction.type === 'credit'
                       ? 'text-success-600'
                       : 'text-foreground'
-                  }`}
+                  }${isCategoryIgnored(transaction.category) ? ' line-through' : ''}`}
                 >
                   {transaction.type === 'credit' ? '+' : '-'}
                   {formatCurrency(transaction.amount, transaction.currency)}

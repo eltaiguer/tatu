@@ -15,7 +15,8 @@ import {
   ArrowLeftRight,
   Receipt,
   TrendingUp,
-  Ellipsis
+  Ellipsis,
+  EyeOff,
 } from 'lucide-react';
 import { getCategoryDisplay } from '../utils/category-display';
 import { getCategoryDefinition } from '../services/categories/category-registry';
@@ -42,6 +43,7 @@ const iconMap = {
   personal: UserRound,
   insurance: Shield,
   fees: Receipt,
+  ignored: EyeOff,
   uncategorized: Ellipsis,
   income: TrendingUp,
 };
@@ -54,8 +56,9 @@ export function CategoryBadge({ categoryId, showIcon = true, size = 'md' }: Cate
   const iconSize = size === 'sm' ? 12 : 14;
   const padding = size === 'sm' ? 'px-2 py-0.5' : 'px-2.5 py-1';
   const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
-  const label = categoryDefinition.isCustom ? categoryDefinition.label : category.label;
-  const color = categoryDefinition.isCustom ? categoryDefinition.color : category.color;
+  const useDefinition = categoryDefinition.isCustom || categoryDefinition.isOverridden;
+  const label = useDefinition ? categoryDefinition.label : category.label;
+  const color = useDefinition ? categoryDefinition.color : category.color;
   const customIcon = categoryDefinition.isCustom ? categoryDefinition.icon : null;
 
   return (

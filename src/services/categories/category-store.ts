@@ -3,6 +3,7 @@ export interface CustomCategory {
   label: string
   color: string
   icon?: string
+  isIgnored?: boolean
 }
 
 let _customCategories: CustomCategory[] = []
@@ -39,6 +40,7 @@ export function addCustomCategory(input: {
   label: string
   color: string
   icon?: string
+  isIgnored?: boolean
 }): CustomCategory {
   const existingIds = new Set(_customCategories.map((c) => c.id))
   const baseId = slugifyLabel(input.label) || 'custom-category'
@@ -48,6 +50,7 @@ export function addCustomCategory(input: {
     label: input.label.trim(),
     color: input.color,
     icon: input.icon,
+    isIgnored: input.isIgnored,
   }
   _customCategories = [..._customCategories, next]
   return next
@@ -55,7 +58,7 @@ export function addCustomCategory(input: {
 
 export function updateCustomCategory(
   id: string,
-  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon'>>
+  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>>
 ): void {
   _customCategories = _customCategories.map((c) =>
     c.id === id ? { ...c, ...updates } : c
@@ -83,6 +86,7 @@ export async function syncCustomCategoryToCloud(id: string): Promise<void> {
         color: category.color,
         icon: category.icon,
         isArchived: false,
+        isIgnored: category.isIgnored,
       })
     }
   } catch {
@@ -94,6 +98,7 @@ export async function addCustomCategoryWithSync(input: {
   label: string
   color: string
   icon?: string
+  isIgnored?: boolean
 }): Promise<CustomCategory> {
   const created = addCustomCategory(input)
   await syncCustomCategoryToCloud(created.id)
@@ -102,7 +107,7 @@ export async function addCustomCategoryWithSync(input: {
 
 export async function updateCustomCategoryWithSync(
   id: string,
-  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon'>>
+  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>>
 ): Promise<void> {
   updateCustomCategory(id, updates)
   const category = _customCategories.find((c) => c.id === id)
@@ -121,11 +126,42 @@ export async function updateCustomCategoryWithSync(
         color: category.color,
         icon: category.icon,
         isArchived: false,
+        isIgnored: category.isIgnored,
       })
     }
   } catch {
     // in-memory update remains applied
   }
+}
+
+export function upsertBuiltinOverride(
+  id: string,
+  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'isIgnored'>>
+): void {
+  const existing = _customCategories.find((c) => c.id === id)
+  if (existing) {
+    _customCategories = _customCategories.map((c) =>
+      c.id === id ? { ...c, ...updates } : c
+    )
+  } else {
+    _customCategories = [
+      ..._customCategories,
+      {
+        id,
+        label: updates.label ?? id,
+        color: updates.color ?? '#94a3b8',
+        isIgnored: updates.isIgnored,
+      },
+    ]
+  }
+}
+
+export async function upsertBuiltinOverrideWithSync(
+  id: string,
+  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'isIgnored'>>
+): Promise<void> {
+  upsertBuiltinOverride(id, updates)
+  await syncCustomCategoryToCloud(id)
 }
 
 export async function removeCustomCategoryWithSync(id: string): Promise<void> {

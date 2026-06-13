@@ -1,6 +1,7 @@
 import type { Currency, Transaction } from '../../models'
 import { Category } from '../../models'
 import { isTransferCategory } from '../transfers/internal-transfers'
+import { isCategoryIgnored } from '../categories/category-registry'
 
 export interface CategorySpendingDatum {
   category: string
@@ -36,7 +37,8 @@ export function buildCategorySpending(
     if (
       tx.currency !== currency ||
       tx.type !== 'debit' ||
-      isTransferCategory(tx.category)
+      isTransferCategory(tx.category) ||
+      isCategoryIgnored(tx.category)
     ) {
       return
     }
@@ -71,7 +73,7 @@ export function buildMonthlyTrends(
       return
     }
 
-    if (isTransferCategory(tx.category)) {
+    if (isTransferCategory(tx.category) || isCategoryIgnored(tx.category)) {
       return
     }
 
@@ -99,7 +101,7 @@ export function buildIncomeExpenseSummary(
         return summary
       }
 
-      if (isTransferCategory(tx.category)) {
+      if (isTransferCategory(tx.category) || isCategoryIgnored(tx.category)) {
         return summary
       }
 

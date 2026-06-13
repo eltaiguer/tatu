@@ -18,6 +18,7 @@ export type CategoryIconName =
   | 'income'
   | 'transfer'
   | 'fees'
+  | 'ignored'
   | 'uncategorized';
 
 export interface CategoryDisplay {
@@ -94,6 +95,10 @@ const MODERN_META: Record<
   [Category.Fees]: {
     icon: 'fees',
     color: CATEGORY_COLORS[Category.Fees],
+  },
+  [Category.Ignored]: {
+    icon: 'ignored',
+    color: CATEGORY_COLORS[Category.Ignored],
   },
   [Category.Uncategorized]: {
     icon: 'uncategorized',

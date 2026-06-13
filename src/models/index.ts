@@ -40,6 +40,7 @@ export {
   isExpenseCategory,
   isIncomeCategory,
   isTransferCategory,
+  isIgnoredCategory,
   getAllCategories,
   getExpenseCategories,
 } from './category'

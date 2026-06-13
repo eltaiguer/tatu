@@ -12,26 +12,41 @@ export interface CategoryDefinition {
   color: string
   icon: string
   isCustom?: boolean
+  isIgnored?: boolean
+  isOverridden?: boolean
 }
 
 const DEFAULT_CUSTOM_ICON = '🏷️'
 
 export function getCategoryDefinitions(): CategoryDefinition[] {
-  const builtin = Object.values(Category).map((category) => ({
-    id: category,
-    label: CATEGORY_LABELS[category],
-    color: CATEGORY_COLORS[category],
-    icon: CATEGORY_ICONS[category],
-    isCustom: false,
-  }))
+  const customList = listCustomCategories()
+  const builtinIds = new Set(Object.values(Category) as string[])
+  const overrideMap = new Map(
+    customList.filter((c) => builtinIds.has(c.id)).map((c) => [c.id, c])
+  )
 
-  const custom = listCustomCategories().map((category) => ({
-    id: category.id,
-    label: category.label,
-    color: category.color,
-    icon: category.icon || DEFAULT_CUSTOM_ICON,
-    isCustom: true,
-  }))
+  const builtin = Object.values(Category).map((category) => {
+    const override = overrideMap.get(category)
+    return {
+      id: category,
+      label: override?.label ?? CATEGORY_LABELS[category],
+      color: override?.color ?? CATEGORY_COLORS[category],
+      icon: CATEGORY_ICONS[category],
+      isCustom: false,
+      isIgnored: override?.isIgnored ?? (category === Category.Ignored),
+    }
+  })
+
+  const custom = customList
+    .filter((c) => !builtinIds.has(c.id))
+    .map((c) => ({
+      id: c.id,
+      label: c.label,
+      color: c.color,
+      icon: c.icon || DEFAULT_CUSTOM_ICON,
+      isCustom: true,
+      isIgnored: c.isIgnored ?? false,
+    }))
 
   return [...builtin, ...custom]
 }
@@ -52,11 +67,14 @@ export function getCategoryDefinition(
 
   if (Object.values(Category).includes(id as Category)) {
     const category = id as Category
+    const override = listCustomCategories().find((c) => c.id === id)
     return {
       id: category,
-      label: CATEGORY_LABELS[category],
-      color: CATEGORY_COLORS[category],
+      label: override?.label ?? CATEGORY_LABELS[category],
+      color: override?.color ?? CATEGORY_COLORS[category],
       icon: CATEGORY_ICONS[category],
+      isIgnored: override?.isIgnored ?? (category === Category.Ignored),
+      isOverridden: !!override,
     }
   }
 
@@ -71,5 +89,13 @@ export function getCategoryDefinition(
     color: custom.color,
     icon: custom.icon || DEFAULT_CUSTOM_ICON,
     isCustom: true,
+    isIgnored: custom.isIgnored ?? false,
   }
+}
+
+export function isCategoryIgnored(id: string | undefined): boolean {
+  if (!id) return false
+  const override = listCustomCategories().find((c) => c.id === id)
+  if (override?.isIgnored !== undefined) return override.isIgnored
+  return id === Category.Ignored
 }

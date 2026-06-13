@@ -13,6 +13,7 @@ import type { Transaction, Currency, TransactionsFilter } from '../models'
 import { useMemo, useState } from 'react'
 import { getCategoryDisplay } from '../utils/category-display'
 import { isTransferCategory } from '../services/transfers/internal-transfers'
+import { isCategoryIgnored } from '../services/categories/category-registry'
 
 function toSafeNumber(value: number): number {
   return Number.isFinite(value) ? value : 0
@@ -34,11 +35,11 @@ function calculateSummary(transactions: Transaction[], currency?: Currency) {
     : transactions
 
   const income = filtered
-    .filter((tx) => tx.type === 'credit' && !isTransferCategory(tx.category))
+    .filter((tx) => tx.type === 'credit' && !isTransferCategory(tx.category) && !isCategoryIgnored(tx.category))
     .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
 
   const expenses = filtered
-    .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
+    .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category) && !isCategoryIgnored(tx.category))
     .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
 
   return {
@@ -153,7 +154,7 @@ export function Dashboard({
         : thisMonthTransactions.filter((tx) => tx.currency === 'UYU')
 
     const debits = slice.filter(
-      (tx) => tx.type === 'debit' && !isTransferCategory(tx.category),
+      (tx) => tx.type === 'debit' && !isTransferCategory(tx.category) && !isCategoryIgnored(tx.category),
     )
     const total = debits.reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
     const byCategory = new Map<string, number>()

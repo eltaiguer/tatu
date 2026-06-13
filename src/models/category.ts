@@ -26,6 +26,7 @@ export enum Category {
   Income = 'income',
   Transfer = 'transfer',
   Fees = 'fees',
+  Ignored = 'ignored',
 
   // Default
   Uncategorized = 'uncategorized',
@@ -51,6 +52,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   [Category.Income]: 'Ingresos',
   [Category.Transfer]: 'Transferencias',
   [Category.Fees]: 'Comisiones',
+  [Category.Ignored]: 'Ignorada',
   [Category.Uncategorized]: 'Sin categoría',
 }
 
@@ -74,6 +76,7 @@ export const CATEGORY_ICONS: Record<Category, string> = {
   [Category.Income]: '💰',
   [Category.Transfer]: '💸',
   [Category.Fees]: '💳',
+  [Category.Ignored]: '🚫',
   [Category.Uncategorized]: '❓',
 }
 
@@ -97,6 +100,7 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   [Category.Income]: '#16a34a',
   [Category.Transfer]: '#0284c7',
   [Category.Fees]: '#fb7185',
+  [Category.Ignored]: '#94a3b8',
   [Category.Uncategorized]: '#94a3b8',
 }
 
@@ -107,6 +111,7 @@ export function isExpenseCategory(category: Category): boolean {
   return (
     category !== Category.Income &&
     category !== Category.Transfer &&
+    category !== Category.Ignored &&
     category !== Category.Uncategorized
   )
 }
@@ -126,6 +131,13 @@ export function isTransferCategory(category: Category): boolean {
 }
 
 /**
+ * Helper to check if a category is ignored (excluded from all totals)
+ */
+export function isIgnoredCategory(category: string | undefined): boolean {
+  return (category ?? '').trim() === Category.Ignored
+}
+
+/**
  * Get all available categories
  */
 export function getAllCategories(): Category[] {
@@ -140,6 +152,7 @@ export function getExpenseCategories(): Category[] {
     (cat) =>
       cat !== Category.Income &&
       cat !== Category.Transfer &&
+      cat !== Category.Ignored &&
       cat !== Category.Uncategorized
   )
 }
