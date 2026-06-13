@@ -1079,8 +1079,10 @@ function App() {
           {currentView === 'overview' && (
               <Dashboard
                 transactions={transactions}
+                userName={session?.user?.email ?? undefined}
                 onNavigateToImport={() => setImportOpen(true)}
                 onNavigateToTransactions={navigateToTransactions}
+                onNavigateToAnalysis={() => setCurrentView('analysis')}
               />
             )}
             {currentView === 'transactions' && (

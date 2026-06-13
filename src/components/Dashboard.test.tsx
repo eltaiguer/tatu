@@ -41,7 +41,9 @@ describe('Dashboard', () => {
 
     render(<Dashboard transactions={transactions} />)
 
+    // USD income appears as secondary in "Este mes" panel (since > 0)
     expect(screen.getByText('US$ 200,00')).toBeInTheDocument()
+    // USD expense appears as secondary in "Este mes" panel (since > 0)
     expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
   })
 

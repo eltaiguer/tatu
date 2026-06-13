@@ -16,7 +16,7 @@ describe('App', () => {
   it('renders overview (dashboard) view by default', () => {
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: 'Bienvenido a Tatú' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /Hola/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Empezá importando tu extracto' })).toBeInTheDocument()
   })
 
@@ -165,8 +165,8 @@ describe('App', () => {
     ])
 
     render(<App />)
-    // Click top category card to deep-link
-    const topCategoryLink = screen.getByText(/Alimentación|Restaurantes/)
+    // Click top category row to deep-link (Alimentación = groceries, highest amount)
+    const topCategoryLink = screen.getByText('Alimentación')
     fireEvent.click(topCategoryLink)
 
     expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()

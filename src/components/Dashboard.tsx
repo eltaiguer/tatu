@@ -1,247 +1,256 @@
-// Dashboard - Main overview with summary cards
+// Dashboard - Overview with account cards and monthly summary
 
-import { Card } from './ui/card';
-import { Button } from './ui/button';
-import { TrendingUp, TrendingDown, Wallet, CreditCard, DollarSign, Landmark, Upload, X } from 'lucide-react';
-import type { Transaction, Currency, TransactionsFilter } from '../models';
-import { useMemo, useState } from 'react';
-import { filterByPeriod, generatePeriodOptions } from '../utils/date-utils';
-import { getCategoryDisplay } from '../utils/category-display';
-import { isTransferCategory } from '../services/transfers/internal-transfers';
+import { Card } from './ui/card'
+import { Button } from './ui/button'
+import {
+  CreditCard,
+  DollarSign,
+  Landmark,
+  Upload,
+  ArrowRight,
+} from 'lucide-react'
+import type { Transaction, Currency, TransactionsFilter } from '../models'
+import { useMemo, useState } from 'react'
+import { getCategoryDisplay } from '../utils/category-display'
+import { isTransferCategory } from '../services/transfers/internal-transfers'
 
 function toSafeNumber(value: number): number {
-  return Number.isFinite(value) ? value : 0;
+  return Number.isFinite(value) ? value : 0
 }
 
 function formatCurrency(amount: number, currency: Currency): string {
-  const absAmount = Math.abs(toSafeNumber(amount));
+  const absAmount = Math.abs(toSafeNumber(amount))
   const formatted = new Intl.NumberFormat('es-UY', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(absAmount);
-
-  const symbol = currency === 'UYU' ? '$U' : 'US$';
-  return `${symbol} ${formatted}`;
+  }).format(absAmount)
+  const symbol = currency === 'UYU' ? '$U' : 'US$'
+  return `${symbol} ${formatted}`
 }
 
 function calculateSummary(transactions: Transaction[], currency?: Currency) {
   const filtered = currency
     ? transactions.filter((tx) => tx.currency === currency)
-    : transactions;
+    : transactions
 
   const income = filtered
     .filter((tx) => tx.type === 'credit' && !isTransferCategory(tx.category))
-    .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0);
+    .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
 
   const expenses = filtered
     .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
-    .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0);
+    .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
 
   return {
     income: toSafeNumber(income),
     expenses: toSafeNumber(expenses),
     balance: toSafeNumber(income - expenses),
     transactionCount: filtered.length,
-  };
-}
-
-function findTopExpense(transactions: Transaction[]): Transaction | null {
-  const debits = transactions.filter(
-    (tx) =>
-      tx.type === 'debit' &&
-      Number.isFinite(tx.amount) &&
-      !isTransferCategory(tx.category)
-  );
-
-  if (debits.length === 0) {
-    return null;
   }
-
-  return debits.reduce((max, tx) => (tx.amount > max.amount ? tx : max), debits[0]);
-}
-
-function getTopCategory(transactions: Transaction[]): {
-  category: string;
-  amount: number;
-  percentage: number;
-} | null {
-  const debits = transactions.filter(
-    (tx) =>
-      tx.type === 'debit' &&
-      Number.isFinite(tx.amount) &&
-      !isTransferCategory(tx.category)
-  );
-
-  if (debits.length === 0) {
-    return null;
-  }
-
-  const totals = new Map<string, number>();
-  debits.forEach((tx) => {
-    const category = tx.category ?? 'uncategorized';
-    totals.set(category, (totals.get(category) ?? 0) + toSafeNumber(tx.amount));
-  });
-
-  let top = { category: 'uncategorized', amount: 0 };
-  totals.forEach((amount, category) => {
-    if (amount > top.amount) {
-      top = { category, amount };
-    }
-  });
-
-  const totalAmount = debits.reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0);
-  const percentage = totalAmount > 0 ? (top.amount / totalAmount) * 100 : 0;
-
-  return {
-    category: top.category,
-    amount: top.amount,
-    percentage,
-  };
 }
 
 interface DashboardProps {
-  transactions: Transaction[];
-  onNavigateToImport?: () => void;
-  onNavigateToTransactions?: (filter: TransactionsFilter) => void;
+  transactions: Transaction[]
+  userName?: string
+  onNavigateToImport?: () => void
+  onNavigateToTransactions?: (filter: TransactionsFilter) => void
+  onNavigateToAnalysis?: () => void
 }
 
-export function Dashboard({ transactions, onNavigateToImport, onNavigateToTransactions }: DashboardProps) {
-  const selectedCurrency: Currency | 'all' = 'all'
-  const selectedPeriodId = 'all'
+type CurrencyFilter = Currency | 'all'
 
-  const periodOptions = useMemo(() => {
-    const dates = transactions.map((tx) => tx.date);
-    return generatePeriodOptions(dates);
-  }, [transactions]);
+export function Dashboard({
+  transactions,
+  userName,
+  onNavigateToImport,
+  onNavigateToTransactions,
+  onNavigateToAnalysis,
+}: DashboardProps) {
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyFilter>('all')
 
-  const selectedPeriod = useMemo(
-    () => periodOptions.find((option) => option.id === selectedPeriodId) || periodOptions[0],
-    [periodOptions, selectedPeriodId]
-  );
+  const hasTransactions = transactions.length > 0
 
-  const filteredTransactions = useMemo(() => {
-    if (!selectedPeriod) {
-      return transactions;
-    }
+  // Reference month from latest transaction date — not current clock
+  const latestDate = useMemo(() => {
+    if (transactions.length === 0) return new Date()
+    return transactions.reduce(
+      (latest, tx) => (tx.date > latest ? tx.date : latest),
+      transactions[0].date,
+    )
+  }, [transactions])
 
-    return filterByPeriod(
-      transactions,
-      'date',
-      selectedPeriod.period,
-      selectedPeriod.referenceDate
-    );
-  }, [transactions, selectedPeriod]);
+  const monthLabel = useMemo(
+    () => latestDate.toLocaleDateString('es-UY', { month: 'long', year: 'numeric' }),
+    [latestDate],
+  )
 
-  const allSummary = useMemo(
-    () => calculateSummary(filteredTransactions),
-    [filteredTransactions]
-  );
-  const uyuSummary = useMemo(
-    () => calculateSummary(filteredTransactions, 'UYU'),
-    [filteredTransactions]
-  );
-  const usdSummary = useMemo(
-    () => calculateSummary(filteredTransactions, 'USD'),
-    [filteredTransactions]
-  );
+  const thisMonthTransactions = useMemo(() => {
+    const y = latestDate.getFullYear()
+    const m = latestDate.getMonth()
+    return transactions.filter((tx) => {
+      const d = tx.date
+      return d.getFullYear() === y && d.getMonth() === m
+    })
+  }, [transactions, latestDate])
 
-  const currencyFilteredTransactions = useMemo(
-    () =>
-      selectedCurrency === 'all'
-        ? filteredTransactions
-        : filteredTransactions.filter((tx) => tx.currency === selectedCurrency),
-    [filteredTransactions, selectedCurrency]
-  );
-
-  const summary = selectedCurrency === 'all'
-    ? allSummary
-    : selectedCurrency === 'UYU'
-      ? uyuSummary
-      : usdSummary;
-
-  const debitCount = currencyFilteredTransactions.filter(
-    (tx) => tx.type === 'debit' && !isTransferCategory(tx.category)
-  ).length;
-  const averageExpense = debitCount > 0 ? summary.expenses / debitCount : 0;
-  const currencyLabel = selectedCurrency === 'all' ? 'multimoneda' : selectedCurrency;
-
-  const topExpense = useMemo(
-    () => findTopExpense(currencyFilteredTransactions),
-    [currencyFilteredTransactions]
-  );
-  const topCategory = useMemo(
-    () => getTopCategory(currencyFilteredTransactions),
-    [currencyFilteredTransactions]
-  );
-  const topCategoryDisplay = topCategory
-    ? getCategoryDisplay(topCategory.category)
-    : getCategoryDisplay();
-
+  // Per-source account summaries
   const creditCardTransactions = useMemo(
-    () => filteredTransactions.filter((tx) => tx.source === 'credit_card'),
-    [filteredTransactions]
-  );
-  const creditCardSummary = useMemo(
-    () => calculateSummary(creditCardTransactions),
-    [creditCardTransactions]
-  );
+    () => transactions.filter((tx) => tx.source === 'credit_card'),
+    [transactions],
+  )
   const creditCardSummaryUYU = useMemo(
     () => calculateSummary(creditCardTransactions, 'UYU'),
-    [creditCardTransactions]
-  );
+    [creditCardTransactions],
+  )
   const creditCardSummaryUSD = useMemo(
     () => calculateSummary(creditCardTransactions, 'USD'),
-    [creditCardTransactions]
-  );
+    [creditCardTransactions],
+  )
 
   const usdBankTransactions = useMemo(
-    () => filteredTransactions.filter((tx) => tx.source === 'bank_account' && tx.currency === 'USD'),
-    [filteredTransactions]
+    () =>
+      transactions.filter(
+        (tx) => tx.source === 'bank_account' && tx.currency === 'USD',
+      ),
+    [transactions],
   )
   const usdBankSummary = useMemo(
     () => calculateSummary(usdBankTransactions, 'USD'),
-    [usdBankTransactions]
+    [usdBankTransactions],
   )
 
   const uyuBankTransactions = useMemo(
-    () => filteredTransactions.filter((tx) => tx.source === 'bank_account' && tx.currency === 'UYU'),
-    [filteredTransactions]
-  );
+    () =>
+      transactions.filter(
+        (tx) => tx.source === 'bank_account' && tx.currency === 'UYU',
+      ),
+    [transactions],
+  )
   const uyuBankSummary = useMemo(
     () => calculateSummary(uyuBankTransactions, 'UYU'),
-    [uyuBankTransactions]
-  );
-
-  const hasTransactions = transactions.length > 0;
-
-  const [bannerDismissed, setBannerDismissed] = useState(
-    () => localStorage.getItem('tatu:welcomeBannerDismissed') === 'true'
+    [uyuBankTransactions],
   )
 
-  function dismissBanner() {
-    localStorage.setItem('tatu:welcomeBannerDismissed', 'true')
-    setBannerDismissed(true)
-  }
+  // "Este mes" panel summaries
+  const thisMonthSummaryUYU = useMemo(
+    () => calculateSummary(thisMonthTransactions, 'UYU'),
+    [thisMonthTransactions],
+  )
+  const thisMonthSummaryUSD = useMemo(
+    () => calculateSummary(thisMonthTransactions, 'USD'),
+    [thisMonthTransactions],
+  )
+
+  const panelCurrency: Currency = selectedCurrency === 'USD' ? 'USD' : 'UYU'
+  const panelSummary =
+    selectedCurrency === 'USD' ? thisMonthSummaryUSD : thisMonthSummaryUYU
+
+  // Top-5 category breakdown for selected currency (defaults to UYU in 'all' mode)
+  const categoryBreakdown = useMemo(() => {
+    const slice =
+      selectedCurrency === 'USD'
+        ? thisMonthTransactions.filter((tx) => tx.currency === 'USD')
+        : thisMonthTransactions.filter((tx) => tx.currency === 'UYU')
+
+    const debits = slice.filter(
+      (tx) => tx.type === 'debit' && !isTransferCategory(tx.category),
+    )
+    const total = debits.reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
+    const byCategory = new Map<string, number>()
+    debits.forEach((tx) => {
+      const cat = tx.category ?? 'uncategorized'
+      byCategory.set(cat, (byCategory.get(cat) ?? 0) + toSafeNumber(tx.amount))
+    })
+
+    return Array.from(byCategory.entries())
+      .map(([cat, amount]) => ({
+        category: cat,
+        amount,
+        pct: total > 0 ? (amount / total) * 100 : 0,
+        display: getCategoryDisplay(cat),
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5)
+  }, [thisMonthTransactions, selectedCurrency])
+
+  const recentTransactions = useMemo(
+    () =>
+      [...transactions]
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
+        .slice(0, 6),
+    [transactions],
+  )
+
+  const firstName = userName ? userName.split('@')[0] : null
+  const greeting = firstName ? `Hola, ${firstName} 👋` : 'Hola 👋'
+  const summaryLabel =
+    selectedCurrency === 'USD' ? 'Este mes en dólares' : 'Este mes en pesos'
 
   return (
     <div className="space-y-6">
-      {!bannerDismissed && (
-        <div className="relative bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 rounded-2xl p-6 md:p-8 border border-primary/20">
-          <button
-            onClick={dismissBanner}
-            aria-label="Cerrar bienvenida"
-            className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+      {/* Page header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
+            {greeting}
+          </h1>
+          <p
+            className="text-muted-foreground"
+            style={{ fontSize: 14 }}
           >
-            <X size={18} />
-          </button>
-          <h1 className="mb-2">Bienvenido a Tatú</h1>
-          <p className="text-muted-foreground max-w-2xl">
-            Tu gestor de gastos inteligente. Monitoreá tus finanzas, descubrí patrones de gasto y
-            tomá decisiones informadas con datos de tus cuentas Santander Uruguay.
+            Esto es lo que pasó en tus cuentas Santander · {monthLabel}
           </p>
         </div>
-      )}
+        {hasTransactions && (
+          <div
+            style={{
+              display: 'flex',
+              background: 'var(--surface-2)',
+              borderRadius: 10,
+              padding: 3,
+              gap: 2,
+            }}
+          >
+            {(['all', 'UYU', 'USD'] as const).map((val) => (
+              <button
+                key={val}
+                onClick={() => setSelectedCurrency(val)}
+                style={{
+                  padding: '5px 14px',
+                  borderRadius: 7,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  background:
+                    selectedCurrency === val ? 'var(--bg)' : 'transparent',
+                  color:
+                    selectedCurrency === val
+                      ? 'var(--text)'
+                      : 'var(--text-faint)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  boxShadow:
+                    selectedCurrency === val
+                      ? '0 1px 3px rgba(0,0,0,.08)'
+                      : 'none',
+                }}
+              >
+                {val === 'all' ? 'Todo' : val === 'UYU' ? '$U' : 'US$'}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
+      {/* Empty state */}
       {!hasTransactions && (
         <Card className="p-8 text-center space-y-4">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
@@ -250,7 +259,8 @@ export function Dashboard({ transactions, onNavigateToImport, onNavigateToTransa
           <div>
             <h2 className="mb-2">Empezá importando tu extracto</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Arrastrá tu archivo CSV de Santander Uruguay para ver tu dashboard con ingresos, gastos y estadísticas.
+              Arrastrá tu archivo CSV de Santander Uruguay para ver tu dashboard
+              con ingresos, gastos y estadísticas.
             </p>
           </div>
           {onNavigateToImport && (
@@ -262,220 +272,553 @@ export function Dashboard({ transactions, onNavigateToImport, onNavigateToTransa
         </Card>
       )}
 
-      {hasTransactions && (<>
-      <div>
-        <h2 className="mb-1">Panel General</h2>
-        <p className="text-muted-foreground">Resumen de tu actividad financiera</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="p-6 border-l-4 border-l-success-500">
-          <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-success-50 dark:bg-success-900/20">
-              <TrendingUp className="text-success-600" size={24} />
-            </div>
-            <span className="text-xs text-success-600 bg-success-50 dark:bg-success-900/20 px-2 py-1 rounded-full">
-              {currencyLabel}
-            </span>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Ingresos</p>
-            <p className="font-mono tracking-tight">
-              {selectedCurrency === 'all' ? (
-                <>
-                  <span className="block">{formatCurrency(uyuSummary.income, 'UYU')}</span>
-                  <span className="block text-muted-foreground">{formatCurrency(usdSummary.income, 'USD')}</span>
-                </>
-              ) : (
-                formatCurrency(summary.income, selectedCurrency as Currency)
-              )}
-            </p>
-          </div>
-        </Card>
-
-        <Card className="p-6 border-l-4 border-l-destructive">
-          <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-red-50 dark:bg-red-900/20">
-              <TrendingDown className="text-destructive" size={24} />
-            </div>
-            <span className="text-xs text-destructive bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-full">
-              {debitCount} débitos
-            </span>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Gastos</p>
-            <p className="font-mono tracking-tight">
-              {selectedCurrency === 'all' ? (
-                <>
-                  <span className="block">{formatCurrency(uyuSummary.expenses, 'UYU')}</span>
-                  <span className="block text-muted-foreground">{formatCurrency(usdSummary.expenses, 'USD')}</span>
-                </>
-              ) : (
-                formatCurrency(summary.expenses, selectedCurrency as Currency)
-              )}
-            </p>
-          </div>
-        </Card>
-
-        <Card className="p-6 border-l-4 border-l-primary">
-          <div className="flex items-start justify-between mb-3">
-            <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/20">
-              <Wallet className="text-primary" size={24} />
-            </div>
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
-              Balance
-            </span>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Saldo</p>
-            <p className="font-mono tracking-tight">
-              {selectedCurrency === 'all' ? (
-                <>
-                  <span className="block">{formatCurrency(uyuSummary.balance, 'UYU')}</span>
-                  <span className="block text-muted-foreground">{formatCurrency(usdSummary.balance, 'USD')}</span>
-                </>
-              ) : (
-                formatCurrency(summary.balance, selectedCurrency as Currency)
-              )}
-            </p>
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card
-          className={`p-6${onNavigateToTransactions ? ' cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all' : ''}`}
-          onClick={onNavigateToTransactions ? () => onNavigateToTransactions({ accountType: 'credit_card' }) : undefined}
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-accent-50 dark:bg-accent-900/20">
-              <CreditCard className="text-accent" size={20} />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold">Tarjeta de Crédito</h3>
-              <p className="text-xs text-muted-foreground">Santander Mastercard</p>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between items-baseline">
-              <span className="text-sm text-muted-foreground">Consumido</span>
-              <div className="font-mono text-right">
-                {selectedCurrency === 'all' ? (
-                  <>
-                    <span className="block">
-                      {formatCurrency(creditCardSummaryUYU.expenses, 'UYU')}
-                    </span>
-                    <span className="block text-muted-foreground">
+      {hasTransactions && (
+        <>
+          {/* 3 Account cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card
+              className={onNavigateToTransactions ? 'p-5 cursor-pointer' : 'p-5'}
+              onClick={
+                onNavigateToTransactions
+                  ? () => onNavigateToTransactions({ accountType: 'credit_card' })
+                  : undefined
+              }
+              style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: 'var(--surface-2)',
+                    color: 'var(--brand)',
+                    display: 'grid',
+                    placeItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <CreditCard size={18} />
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>
+                    Tarjeta de Crédito
+                  </div>
+                  <div
+                    className="text-muted-foreground"
+                    style={{ fontSize: 12 }}
+                  >
+                    Santander Mastercard
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div
+                  className="text-muted-foreground"
+                  style={{ fontSize: 12, fontWeight: 500 }}
+                >
+                  Consumo del período
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <div
+                    className="font-mono"
+                    style={{ fontSize: 22, color: 'var(--neg)' }}
+                  >
+                    {formatCurrency(creditCardSummaryUYU.expenses, 'UYU')}
+                  </div>
+                  {creditCardSummaryUSD.expenses > 0 && (
+                    <div
+                      className="font-mono text-muted-foreground"
+                      style={{ fontSize: 14, marginTop: 2 }}
+                    >
                       {formatCurrency(creditCardSummaryUSD.expenses, 'USD')}
-                    </span>
-                  </>
-                ) : (
-                  formatCurrency(creditCardSummary.expenses, selectedCurrency as Currency)
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div
+                className="text-muted-foreground"
+                style={{
+                  fontSize: 12,
+                  marginTop: 'auto',
+                  paddingTop: 8,
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                {creditCardTransactions.length} movimientos este período
+              </div>
+            </Card>
+
+            <Card
+              className={onNavigateToTransactions ? 'p-5 cursor-pointer' : 'p-5'}
+              onClick={
+                onNavigateToTransactions
+                  ? () =>
+                      onNavigateToTransactions({
+                        accountType: 'bank_account',
+                        currency: 'USD',
+                      })
+                  : undefined
+              }
+              style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: 'var(--surface-2)',
+                    color: 'var(--brand)',
+                    display: 'grid',
+                    placeItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <DollarSign size={18} />
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>
+                    Cuenta en Dólares
+                  </div>
+                  <div
+                    className="text-muted-foreground"
+                    style={{ fontSize: 12 }}
+                  >
+                    Caja de ahorro USD
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div
+                  className="text-muted-foreground"
+                  style={{ fontSize: 12, fontWeight: 500 }}
+                >
+                  Saldo disponible
+                </div>
+                <div
+                  className="font-mono"
+                  style={{
+                    fontSize: 24,
+                    marginTop: 4,
+                    color:
+                      usdBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)',
+                  }}
+                >
+                  {formatCurrency(usdBankSummary.balance, 'USD')}
+                </div>
+              </div>
+              <div
+                className="text-muted-foreground"
+                style={{
+                  fontSize: 12,
+                  marginTop: 'auto',
+                  paddingTop: 8,
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                {usdBankTransactions.length} movimientos este período
+              </div>
+            </Card>
+
+            <Card
+              className={onNavigateToTransactions ? 'p-5 cursor-pointer' : 'p-5'}
+              onClick={
+                onNavigateToTransactions
+                  ? () =>
+                      onNavigateToTransactions({
+                        accountType: 'bank_account',
+                        currency: 'UYU',
+                      })
+                  : undefined
+              }
+              style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    background: 'var(--surface-2)',
+                    color: 'var(--brand)',
+                    display: 'grid',
+                    placeItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <Landmark size={18} />
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>
+                    Cuenta en Pesos
+                  </div>
+                  <div
+                    className="text-muted-foreground"
+                    style={{ fontSize: 12 }}
+                  >
+                    Caja de ahorro UYU
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div
+                  className="text-muted-foreground"
+                  style={{ fontSize: 12, fontWeight: 500 }}
+                >
+                  Saldo disponible
+                </div>
+                <div
+                  className="font-mono"
+                  style={{
+                    fontSize: 24,
+                    marginTop: 4,
+                    color:
+                      uyuBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)',
+                  }}
+                >
+                  {formatCurrency(uyuBankSummary.balance, 'UYU')}
+                </div>
+              </div>
+              <div
+                className="text-muted-foreground"
+                style={{
+                  fontSize: 12,
+                  marginTop: 'auto',
+                  paddingTop: 8,
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                {uyuBankTransactions.length} movimientos este período
+              </div>
+            </Card>
+          </div>
+
+          {/* Este mes panel */}
+          <Card className="p-6">
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 20,
+              }}
+            >
+              <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+                {summaryLabel}
+              </h2>
+              {onNavigateToAnalysis && (
+                <button
+                  onClick={onNavigateToAnalysis}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 13,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--brand)',
+                    fontWeight: 500,
+                  }}
+                >
+                  Ver análisis completo <ArrowRight size={14} />
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-6">
+              <div>
+                <div
+                  className="text-muted-foreground"
+                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
+                >
+                  Ingresos
+                </div>
+                <div
+                  className="font-mono"
+                  style={{ fontSize: 22, color: 'var(--pos)' }}
+                >
+                  {formatCurrency(panelSummary.income, panelCurrency)}
+                </div>
+                {selectedCurrency === 'all' && thisMonthSummaryUSD.income > 0 && (
+                  <div
+                    className="font-mono text-muted-foreground"
+                    style={{ fontSize: 13, marginTop: 2 }}
+                  >
+                    {formatCurrency(thisMonthSummaryUSD.income, 'USD')}
+                  </div>
                 )}
               </div>
-            </div>
-            {selectedCurrency === 'all' && (
-              <div className="flex justify-between text-xs text-muted-foreground mt-3">
-                <span>{creditCardSummary.transactionCount} movimientos</span>
-                <span>{debitCount} débitos totales</span>
+              <div>
+                <div
+                  className="text-muted-foreground"
+                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
+                >
+                  Gastos
+                </div>
+                <div
+                  className="font-mono"
+                  style={{ fontSize: 22, color: 'var(--neg)' }}
+                >
+                  {formatCurrency(panelSummary.expenses, panelCurrency)}
+                </div>
+                {selectedCurrency === 'all' &&
+                  thisMonthSummaryUSD.expenses > 0 && (
+                    <div
+                      className="font-mono text-muted-foreground"
+                      style={{ fontSize: 13, marginTop: 2 }}
+                    >
+                      {formatCurrency(thisMonthSummaryUSD.expenses, 'USD')}
+                    </div>
+                  )}
               </div>
-            )}
-          </div>
-        </Card>
+              <div>
+                <div
+                  className="text-muted-foreground"
+                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
+                >
+                  Balance neto
+                </div>
+                <div
+                  className="font-mono"
+                  style={{
+                    fontSize: 22,
+                    color:
+                      panelSummary.balance >= 0 ? 'var(--pos)' : 'var(--neg)',
+                  }}
+                >
+                  {panelSummary.balance >= 0 ? '+' : '−'}
+                  {formatCurrency(Math.abs(panelSummary.balance), panelCurrency)}
+                </div>
+                <div
+                  className="text-muted-foreground"
+                  style={{ fontSize: 12, marginTop: 8 }}
+                >
+                  {thisMonthTransactions.length} transacciones registradas
+                </div>
+              </div>
+            </div>
+          </Card>
 
-        <Card
-          className={`p-6${onNavigateToTransactions ? ' cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all' : ''}`}
-          onClick={onNavigateToTransactions ? () => onNavigateToTransactions({ accountType: 'bank_account', currency: 'USD' }) : undefined}
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/20">
-              <DollarSign className="text-primary" size={20} />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold">Cuenta en Dólares</h3>
-              <p className="text-xs text-muted-foreground">Caja de ahorro USD</p>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between items-baseline">
-              <span className="text-sm text-muted-foreground">Saldo disponible</span>
-              <span className="font-mono">{formatCurrency(usdBankSummary.balance, 'USD')}</span>
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground mt-3">
-              <span>{usdBankTransactions.length} movimientos USD</span>
-              <span>{filteredTransactions.length} totales</span>
-            </div>
-          </div>
-        </Card>
+          {/* Two-column: categories + recent transactions */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card className="p-6">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 18,
+                }}
+              >
+                <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
+                  Gasto por categoría
+                </h2>
+                {onNavigateToAnalysis && (
+                  <button
+                    onClick={onNavigateToAnalysis}
+                    style={{
+                      fontSize: 13,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--brand)',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Detalle
+                  </button>
+                )}
+              </div>
+              {categoryBreakdown.length === 0 ? (
+                <p
+                  className="text-muted-foreground"
+                  style={{ fontSize: 13 }}
+                >
+                  Sin gastos registrados este mes.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {categoryBreakdown.map((row) => (
+                    <div
+                      key={row.category}
+                      onClick={() =>
+                        onNavigateToTransactions?.({ category: row.category })
+                      }
+                      style={{
+                        cursor: onNavigateToTransactions ? 'pointer' : 'default',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'baseline',
+                          marginBottom: 5,
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 7,
+                            fontSize: 13.5,
+                            fontWeight: 500,
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 9,
+                              height: 9,
+                              borderRadius: 3,
+                              background: row.display.color,
+                              display: 'inline-block',
+                              flexShrink: 0,
+                            }}
+                          />
+                          {row.display.label}
+                        </span>
+                        <span
+                          className="font-mono"
+                          style={{ fontSize: 13 }}
+                        >
+                          {formatCurrency(row.amount, panelCurrency)}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          height: 4,
+                          borderRadius: 2,
+                          background: 'var(--surface-2)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${row.pct}%`,
+                            background: row.display.color,
+                            borderRadius: 2,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
 
-        <Card
-          className={`p-6${onNavigateToTransactions ? ' cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all' : ''}`}
-          onClick={onNavigateToTransactions ? () => onNavigateToTransactions({ accountType: 'bank_account', currency: 'UYU' }) : undefined}
-        >
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-success-50 dark:bg-success-900/20">
-              <Landmark className="text-success-600" size={20} />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold">Cuenta en Pesos</h3>
-              <p className="text-xs text-muted-foreground">Caja de ahorro UYU</p>
-            </div>
+            <Card className="p-6">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 14,
+                }}
+              >
+                <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
+                  Movimientos recientes
+                </h2>
+                {onNavigateToTransactions && (
+                  <button
+                    onClick={() => onNavigateToTransactions({})}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: 13,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--brand)',
+                      fontWeight: 500,
+                    }}
+                  >
+                    Ver todos <ArrowRight size={14} />
+                  </button>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {recentTransactions.map((tx, i) => {
+                  const display = getCategoryDisplay(tx.category ?? 'uncategorized')
+                  const isCredit = tx.type === 'credit'
+                  return (
+                    <div
+                      key={tx.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        padding: '10px 0',
+                        borderBottom:
+                          i < recentTransactions.length - 1
+                            ? '1px solid var(--border)'
+                            : 'none',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 9,
+                          background: display.color + '1f',
+                          display: 'grid',
+                          placeItems: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: '50%',
+                            background: display.color,
+                            display: 'block',
+                          }}
+                        />
+                      </span>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div
+                          style={{
+                            fontSize: 13.5,
+                            fontWeight: 500,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {tx.description}
+                        </div>
+                        <div
+                          className="text-muted-foreground"
+                          style={{ fontSize: 11.5 }}
+                        >
+                          {tx.date.toLocaleDateString('es-UY', {
+                            day: 'numeric',
+                            month: 'short',
+                          })}
+                        </div>
+                      </div>
+                      <span
+                        className="font-mono"
+                        style={{
+                          fontSize: 13.5,
+                          color: isCredit ? 'var(--pos)' : 'var(--text)',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {isCredit ? '+' : '−'}
+                        {formatCurrency(tx.amount, tx.currency)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
           </div>
-          <div className="space-y-2">
-            <div className="flex justify-between items-baseline">
-              <span className="text-sm text-muted-foreground">Saldo disponible</span>
-              <span className="font-mono">{formatCurrency(uyuBankSummary.balance, 'UYU')}</span>
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground mt-3">
-              <span>{uyuBankTransactions.length} movimientos UYU</span>
-              <span>{filteredTransactions.length} totales</span>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <Card className="p-6">
-        <h3 className="mb-4">Estadísticas Rápidas</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">Transacciones</p>
-            <p className="font-mono">{summary.transactionCount}</p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">Gasto promedio</p>
-            <p className="font-mono">
-              {selectedCurrency === 'all'
-                ? formatCurrency(averageExpense, 'UYU')
-                : formatCurrency(averageExpense, selectedCurrency as Currency)
-              }
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">Mayor gasto</p>
-            <p className="font-mono">
-              {topExpense
-                ? formatCurrency(topExpense.amount, topExpense.currency)
-                : formatCurrency(0, selectedCurrency === 'all' ? 'UYU' : selectedCurrency)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {topExpense?.description || 'Sin movimientos en el período'}
-            </p>
-          </div>
-          <div
-            className={onNavigateToTransactions && topCategory ? 'cursor-pointer group' : ''}
-            onClick={onNavigateToTransactions && topCategory ? () => onNavigateToTransactions({ category: topCategory.category }) : undefined}
-          >
-            <p className="text-sm text-muted-foreground mb-1">Categoría top</p>
-            <p className={`font-mono${onNavigateToTransactions && topCategory ? ' group-hover:text-primary transition-colors' : ''}`}>
-              {topCategoryDisplay.label}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {topCategory ? `${topCategory.percentage.toFixed(1)}% del total` : '0.0% del total'}
-            </p>
-          </div>
-        </div>
-      </Card>
-      </>)}
+        </>
+      )}
     </div>
-  );
+  )
 }
