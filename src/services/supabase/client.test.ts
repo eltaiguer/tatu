@@ -45,12 +45,18 @@ describe('supabase client service', () => {
   it('creates supabase client once and reuses singleton instance', async () => {
     createClientMock.mockReturnValue({ auth: {} })
 
+    import.meta.env.VITE_SUPABASE_URL = 'https://example.supabase.co'
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY = 'anon-key'
+
     const { getSupabaseClient } = await import('./client')
     const first = getSupabaseClient()
     const second = getSupabaseClient()
 
     expect(first).toBe(second)
     expect(createClientMock).toHaveBeenCalledTimes(1)
+
+    import.meta.env.VITE_SUPABASE_URL = ''
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY = ''
   })
 
   it('reports configured status based on env vars', async () => {
