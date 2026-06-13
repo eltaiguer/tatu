@@ -14,6 +14,8 @@ import { AuthCard } from './components/AuthCard'
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
+  DialogDescription,
 } from './components/ui/dialog'
 import { Sun, Moon } from 'lucide-react'
 import { useStore } from 'zustand'
@@ -1137,6 +1139,11 @@ function App() {
             borderRadius: 'var(--radius-lg)',
           }}
         >
+          <DialogTitle className="sr-only">Importar archivo CSV</DialogTitle>
+          <DialogDescription className="sr-only">
+            Arrastrá o seleccioná un archivo CSV de Santander Uruguay para
+            importar tus movimientos.
+          </DialogDescription>
           <ImportCSV
             onImportComplete={() => {
               setImportOpen(false)
