@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Toaster } from './components/ui/sonner'
 import { TatuLogo } from './components/TatuLogo'
-import { AppSidebar } from './components/AppSidebar'
+import { AppSidebar, SidebarInner } from './components/AppSidebar'
 import type { View } from './components/AppSidebar'
 import { Dashboard } from './components/Dashboard'
 import { Transactions } from './components/Transactions'
@@ -17,7 +17,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from './components/ui/dialog'
-import { Sun, Moon } from 'lucide-react'
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetDescription,
+} from './components/ui/sheet'
+import { Sun, Moon, Menu } from 'lucide-react'
 import { useStore } from 'zustand'
 import {
   getPersistedTransactionsSnapshot,
@@ -132,6 +138,7 @@ function App() {
   })
   const [currentView, setCurrentView] = useState<View>('overview')
   const [importOpen, setImportOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const toggleTheme = () => setIsDark((d) => !d)
   const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
   const [session, setSession] = useState<SupabaseSession | null>(() =>
@@ -1028,7 +1035,7 @@ function App() {
     <div
       style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}
     >
-      {/* Sidebar */}
+      {/* Sidebar (desktop only — hidden on mobile via CSS) */}
       <AppSidebar
         view={currentView}
         onNavigate={(v) => {
@@ -1044,6 +1051,43 @@ function App() {
         supabaseEnabled={supabaseEnabled}
       />
 
+      {/* Mobile nav sheet */}
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+        <SheetContent
+          side="left"
+          style={{
+            padding: 0,
+            width: 'min(288px, 85vw)',
+            background: 'var(--surface)',
+            borderRight: '1px solid var(--border)',
+          }}
+        >
+          <SheetTitle className="sr-only">Menú de navegación</SheetTitle>
+          <SheetDescription className="sr-only">
+            Navegación principal de la aplicación
+          </SheetDescription>
+          <SidebarInner
+            view={currentView}
+            onNavigate={(v) => {
+              if (v === 'transactions') setPendingTxFilter(null)
+              setCurrentView(v)
+              setMobileMenuOpen(false)
+            }}
+            onImport={() => {
+              setImportOpen(true)
+              setMobileMenuOpen(false)
+            }}
+            onSignOut={() => {
+              void handleSignOut()
+              setMobileMenuOpen(false)
+            }}
+            session={session}
+            txCount={transactions.length}
+            supabaseEnabled={supabaseEnabled}
+          />
+        </SheetContent>
+      </Sheet>
+
       {/* Main content */}
       <main
         style={{
@@ -1052,11 +1096,51 @@ function App() {
           marginLeft: 'var(--sidebar-w, 252px)',
         }}
       >
+        {/* Mobile sticky header */}
+        <header
+          className="md:hidden sticky top-0 z-40 flex items-center gap-3"
+          style={{
+            height: 56,
+            padding: '0 16px',
+            background: 'var(--surface)',
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Abrir menú"
+            aria-expanded={mobileMenuOpen}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--text-muted)',
+              display: 'grid',
+              placeItems: 'center',
+              padding: 8,
+              borderRadius: 8,
+              flexShrink: 0,
+            }}
+          >
+            <Menu size={20} />
+          </button>
+          <span
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 20,
+              fontWeight: 600,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Tatú
+          </span>
+        </header>
+
         <div
+          className="px-4 pt-5 pb-20 md:px-11 md:pt-10"
           style={{
             maxWidth: 1180,
             margin: '0 auto',
-            padding: '40px 44px 80px',
           }}
         >
           {authError && (

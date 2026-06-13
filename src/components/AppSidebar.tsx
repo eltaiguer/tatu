@@ -31,7 +31,11 @@ interface AppSidebarProps {
   supabaseEnabled: boolean
 }
 
-function BrandMark() {
+interface SidebarInnerProps extends AppSidebarProps {
+  onClose?: () => void
+}
+
+export function BrandMark() {
   return (
     <span
       style={{
@@ -72,7 +76,7 @@ function BrandMark() {
   )
 }
 
-export function AppSidebar({
+export function SidebarInner({
   view,
   onNavigate,
   onImport,
@@ -80,7 +84,8 @@ export function AppSidebar({
   session,
   txCount,
   supabaseEnabled,
-}: AppSidebarProps) {
+  onClose,
+}: SidebarInnerProps) {
   const groups: NavGroup[] = [
     {
       label: 'General',
@@ -109,17 +114,13 @@ export function AppSidebar({
   const avatarInitial = userName.charAt(0).toUpperCase()
 
   return (
-    <aside
+    <div
       style={{
-        position: 'fixed',
-        inset: '0 auto 0 0',
-        width: 'var(--sidebar-w, 252px)',
-        background: 'var(--surface)',
-        borderRight: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
+        height: '100%',
         padding: '22px 16px 18px',
-        zIndex: 40,
+        overflowY: 'auto',
       }}
     >
       {/* Brand row */}
@@ -160,7 +161,10 @@ export function AppSidebar({
 
       {/* Import button */}
       <button
-        onClick={onImport}
+        onClick={() => {
+          onImport()
+          onClose?.()
+        }}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -226,7 +230,10 @@ export function AppSidebar({
             return (
               <button
                 key={item.id}
-                onClick={() => onNavigate(item.id)}
+                onClick={() => {
+                  onNavigate(item.id)
+                  onClose?.()
+                }}
                 aria-current={isActive ? 'page' : undefined}
                 style={{
                   display: 'flex',
@@ -394,6 +401,24 @@ export function AppSidebar({
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+export function AppSidebar(props: AppSidebarProps) {
+  return (
+    <aside
+      className="hidden md:block"
+      style={{
+        position: 'fixed',
+        inset: '0 auto 0 0',
+        width: 'var(--sidebar-w, 252px)',
+        background: 'var(--surface)',
+        borderRight: '1px solid var(--border)',
+        zIndex: 40,
+      }}
+    >
+      <SidebarInner {...props} />
     </aside>
   )
 }

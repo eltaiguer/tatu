@@ -200,4 +200,33 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Categorías' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Configuración' })).toBeInTheDocument()
   })
+
+  it('mobile hamburger opens nav sheet and closes on nav item click', async () => {
+    render(<App />)
+
+    const hamburger = screen.getByRole('button', { name: /abrir menú/i })
+    expect(hamburger).toBeInTheDocument()
+    expect(hamburger).toHaveAttribute('aria-expanded', 'false')
+
+    await act(async () => {
+      fireEvent.click(hamburger)
+    })
+
+    expect(hamburger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('dialog', { name: /menú de navegación/i })).toBeInTheDocument()
+
+    // clicking a nav item closes the sheet (aria-expanded goes back to false)
+    const dialogNavButtons = screen
+      .getByRole('dialog', { name: /menú de navegación/i })
+      .querySelectorAll('button')
+    const transaccionesBtn = Array.from(dialogNavButtons).find((b) =>
+      b.textContent?.includes('Transacciones')
+    )
+    await act(async () => {
+      fireEvent.click(transaccionesBtn!)
+    })
+
+    expect(hamburger).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
+  })
 })

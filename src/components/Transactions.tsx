@@ -636,8 +636,8 @@ export function Transactions({
 
       <Card className="p-4 space-y-3">
         {/* Row 1: Search + Category + Account */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div className="relative flex-1">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="relative w-full sm:flex-1">
             <Search
               className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
               size={16}
