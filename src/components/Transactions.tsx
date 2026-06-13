@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import {
   ArrowUpDown,
   CreditCard,
+  Download,
   Loader2,
   Pencil,
   Search,
@@ -31,6 +32,8 @@ import { Category } from '../models'
 import type { Currency, Transaction } from '../models'
 import { getDescriptionOverride } from '../services/descriptions/description-overrides'
 import { getCategoryDisplay } from '../utils/category-display'
+import { getCategoryDefinitions } from '../services/categories/category-registry'
+import { exportTransactions } from '../services/export/export'
 import {
   addCustomCategory,
   listCustomCategories,
@@ -108,6 +111,8 @@ export function Transactions({
   const [categoryFilter, setCategoryFilter] = useState('')
   const [accountFilter, setAccountFilter] = useState<'all' | 'credit_card' | 'bank_account'>('all')
   const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'UYU'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all')
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   useEffect(() => {
     if (initialFilter) {
@@ -148,7 +153,7 @@ export function Transactions({
   >('single')
   const [editError, setEditError] = useState('')
 
-  const itemsPerPage = 20
+  const itemsPerPage = 12
 
   const filteredTransactions = useMemo(() => {
     const query = searchTerm.toLowerCase()
@@ -191,6 +196,10 @@ export function Transactions({
         return false
       }
 
+      if (typeFilter !== 'all' && transaction.type !== typeFilter) {
+        return false
+      }
+
       return true
     })
 
@@ -224,6 +233,7 @@ export function Transactions({
     categoryFilter,
     accountFilter,
     currencyFilter,
+    typeFilter,
     sortField,
     sortDirection,
   ])
@@ -246,7 +256,8 @@ export function Transactions({
     Boolean(dateToFilter) ||
     Boolean(categoryFilter) ||
     accountFilter !== 'all' ||
-    currencyFilter !== 'all'
+    currencyFilter !== 'all' ||
+    typeFilter !== 'all'
 
   const dateRangeError =
     dateFromFilter && dateToFilter && dateToFilter < dateFromFilter
@@ -260,7 +271,14 @@ export function Transactions({
     setCategoryFilter('')
     setAccountFilter('all')
     setCurrencyFilter('all')
+    setTypeFilter('all')
   }
+
+  const emojiLookup = useMemo(() => {
+    const map = new Map<string, string>()
+    getCategoryDefinitions().forEach((d) => map.set(d.id, d.icon))
+    return map
+  }, [])
 
   const categorySuggestions = useMemo(() => {
     return Array.from(
@@ -597,146 +615,189 @@ export function Transactions({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="mb-1">Transacciones</h2>
-        <p className="text-muted-foreground">
-          {filteredTransactions.length} transacciones encontradas
-        </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>Transacciones</h1>
+          <p className="text-muted-foreground" style={{ fontSize: 14 }}>
+            {filteredTransactions.length} de {transactions.length} movimientos
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => exportTransactions(filteredTransactions, { format: 'csv' })}
+          style={{ gap: 6 }}
+        >
+          <Download size={15} />
+          Exportar
+        </Button>
       </div>
 
-      <Card className="p-4">
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-                size={20}
-              />
-              <Input
-                placeholder="Buscar por comercio o descripción..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                className="pl-10"
-              />
-            </div>
-            {hasActiveFilters && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={clearAllFilters}
-                className="shrink-0 gap-1.5"
+      <Card className="p-4 space-y-3">
+        {/* Row 1: Search + Category + Account */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="relative flex-1">
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              size={16}
+            />
+            <Input
+              placeholder="Buscar por comercio o descripción..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="pl-9"
+              style={{ fontSize: 13 }}
+            />
+          </div>
+          <select
+            id="transactions-category-filter"
+            aria-label="Filtro categoría"
+            value={categoryFilter}
+            onChange={(event) => setCategoryFilter(event.target.value)}
+            className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
+            style={{ minWidth: 130 }}
+          >
+            <option value="">Categoría</option>
+            {availableCategories.map((category) => (
+              <option key={category} value={category}>
+                {getCategoryDisplay(category).label}
+              </option>
+            ))}
+          </select>
+          <select
+            id="transactions-account-filter"
+            aria-label="Filtro cuenta"
+            value={accountFilter}
+            onChange={(event) =>
+              setAccountFilter(
+                event.target.value as 'all' | 'credit_card' | 'bank_account'
+              )
+            }
+            className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
+            style={{ minWidth: 120 }}
+          >
+            <option value="all">Cuenta</option>
+            <option value="bank_account">Cuenta bancaria</option>
+            <option value="credit_card">Tarjeta</option>
+          </select>
+        </div>
+
+        {/* Row 2: Type segment + Currency segment + Más + Clear */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* Type filter */}
+          <div style={{ display: 'inline-flex', background: 'var(--surface-2)', borderRadius: 10, padding: 3, gap: 2 }}>
+            {([
+              { value: 'all', label: 'Todos' },
+              { value: 'credit', label: 'Ingresos' },
+              { value: 'debit', label: 'Gastos' },
+            ] as const).map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setTypeFilter(value)}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 7,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  background: typeFilter === value ? 'var(--bg)' : 'transparent',
+                  color: typeFilter === value ? 'var(--text)' : 'var(--text-faint)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: typeFilter === value ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                }}
               >
-                <X size={14} />
-                Limpiar filtros
-              </Button>
-            )}
+                {label}
+              </button>
+            ))}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <div className="space-y-1">
-              <label
-                htmlFor="transactions-date-from-filter"
-                className="text-sm font-medium"
+          {/* Currency filter */}
+          <div style={{ display: 'inline-flex', background: 'var(--surface-2)', borderRadius: 10, padding: 3, gap: 2 }}>
+            {([
+              { value: 'all', label: 'Todo' },
+              { value: 'UYU', label: '$U' },
+              { value: 'USD', label: 'US$' },
+            ] as const).map(({ value, label }) => (
+              <button
+                key={value}
+                aria-label={`Filtro moneda ${label}`}
+                onClick={() => setCurrencyFilter(value)}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 7,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  background: currencyFilter === value ? 'var(--bg)' : 'transparent',
+                  color: currencyFilter === value ? 'var(--text)' : 'var(--text-faint)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: currencyFilter === value ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                }}
               >
-                Fecha desde
-              </label>
-              <Input
-                id="transactions-date-from-filter"
-                aria-label="Filtro fecha desde"
-                type="date"
-                value={dateFromFilter}
-                onChange={(event) => setDateFromFilter(event.target.value)}
-              />
-            </div>
+                {label}
+              </button>
+            ))}
+          </div>
 
-            <div className="space-y-1">
-              <label
-                htmlFor="transactions-date-to-filter"
-                className="text-sm font-medium"
-              >
-                Fecha hasta
-              </label>
-              <Input
-                id="transactions-date-to-filter"
-                aria-label="Filtro fecha hasta"
-                type="date"
-                value={dateToFilter}
-                onChange={(event) => setDateToFilter(event.target.value)}
-                className={dateRangeError ? 'border-destructive' : ''}
-              />
-              {dateRangeError && (
-                <p className="text-xs text-destructive">{dateRangeError}</p>
-              )}
-            </div>
+          {/* Más button */}
+          <button
+            onClick={() => setAdvancedOpen(!advancedOpen)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '4px 12px',
+              height: 32,
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 500,
+              background: advancedOpen ? 'var(--brand-soft)' : 'var(--surface-2)',
+              color: advancedOpen ? 'var(--brand-text)' : 'var(--text-faint)',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <SlidersHorizontal size={13} />
+            Más
+          </button>
 
-            <div className="space-y-1">
-              <label
-                htmlFor="transactions-category-filter"
-                className="text-sm font-medium"
-              >
-                Categoría
-              </label>
-              <select
-                id="transactions-category-filter"
-                aria-label="Filtro categoría"
-                value={categoryFilter}
-                onChange={(event) => setCategoryFilter(event.target.value)}
-                className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
-              >
-                <option value="">Todas</option>
-                {availableCategories.map((category) => (
-                <option key={category} value={category}>
-                    {getCategoryDisplay(category).label}
-                </option>
-              ))}
-              </select>
-            </div>
+          {hasActiveFilters && (
+            <Button variant="outline" size="sm" onClick={clearAllFilters} style={{ gap: 5 }}>
+              <X size={13} />
+              Limpiar
+            </Button>
+          )}
+        </div>
 
-            <div className="space-y-1">
-              <label
-                htmlFor="transactions-account-filter"
-                className="text-sm font-medium"
-              >
-                Cuenta
-              </label>
-              <select
-                id="transactions-account-filter"
-                aria-label="Filtro cuenta"
-                value={accountFilter}
-                onChange={(event) =>
-                  setAccountFilter(
-                    event.target.value as 'all' | 'credit_card' | 'bank_account'
-                  )
-                }
-                className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
-              >
-                <option value="all">Todas</option>
-                <option value="bank_account">Cuenta bancaria</option>
-                <option value="credit_card">Tarjeta</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label
-                htmlFor="transactions-currency-filter"
-                className="text-sm font-medium"
-              >
-                Moneda
-              </label>
-              <select
-                id="transactions-currency-filter"
-                aria-label="Filtro moneda"
-                value={currencyFilter}
-                onChange={(event) =>
-                  setCurrencyFilter(event.target.value as 'all' | 'USD' | 'UYU')
-                }
-                className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 w-full rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
-              >
-                <option value="all">Todas</option>
-                <option value="UYU">UYU ($U)</option>
-                <option value="USD">USD (US$)</option>
-              </select>
-            </div>
+        {/* Advanced: date range (always in DOM for test accessibility, visible when advancedOpen) */}
+        <div style={{ display: advancedOpen ? 'grid' : 'none', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="space-y-1">
+            <label htmlFor="transactions-date-from-filter" className="text-sm font-medium">
+              Fecha desde
+            </label>
+            <Input
+              id="transactions-date-from-filter"
+              aria-label="Filtro fecha desde"
+              type="date"
+              value={dateFromFilter}
+              onChange={(event) => setDateFromFilter(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="transactions-date-to-filter" className="text-sm font-medium">
+              Fecha hasta
+            </label>
+            <Input
+              id="transactions-date-to-filter"
+              aria-label="Filtro fecha hasta"
+              type="date"
+              value={dateToFilter}
+              onChange={(event) => setDateToFilter(event.target.value)}
+              className={dateRangeError ? 'border-destructive' : ''}
+            />
+            {dateRangeError && (
+              <p className="text-xs text-destructive">{dateRangeError}</p>
+            )}
           </div>
         </div>
       </Card>
@@ -923,27 +984,56 @@ export function Transactions({
                     </div>
                   </td>
                   <td className="p-4">
-                    <div className="font-medium">{displayDescription}</div>
-                    {hasFriendlyOverride && (
-                      <div className="text-xs text-muted-foreground">
-                        Original: {transaction.description}
-                      </div>
-                    )}
-                    <div className="text-xs text-muted-foreground">
-                      {transaction.type === 'debit' ? 'Débito' : 'Crédito'}
-                    </div>
-                    {(transaction.tags ?? []).length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {(transaction.tags ?? []).map((tag) => (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                      {(() => {
+                        const catId = transaction.category ?? 'uncategorized'
+                        const display = getCategoryDisplay(catId)
+                        const emoji = emojiLookup.get(catId)
+                        return (
                           <span
-                            key={`${transaction.id}-${tag}`}
-                            className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs"
+                            aria-hidden="true"
+                            style={{
+                              width: 30,
+                              height: 30,
+                              borderRadius: 8,
+                              background: display.color + '1f',
+                              display: 'grid',
+                              placeItems: 'center',
+                              fontSize: 14,
+                              flexShrink: 0,
+                              marginTop: 1,
+                            }}
                           >
-                            #{tag}
+                            {emoji ?? (
+                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: display.color, display: 'block' }} />
+                            )}
                           </span>
-                        ))}
+                        )
+                      })()}
+                      <div>
+                        <div className="font-medium">{displayDescription}</div>
+                        {hasFriendlyOverride && (
+                          <div className="text-xs text-muted-foreground">
+                            Original: {transaction.description}
+                          </div>
+                        )}
+                        <div className="text-xs text-muted-foreground">
+                          {transaction.type === 'debit' ? 'Débito' : 'Crédito'}
+                        </div>
+                        {(transaction.tags ?? []).length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {(transaction.tags ?? []).map((tag) => (
+                              <span
+                                key={`${transaction.id}-${tag}`}
+                                className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs"
+                              >
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-1.5">

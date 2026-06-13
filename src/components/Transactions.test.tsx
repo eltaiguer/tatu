@@ -284,7 +284,7 @@ describe('Transactions', () => {
     })
     fireEvent.click(headerCheckboxes[0])
 
-    expect(screen.getAllByText('20 seleccionadas').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('12 seleccionadas').length).toBeGreaterThan(0)
     expect(
       screen.getAllByRole('checkbox', { name: 'Seleccionar merchant 24' })[0]
     ).toHaveAttribute('aria-checked', 'true')
@@ -320,7 +320,7 @@ describe('Transactions', () => {
     })
     fireEvent.click(headerCheckboxes[0])
 
-    expect(screen.getAllByText('20 seleccionadas').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('12 seleccionadas').length).toBeGreaterThan(0)
 
     fireEvent.click(
       screen.getByText('Seleccionar las 25 transacciones')

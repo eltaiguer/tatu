@@ -43,7 +43,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
-    expect(screen.getByText(/transacciones encontradas/)).toBeInTheDocument()
+    expect(screen.getByText(/movimientos/)).toBeInTheDocument()
   })
 
   it('auto-categorizes selected transactions from the transactions view', async () => {

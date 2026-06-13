@@ -139,7 +139,7 @@ describe('App persistence flow', () => {
     render(<App />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
-    expect(screen.getByText('2 transacciones encontradas')).toBeInTheDocument()
+    expect(screen.getByText('2 de 2 movimientos')).toBeInTheDocument()
     expect(screen.getAllByText('tx tx-1').length).toBeGreaterThan(0)
     expect(screen.getAllByText('tx tx-2').length).toBeGreaterThan(0)
   })
