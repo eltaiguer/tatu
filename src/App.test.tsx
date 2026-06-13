@@ -138,6 +138,51 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Categorías y reglas' })).toBeInTheDocument()
   })
 
+  it('filters Transacciones by category when deep-linking from Resumen', async () => {
+    transactionStore.getState().addTransactions([
+      {
+        id: 'tx-cat',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        description: 'Devoto Supermercado',
+        amount: 100,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        category: 'groceries',
+        rawData: {},
+      },
+      {
+        id: 'tx-other',
+        date: new Date('2026-01-11T00:00:00.000Z'),
+        description: 'Café Bacacay',
+        amount: 50,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        category: 'restaurants',
+        rawData: {},
+      },
+    ])
+
+    render(<App />)
+    // Click top category card to deep-link
+    const topCategoryLink = screen.getByText(/Alimentación|Restaurantes/)
+    fireEvent.click(topCategoryLink)
+
+    expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
+  })
+
+  it('opens import as a dialog overlay without navigating away from current view', () => {
+    render(<App />)
+    // Importar button is in the sidebar
+    expect(screen.getByRole('button', { name: 'Importar' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
+
+    // Import dialog content appears
+    expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument()
+    expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
+  })
+
   it('applies dark theme from localStorage on initial render', () => {
     localStorage.setItem('theme', 'dark')
 

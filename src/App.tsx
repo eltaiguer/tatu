@@ -11,6 +11,10 @@ import { Categories } from './components/Categories'
 import { Settings } from './components/Settings'
 import { ImportCSV } from './components/ImportCSV'
 import { AuthCard } from './components/AuthCard'
+import {
+  Dialog,
+  DialogContent,
+} from './components/ui/dialog'
 import { Sun, Moon } from 'lucide-react'
 import { useStore } from 'zustand'
 import {
@@ -1072,61 +1076,74 @@ function App() {
             </p>
           )}
 
-          {importOpen ? (
-            <ImportCSV
-              onImportComplete={() => {
-                setImportOpen(false)
-                setCurrentView('transactions')
-              }}
-              onTransactionsImported={handleTransactionsImported}
-            />
-          ) : (
-            <>
-              {currentView === 'overview' && (
-                <Dashboard
-                  transactions={transactions}
-                  onNavigateToImport={() => setImportOpen(true)}
-                  onNavigateToTransactions={navigateToTransactions}
-                />
-              )}
-              {currentView === 'transactions' && (
-                <Transactions
-                  transactions={transactions}
-                  initialFilter={pendingTxFilter ?? undefined}
-                  onUpdateTransaction={handleUpdateTransaction}
-                  onDeleteTransaction={handleDeleteTransaction}
-                  onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
-                  onBulkCategorize={handleBulkCategorizeTransactions}
-                  onBulkDelete={handleBulkDeleteTransactions}
-                  onBulkTag={handleBulkTagTransactions}
-                />
-              )}
-              {currentView === 'analysis' && (
-                <Charts
-                  transactions={transactions}
-                  onNavigateToTransactions={navigateToTransactions}
-                />
-              )}
-              {currentView === 'categories' && (
-                <Categories transactions={transactions} />
-              )}
-              {currentView === 'settings' && (
-                <Settings
-                  isDark={isDark}
-                  onToggleTheme={toggleTheme}
-                  session={session}
-                  supabaseEnabled={supabaseEnabled}
-                  onSignOut={() => {
-                    void handleSignOut()
-                  }}
-                  transactions={transactions}
-                  onResetAllData={handleResetAllData}
-                />
-              )}
-            </>
-          )}
+          {currentView === 'overview' && (
+              <Dashboard
+                transactions={transactions}
+                onNavigateToImport={() => setImportOpen(true)}
+                onNavigateToTransactions={navigateToTransactions}
+              />
+            )}
+            {currentView === 'transactions' && (
+              <Transactions
+                transactions={transactions}
+                initialFilter={pendingTxFilter ?? undefined}
+                onUpdateTransaction={handleUpdateTransaction}
+                onDeleteTransaction={handleDeleteTransaction}
+                onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
+                onBulkCategorize={handleBulkCategorizeTransactions}
+                onBulkDelete={handleBulkDeleteTransactions}
+                onBulkTag={handleBulkTagTransactions}
+              />
+            )}
+            {currentView === 'analysis' && (
+              <Charts
+                transactions={transactions}
+                onNavigateToTransactions={navigateToTransactions}
+              />
+            )}
+            {currentView === 'categories' && (
+              <Categories transactions={transactions} />
+            )}
+            {currentView === 'settings' && (
+              <Settings
+                isDark={isDark}
+                onToggleTheme={toggleTheme}
+                session={session}
+                supabaseEnabled={supabaseEnabled}
+                onSignOut={() => {
+                  void handleSignOut()
+                }}
+                transactions={transactions}
+                onResetAllData={handleResetAllData}
+              />
+            )}
         </div>
       </main>
+
+      {/* Import Dialog */}
+      <Dialog
+        open={importOpen}
+        onOpenChange={(open) => {
+          if (!open) setImportOpen(false)
+        }}
+      >
+        <DialogContent
+          style={{
+            maxWidth: 680,
+            padding: 0,
+            overflow: 'hidden',
+            borderRadius: 'var(--radius-lg)',
+          }}
+        >
+          <ImportCSV
+            onImportComplete={() => {
+              setImportOpen(false)
+              setCurrentView('transactions')
+            }}
+            onTransactionsImported={handleTransactionsImported}
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Floating theme toggle */}
       <button

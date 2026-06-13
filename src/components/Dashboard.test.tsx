@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { Dashboard } from './Dashboard'
 import type { Transaction } from '../models'
 import { Category } from '../models'
@@ -32,33 +32,14 @@ describe('Dashboard', () => {
     vi.useRealTimers()
   })
 
-  it('shows currency-specific summary when filtered to USD', () => {
+  it('shows multi-currency summary amounts in the overview', () => {
     const transactions = [
-      makeTransaction({
-        id: 'uyu-debit',
-        currency: 'UYU',
-        type: 'debit',
-        amount: 1000,
-      }),
-      makeTransaction({
-        id: 'usd-debit',
-        currency: 'USD',
-        type: 'debit',
-        amount: 50,
-      }),
-      makeTransaction({
-        id: 'usd-credit',
-        currency: 'USD',
-        type: 'credit',
-        amount: 200,
-      }),
+      makeTransaction({ id: 'uyu-debit', currency: 'UYU', type: 'debit', amount: 1000 }),
+      makeTransaction({ id: 'usd-debit', currency: 'USD', type: 'debit', amount: 50 }),
+      makeTransaction({ id: 'usd-credit', currency: 'USD', type: 'credit', amount: 200 }),
     ]
 
     render(<Dashboard transactions={transactions} />)
-
-    const selects = screen.getAllByRole('combobox')
-    const currencySelect = selects[1]
-    fireEvent.change(currencySelect, { target: { value: 'USD' } })
 
     expect(screen.getByText('US$ 200,00')).toBeInTheDocument()
     expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
@@ -83,10 +64,6 @@ describe('Dashboard', () => {
     ]
 
     render(<Dashboard transactions={transactions} />)
-
-    const selects = screen.getAllByRole('combobox')
-    const currencySelect = selects[1]
-    fireEvent.change(currencySelect, { target: { value: 'USD' } })
 
     expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
     expect(screen.queryByText('US$ 150,00')).not.toBeInTheDocument()

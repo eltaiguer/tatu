@@ -106,8 +106,8 @@ interface DashboardProps {
 }
 
 export function Dashboard({ transactions, onNavigateToImport, onNavigateToTransactions }: DashboardProps) {
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency | 'all'>('all');
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('all');
+  const selectedCurrency: Currency | 'all' = 'all'
+  const selectedPeriodId = 'all'
 
   const periodOptions = useMemo(() => {
     const dates = transactions.map((tx) => tx.date);
@@ -263,37 +263,9 @@ export function Dashboard({ transactions, onNavigateToImport, onNavigateToTransa
       )}
 
       {hasTransactions && (<>
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="mb-1">Panel General</h2>
-          <p className="text-muted-foreground">Resumen de tu actividad financiera</p>
-        </div>
-
-        <div className="flex gap-3">
-          <select
-            aria-label="Período"
-            className="px-4 py-2 rounded-lg border border-input bg-input-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1rem] bg-[right_0.5rem_center] bg-no-repeat pr-8"
-            value={selectedPeriodId}
-            onChange={(event) => setSelectedPeriodId(event.target.value)}
-          >
-            {periodOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <select
-            aria-label="Moneda"
-            className="px-4 py-2 rounded-lg border border-input bg-input-background text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236b7280%22%20stroke-width%3D%222%22%3E%3Cpath%20d%3D%22m6%209%206%206%206-6%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1rem] bg-[right_0.5rem_center] bg-no-repeat pr-8"
-            value={selectedCurrency}
-            onChange={(event) => setSelectedCurrency(event.target.value as Currency | 'all')}
-          >
-            <option value="all">Todas</option>
-            <option value="UYU">Pesos (UYU)</option>
-            <option value="USD">Dólares (USD)</option>
-          </select>
-        </div>
+      <div>
+        <h2 className="mb-1">Panel General</h2>
+        <p className="text-muted-foreground">Resumen de tu actividad financiera</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
