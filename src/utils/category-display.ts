@@ -1,5 +1,4 @@
 import { Category, CATEGORY_COLORS, CATEGORY_LABELS } from '../models';
-import { categories as legacyCategories } from './figma-data';
 
 export type CategoryIconName =
   | 'groceries'
@@ -146,16 +145,6 @@ export function getCategoryDisplay(categoryId?: string | null): CategoryDisplay 
       label: CATEGORY_LABELS[modernId],
       color: meta.color,
       icon: meta.icon,
-    };
-  }
-
-  const legacy = legacyCategories.find((category) => category.id === normalizedId);
-  if (legacy) {
-    return {
-      id: legacy.id,
-      label: legacy.name,
-      color: legacy.color,
-      icon: ID_ALIASES[legacy.id] ? MODERN_META[ID_ALIASES[legacy.id]].icon : 'uncategorized',
     };
   }
 

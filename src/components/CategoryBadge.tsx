@@ -1,24 +1,3 @@
-// Category Badge with icon for Tatu
-
-import {
-  Utensils,
-  Car,
-  Zap,
-  Tv,
-  ShoppingBag,
-  Heart,
-  GraduationCap,
-  Laptop,
-  Home,
-  UserRound,
-  Shield,
-  ArrowLeftRight,
-  Receipt,
-  TrendingUp,
-  Ellipsis,
-  EyeOff,
-} from 'lucide-react';
-import { getCategoryDisplay } from '../utils/category-display';
 import { getCategoryDefinition } from '../services/categories/category-registry';
 
 interface CategoryBadgeProps {
@@ -27,57 +6,26 @@ interface CategoryBadgeProps {
   size?: 'sm' | 'md';
 }
 
-const iconMap = {
-  groceries: Utensils,
-  restaurants: Utensils,
-  transport: Car,
-  transfer: ArrowLeftRight,
-  utilities: Zap,
-  entertainment: Tv,
-  shopping: ShoppingBag,
-  healthcare: Heart,
-  education: GraduationCap,
-  software: Laptop,
-  automotive: Car,
-  housing: Home,
-  personal: UserRound,
-  insurance: Shield,
-  fees: Receipt,
-  ignored: EyeOff,
-  uncategorized: Ellipsis,
-  income: TrendingUp,
-};
-
 export function CategoryBadge({ categoryId, showIcon = true, size = 'md' }: CategoryBadgeProps) {
-  const category = getCategoryDisplay(categoryId);
-  const categoryDefinition = getCategoryDefinition(categoryId);
+  const definition = getCategoryDefinition(categoryId);
 
-  const Icon = iconMap[category.icon];
-  const iconSize = size === 'sm' ? 12 : 14;
   const padding = size === 'sm' ? 'px-2 py-0.5' : 'px-2.5 py-1';
   const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
-  const useDefinition = categoryDefinition.isCustom || categoryDefinition.isOverridden;
-  const label = useDefinition ? categoryDefinition.label : category.label;
-  const color = useDefinition ? categoryDefinition.color : category.color;
-  const customIcon = categoryDefinition.isCustom ? categoryDefinition.icon : null;
 
   return (
     <span
       className={`inline-flex items-center gap-1.5 ${padding} ${textSize} rounded-full font-medium transition-colors`}
       style={{
-        backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
-        color,
+        backgroundColor: `color-mix(in srgb, ${definition.color} 15%, transparent)`,
+        color: definition.color,
       }}
     >
-      {showIcon &&
-        (customIcon ? (
-          <span aria-hidden="true" className="leading-none">
-            {customIcon}
-          </span>
-        ) : (
-          Icon && <Icon size={iconSize} />
-        ))}
-      <span>{label}</span>
+      {showIcon && definition.icon && (
+        <span aria-hidden="true" className="leading-none">
+          {definition.icon}
+        </span>
+      )}
+      <span>{definition.label}</span>
     </span>
   );
 }

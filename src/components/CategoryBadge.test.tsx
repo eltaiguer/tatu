@@ -25,7 +25,7 @@ describe('CategoryBadge', () => {
   it('falls back to uncategorized label for unknown categories', () => {
     render(<CategoryBadge categoryId="unknown-category" />);
 
-    expect(screen.getByText('Unknown category')).toBeInTheDocument();
+    expect(screen.getByText('Sin categoría')).toBeInTheDocument();
   });
 
   it('renders all built-in categories with a label', () => {
