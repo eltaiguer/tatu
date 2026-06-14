@@ -3,13 +3,16 @@
 import { Card } from './ui/card'
 import { ChartPie } from 'lucide-react'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import {
   PieChart,
   Pie,
   Cell,
   AreaChart,
   Area,
+  BarChart,
+  Bar,
+  ReferenceLine,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -17,13 +20,17 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import type { TooltipProps } from 'recharts'
-import type {
-  NameType,
-  ValueType,
-} from 'recharts/types/component/DefaultTooltipContent'
+import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getCategoryDefinitions } from '../services/categories/category-registry'
 import { isTransferCategory } from '../services/transfers/internal-transfers'
+import {
+  buildCategorySpendingConverted,
+  buildMonthlyTrendsConverted,
+  buildCurrencySplit,
+} from '../services/charts/chart-data'
+import { convert } from '../services/currency/convert'
+import { FxChip } from './FxChip'
 
 function formatAmt(amount: number, currency: Currency): string {
   const formatted = Math.abs(amount).toLocaleString('es-UY', {
@@ -44,72 +51,65 @@ function formatAmtShort(amount: number, currency: Currency): string {
 interface ChartsProps {
   transactions: Transaction[]
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
+  homeCurrency?: Currency
+  fxRate?: number
+  onSetHomeCurrency?: (c: Currency) => void
+  onSetFxRate?: (r: number) => void
 }
 
-export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) {
-  const [currency, setCurrency] = useState<Currency>('UYU')
-
-  // Emoji icon lookup from category definitions
+export function Charts({
+  transactions,
+  onNavigateToTransactions,
+  homeCurrency = 'USD',
+  fxRate = 40.5,
+  onSetHomeCurrency,
+  onSetFxRate,
+}: ChartsProps) {
   const emojiLookup = useMemo(() => {
     const map = new Map<string, string>()
     getCategoryDefinitions().forEach((d) => map.set(d.id, d.icon))
     return map
   }, [])
 
-  const currencyTxs = useMemo(
-    () => transactions.filter((tx) => tx.currency === currency),
-    [transactions, currency],
-  )
-
-  // Category breakdown (expenses only, no transfers)
+  // Category breakdown — converted + combined
   const categoryData = useMemo(() => {
-    const grouped = new Map<string, number>()
-    currencyTxs
-      .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
-      .forEach((tx) => {
-        const cat = tx.category ?? 'uncategorized'
-        grouped.set(cat, (grouped.get(cat) ?? 0) + tx.amount)
-      })
-
-    const total = Array.from(grouped.values()).reduce((s, v) => s + v, 0)
-    return Array.from(grouped.entries())
-      .map(([catId, value]) => {
-        const display = getCategoryDisplay(catId)
-        return {
-          categoryId: catId,
-          label: display.label,
-          color: display.color,
-          emoji: emojiLookup.get(catId) ?? '',
-          value,
-          pct: total > 0 ? (value / total) * 100 : 0,
-        }
-      })
-      .sort((a, b) => b.value - a.value)
-  }, [currencyTxs, emojiLookup])
+    const data = buildCategorySpendingConverted(transactions, homeCurrency, fxRate)
+    const total = data.reduce((s, r) => s + r.total, 0) || 1
+    return data.map((row) => {
+      const display = getCategoryDisplay(row.category)
+      return {
+        categoryId: row.category,
+        label: display.label,
+        color: display.color,
+        emoji: emojiLookup.get(row.category) ?? '',
+        value: row.total,
+        pct: (row.total / total) * 100,
+      }
+    })
+  }, [transactions, homeCurrency, fxRate, emojiLookup])
 
   const totalExpenses = categoryData.reduce((s, c) => s + c.value, 0)
   const hasExpenseData = totalExpenses > 0
 
-  // Monthly trend
+  // Monthly trend — converted + combined
   const monthlyTrend = useMemo(() => {
-    const grouped = new Map<string, { income: number; expense: number; key: string }>()
-    currencyTxs.forEach((tx) => {
-      if (isTransferCategory(tx.category)) return
-      const key = `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, '0')}`
-      const label = new Intl.DateTimeFormat('es-UY', {
-        year: 'numeric',
-        month: 'short',
-      }).format(tx.date)
-      if (!grouped.has(key)) grouped.set(key, { income: 0, expense: 0, key: label })
-      const entry = grouped.get(key)!
-      if (tx.type === 'credit') entry.income += tx.amount
-      else entry.expense += tx.amount
-    })
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, v]) => ({ month: v.key, ingresos: v.income, gastos: v.expense }))
+    return buildMonthlyTrendsConverted(transactions, homeCurrency, fxRate)
       .slice(-12)
-  }, [currencyTxs])
+      .map((m) => ({
+        month: new Intl.DateTimeFormat('es-UY', { year: 'numeric', month: 'short' }).format(
+          new Date(m.month + '-01T00:00:00.000Z')
+        ),
+        ingresos: m.income,
+        gastos: m.expense,
+        neto: m.net,
+      }))
+  }, [transactions, homeCurrency, fxRate])
+
+  // Currency split card
+  const currencySplit = useMemo(
+    () => buildCurrencySplit(transactions, homeCurrency, fxRate),
+    [transactions, homeCurrency, fxRate],
+  )
 
   const totalIncome = monthlyTrend.reduce((s, m) => s + m.ingresos, 0)
   const totalExpenseTrend = monthlyTrend.reduce((s, m) => s + m.gastos, 0)
@@ -122,37 +122,30 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
       ? Math.round(totalExpenseTrend / monthlyTrend.length)
       : 0
 
-  // Top merchants by spend
+  // Top merchants — spending across all history in home currency
   const topMerchants = useMemo(() => {
     const map = new Map<string, { name: string; total: number; count: number; catId: string }>()
-    currencyTxs
+    transactions
       .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
       .forEach((tx) => {
         const key = tx.description
-        const entry = map.get(key) ?? {
-          name: key,
-          total: 0,
-          count: 0,
-          catId: tx.category ?? 'uncategorized',
+        const prev = map.get(key) ?? {
+          name: key, total: 0, count: 0, catId: tx.category ?? 'uncategorized',
         }
-        entry.total += tx.amount
-        entry.count++
-        map.set(key, entry)
+        const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
+        prev.total += converted
+        prev.count++
+        map.set(key, prev)
       })
-    return Array.from(map.values())
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 6)
-  }, [currencyTxs])
+    return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 6)
+  }, [transactions, homeCurrency, fxRate])
 
   const hasData = transactions.length > 0
-
   const topCategory = categoryData[0]
 
   const donutData = useMemo(() => {
     const top7 = categoryData.slice(0, 7)
-    const otherVal = categoryData
-      .slice(7)
-      .reduce((s, r) => s + r.value, 0)
+    const otherVal = categoryData.slice(7).reduce((s, r) => s + r.value, 0)
     if (otherVal > 0) {
       return [
         ...top7,
@@ -178,21 +171,13 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
       return (
         <div
           style={{
-            background: 'var(--bg)',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            padding: '10px 14px',
-            boxShadow: '0 4px 16px rgba(0,0,0,.08)',
+            background: 'var(--bg)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: '10px 14px', boxShadow: '0 4px 16px rgba(0,0,0,.08)',
           }}
         >
-          <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
-            {payload[0].name}
-          </p>
-          <p
-            className="font-mono"
-            style={{ fontSize: 13, color: 'var(--text-faint)' }}
-          >
-            {formatAmt(value, currency)}
+          <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{payload[0].name}</p>
+          <p className="font-mono" style={{ fontSize: 13, color: 'var(--text-faint)' }}>
+            {formatAmt(value, homeCurrency)}
           </p>
         </div>
       )
@@ -204,9 +189,7 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
     return (
       <div className="space-y-6">
         <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
-            Análisis
-          </h1>
+          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>Análisis</h1>
           <p className="text-muted-foreground" style={{ fontSize: 14 }}>
             Tendencias y patrones de gasto en tus cuentas
           </p>
@@ -232,110 +215,73 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
       {/* Page header */}
       <div
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: 12,
+          display: 'flex', justifyContent: 'space-between',
+          alignItems: 'flex-start', flexWrap: 'wrap', gap: 12,
         }}
       >
         <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
-            Análisis
-          </h1>
+          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>Análisis</h1>
           <p className="text-muted-foreground" style={{ fontSize: 14 }}>
             Tendencias y patrones de gasto en tus cuentas
           </p>
         </div>
-        <div
-          style={{
-            display: 'flex',
-            background: 'var(--surface-2)',
-            borderRadius: 10,
-            padding: 3,
-            gap: 2,
-          }}
-        >
-          {(
-            [
-              { value: 'UYU', label: 'Pesos $U' },
-              { value: 'USD', label: 'Dólares US$' },
-            ] as const
-          ).map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setCurrency(value)}
-              style={{
-                padding: '5px 14px',
-                borderRadius: 7,
-                fontSize: 13,
-                fontWeight: 500,
-                background:
-                  currency === value ? 'var(--bg)' : 'transparent',
-                color:
-                  currency === value ? 'var(--text)' : 'var(--text-faint)',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
-                boxShadow:
-                  currency === value ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
-              }}
-            >
-              {label}
-            </button>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <FxChip fxRate={fxRate} onSetFxRate={onSetFxRate} />
+          <div
+            style={{
+              display: 'flex', background: 'var(--surface-2)',
+              borderRadius: 10, padding: 3, gap: 2,
+            }}
+          >
+            {(['USD', 'UYU'] as const).map((val) => (
+              <button
+                key={val}
+                onClick={() => onSetHomeCurrency?.(val)}
+                style={{
+                  padding: '5px 14px', borderRadius: 7, fontSize: 13, fontWeight: 500,
+                  background: homeCurrency === val ? 'var(--bg)' : 'transparent',
+                  color: homeCurrency === val ? 'var(--text)' : 'var(--text-faint)',
+                  border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+                  boxShadow: homeCurrency === val ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                }}
+              >
+                {val === 'USD' ? 'US$' : '$U'}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* KPI tiles */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="p-5">
-          <div
-            className="text-muted-foreground"
-            style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
-          >
+          <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}>
             Mayor categoría
           </div>
           <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
             {topCategory?.label ?? '—'}
           </div>
           <div className="text-muted-foreground" style={{ fontSize: 12 }}>
-            {topCategory
-              ? `${Math.round(topCategory.pct)}% del gasto`
-              : 'Sin datos'}
+            {topCategory ? `${Math.round(topCategory.pct)}% del gasto` : 'Sin datos'}
           </div>
         </Card>
         <Card className="p-5">
-          <div
-            className="text-muted-foreground"
-            style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
-          >
+          <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}>
             Gasto promedio mensual
           </div>
-          <div
-            className="font-mono"
-            style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}
-          >
-            {formatAmtShort(avgMonthly, currency)}
+          <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+            {formatAmtShort(avgMonthly, homeCurrency)}
           </div>
           <div className="text-muted-foreground" style={{ fontSize: 12 }}>
             Últimos {monthlyTrend.length} meses
           </div>
         </Card>
         <Card className="p-5">
-          <div
-            className="text-muted-foreground"
-            style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
-          >
+          <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}>
             Tasa de ahorro
           </div>
           <div
-            style={{
-              fontSize: 20,
-              fontWeight: 700,
-              marginBottom: 4,
-              color: savingsRate >= 0 ? 'var(--pos)' : 'var(--neg)',
-            }}
+            style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, color: savingsRate >= 0 ? 'var(--pos)' : 'var(--neg)' }}
           >
             {savingsRate}%
           </div>
@@ -344,10 +290,7 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
           </div>
         </Card>
         <Card className="p-5">
-          <div
-            className="text-muted-foreground"
-            style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
-          >
+          <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}>
             Categorías activas
           </div>
           <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
@@ -372,12 +315,11 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '220px 1fr',
+              gridTemplateColumns: 'min(220px, 100%) 1fr',
               gap: 36,
               alignItems: 'center',
             }}
           >
-            {/* Donut */}
             <div style={{ position: 'relative', width: 220, height: 220 }}>
               <ResponsiveContainer width={220} height={220}>
                 <PieChart>
@@ -400,53 +342,36 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
               </ResponsiveContainer>
               <div
                 style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  textAlign: 'center',
-                  pointerEvents: 'none',
+                  position: 'absolute', top: '50%', left: '50%',
+                  transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none',
                 }}
               >
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em' }}
-                >
+                <div className="text-muted-foreground" style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em' }}>
                   TOTAL
                 </div>
                 <div className="font-mono" style={{ fontSize: 15, fontWeight: 700 }}>
-                  {formatAmtShort(totalExpenses, currency)}
+                  {formatAmtShort(totalExpenses, homeCurrency)}
                 </div>
               </div>
             </div>
 
-            {/* Breakdown list */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
               {categoryData.slice(0, 7).map((row) => (
                 <div
                   key={row.categoryId}
-                  onClick={() =>
-                    onNavigateToTransactions?.({ category: row.categoryId })
-                  }
-                  style={{
-                    cursor: onNavigateToTransactions ? 'pointer' : 'default',
-                  }}
+                  onClick={() => onNavigateToTransactions?.({ category: row.categoryId })}
+                  style={{ cursor: onNavigateToTransactions ? 'pointer' : 'default' }}
                 >
                   <div
                     style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                      marginBottom: 5,
+                      display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'baseline', marginBottom: 5,
                     }}
                   >
                     <span
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        fontSize: 13.5,
-                        fontWeight: 500,
+                        display: 'inline-flex', alignItems: 'center',
+                        gap: 8, fontSize: 13.5, fontWeight: 500,
                       }}
                     >
                       {row.emoji ? (
@@ -454,25 +379,18 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
                       ) : (
                         <span
                           style={{
-                            width: 9,
-                            height: 9,
-                            borderRadius: 3,
-                            background: row.color,
-                            display: 'inline-block',
+                            width: 9, height: 9, borderRadius: 3,
+                            background: row.color, display: 'inline-block',
                           }}
                         />
                       )}
                       {row.label}
                     </span>
                     <span
-                      style={{
-                        display: 'inline-flex',
-                        gap: 10,
-                        alignItems: 'baseline',
-                      }}
+                      style={{ display: 'inline-flex', gap: 10, alignItems: 'baseline' }}
                     >
                       <span className="font-mono" style={{ fontSize: 13 }}>
-                        {formatAmt(row.value, currency)}
+                        {formatAmt(row.value, homeCurrency)}
                       </span>
                       <span
                         className="font-mono text-muted-foreground"
@@ -484,18 +402,13 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
                   </div>
                   <div
                     style={{
-                      height: 4,
-                      borderRadius: 2,
-                      background: 'var(--surface-2)',
-                      overflow: 'hidden',
+                      height: 4, borderRadius: 2, background: 'var(--surface-2)', overflow: 'hidden',
                     }}
                   >
                     <div
                       style={{
-                        height: '100%',
-                        width: `${row.pct}%`,
-                        background: row.color,
-                        borderRadius: 2,
+                        height: '100%', width: `${row.pct}%`,
+                        background: row.color, borderRadius: 2,
                       }}
                     />
                   </div>
@@ -510,15 +423,11 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
       <Card className="p-6">
         <div
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 20,
+            display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center', marginBottom: 20,
           }}
         >
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-            Ingresos vs Gastos
-          </h2>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Ingresos vs Gastos</h2>
           <div style={{ display: 'flex', gap: 18 }}>
             {[
               { label: 'Ingresos', color: 'var(--pos)' },
@@ -527,20 +436,14 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
               <span
                 key={label}
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  fontSize: 12.5,
-                  color: 'var(--text-faint)',
+                  display: 'inline-flex', alignItems: 'center',
+                  gap: 7, fontSize: 12.5, color: 'var(--text-faint)',
                 }}
               >
                 <span
                   style={{
-                    width: 12,
-                    height: 3,
-                    borderRadius: 2,
-                    background: color,
-                    display: 'inline-block',
+                    width: 12, height: 3, borderRadius: 2,
+                    background: color, display: 'inline-block',
                   }}
                 />
                 {label}
@@ -549,10 +452,7 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
           </div>
         </div>
         <ResponsiveContainer width="100%" height={280}>
-          <AreaChart
-            data={monthlyTrend}
-            margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
-          >
+          <AreaChart data={monthlyTrend} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="gradIngresos" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="var(--pos)" stopOpacity={0.22} />
@@ -565,53 +465,161 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
             </defs>
             <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
             <XAxis
-              dataKey="month"
-              stroke="var(--text-faint)"
-              tick={{ fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
+              dataKey="month" stroke="var(--text-faint)"
+              tick={{ fontSize: 12 }} axisLine={false} tickLine={false}
             />
             <YAxis
-              stroke="var(--text-faint)"
-              tick={{ fontSize: 12 }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={(v) => formatAmtShort(v, currency)}
-              width={70}
+              stroke="var(--text-faint)" tick={{ fontSize: 12 }}
+              axisLine={false} tickLine={false}
+              tickFormatter={(v) => formatAmtShort(v, homeCurrency)} width={70}
             />
             <Tooltip
               contentStyle={{
-                background: 'var(--bg)',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
+                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
               }}
-              formatter={(value: ValueType) =>
-                formatAmt(Number(value), currency)
-              }
+              formatter={(value: ValueType) => formatAmt(Number(value), homeCurrency)}
             />
             <Area
-              type="monotone"
-              dataKey="ingresos"
-              stroke="var(--pos)"
-              strokeWidth={2.5}
-              fill="url(#gradIngresos)"
-              name="Ingresos"
-              dot={false}
-              activeDot={{ r: 4, fill: 'var(--pos)' }}
+              type="monotone" dataKey="ingresos" stroke="var(--pos)"
+              strokeWidth={2.5} fill="url(#gradIngresos)" name="Ingresos"
+              dot={false} activeDot={{ r: 4, fill: 'var(--pos)' }}
             />
             <Area
-              type="monotone"
-              dataKey="gastos"
-              stroke="var(--neg)"
-              strokeWidth={2.5}
-              fill="url(#gradGastos)"
-              name="Gastos"
-              dot={false}
-              activeDot={{ r: 4, fill: 'var(--neg)' }}
+              type="monotone" dataKey="gastos" stroke="var(--neg)"
+              strokeWidth={2.5} fill="url(#gradGastos)" name="Gastos"
+              dot={false} activeDot={{ r: 4, fill: 'var(--neg)' }}
             />
           </AreaChart>
         </ResponsiveContainer>
       </Card>
+
+      {/* ¿Estás ahorrando? — diverging monthly net bars */}
+      {monthlyTrend.length > 0 && (
+        <Card className="p-6">
+          <div style={{ marginBottom: 20 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, marginBottom: 4 }}>
+              ¿Estás ahorrando?
+            </h2>
+            <p className="text-muted-foreground" style={{ fontSize: 13 }}>
+              Neto mensual (ingresos − gastos) en {homeCurrency === 'USD' ? 'dólares' : 'pesos'}
+            </p>
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={monthlyTrend} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
+              <XAxis
+                dataKey="month" stroke="var(--text-faint)"
+                tick={{ fontSize: 12 }} axisLine={false} tickLine={false}
+              />
+              <YAxis
+                stroke="var(--text-faint)" tick={{ fontSize: 12 }}
+                axisLine={false} tickLine={false}
+                tickFormatter={(v) => formatAmtShort(v, homeCurrency)} width={70}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
+                }}
+                formatter={(value: ValueType) => [formatAmt(Number(value), homeCurrency), 'Neto']}
+              />
+              <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.5} />
+              <Bar dataKey="neto" radius={[3, 3, 0, 0]}>
+                {monthlyTrend.map((entry, i) => (
+                  <Cell
+                    key={i}
+                    fill={entry.neto >= 0 ? 'var(--pos)' : 'var(--neg)'}
+                    fillOpacity={0.8}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+          <div style={{ display: 'flex', gap: 24, marginTop: 16, flexWrap: 'wrap' }}>
+            <div>
+              <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+                Promedio mensual neto
+              </div>
+              <div
+                className="font-mono"
+                style={{
+                  fontSize: 16, fontWeight: 700, marginTop: 2,
+                  color: (totalIncome - totalExpenseTrend) >= 0 ? 'var(--pos)' : 'var(--neg)',
+                }}
+              >
+                {formatAmtShort(
+                  monthlyTrend.length > 0
+                    ? (totalIncome - totalExpenseTrend) / monthlyTrend.length
+                    : 0,
+                  homeCurrency
+                )}
+              </div>
+            </div>
+            <div>
+              <div className="text-muted-foreground" style={{ fontSize: 12 }}>Tasa de ahorro</div>
+              <div
+                style={{
+                  fontSize: 16, fontWeight: 700, marginTop: 2,
+                  color: savingsRate >= 0 ? 'var(--pos)' : 'var(--neg)',
+                }}
+              >
+                {savingsRate}%
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* Gasto por moneda */}
+      {currencySplit.total > 0 && (
+        <Card className="p-6">
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>
+            Gasto por moneda
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {(
+              [
+                { key: 'USD' as const, label: 'US$ Dólares', pct: currencySplit.pctUSD, amount: currencySplit.USD },
+                { key: 'UYU' as const, label: '$U Pesos', pct: currencySplit.pctUYU, amount: currencySplit.UYU },
+              ] as const
+            ).map((row) => (
+              <div key={row.key}>
+                <div
+                  style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'baseline', marginBottom: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 13.5, fontWeight: 500 }}>{row.label}</span>
+                  <span style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+                    <span className="font-mono" style={{ fontSize: 13 }}>
+                      {formatAmt(row.amount, homeCurrency)}
+                    </span>
+                    <span
+                      className="font-mono text-muted-foreground"
+                      style={{ fontSize: 11.5, width: 38, textAlign: 'right' }}
+                    >
+                      {row.pct.toFixed(1)}%
+                    </span>
+                  </span>
+                </div>
+                <div
+                  style={{
+                    height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      height: '100%', width: `${row.pct}%`,
+                      background: row.key === 'USD' ? 'var(--brand)' : 'var(--accent)',
+                      borderRadius: 3,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Top merchants */}
       {topMerchants.length > 0 && (
@@ -620,11 +628,7 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
             Mayores comercios
           </h2>
           <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '0 36px',
-            }}
+            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 36px' }}
           >
             {topMerchants.map((m, i) => {
               const display = getCategoryDisplay(m.catId)
@@ -633,39 +637,26 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
                 <div
                   key={i}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '11px 0',
-                    borderBottom: '1px solid var(--border)',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '11px 0', borderBottom: '1px solid var(--border)',
                   }}
                 >
-                  <span
-                    className="font-mono text-muted-foreground"
-                    style={{ fontSize: 12, width: 16 }}
-                  >
+                  <span className="font-mono text-muted-foreground" style={{ fontSize: 12, width: 16 }}>
                     {i + 1}
                   </span>
                   <span
                     style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: 8,
+                      width: 30, height: 30, borderRadius: 8,
                       background: display.color + '1f',
-                      display: 'grid',
-                      placeItems: 'center',
-                      fontSize: 14,
-                      flexShrink: 0,
+                      display: 'grid', placeItems: 'center',
+                      fontSize: 14, flexShrink: 0,
                     }}
                   >
                     {emoji ?? (
                       <span
                         style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          background: display.color,
-                          display: 'block',
+                          width: 8, height: 8, borderRadius: '50%',
+                          background: display.color, display: 'block',
                         }}
                       />
                     )}
@@ -673,24 +664,18 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                        fontSize: 13.5,
-                        fontWeight: 500,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        fontSize: 13.5, fontWeight: 500,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                       }}
                     >
                       {m.name}
                     </div>
-                    <div
-                      className="text-muted-foreground"
-                      style={{ fontSize: 11.5 }}
-                    >
+                    <div className="text-muted-foreground" style={{ fontSize: 11.5 }}>
                       {m.count} {m.count > 1 ? 'movimientos' : 'movimiento'}
                     </div>
                   </div>
                   <span className="font-mono" style={{ fontSize: 13 }}>
-                    {formatAmt(m.total, currency)}
+                    {formatAmt(m.total, homeCurrency)}
                   </span>
                 </div>
               )

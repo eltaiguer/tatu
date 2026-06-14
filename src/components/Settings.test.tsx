@@ -92,7 +92,7 @@ describe('Settings', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dólares' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Dólares US$' }))
     expect(onSetCurrency).toHaveBeenCalledWith('USD')
   })
 
