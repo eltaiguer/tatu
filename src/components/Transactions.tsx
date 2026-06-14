@@ -287,7 +287,6 @@ export function Transactions({
         [
           ...Object.values(Category),
           ...listCustomCategories().map((c) => c.id),
-          ...transactions.map((tx) => tx.category ?? ''),
           editCategory,
         ]
           .map((value) => value.trim())
@@ -296,15 +295,16 @@ export function Transactions({
     ).sort((a, b) =>
       getCategoryDisplay(a).label.localeCompare(getCategoryDisplay(b).label, 'es')
     )
-  }, [transactions, editCategory])
+  }, [editCategory])
 
   const filteredCategorySuggestions = useMemo(() => {
     const query = newCategoryInput.trim().toLowerCase()
-    if (!query) {
-      return categorySuggestions
-    }
+    const base = categorySuggestions.filter(
+      (c) => c !== Category.Uncategorized
+    )
+    if (!query) return base
 
-    return categorySuggestions.filter((category) => {
+    return base.filter((category) => {
       const label = getCategoryDisplay(category).label.toLowerCase()
       return category.toLowerCase().includes(query) || label.includes(query)
     })

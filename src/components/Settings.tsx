@@ -6,8 +6,10 @@ import type { SupabaseSession } from '../services/supabase/client'
 import { exportTransactions } from '../services/export/export'
 
 interface SettingsProps {
-  isDark: boolean
-  onToggleTheme: () => void
+  theme: 'light' | 'dark' | 'auto'
+  onSetTheme: (t: 'light' | 'dark' | 'auto') => void
+  preferredCurrency: 'UYU' | 'USD'
+  onSetCurrency: (c: 'UYU' | 'USD') => void
   session: SupabaseSession | null
   supabaseEnabled: boolean
   onSignOut: () => void
@@ -135,8 +137,10 @@ function SettingRow({
 }
 
 export function Settings({
-  isDark,
-  onToggleTheme,
+  theme,
+  onSetTheme,
+  preferredCurrency,
+  onSetCurrency,
   session,
   supabaseEnabled,
   onSignOut,
@@ -194,12 +198,11 @@ export function Settings({
             <SegmentControl
               options={[
                 { label: 'Claro', value: 'light' },
+                { label: 'Auto', value: 'auto' },
                 { label: 'Oscuro', value: 'dark' },
               ]}
-              value={isDark ? 'dark' : 'light'}
-              onChange={(v) => {
-                if ((v === 'dark') !== isDark) onToggleTheme()
-              }}
+              value={theme}
+              onChange={(v) => onSetTheme(v as 'light' | 'dark' | 'auto')}
             />
           }
         />
@@ -225,8 +228,8 @@ export function Settings({
               { label: 'Pesos', value: 'UYU' },
               { label: 'Dólares', value: 'USD' },
             ]}
-            value="UYU"
-            onChange={() => {}}
+            value={preferredCurrency}
+            onChange={(v) => onSetCurrency(v as 'UYU' | 'USD')}
           />
         </div>
       </SectionCard>
