@@ -379,6 +379,7 @@ describe('App with supabase enabled', () => {
         {
           displayDescription: 'New merchant',
           category: 'services',
+          categoryConfidence: 1,
           tags: ['monthly', 'fixed'],
         }
       )

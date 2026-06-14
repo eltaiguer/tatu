@@ -582,6 +582,7 @@ function App() {
             matchingTransactions.map((tx) =>
               updateRemoteTransaction(session, tx.id, {
                 category: nextCategory,
+                ...(nextCategory !== undefined && { categoryConfidence: 1 }),
                 displayDescription: undefined,
               })
             )
@@ -661,6 +662,7 @@ function App() {
                 ? trimmedDisplayDescription
                 : undefined,
             category: nextCategory,
+            ...(nextCategory !== undefined && { categoryConfidence: 1 }),
             tags: nextTags,
           })
         }
@@ -697,6 +699,7 @@ function App() {
         await updateRemoteTransaction(session, transactionId, {
           displayDescription: singleDisplayDescription,
           category: nextCategory,
+          ...(nextCategory !== undefined && { categoryConfidence: 1 }),
           tags: nextTags,
         })
       }
@@ -751,7 +754,7 @@ function App() {
       if (supabaseEnabled && session) {
         await Promise.all(
           transactionIds.map((id) =>
-            updateRemoteTransaction(session, id, { category })
+            updateRemoteTransaction(session, id, { category, categoryConfidence: 1 })
           )
         )
       }
@@ -761,7 +764,7 @@ function App() {
           if (!targetIds.has(transaction.id)) {
             return transaction
           }
-          return { ...transaction, category }
+          return { ...transaction, category, categoryConfidence: 1 }
         })
       )
       setAuthError('')

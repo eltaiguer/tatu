@@ -531,7 +531,7 @@ export function Categories({ transactions }: CategoriesProps) {
               }}
             >
               {getCategoryDefinitions()
-                .filter((c) => c.id !== Category.Uncategorized && !c.isIgnored)
+                .filter((c) => c.id !== Category.Uncategorized)
                 .map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.icon} {cat.label}

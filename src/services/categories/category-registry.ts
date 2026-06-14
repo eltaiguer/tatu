@@ -79,7 +79,7 @@ export function getCategoryDefinition(
 
   if (Object.values(Category).includes(resolvedId as Category)) {
     const category = resolvedId as Category
-    const override = listCustomCategories().find((c) => c.id === id)
+    const override = listCustomCategories().find((c) => c.id === resolvedId)
     return {
       id: category,
       label: override?.label ?? CATEGORY_LABELS[category],
