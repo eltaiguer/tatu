@@ -18,6 +18,15 @@ export interface CategoryDefinition {
 
 const DEFAULT_CUSTOM_ICON = '🏷️'
 
+const ID_ALIASES: Partial<Record<string, Category>> = {
+  food: Category.Groceries,
+  restaurant: Category.Restaurants,
+  restaurants: Category.Restaurants,
+  health: Category.Healthcare,
+  salary: Category.Income,
+  other: Category.Uncategorized,
+}
+
 export function getCategoryDefinitions(): CategoryDefinition[] {
   const customList = listCustomCategories()
   const builtinIds = new Set(Object.values(Category) as string[])
@@ -65,8 +74,11 @@ export function getCategoryDefinition(
     return fallback
   }
 
-  if (Object.values(Category).includes(id as Category)) {
-    const category = id as Category
+  const normalizedId = id.toLowerCase()
+  const resolvedId = ID_ALIASES[normalizedId] ?? normalizedId
+
+  if (Object.values(Category).includes(resolvedId as Category)) {
+    const category = resolvedId as Category
     const override = listCustomCategories().find((c) => c.id === id)
     return {
       id: category,
@@ -78,7 +90,7 @@ export function getCategoryDefinition(
     }
   }
 
-  const custom = listCustomCategories().find((category) => category.id === id)
+  const custom = listCustomCategories().find((category) => category.id === resolvedId)
   if (!custom) {
     return fallback
   }

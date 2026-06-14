@@ -602,7 +602,9 @@ function App() {
               return tx
             }
 
-            const categoryUpdates = nextCategory ? { category: nextCategory } : {}
+            const categoryUpdates = nextCategory
+              ? { category: nextCategory, categoryConfidence: 1 as const }
+              : {}
             const tagsUpdates =
               tx.id === transactionId && nextTags !== undefined
                 ? { tags: nextTags }
@@ -670,6 +672,7 @@ function App() {
               ? trimmedDisplayDescription
               : undefined,
           category: nextCategory,
+          ...(nextCategory !== undefined && { categoryConfidence: 1 }),
           tags: nextTags,
         })
         setAuthError('')
@@ -701,6 +704,7 @@ function App() {
       state.updateTransaction(transactionId, {
         displayDescription: singleDisplayDescription,
         category: nextCategory,
+        ...(nextCategory !== undefined && { categoryConfidence: 1 }),
         tags: nextTags,
       })
       setAuthError('')
