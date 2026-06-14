@@ -33,7 +33,12 @@ export function listCustomCategories(): CustomCategory[] {
 }
 
 export function replaceCustomCategories(categories: CustomCategory[]): void {
-  _customCategories = categories
+  const seen = new Set<string>()
+  _customCategories = categories.filter((c) => {
+    if (seen.has(c.id)) return false
+    seen.add(c.id)
+    return true
+  })
 }
 
 export function addCustomCategory(input: {

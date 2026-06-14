@@ -8,8 +8,8 @@ import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -549,11 +549,21 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
           </div>
         </div>
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart
+          <AreaChart
             data={monthlyTrend}
-            margin={{ top: 0, right: 0, left: 0, bottom: 0 }}
+            margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+            <defs>
+              <linearGradient id="gradIngresos" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--pos)" stopOpacity={0.22} />
+                <stop offset="95%" stopColor="var(--pos)" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="gradGastos" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="var(--neg)" stopOpacity={0.2} />
+                <stop offset="95%" stopColor="var(--neg)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="2 4" stroke="var(--border)" vertical={false} />
             <XAxis
               dataKey="month"
               stroke="var(--text-faint)"
@@ -579,21 +589,27 @@ export function Charts({ transactions, onNavigateToTransactions }: ChartsProps) 
                 formatAmt(Number(value), currency)
               }
             />
-            <Bar
+            <Area
+              type="monotone"
               dataKey="ingresos"
-              fill="var(--pos)"
+              stroke="var(--pos)"
+              strokeWidth={2.5}
+              fill="url(#gradIngresos)"
               name="Ingresos"
-              radius={[6, 6, 0, 0]}
-              opacity={0.85}
+              dot={false}
+              activeDot={{ r: 4, fill: 'var(--pos)' }}
             />
-            <Bar
+            <Area
+              type="monotone"
               dataKey="gastos"
-              fill="var(--neg)"
+              stroke="var(--neg)"
+              strokeWidth={2.5}
+              fill="url(#gradGastos)"
               name="Gastos"
-              radius={[6, 6, 0, 0]}
-              opacity={0.85}
+              dot={false}
+              activeDot={{ r: 4, fill: 'var(--neg)' }}
             />
-          </BarChart>
+          </AreaChart>
         </ResponsiveContainer>
       </Card>
 

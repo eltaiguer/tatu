@@ -46,8 +46,14 @@ export function getCategoryDefinitions(): CategoryDefinition[] {
     }
   })
 
+  const seenCustomIds = new Set<string>()
   const custom = customList
-    .filter((c) => !builtinIds.has(c.id))
+    .filter((c) => {
+      if (builtinIds.has(c.id)) return false
+      if (seenCustomIds.has(c.id)) return false
+      seenCustomIds.add(c.id)
+      return true
+    })
     .map((c) => ({
       id: c.id,
       label: c.label,
@@ -57,7 +63,11 @@ export function getCategoryDefinitions(): CategoryDefinition[] {
       isIgnored: c.isIgnored ?? false,
     }))
 
-  return [...builtin, ...custom]
+  return [...builtin, ...custom].sort((a, b) => {
+    if (a.id === Category.Uncategorized) return 1
+    if (b.id === Category.Uncategorized) return -1
+    return a.label.localeCompare(b.label, 'es')
+  })
 }
 
 export function getCategoryDefinition(

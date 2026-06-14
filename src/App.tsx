@@ -23,7 +23,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from './components/ui/sheet'
-import { Sun, Moon, Menu } from 'lucide-react'
+import { Sun, Moon, Menu, Monitor } from 'lucide-react'
 import { useStore } from 'zustand'
 import {
   getPersistedTransactionsSnapshot,
@@ -132,14 +132,26 @@ function App() {
   const supabaseEnabled = isSupabaseConfigured()
 
   // Initialize theme from localStorage
-  const [isDark, setIsDark] = useState(() => {
+  const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>(() => {
     const saved = localStorage.getItem('theme')
-    return saved === 'dark'
+    if (saved === 'light' || saved === 'dark' || saved === 'auto') return saved
+    return 'auto'
   })
+  const [systemDark, setSystemDark] = useState(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
+  const isDark = theme === 'dark' || (theme === 'auto' && systemDark)
   const [currentView, setCurrentView] = useState<View>('overview')
   const [importOpen, setImportOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const toggleTheme = () => setIsDark((d) => !d)
+  const cycleTheme = () =>
+    setTheme((t) => (t === 'light' ? 'dark' : t === 'dark' ? 'auto' : 'light'))
+  const [preferredCurrency, setPreferredCurrencyState] = useState<
+    'UYU' | 'USD'
+  >(() => {
+    const saved = localStorage.getItem('tatu:preferences:currency')
+    return saved === 'USD' ? 'USD' : 'UYU'
+  })
   const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
   const [session, setSession] = useState<SupabaseSession | null>(() =>
     supabaseEnabled ? getCurrentSession() : null
@@ -156,16 +168,28 @@ function App() {
   // Get transactions from store
   const transactions = useStore(transactionStore, (state) => state.transactions)
 
-  // Handle theme toggle and persist to localStorage
+  // Listen for system color-scheme changes (used when theme === 'auto')
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  // Apply dark class and persist theme preference
   useEffect(() => {
     if (isDark) {
       document.documentElement.classList.add('dark')
-      localStorage.setItem('theme', 'dark')
     } else {
       document.documentElement.classList.remove('dark')
-      localStorage.setItem('theme', 'light')
     }
-  }, [isDark])
+    localStorage.setItem('theme', theme)
+  }, [isDark, theme])
+
+  function setPreferredCurrency(c: 'UYU' | 'USD') {
+    setPreferredCurrencyState(c)
+    localStorage.setItem('tatu:preferences:currency', c)
+  }
 
   useEffect(() => {
     setActiveSupabaseSession(session)
@@ -1176,6 +1200,7 @@ function App() {
                 onNavigateToImport={() => setImportOpen(true)}
                 onNavigateToTransactions={navigateToTransactions}
                 onNavigateToAnalysis={() => setCurrentView('analysis')}
+                defaultCurrency={preferredCurrency}
               />
             )}
             {currentView === 'transactions' && (
@@ -1201,8 +1226,10 @@ function App() {
             )}
             {currentView === 'settings' && (
               <Settings
-                isDark={isDark}
-                onToggleTheme={toggleTheme}
+                theme={theme}
+                onSetTheme={setTheme}
+                preferredCurrency={preferredCurrency}
+                onSetCurrency={setPreferredCurrency}
                 session={session}
                 supabaseEnabled={supabaseEnabled}
                 onSignOut={() => {
@@ -1247,8 +1274,14 @@ function App() {
 
       {/* Floating theme toggle */}
       <button
-        onClick={toggleTheme}
-        aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        onClick={cycleTheme}
+        aria-label={
+          theme === 'auto'
+            ? 'Tema automático (según sistema)'
+            : isDark
+              ? 'Cambiar a modo claro'
+              : 'Cambiar a modo oscuro'
+        }
         style={{
           position: 'fixed',
           bottom: 22,
@@ -1278,7 +1311,13 @@ function App() {
             'var(--text-muted)'
         }}
       >
-        {isDark ? <Sun size={18} /> : <Moon size={18} />}
+        {theme === 'auto' ? (
+          <Monitor size={18} />
+        ) : isDark ? (
+          <Sun size={18} />
+        ) : (
+          <Moon size={18} />
+        )}
       </button>
 
       <Toaster />

@@ -32,11 +32,13 @@ describe('Settings', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders the page heading and Apariencia section', () => {
+  it('renders the page heading and Apariencia section with all theme options', () => {
     render(
       <Settings
-        isDark={false}
-        onToggleTheme={() => {}}
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
@@ -49,15 +51,18 @@ describe('Settings', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Apariencia')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Claro' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Auto' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Oscuro' })).toBeInTheDocument()
   })
 
-  it('calls onToggleTheme when clicking the opposite theme button', () => {
-    const onToggle = vi.fn()
+  it('calls onSetTheme with the selected value when clicking a theme button', () => {
+    const onSetTheme = vi.fn()
     render(
       <Settings
-        isDark={false}
-        onToggleTheme={onToggle}
+        theme="light"
+        onSetTheme={onSetTheme}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
@@ -66,14 +71,38 @@ describe('Settings', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Oscuro' }))
-    expect(onToggle).toHaveBeenCalledTimes(1)
+    expect(onSetTheme).toHaveBeenCalledWith('dark')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Auto' }))
+    expect(onSetTheme).toHaveBeenCalledWith('auto')
+  })
+
+  it('calls onSetCurrency when clicking a currency button', () => {
+    const onSetCurrency = vi.fn()
+    render(
+      <Settings
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={onSetCurrency}
+        session={null}
+        supabaseEnabled={false}
+        onSignOut={() => {}}
+        transactions={[]}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dólares' }))
+    expect(onSetCurrency).toHaveBeenCalledWith('USD')
   })
 
   it('shows Conectado badge and sign-out button when session is active', () => {
     render(
       <Settings
-        isDark={false}
-        onToggleTheme={() => {}}
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
         session={mockSession}
         supabaseEnabled={true}
         onSignOut={() => {}}
@@ -89,8 +118,10 @@ describe('Settings', () => {
     const onSignOut = vi.fn()
     render(
       <Settings
-        isDark={false}
-        onToggleTheme={() => {}}
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
         session={mockSession}
         supabaseEnabled={true}
         onSignOut={onSignOut}
@@ -105,8 +136,10 @@ describe('Settings', () => {
   it('shows the correct privacy copy', () => {
     render(
       <Settings
-        isDark={false}
-        onToggleTheme={() => {}}
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
@@ -128,8 +161,10 @@ describe('Settings', () => {
 
     render(
       <Settings
-        isDark={false}
-        onToggleTheme={() => {}}
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}

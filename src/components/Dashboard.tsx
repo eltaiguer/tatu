@@ -13,10 +13,35 @@ import type { Transaction, Currency, TransactionsFilter } from '../models'
 import { useMemo, useState } from 'react'
 import { getCategoryDisplay } from '../utils/category-display'
 import { isTransferCategory } from '../services/transfers/internal-transfers'
-import { isCategoryIgnored } from '../services/categories/category-registry'
+import {
+  isCategoryIgnored,
+  getCategoryDefinition,
+} from '../services/categories/category-registry'
 
 function toSafeNumber(value: number): number {
   return Number.isFinite(value) ? value : 0
+}
+
+function MiniBars({ values, color }: { values: number[]; color: string }) {
+  const max = Math.max(...values, 1)
+  const bars = values.slice(-6)
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 24 }}>
+      {bars.map((v, i) => (
+        <div
+          key={i}
+          style={{
+            flex: 1,
+            height: `${Math.round((v / max) * 100)}%`,
+            minHeight: 3,
+            background: color,
+            borderRadius: 2,
+            opacity: i === bars.length - 1 ? 1 : 0.35,
+          }}
+        />
+      ))}
+    </div>
+  )
 }
 
 function formatCurrency(amount: number, currency: Currency): string {
@@ -56,6 +81,7 @@ interface DashboardProps {
   onNavigateToImport?: () => void
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
   onNavigateToAnalysis?: () => void
+  defaultCurrency?: Currency
 }
 
 type CurrencyFilter = Currency | 'all'
@@ -66,8 +92,11 @@ export function Dashboard({
   onNavigateToImport,
   onNavigateToTransactions,
   onNavigateToAnalysis,
+  defaultCurrency,
 }: DashboardProps) {
-  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyFilter>('all')
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyFilter>(
+    defaultCurrency ?? 'all'
+  )
 
   const hasTransactions = transactions.length > 0
 
@@ -181,6 +210,28 @@ export function Dashboard({
         .slice(0, 6),
     [transactions],
   )
+
+  const uyuMonthlyTrend = useMemo(() => {
+    const grouped = new Map<string, { income: number; expense: number }>()
+    transactions
+      .filter(
+        (tx) =>
+          tx.currency === 'UYU' &&
+          !isTransferCategory(tx.category) &&
+          !isCategoryIgnored(tx.category),
+      )
+      .forEach((tx) => {
+        const key = `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, '0')}`
+        if (!grouped.has(key)) grouped.set(key, { income: 0, expense: 0 })
+        const entry = grouped.get(key)!
+        if (tx.type === 'credit') entry.income += toSafeNumber(tx.amount)
+        else entry.expense += toSafeNumber(tx.amount)
+      })
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, v]) => v)
+      .slice(-6)
+  }, [transactions])
 
   const firstName = userName ? userName.split('@')[0] : null
   const greeting = firstName ? `Hola, ${firstName} 👋` : 'Hola 👋'
@@ -549,6 +600,14 @@ export function Dashboard({
                     {formatCurrency(thisMonthSummaryUSD.income, 'USD')}
                   </div>
                 )}
+                {uyuMonthlyTrend.length > 1 && selectedCurrency !== 'USD' && (
+                  <div style={{ marginTop: 12 }}>
+                    <MiniBars
+                      values={uyuMonthlyTrend.map((m) => m.income)}
+                      color="var(--pos)"
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <div
@@ -572,6 +631,14 @@ export function Dashboard({
                       {formatCurrency(thisMonthSummaryUSD.expenses, 'USD')}
                     </div>
                   )}
+                {uyuMonthlyTrend.length > 1 && selectedCurrency !== 'USD' && (
+                  <div style={{ marginTop: 12 }}>
+                    <MiniBars
+                      values={uyuMonthlyTrend.map((m) => m.expense)}
+                      color="var(--neg)"
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <div
@@ -742,7 +809,9 @@ export function Dashboard({
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {recentTransactions.map((tx, i) => {
-                  const display = getCategoryDisplay(tx.category ?? 'uncategorized')
+                  const catDef = getCategoryDefinition(
+                    tx.category ?? 'uncategorized',
+                  )
                   const isCredit = tx.type === 'credit'
                   return (
                     <div
@@ -763,21 +832,14 @@ export function Dashboard({
                           width: 32,
                           height: 32,
                           borderRadius: 9,
-                          background: display.color + '1f',
+                          background: catDef.color + '1f',
                           display: 'grid',
                           placeItems: 'center',
                           flexShrink: 0,
+                          fontSize: 15,
                         }}
                       >
-                        <span
-                          style={{
-                            width: 10,
-                            height: 10,
-                            borderRadius: '50%',
-                            background: display.color,
-                            display: 'block',
-                          }}
-                        />
+                        {catDef.icon}
                       </span>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div
