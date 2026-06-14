@@ -32,22 +32,26 @@ describe('Dashboard', () => {
     vi.useRealTimers()
   })
 
-  it('shows multi-currency summary amounts in the overview', () => {
+  it('shows converted+combined totals in home currency', () => {
     const transactions = [
       makeTransaction({ id: 'uyu-debit', currency: 'UYU', type: 'debit', amount: 1000 }),
       makeTransaction({ id: 'usd-debit', currency: 'USD', type: 'debit', amount: 50 }),
       makeTransaction({ id: 'usd-credit', currency: 'USD', type: 'credit', amount: 200 }),
     ]
 
-    render(<Dashboard transactions={transactions} />)
+    // homeCurrency defaults to 'USD', fxRate defaults to 40.5
+    // income = 200 USD, expenses = 50 USD + 1000/40.5 ≈ 24.69 USD
+    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
 
-    // USD income appears as secondary in "Este mes" panel (since > 0)
+    // income = 200 USD appears in "Este mes" panel
     expect(screen.getByText('US$ 200,00')).toBeInTheDocument()
-    // USD expense appears as secondary in "Este mes" panel (since > 0)
-    expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
+    // UYU transaction native amount appears in recent list
+    expect(screen.getAllByText('$U 1.000,00').length).toBeGreaterThan(0)
+    // Converted secondary line appears for the UYU tx (≈ USD)
+    expect(screen.getByText(/≈ US\$/)).toBeInTheDocument()
   })
 
-  it('does not count transfer debits as expenses', () => {
+  it('does not count transfer debits as expenses in converted totals', () => {
     const transactions = [
       makeTransaction({
         id: 'normal-expense',
@@ -65,9 +69,12 @@ describe('Dashboard', () => {
       }),
     ]
 
-    render(<Dashboard transactions={transactions} />)
+    // homeCurrency=USD, so expense total = 50 (transfer excluded)
+    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
 
+    // 50 appears (native + converted total)
     expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
+    // 150 should NOT appear (transfer excluded from totals)
     expect(screen.queryByText('US$ 150,00')).not.toBeInTheDocument()
   })
 })

@@ -1,4 +1,4 @@
-// Dashboard - Overview with account cards and monthly summary
+// Dashboard - Overview with account cards, converted+combined monthly summary
 
 import { Card } from './ui/card'
 import { Button } from './ui/button'
@@ -10,13 +10,17 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { getCategoryDisplay } from '../utils/category-display'
 import { isTransferCategory } from '../services/transfers/internal-transfers'
+import { isCategoryIgnored, getCategoryDefinition } from '../services/categories/category-registry'
 import {
-  isCategoryIgnored,
-  getCategoryDefinition,
-} from '../services/categories/category-registry'
+  buildCurrentMonthSummary,
+  buildCategorySpendingConverted,
+  buildMonthlyTrendsConverted,
+} from '../services/charts/chart-data'
+import { convert } from '../services/currency/convert'
+import { FxChip } from './FxChip'
 
 function toSafeNumber(value: number): number {
   return Number.isFinite(value) ? value : 0
@@ -54,19 +58,14 @@ function formatCurrency(amount: number, currency: Currency): string {
   return `${symbol} ${formatted}`
 }
 
-function calculateSummary(transactions: Transaction[], currency?: Currency) {
-  const filtered = currency
-    ? transactions.filter((tx) => tx.currency === currency)
-    : transactions
-
+function calculateAccountSummary(transactions: Transaction[], currency: Currency) {
+  const filtered = transactions.filter((tx) => tx.currency === currency)
   const income = filtered
     .filter((tx) => tx.type === 'credit' && !isTransferCategory(tx.category) && !isCategoryIgnored(tx.category))
     .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
-
   const expenses = filtered
     .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category) && !isCategoryIgnored(tx.category))
     .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
-
   return {
     income: toSafeNumber(income),
     expenses: toSafeNumber(expenses),
@@ -81,10 +80,11 @@ interface DashboardProps {
   onNavigateToImport?: () => void
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
   onNavigateToAnalysis?: () => void
-  defaultCurrency?: Currency
+  homeCurrency?: Currency
+  fxRate?: number
+  onSetHomeCurrency?: (c: Currency) => void
+  onSetFxRate?: (r: number) => void
 }
-
-type CurrencyFilter = Currency | 'all'
 
 export function Dashboard({
   transactions,
@@ -92,15 +92,14 @@ export function Dashboard({
   onNavigateToImport,
   onNavigateToTransactions,
   onNavigateToAnalysis,
-  defaultCurrency,
+  homeCurrency = 'USD',
+  fxRate = 40.5,
+  onSetHomeCurrency,
+  onSetFxRate,
 }: DashboardProps) {
-  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyFilter>(
-    defaultCurrency ?? 'all'
-  )
-
   const hasTransactions = transactions.length > 0
 
-  // Reference month from latest transaction date — not current clock
+  // Latest date used as reference month (avoids dependency on system clock)
   const latestDate = useMemo(() => {
     if (transactions.length === 0) return new Date()
     return transactions.reduce(
@@ -109,99 +108,70 @@ export function Dashboard({
     )
   }, [transactions])
 
-  const monthLabel = useMemo(
-    () => latestDate.toLocaleDateString('es-UY', { month: 'long', year: 'numeric' }),
-    [latestDate],
-  )
-
-  const thisMonthTransactions = useMemo(() => {
-    const y = latestDate.getFullYear()
-    const m = latestDate.getMonth()
-    return transactions.filter((tx) => {
-      const d = tx.date
-      return d.getFullYear() === y && d.getMonth() === m
-    })
-  }, [transactions, latestDate])
-
-  // Per-source account summaries
+  // Per-source account summaries (native currency, not converted)
   const creditCardTransactions = useMemo(
     () => transactions.filter((tx) => tx.source === 'credit_card'),
     [transactions],
   )
   const creditCardSummaryUYU = useMemo(
-    () => calculateSummary(creditCardTransactions, 'UYU'),
+    () => calculateAccountSummary(creditCardTransactions, 'UYU'),
     [creditCardTransactions],
   )
   const creditCardSummaryUSD = useMemo(
-    () => calculateSummary(creditCardTransactions, 'USD'),
+    () => calculateAccountSummary(creditCardTransactions, 'USD'),
     [creditCardTransactions],
   )
-
   const usdBankTransactions = useMemo(
-    () =>
-      transactions.filter(
-        (tx) => tx.source === 'bank_account' && tx.currency === 'USD',
-      ),
+    () => transactions.filter((tx) => tx.source === 'bank_account' && tx.currency === 'USD'),
     [transactions],
   )
   const usdBankSummary = useMemo(
-    () => calculateSummary(usdBankTransactions, 'USD'),
+    () => calculateAccountSummary(usdBankTransactions, 'USD'),
     [usdBankTransactions],
   )
-
   const uyuBankTransactions = useMemo(
-    () =>
-      transactions.filter(
-        (tx) => tx.source === 'bank_account' && tx.currency === 'UYU',
-      ),
+    () => transactions.filter((tx) => tx.source === 'bank_account' && tx.currency === 'UYU'),
     [transactions],
   )
   const uyuBankSummary = useMemo(
-    () => calculateSummary(uyuBankTransactions, 'UYU'),
+    () => calculateAccountSummary(uyuBankTransactions, 'UYU'),
     [uyuBankTransactions],
   )
 
-  // "Este mes" panel summaries
-  const thisMonthSummaryUYU = useMemo(
-    () => calculateSummary(thisMonthTransactions, 'UYU'),
-    [thisMonthTransactions],
-  )
-  const thisMonthSummaryUSD = useMemo(
-    () => calculateSummary(thisMonthTransactions, 'USD'),
-    [thisMonthTransactions],
+  // "Este mes" — converted + combined totals in home currency
+  const monthSummary = useMemo(
+    () => buildCurrentMonthSummary(transactions, homeCurrency, fxRate),
+    [transactions, homeCurrency, fxRate],
   )
 
-  const panelCurrency: Currency = selectedCurrency === 'USD' ? 'USD' : 'UYU'
-  const panelSummary =
-    selectedCurrency === 'USD' ? thisMonthSummaryUSD : thisMonthSummaryUYU
-
-  // Top-5 category breakdown for selected currency (defaults to UYU in 'all' mode)
-  const categoryBreakdown = useMemo(() => {
-    const slice =
-      selectedCurrency === 'USD'
-        ? thisMonthTransactions.filter((tx) => tx.currency === 'USD')
-        : thisMonthTransactions.filter((tx) => tx.currency === 'UYU')
-
-    const debits = slice.filter(
-      (tx) => tx.type === 'debit' && !isTransferCategory(tx.category) && !isCategoryIgnored(tx.category),
+  // Category breakdown for current month, in home currency
+  const thisMonthTransactions = useMemo(() => {
+    const y = latestDate.getUTCFullYear()
+    const m = latestDate.getUTCMonth()
+    return transactions.filter(
+      (tx) => tx.date.getUTCFullYear() === y && tx.date.getUTCMonth() === m,
     )
-    const total = debits.reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
-    const byCategory = new Map<string, number>()
-    debits.forEach((tx) => {
-      const cat = tx.category ?? 'uncategorized'
-      byCategory.set(cat, (byCategory.get(cat) ?? 0) + toSafeNumber(tx.amount))
-    })
+  }, [transactions, latestDate])
 
-    return Array.from(byCategory.entries())
-      .map(([cat, amount]) => ({
-        category: cat,
-        amount,
-        pct: total > 0 ? (amount / total) * 100 : 0,
-        display: getCategoryDisplay(cat),
-      }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5)
-  }, [thisMonthTransactions, selectedCurrency])
+  const categoryBreakdown = useMemo(() => {
+    const data = buildCategorySpendingConverted(
+      thisMonthTransactions,
+      homeCurrency,
+      fxRate,
+    )
+    const total = data.reduce((s, r) => s + r.total, 0) || 1
+    return data.slice(0, 5).map((row) => ({
+      ...row,
+      pct: (row.total / total) * 100,
+      display: getCategoryDisplay(row.category),
+    }))
+  }, [thisMonthTransactions, homeCurrency, fxRate])
+
+  // Monthly sparkline trend (converted+combined for home currency)
+  const monthlyTrend = useMemo(
+    () => buildMonthlyTrendsConverted(transactions, homeCurrency, fxRate).slice(-6),
+    [transactions, homeCurrency, fxRate],
+  )
 
   const recentTransactions = useMemo(
     () =>
@@ -211,32 +181,8 @@ export function Dashboard({
     [transactions],
   )
 
-  const uyuMonthlyTrend = useMemo(() => {
-    const grouped = new Map<string, { income: number; expense: number }>()
-    transactions
-      .filter(
-        (tx) =>
-          tx.currency === 'UYU' &&
-          !isTransferCategory(tx.category) &&
-          !isCategoryIgnored(tx.category),
-      )
-      .forEach((tx) => {
-        const key = `${tx.date.getFullYear()}-${String(tx.date.getMonth() + 1).padStart(2, '0')}`
-        if (!grouped.has(key)) grouped.set(key, { income: 0, expense: 0 })
-        const entry = grouped.get(key)!
-        if (tx.type === 'credit') entry.income += toSafeNumber(tx.amount)
-        else entry.expense += toSafeNumber(tx.amount)
-      })
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([, v]) => v)
-      .slice(-6)
-  }, [transactions])
-
   const firstName = userName ? userName.split('@')[0] : null
   const greeting = firstName ? `Hola, ${firstName} 👋` : 'Hola 👋'
-  const summaryLabel =
-    selectedCurrency === 'USD' ? 'Este mes en dólares' : 'Este mes en pesos'
 
   return (
     <div className="space-y-6">
@@ -254,50 +200,43 @@ export function Dashboard({
           <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
             {greeting}
           </h1>
-          <p
-            className="text-muted-foreground"
-            style={{ fontSize: 14 }}
-          >
-            Esto es lo que pasó en tus cuentas Santander · {monthLabel}
+          <p className="text-muted-foreground" style={{ fontSize: 14 }}>
+            Esto es lo que pasó en tus cuentas Santander · {monthSummary.monthLabel || latestDate.toLocaleDateString('es-UY', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
           </p>
         </div>
         {hasTransactions && (
-          <div
-            style={{
-              display: 'flex',
-              background: 'var(--surface-2)',
-              borderRadius: 10,
-              padding: 3,
-              gap: 2,
-            }}
-          >
-            {(['all', 'UYU', 'USD'] as const).map((val) => (
-              <button
-                key={val}
-                onClick={() => setSelectedCurrency(val)}
-                style={{
-                  padding: '5px 14px',
-                  borderRadius: 7,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  background:
-                    selectedCurrency === val ? 'var(--bg)' : 'transparent',
-                  color:
-                    selectedCurrency === val
-                      ? 'var(--text)'
-                      : 'var(--text-faint)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s',
-                  boxShadow:
-                    selectedCurrency === val
-                      ? '0 1px 3px rgba(0,0,0,.08)'
-                      : 'none',
-                }}
-              >
-                {val === 'all' ? 'Todo' : val === 'UYU' ? '$U' : 'US$'}
-              </button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <FxChip fxRate={fxRate} onSetFxRate={onSetFxRate} />
+            <div
+              style={{
+                display: 'flex',
+                background: 'var(--surface-2)',
+                borderRadius: 10,
+                padding: 3,
+                gap: 2,
+              }}
+            >
+              {(['USD', 'UYU'] as const).map((val) => (
+                <button
+                  key={val}
+                  onClick={() => onSetHomeCurrency?.(val)}
+                  style={{
+                    padding: '5px 14px',
+                    borderRadius: 7,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    background: homeCurrency === val ? 'var(--bg)' : 'transparent',
+                    color: homeCurrency === val ? 'var(--text)' : 'var(--text-faint)',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    boxShadow: homeCurrency === val ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
+                  }}
+                >
+                  {val === 'USD' ? 'US$' : '$U'}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -326,7 +265,7 @@ export function Dashboard({
 
       {hasTransactions && (
         <>
-          {/* 3 Account cards */}
+          {/* 3 Account cards (native amounts) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card
               className={onNavigateToTransactions ? 'p-5 cursor-pointer' : 'p-5'}
@@ -340,49 +279,30 @@ export function Dashboard({
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: 'var(--surface-2)',
-                    color: 'var(--brand)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    flexShrink: 0,
+                    width: 36, height: 36, borderRadius: 10,
+                    background: 'var(--surface-2)', color: 'var(--brand)',
+                    display: 'grid', placeItems: 'center', flexShrink: 0,
                   }}
                 >
                   <CreditCard size={18} />
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>
-                    Tarjeta de Crédito
-                  </div>
-                  <div
-                    className="text-muted-foreground"
-                    style={{ fontSize: 12 }}
-                  >
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Tarjeta de Crédito</div>
+                  <div className="text-muted-foreground" style={{ fontSize: 12 }}>
                     Santander Mastercard
                   </div>
                 </div>
               </div>
               <div>
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500 }}
-                >
+                <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500 }}>
                   Consumo del período
                 </div>
                 <div style={{ marginTop: 4 }}>
-                  <div
-                    className="font-mono"
-                    style={{ fontSize: 22, color: 'var(--neg)' }}
-                  >
+                  <div className="font-mono" style={{ fontSize: 22, color: 'var(--neg)' }}>
                     {formatCurrency(creditCardSummaryUYU.expenses, 'UYU')}
                   </div>
                   {creditCardSummaryUSD.expenses > 0 && (
-                    <div
-                      className="font-mono text-muted-foreground"
-                      style={{ fontSize: 14, marginTop: 2 }}
-                    >
+                    <div className="font-mono text-muted-foreground" style={{ fontSize: 14, marginTop: 2 }}>
                       {formatCurrency(creditCardSummaryUSD.expenses, 'USD')}
                     </div>
                   )}
@@ -390,12 +310,7 @@ export function Dashboard({
               </div>
               <div
                 className="text-muted-foreground"
-                style={{
-                  fontSize: 12,
-                  marginTop: 'auto',
-                  paddingTop: 8,
-                  borderTop: '1px solid var(--border)',
-                }}
+                style={{ fontSize: 12, marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)' }}
               >
                 {creditCardTransactions.length} movimientos este período
               </div>
@@ -405,11 +320,7 @@ export function Dashboard({
               className={onNavigateToTransactions ? 'p-5 cursor-pointer' : 'p-5'}
               onClick={
                 onNavigateToTransactions
-                  ? () =>
-                      onNavigateToTransactions({
-                        accountType: 'bank_account',
-                        currency: 'USD',
-                      })
+                  ? () => onNavigateToTransactions({ accountType: 'bank_account', currency: 'USD' })
                   : undefined
               }
               style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
@@ -417,57 +328,34 @@ export function Dashboard({
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: 'var(--surface-2)',
-                    color: 'var(--brand)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    flexShrink: 0,
+                    width: 36, height: 36, borderRadius: 10,
+                    background: 'var(--surface-2)', color: 'var(--brand)',
+                    display: 'grid', placeItems: 'center', flexShrink: 0,
                   }}
                 >
                   <DollarSign size={18} />
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>
-                    Cuenta en Dólares
-                  </div>
-                  <div
-                    className="text-muted-foreground"
-                    style={{ fontSize: 12 }}
-                  >
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Cuenta en Dólares</div>
+                  <div className="text-muted-foreground" style={{ fontSize: 12 }}>
                     Caja de ahorro USD
                   </div>
                 </div>
               </div>
               <div>
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500 }}
-                >
+                <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500 }}>
                   Saldo disponible
                 </div>
                 <div
                   className="font-mono"
-                  style={{
-                    fontSize: 24,
-                    marginTop: 4,
-                    color:
-                      usdBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)',
-                  }}
+                  style={{ fontSize: 24, marginTop: 4, color: usdBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)' }}
                 >
                   {formatCurrency(usdBankSummary.balance, 'USD')}
                 </div>
               </div>
               <div
                 className="text-muted-foreground"
-                style={{
-                  fontSize: 12,
-                  marginTop: 'auto',
-                  paddingTop: 8,
-                  borderTop: '1px solid var(--border)',
-                }}
+                style={{ fontSize: 12, marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)' }}
               >
                 {usdBankTransactions.length} movimientos este período
               </div>
@@ -477,11 +365,7 @@ export function Dashboard({
               className={onNavigateToTransactions ? 'p-5 cursor-pointer' : 'p-5'}
               onClick={
                 onNavigateToTransactions
-                  ? () =>
-                      onNavigateToTransactions({
-                        accountType: 'bank_account',
-                        currency: 'UYU',
-                      })
+                  ? () => onNavigateToTransactions({ accountType: 'bank_account', currency: 'UYU' })
                   : undefined
               }
               style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
@@ -489,64 +373,41 @@ export function Dashboard({
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: 'var(--surface-2)',
-                    color: 'var(--brand)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    flexShrink: 0,
+                    width: 36, height: 36, borderRadius: 10,
+                    background: 'var(--surface-2)', color: 'var(--brand)',
+                    display: 'grid', placeItems: 'center', flexShrink: 0,
                   }}
                 >
                   <Landmark size={18} />
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>
-                    Cuenta en Pesos
-                  </div>
-                  <div
-                    className="text-muted-foreground"
-                    style={{ fontSize: 12 }}
-                  >
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Cuenta en Pesos</div>
+                  <div className="text-muted-foreground" style={{ fontSize: 12 }}>
                     Caja de ahorro UYU
                   </div>
                 </div>
               </div>
               <div>
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500 }}
-                >
+                <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500 }}>
                   Saldo disponible
                 </div>
                 <div
                   className="font-mono"
-                  style={{
-                    fontSize: 24,
-                    marginTop: 4,
-                    color:
-                      uyuBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)',
-                  }}
+                  style={{ fontSize: 24, marginTop: 4, color: uyuBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)' }}
                 >
                   {formatCurrency(uyuBankSummary.balance, 'UYU')}
                 </div>
               </div>
               <div
                 className="text-muted-foreground"
-                style={{
-                  fontSize: 12,
-                  marginTop: 'auto',
-                  paddingTop: 8,
-                  borderTop: '1px solid var(--border)',
-                }}
+                style={{ fontSize: 12, marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)' }}
               >
                 {uyuBankTransactions.length} movimientos este período
               </div>
             </Card>
           </div>
 
-          {/* Este mes panel */}
+          {/* Este mes panel — converted + combined in home currency */}
           <Card className="p-6">
             <div
               style={{
@@ -557,21 +418,15 @@ export function Dashboard({
               }}
             >
               <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-                {summaryLabel}
+                Este mes
               </h2>
               {onNavigateToAnalysis && (
                 <button
                   onClick={onNavigateToAnalysis}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    fontSize: 13,
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--brand)',
-                    fontWeight: 500,
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    fontSize: 13, background: 'none', border: 'none',
+                    cursor: 'pointer', color: 'var(--brand)', fontWeight: 500,
                   }}
                 >
                   Ver análisis completo <ArrowRight size={14} />
@@ -580,89 +435,54 @@ export function Dashboard({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <div>
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
-                >
+                <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>
                   Ingresos
                 </div>
-                <div
-                  className="font-mono"
-                  style={{ fontSize: 22, color: 'var(--pos)' }}
-                >
-                  {formatCurrency(panelSummary.income, panelCurrency)}
+                <div className="font-mono" style={{ fontSize: 22, color: 'var(--pos)' }}>
+                  {formatCurrency(monthSummary.income, homeCurrency)}
                 </div>
-                {selectedCurrency === 'all' && thisMonthSummaryUSD.income > 0 && (
-                  <div
-                    className="font-mono text-muted-foreground"
-                    style={{ fontSize: 13, marginTop: 2 }}
-                  >
-                    {formatCurrency(thisMonthSummaryUSD.income, 'USD')}
-                  </div>
-                )}
-                {uyuMonthlyTrend.length > 1 && selectedCurrency !== 'USD' && (
+                {monthlyTrend.length > 1 && (
                   <div style={{ marginTop: 12 }}>
-                    <MiniBars
-                      values={uyuMonthlyTrend.map((m) => m.income)}
-                      color="var(--pos)"
-                    />
+                    <MiniBars values={monthlyTrend.map((m) => m.income)} color="var(--pos)" />
                   </div>
                 )}
               </div>
               <div>
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
-                >
+                <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>
                   Gastos
                 </div>
-                <div
-                  className="font-mono"
-                  style={{ fontSize: 22, color: 'var(--neg)' }}
-                >
-                  {formatCurrency(panelSummary.expenses, panelCurrency)}
+                <div className="font-mono" style={{ fontSize: 22, color: 'var(--neg)' }}>
+                  {formatCurrency(monthSummary.expense, homeCurrency)}
                 </div>
-                {selectedCurrency === 'all' &&
-                  thisMonthSummaryUSD.expenses > 0 && (
-                    <div
-                      className="font-mono text-muted-foreground"
-                      style={{ fontSize: 13, marginTop: 2 }}
-                    >
-                      {formatCurrency(thisMonthSummaryUSD.expenses, 'USD')}
-                    </div>
-                  )}
-                {uyuMonthlyTrend.length > 1 && selectedCurrency !== 'USD' && (
+                {homeCurrency === 'USD' && monthSummary.split.UYU > 0 && (
+                  <div className="text-muted-foreground" style={{ fontSize: 12, marginTop: 4 }}>
+                    {formatCurrency(monthSummary.split.USD, 'USD')} + {formatCurrency(monthSummary.split.UYU, 'UYU')} nativo
+                  </div>
+                )}
+                {homeCurrency === 'UYU' && monthSummary.split.USD > 0 && (
+                  <div className="text-muted-foreground" style={{ fontSize: 12, marginTop: 4 }}>
+                    {formatCurrency(monthSummary.split.UYU, 'UYU')} + {formatCurrency(monthSummary.split.USD, 'USD')} nativo
+                  </div>
+                )}
+                {monthlyTrend.length > 1 && (
                   <div style={{ marginTop: 12 }}>
-                    <MiniBars
-                      values={uyuMonthlyTrend.map((m) => m.expense)}
-                      color="var(--neg)"
-                    />
+                    <MiniBars values={monthlyTrend.map((m) => m.expense)} color="var(--neg)" />
                   </div>
                 )}
               </div>
               <div>
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
-                >
+                <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}>
                   Balance neto
                 </div>
                 <div
                   className="font-mono"
-                  style={{
-                    fontSize: 22,
-                    color:
-                      panelSummary.balance >= 0 ? 'var(--pos)' : 'var(--neg)',
-                  }}
+                  style={{ fontSize: 22, color: monthSummary.net >= 0 ? 'var(--pos)' : 'var(--neg)' }}
                 >
-                  {panelSummary.balance >= 0 ? '+' : '−'}
-                  {formatCurrency(Math.abs(panelSummary.balance), panelCurrency)}
+                  {monthSummary.net >= 0 ? '+' : '−'}
+                  {formatCurrency(Math.abs(monthSummary.net), homeCurrency)}
                 </div>
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, marginTop: 8 }}
-                >
-                  {thisMonthTransactions.length} transacciones registradas
+                <div className="text-muted-foreground" style={{ fontSize: 12, marginTop: 8 }}>
+                  {monthSummary.count} transacciones registradas
                 </div>
               </div>
             </div>
@@ -673,10 +493,8 @@ export function Dashboard({
             <Card className="p-6">
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 18,
+                  display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'center', marginBottom: 18,
                 }}
               >
                 <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
@@ -686,12 +504,8 @@ export function Dashboard({
                   <button
                     onClick={onNavigateToAnalysis}
                     style={{
-                      fontSize: 13,
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--brand)',
-                      fontWeight: 500,
+                      fontSize: 13, background: 'none', border: 'none',
+                      cursor: 'pointer', color: 'var(--brand)', fontWeight: 500,
                     }}
                   >
                     Detalle
@@ -699,10 +513,7 @@ export function Dashboard({
                 )}
               </div>
               {categoryBreakdown.length === 0 ? (
-                <p
-                  className="text-muted-foreground"
-                  style={{ fontSize: 13 }}
-                >
+                <p className="text-muted-foreground" style={{ fontSize: 13 }}>
                   Sin gastos registrados este mes.
                 </p>
               ) : (
@@ -710,63 +521,42 @@ export function Dashboard({
                   {categoryBreakdown.map((row) => (
                     <div
                       key={row.category}
-                      onClick={() =>
-                        onNavigateToTransactions?.({ category: row.category })
-                      }
-                      style={{
-                        cursor: onNavigateToTransactions ? 'pointer' : 'default',
-                      }}
+                      onClick={() => onNavigateToTransactions?.({ category: row.category })}
+                      style={{ cursor: onNavigateToTransactions ? 'pointer' : 'default' }}
                     >
                       <div
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'baseline',
-                          marginBottom: 5,
+                          display: 'flex', justifyContent: 'space-between',
+                          alignItems: 'baseline', marginBottom: 5,
                         }}
                       >
                         <span
                           style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 7,
-                            fontSize: 13.5,
-                            fontWeight: 500,
+                            display: 'inline-flex', alignItems: 'center',
+                            gap: 7, fontSize: 13.5, fontWeight: 500,
                           }}
                         >
                           <span
                             style={{
-                              width: 9,
-                              height: 9,
-                              borderRadius: 3,
-                              background: row.display.color,
-                              display: 'inline-block',
-                              flexShrink: 0,
+                              width: 9, height: 9, borderRadius: 3,
+                              background: row.display.color, display: 'inline-block', flexShrink: 0,
                             }}
                           />
                           {row.display.label}
                         </span>
-                        <span
-                          className="font-mono"
-                          style={{ fontSize: 13 }}
-                        >
-                          {formatCurrency(row.amount, panelCurrency)}
+                        <span className="font-mono" style={{ fontSize: 13 }}>
+                          {formatCurrency(row.total, homeCurrency)}
                         </span>
                       </div>
                       <div
                         style={{
-                          height: 4,
-                          borderRadius: 2,
-                          background: 'var(--surface-2)',
-                          overflow: 'hidden',
+                          height: 4, borderRadius: 2, background: 'var(--surface-2)', overflow: 'hidden',
                         }}
                       >
                         <div
                           style={{
-                            height: '100%',
-                            width: `${row.pct}%`,
-                            background: row.display.color,
-                            borderRadius: 2,
+                            height: '100%', width: `${row.pct}%`,
+                            background: row.display.color, borderRadius: 2,
                           }}
                         />
                       </div>
@@ -779,10 +569,8 @@ export function Dashboard({
             <Card className="p-6">
               <div
                 style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 14,
+                  display: 'flex', justifyContent: 'space-between',
+                  alignItems: 'center', marginBottom: 14,
                 }}
               >
                 <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
@@ -792,15 +580,9 @@ export function Dashboard({
                   <button
                     onClick={() => onNavigateToTransactions({})}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: 13,
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--brand)',
-                      fontWeight: 500,
+                      display: 'flex', alignItems: 'center', gap: 4,
+                      fontSize: 13, background: 'none', border: 'none',
+                      cursor: 'pointer', color: 'var(--brand)', fontWeight: 500,
                     }}
                   >
                     Ver todos <ArrowRight size={14} />
@@ -809,34 +591,27 @@ export function Dashboard({
               </div>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {recentTransactions.map((tx, i) => {
-                  const catDef = getCategoryDefinition(
-                    tx.category ?? 'uncategorized',
-                  )
+                  const catDef = getCategoryDefinition(tx.category ?? 'uncategorized')
                   const isCredit = tx.type === 'credit'
+                  const showConverted = tx.currency !== homeCurrency
+                  const convertedAmt = showConverted
+                    ? convert(tx.amount, tx.currency, homeCurrency, fxRate)
+                    : null
                   return (
                     <div
                       key={tx.id}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
+                        display: 'flex', alignItems: 'center', gap: 12,
                         padding: '10px 0',
-                        borderBottom:
-                          i < recentTransactions.length - 1
-                            ? '1px solid var(--border)'
-                            : 'none',
+                        borderBottom: i < recentTransactions.length - 1 ? '1px solid var(--border)' : 'none',
                       }}
                     >
                       <span
                         style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 9,
+                          width: 32, height: 32, borderRadius: 9,
                           background: catDef.color + '1f',
-                          display: 'grid',
-                          placeItems: 'center',
-                          flexShrink: 0,
-                          fontSize: 15,
+                          display: 'grid', placeItems: 'center',
+                          flexShrink: 0, fontSize: 15,
                         }}
                       >
                         {catDef.icon}
@@ -844,36 +619,33 @@ export function Dashboard({
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div
                           style={{
-                            fontSize: 13.5,
-                            fontWeight: 500,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
+                            fontSize: 13.5, fontWeight: 500,
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                           }}
                         >
-                          {tx.description}
+                          {tx.displayDescription ?? tx.description}
                         </div>
-                        <div
-                          className="text-muted-foreground"
-                          style={{ fontSize: 11.5 }}
-                        >
-                          {tx.date.toLocaleDateString('es-UY', {
-                            day: 'numeric',
-                            month: 'short',
-                          })}
+                        <div className="text-muted-foreground" style={{ fontSize: 11.5 }}>
+                          {tx.date.toLocaleDateString('es-UY', { day: 'numeric', month: 'short' })}
                         </div>
                       </div>
-                      <span
-                        className="font-mono"
-                        style={{
-                          fontSize: 13.5,
-                          color: isCredit ? 'var(--pos)' : 'var(--text)',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {isCredit ? '+' : '−'}
-                        {formatCurrency(tx.amount, tx.currency)}
-                      </span>
+                      <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                        <span
+                          className="font-mono"
+                          style={{ fontSize: 13.5, color: isCredit ? 'var(--pos)' : 'var(--text)', display: 'block' }}
+                        >
+                          {isCredit ? '+' : '−'}
+                          {formatCurrency(tx.amount, tx.currency)}
+                        </span>
+                        {showConverted && convertedAmt !== null && (
+                          <span
+                            className="font-mono text-muted-foreground"
+                            style={{ fontSize: 11, display: 'block' }}
+                          >
+                            ≈ {formatCurrency(convertedAmt, homeCurrency)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )
                 })}

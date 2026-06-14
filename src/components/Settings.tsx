@@ -10,6 +10,8 @@ interface SettingsProps {
   onSetTheme: (t: 'light' | 'dark' | 'auto') => void
   preferredCurrency: 'UYU' | 'USD'
   onSetCurrency: (c: 'UYU' | 'USD') => void
+  fxRate?: number
+  onSetFxRate?: (r: number) => void
   session: SupabaseSession | null
   supabaseEnabled: boolean
   onSignOut: () => void
@@ -141,6 +143,8 @@ export function Settings({
   onSetTheme,
   preferredCurrency,
   onSetCurrency,
+  fxRate = 40.5,
+  onSetFxRate,
   session,
   supabaseEnabled,
   onSignOut,
@@ -206,32 +210,58 @@ export function Settings({
             />
           }
         />
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 24,
-            padding: '16px 24px',
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
-              Moneda principal
+      </SectionCard>
+
+      {/* Monedas */}
+      <SectionCard title="Monedas">
+        <SettingRow
+          label="Moneda principal"
+          description="Moneda en la que se convierten y combinan todos los totales"
+          control={
+            <SegmentControl
+              options={[
+                { label: 'Pesos $U', value: 'UYU' },
+                { label: 'Dólares US$', value: 'USD' },
+              ]}
+              value={preferredCurrency}
+              onChange={(v) => onSetCurrency(v as 'UYU' | 'USD')}
+            />
+          }
+        />
+        <SettingRow
+          label="Tipo de cambio"
+          description="Usado para convertir entre USD y UYU en resúmenes y análisis"
+          control={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                1 US$ =
+              </span>
+              <input
+                type="number"
+                min="0.01"
+                step="0.5"
+                value={fxRate}
+                onChange={(e) => {
+                  const n = parseFloat(e.target.value)
+                  if (Number.isFinite(n) && n > 0) onSetFxRate?.(n)
+                }}
+                style={{
+                  width: 72,
+                  fontSize: 13,
+                  fontFamily: 'var(--font-mono)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
+                  padding: '5px 8px',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  outline: 'none',
+                  textAlign: 'right',
+                }}
+              />
+              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>$U</span>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-              Moneda por defecto en resúmenes
-            </div>
-          </div>
-          <SegmentControl
-            options={[
-              { label: 'Pesos', value: 'UYU' },
-              { label: 'Dólares', value: 'USD' },
-            ]}
-            value={preferredCurrency}
-            onChange={(v) => onSetCurrency(v as 'UYU' | 'USD')}
-          />
-        </div>
+          }
+        />
       </SectionCard>
 
       {/* Cuenta */}

@@ -3,6 +3,10 @@ import {
   buildCategorySpending,
   buildIncomeExpenseSummary,
   buildMonthlyTrends,
+  buildCategorySpendingConverted,
+  buildMonthlyTrendsConverted,
+  buildCurrentMonthSummary,
+  buildCurrencySplit,
 } from './chart-data'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
@@ -114,7 +118,7 @@ describe('chart-data', () => {
     })
   })
 
-  it('excludes transfer category from spending and summary metrics', () => {
+  it('excludes transfer category from spending and summary metrics (original)', () => {
     const transactions = [
       makeTransaction('tx-1', {
         amount: 200,
@@ -144,6 +148,123 @@ describe('chart-data', () => {
       income: 0,
       expense: 80,
       net: -80,
+    })
+  })
+})
+
+describe('chart-data multicurrency converting selectors', () => {
+  const RATE = 40
+
+  function makeTx(
+    id: string,
+    overrides: Partial<Transaction> = {}
+  ): Transaction {
+    return {
+      id,
+      date: new Date('2025-01-15T00:00:00.000Z'),
+      description: `tx-${id}`,
+      amount: 10,
+      currency: 'USD',
+      type: 'debit',
+      source: 'bank_account',
+      rawData: {},
+      ...overrides,
+    }
+  }
+
+  describe('buildCategorySpendingConverted', () => {
+    it('converts USD expenses to UYU when home is UYU', () => {
+      const txs = [
+        makeTx('1', { amount: 10, currency: 'USD', type: 'debit', category: Category.Groceries }),
+        makeTx('2', { amount: 400, currency: 'UYU', type: 'debit', category: Category.Groceries }),
+      ]
+      const result = buildCategorySpendingConverted(txs, 'UYU', RATE)
+      expect(result).toHaveLength(1)
+      expect(result[0].category).toBe(Category.Groceries)
+      expect(result[0].total).toBeCloseTo(800) // 10*40 + 400
+    })
+
+    it('excludes credits and transfers', () => {
+      const txs = [
+        makeTx('1', { type: 'credit', category: Category.Groceries }),
+        makeTx('2', { type: 'debit', category: Category.Transfer }),
+        makeTx('3', { type: 'debit', category: Category.Groceries, amount: 20 }),
+      ]
+      const result = buildCategorySpendingConverted(txs, 'USD', RATE)
+      expect(result).toHaveLength(1)
+      expect(result[0].total).toBe(20)
+    })
+  })
+
+  describe('buildMonthlyTrendsConverted', () => {
+    it('combines USD and UYU amounts for same month into home currency', () => {
+      const txs = [
+        makeTx('1', { amount: 10, currency: 'USD', type: 'credit', date: new Date('2025-01-10T00:00:00.000Z') }),
+        makeTx('2', { amount: 200, currency: 'UYU', type: 'debit', date: new Date('2025-01-20T00:00:00.000Z') }),
+      ]
+      const result = buildMonthlyTrendsConverted(txs, 'UYU', RATE)
+      expect(result).toHaveLength(1)
+      expect(result[0].month).toBe('2025-01')
+      expect(result[0].income).toBeCloseTo(400) // 10 USD * 40
+      expect(result[0].expense).toBeCloseTo(200) // 200 UYU
+      expect(result[0].net).toBeCloseTo(200)
+    })
+  })
+
+  describe('buildCurrentMonthSummary', () => {
+    it('returns zeros for empty transactions', () => {
+      const result = buildCurrentMonthSummary([], 'USD', RATE)
+      expect(result.income).toBe(0)
+      expect(result.expense).toBe(0)
+    })
+
+    it('computes latest-month totals in home currency', () => {
+      const txs = [
+        makeTx('old', { date: new Date('2024-11-01T00:00:00.000Z'), type: 'debit', amount: 999 }),
+        makeTx('inc', { date: new Date('2025-01-15T00:00:00.000Z'), type: 'credit', amount: 100, currency: 'USD' }),
+        makeTx('exp-usd', { date: new Date('2025-01-20T00:00:00.000Z'), type: 'debit', amount: 20, currency: 'USD' }),
+        makeTx('exp-uyu', { date: new Date('2025-01-25T00:00:00.000Z'), type: 'debit', amount: 400, currency: 'UYU' }),
+      ]
+      const result = buildCurrentMonthSummary(txs, 'USD', RATE)
+      expect(result.income).toBeCloseTo(100) // 100 USD income
+      expect(result.expense).toBeCloseTo(30) // 20 USD + 400/40 USD = 30
+      expect(result.net).toBeCloseTo(70)
+      expect(result.split.USD).toBeCloseTo(20)
+      expect(result.split.UYU).toBeCloseTo(400)
+    })
+
+    it('excludes transfers', () => {
+      const txs = [
+        makeTx('t', { date: new Date('2025-01-10T00:00:00.000Z'), type: 'debit', amount: 100, category: Category.Transfer }),
+        makeTx('e', { date: new Date('2025-01-10T00:00:00.000Z'), type: 'debit', amount: 50 }),
+      ]
+      const result = buildCurrentMonthSummary(txs, 'USD', RATE)
+      expect(result.expense).toBe(50)
+    })
+  })
+
+  describe('buildCurrencySplit', () => {
+    it('returns correct percentages for mixed spend', () => {
+      const txs = [
+        makeTx('usd', { amount: 1, currency: 'USD', type: 'debit' }),
+        makeTx('uyu', { amount: RATE, currency: 'UYU', type: 'debit' }),
+      ]
+      // Both equal 1 USD each → 50/50
+      const result = buildCurrencySplit(txs, 'USD', RATE)
+      expect(result.pctUSD).toBeCloseTo(50)
+      expect(result.pctUYU).toBeCloseTo(50)
+    })
+
+    it('excludes credits and transfers from the split', () => {
+      const txs = [
+        makeTx('credit', { type: 'credit', amount: 100 }),
+        makeTx('transfer', { type: 'debit', category: Category.Transfer, amount: 100 }),
+        makeTx('real', { type: 'debit', amount: 50, currency: 'USD' }),
+      ]
+      const result = buildCurrencySplit(txs, 'USD', RATE)
+      expect(result.USD).toBe(50)
+      expect(result.UYU).toBe(0)
+      expect(result.pctUSD).toBeCloseTo(100)
     })
   })
 })

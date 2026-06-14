@@ -150,7 +150,12 @@ function App() {
     'UYU' | 'USD'
   >(() => {
     const saved = localStorage.getItem('tatu:preferences:currency')
-    return saved === 'USD' ? 'USD' : 'UYU'
+    return saved === 'UYU' ? 'UYU' : 'USD'
+  })
+  const [fxRate, setFxRateState] = useState<number>(() => {
+    const saved = localStorage.getItem('tatu:preferences:fxRate')
+    const parsed = saved ? parseFloat(saved) : NaN
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 40.5
   })
   const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
   const [session, setSession] = useState<SupabaseSession | null>(() =>
@@ -189,6 +194,11 @@ function App() {
   function setPreferredCurrency(c: 'UYU' | 'USD') {
     setPreferredCurrencyState(c)
     localStorage.setItem('tatu:preferences:currency', c)
+  }
+
+  function setFxRate(r: number) {
+    setFxRateState(r)
+    localStorage.setItem('tatu:preferences:fxRate', String(r))
   }
 
   useEffect(() => {
@@ -1200,7 +1210,10 @@ function App() {
                 onNavigateToImport={() => setImportOpen(true)}
                 onNavigateToTransactions={navigateToTransactions}
                 onNavigateToAnalysis={() => setCurrentView('analysis')}
-                defaultCurrency={preferredCurrency}
+                homeCurrency={preferredCurrency}
+                fxRate={fxRate}
+                onSetHomeCurrency={setPreferredCurrency}
+                onSetFxRate={setFxRate}
               />
             )}
             {currentView === 'transactions' && (
@@ -1219,6 +1232,10 @@ function App() {
               <Charts
                 transactions={transactions}
                 onNavigateToTransactions={navigateToTransactions}
+                homeCurrency={preferredCurrency}
+                fxRate={fxRate}
+                onSetHomeCurrency={setPreferredCurrency}
+                onSetFxRate={setFxRate}
               />
             )}
             {currentView === 'categories' && (
@@ -1230,6 +1247,8 @@ function App() {
                 onSetTheme={setTheme}
                 preferredCurrency={preferredCurrency}
                 onSetCurrency={setPreferredCurrency}
+                fxRate={fxRate}
+                onSetFxRate={setFxRate}
                 session={session}
                 supabaseEnabled={supabaseEnabled}
                 onSignOut={() => {
