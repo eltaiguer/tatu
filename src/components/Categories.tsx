@@ -20,7 +20,6 @@ import {
   removeCustomPattern,
   type MatchType,
 } from '../services/categorizer/custom-patterns'
-import { CATEGORY_LABELS, CATEGORY_ICONS } from '../models/category'
 
 interface CategoriesProps {
   transactions: Transaction[]
@@ -531,11 +530,11 @@ export function Categories({ transactions }: CategoriesProps) {
                 height: 40,
               }}
             >
-              {Object.values(Category)
-                .filter((c) => c !== Category.Uncategorized)
+              {getCategoryDefinitions()
+                .filter((c) => c.id !== Category.Uncategorized)
                 .map((cat) => (
-                  <option key={cat} value={cat}>
-                    {CATEGORY_ICONS[cat]} {CATEGORY_LABELS[cat]}
+                  <option key={cat.id} value={cat.id}>
+                    {cat.icon} {cat.label}
                   </option>
                 ))}
             </select>
