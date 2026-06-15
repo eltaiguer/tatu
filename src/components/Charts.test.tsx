@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { Charts } from './Charts'
 import type { Transaction } from '../models'
+import {
+  replaceCustomCategories,
+} from '../services/categories/category-store'
 
 function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -19,6 +22,10 @@ function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 describe('Charts', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
   it('does not show NaN/Infinity when there are no expense transactions', () => {
     const transactions = [
       makeTransaction({
@@ -45,5 +52,32 @@ describe('Charts', () => {
 
     expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Transporte').length).toBeGreaterThan(0)
+  })
+
+  it('excludes merchants from built-in ignored category in top merchants', () => {
+    const transactions = [
+      makeTransaction({ id: 'ignored-1', description: 'MERCHANT IGNORED', category: 'ignored', amount: 9999 }),
+      makeTransaction({ id: 'normal-1', description: 'NORMAL MERCHANT', category: 'transport', amount: 10 }),
+    ]
+
+    render(<Charts transactions={transactions} />)
+
+    expect(screen.queryByText('MERCHANT IGNORED')).not.toBeInTheDocument()
+    expect(screen.getByText('NORMAL MERCHANT')).toBeInTheDocument()
+  })
+
+  it('excludes merchants whose category has isIgnored flag set via custom override', () => {
+    replaceCustomCategories([
+      { id: 'salary', label: 'Salary', color: '#000', isIgnored: true },
+    ])
+    const transactions = [
+      makeTransaction({ id: 'salary-1', description: 'EMPLOYER DEPOSIT', category: 'salary', amount: 5000 }),
+      makeTransaction({ id: 'normal-1', description: 'GROCERY STORE', category: 'transport', amount: 50 }),
+    ]
+
+    render(<Charts transactions={transactions} />)
+
+    expect(screen.queryByText('EMPLOYER DEPOSIT')).not.toBeInTheDocument()
+    expect(screen.getByText('GROCERY STORE')).toBeInTheDocument()
   })
 })

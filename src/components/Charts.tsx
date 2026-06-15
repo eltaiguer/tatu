@@ -22,7 +22,7 @@ import {
 import type { TooltipProps } from 'recharts'
 import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent'
 import { getCategoryDisplay } from '../utils/category-display'
-import { getCategoryDefinitions } from '../services/categories/category-registry'
+import { getCategoryDefinitions, isCategoryIgnored } from '../services/categories/category-registry'
 import { isTransferCategory } from '../services/transfers/internal-transfers'
 import {
   buildCategorySpendingConverted,
@@ -126,7 +126,12 @@ export function Charts({
   const topMerchants = useMemo(() => {
     const map = new Map<string, { name: string; total: number; count: number; catId: string }>()
     transactions
-      .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category))
+      .filter(
+        (tx) =>
+          tx.type === 'debit' &&
+          !isTransferCategory(tx.category) &&
+          !isCategoryIgnored(tx.category)
+      )
       .forEach((tx) => {
         const key = tx.description
         const prev = map.get(key) ?? {
