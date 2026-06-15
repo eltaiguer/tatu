@@ -123,6 +123,7 @@ describe('supabase custom categories service', () => {
       label: 'Mates',
       color: '#00AA11',
       icon: '🧉',
+      isIgnored: false,
       isArchived: false,
     })
 

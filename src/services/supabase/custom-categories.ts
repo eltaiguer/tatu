@@ -60,7 +60,7 @@ export async function upsertCustomCategory(
     label: string
     color: string
     icon?: string
-    isIgnored?: boolean
+    isIgnored: boolean
     isArchived?: boolean
   }
 ): Promise<void> {
@@ -72,7 +72,7 @@ export async function upsertCustomCategory(
       label: category.label,
       color: category.color,
       icon: category.icon ?? null,
-      is_ignored: category.isIgnored ?? false,
+      is_ignored: category.isIgnored,
       is_archived: category.isArchived ?? false,
     },
     { onConflict: 'user_id,id' }
