@@ -261,15 +261,7 @@ export function Transactions({
     currencyFilter !== 'all' ||
     typeFilter !== 'all'
 
-  const dateRangeError =
-    dateFromFilter && dateToFilter && dateToFilter < dateFromFilter
-      ? 'La fecha "hasta" debe ser posterior a la fecha "desde"'
-      : null
-
-  const totals = useMemo(
-    () => calculateTotals(filteredTransactions),
-    [filteredTransactions]
-  )
+  const totals = calculateTotals(filteredTransactions)
 
   function clearAllFilters() {
     setSearchTerm('')
@@ -795,9 +787,6 @@ export function Transactions({
           onChange={(event) => setDateToFilter(event.target.value)}
           style={{ display: 'none' }}
         />
-        {dateRangeError && (
-          <p className="text-xs text-destructive">{dateRangeError}</p>
-        )}
       </Card>
 
       {hasSelection && (
@@ -861,22 +850,23 @@ export function Transactions({
         </div>
       )}
 
-      {filteredTransactions.length > 0 && (
-        <div
-          role="region"
-          aria-label="Resumen de transacciones filtradas"
-          style={{
-            display: 'flex',
-            gap: 8,
-            flexWrap: 'wrap',
-          }}
-        >
-          {(['UYU', 'USD'] as const)
-            .filter((currency) => {
-              if (currencyFilter !== 'all') return currency === currencyFilter
-              return totals.income[currency] > 0 || totals.expense[currency] > 0
-            })
-            .map((currency) => {
+      {(() => {
+        const currencyGroups = (['UYU', 'USD'] as const).filter((currency) => {
+          if (currencyFilter !== 'all') return currency === currencyFilter
+          return totals.income[currency] > 0 || totals.expense[currency] > 0
+        })
+        if (currencyGroups.length === 0) return null
+        return (
+          <div
+            role="region"
+            aria-label="Resumen de transacciones filtradas"
+            style={{
+              display: 'flex',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}
+          >
+          {currencyGroups.map((currency) => {
               const net = totals.net[currency]
               return (
                 <div
@@ -949,8 +939,9 @@ export function Transactions({
                 </div>
               )
             })}
-        </div>
-      )}
+          </div>
+        )
+      })()}
 
       <Card className="overflow-hidden">
         <div className="hidden md:block overflow-x-auto">

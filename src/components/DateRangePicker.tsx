@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { CalendarIcon } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 import { Calendar } from './ui/calendar'
@@ -20,6 +20,7 @@ function toLocalDateStr(date: Date): string {
 function formatShortDate(dateStr: string): string {
   if (!dateStr) return ''
   const parts = dateStr.split('-')
+  if (parts.length < 3) return dateStr
   return `${parts[2]}/${parts[1]}`
 }
 
@@ -93,33 +94,60 @@ export function DateRangePicker({
   onChange,
 }: DateRangePickerProps) {
   const [open, setOpen] = useState(false)
+  // Buffers the first calendar click so we don't commit a half-range to the parent
+  const [pendingFrom, setPendingFrom] = useState<string | null>(null)
 
-  const selected: DateRange | undefined = dateFrom
-    ? {
-        from: new Date(`${dateFrom}T00:00:00`),
-        to: dateTo ? new Date(`${dateTo}T00:00:00`) : undefined,
-      }
-    : undefined
+  // Stable across renders — presets only shift at midnight
+  const presets = useMemo(getPresets, [])
+
+  // What the calendar shows: pending first-click takes priority over committed state
+  const calendarSelected: DateRange | undefined = useMemo(() => {
+    const from = pendingFrom ?? dateFrom
+    if (!from) return undefined
+    return {
+      from: new Date(`${from}T00:00:00`),
+      to: !pendingFrom && dateTo ? new Date(`${dateTo}T00:00:00`) : undefined,
+    }
+  }, [pendingFrom, dateFrom, dateTo])
+
+  const defaultMonth = useMemo(() => {
+    const base = pendingFrom ?? dateFrom
+    if (base) return new Date(`${base}T00:00:00`)
+    const d = new Date()
+    d.setMonth(d.getMonth() - 1)
+    return d
+  }, [pendingFrom, dateFrom])
 
   function handleSelect(range: DateRange | undefined) {
-    if (!range) {
+    if (!range?.from) {
+      setPendingFrom(null)
       onChange('', '')
       return
     }
-    const from = range.from ? toLocalDateStr(range.from) : ''
-    const to = range.to ? toLocalDateStr(range.to) : ''
-    onChange(from, to)
-    if (from && to) {
-      setOpen(false)
+    const from = toLocalDateStr(range.from)
+    if (!range.to) {
+      // First click — buffer locally, don't touch parent state yet
+      setPendingFrom(from)
+      return
     }
+    // Both ends chosen — commit and close
+    const to = toLocalDateStr(range.to)
+    setPendingFrom(null)
+    onChange(from, to)
+    setOpen(false)
   }
 
   function handlePreset(preset: { from: string; to: string }) {
+    setPendingFrom(null)
     onChange(preset.from, preset.to)
     setOpen(false)
   }
 
-  const presets = getPresets()
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) setPendingFrom(null)
+    setOpen(nextOpen)
+  }
+
   const activePreset = presets.find(
     (p) => p.from === dateFrom && p.to === dateTo
   )?.label
@@ -134,7 +162,7 @@ export function DateRangePicker({
   const isActive = Boolean(dateFrom || dateTo)
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           aria-label="Filtro por periodo"
@@ -204,17 +232,9 @@ export function DateRangePicker({
               mode="range"
               numberOfMonths={2}
               weekStartsOn={1}
-              selected={selected}
+              selected={calendarSelected}
               onSelect={handleSelect}
-              defaultMonth={
-                dateFrom
-                  ? new Date(`${dateFrom}T00:00:00`)
-                  : (() => {
-                      const d = new Date()
-                      d.setMonth(d.getMonth() - 1)
-                      return d
-                    })()
-              }
+              defaultMonth={defaultMonth}
             />
           </div>
         </div>
