@@ -14,6 +14,11 @@ const TRANSFER_DESCRIPTION_KEYWORDS = [
   'cambio moneda',
 ]
 
+// Matches "TRF. PLAZA- NAME", "TRF. BROU- NAME", or "NRR:182500517 JOSE PREX"
+// These patterns indicate a named external beneficiary, so the transaction cannot
+// be an internal (own-account) transfer.
+const EXTERNAL_BENEFICIARY_RE = /trf\.\s*\w+\s*-\s*[a-z]|nrr:[a-z0-9]+\s+[a-z]/
+
 function normalizeText(value: string | undefined): string {
   return (value ?? '').toLowerCase().trim().replace(/\s+/g, ' ')
 }
@@ -42,6 +47,10 @@ function isTransferDescription(description: string): boolean {
   return TRANSFER_DESCRIPTION_KEYWORDS.some((keyword) =>
     normalized.includes(keyword)
   )
+}
+
+function hasExternalBeneficiary(description: string): boolean {
+  return EXTERNAL_BENEFICIARY_RE.test(normalizeText(description))
 }
 
 function canAutoAssignTransfer(transaction: Transaction): boolean {
@@ -90,7 +99,8 @@ export function inferInternalTransfers(transactions: Transaction[]): Transaction
   next.forEach((transaction) => {
     if (
       canAutoAssignTransfer(transaction) &&
-      isTransferDescription(transaction.description)
+      isTransferDescription(transaction.description) &&
+      !hasExternalBeneficiary(transaction.description)
     ) {
       byId.set(transaction.id, markTransfer(transaction, 0.9))
     }
@@ -99,6 +109,7 @@ export function inferInternalTransfers(transactions: Transaction[]): Transaction
   const candidates = next.filter(
     (transaction) =>
       isBankTransaction(transaction) &&
+      !hasExternalBeneficiary(transaction.description) &&
       (isTransferCategory(transaction.category) ||
         isTransferDescription(transaction.description))
   )

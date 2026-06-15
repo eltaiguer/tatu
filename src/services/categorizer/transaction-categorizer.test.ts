@@ -80,6 +80,51 @@ describe('Transaction Categorizer', () => {
     expect(result.category).toBe(Category.Transfer)
   })
 
+  it('should not categorize TRF. PLAZA- NAME transfers as Transfer', () => {
+    const result = categorizeTransaction(
+      'TRANSFERENCIA ENVIADA 797258TT55557944 TRF. PLAZA- FEDERICO GAZZANO',
+      'debit'
+    )
+
+    expect(result.category).not.toBe(Category.Transfer)
+  })
+
+  it('should not categorize DEBITO OPERACION EN BANCA DIGITAL TRF. PLAZA- NAME as Transfer', () => {
+    const result = categorizeTransaction(
+      'DEBITO OPERACION EN BANCA DIGITAL 526741TT55770545 TRF. PLAZA- ISABEL ARISMENDI',
+      'debit'
+    )
+
+    expect(result.category).not.toBe(Category.Transfer)
+  })
+
+  it('should not categorize TRANSF INSTANTANEA ENVIADA NRR: NAME as Transfer', () => {
+    const result = categorizeTransaction(
+      'TRANSF INSTANTANEA ENVIADA 381239LE NRR:182500517 JOSE PREX',
+      'debit'
+    )
+
+    expect(result.category).not.toBe(Category.Transfer)
+  })
+
+  it('should not categorize DEBITO OPERACION EN SUPERNET TRF. PLAZA- NAME as Transfer', () => {
+    const result = categorizeTransaction(
+      'DEBITO OPERACION EN SUPERNET O SMS 466949TT55365654 TRF. PLAZA- MATEO RODRIGUEZ',
+      'debit'
+    )
+
+    expect(result.category).not.toBe(Category.Transfer)
+  })
+
+  it('should still categorize TRF. PLAZA without a named recipient as Transfer', () => {
+    const result = categorizeTransaction(
+      'TRANSFERENCIA ENVIADA 754934TT55557465 TRF. PLAZA',
+      'debit'
+    )
+
+    expect(result.category).toBe(Category.Transfer)
+  })
+
   it('should categorize income when credit matches income keywords', () => {
     const result = categorizeTransaction(
       'CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL',
