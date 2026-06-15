@@ -84,4 +84,29 @@ describe('Custom category store', () => {
     expect(upsertCustomCategoryMock).toHaveBeenCalledTimes(2)
     expect(archiveCustomCategoryMock).toHaveBeenCalledTimes(1)
   })
+
+  it('syncs the isIgnored flag to the cloud on add and update', async () => {
+    getActiveSupabaseSessionMock.mockReturnValue({
+      user: { id: 'user-1' },
+    })
+    upsertCustomCategoryMock.mockResolvedValue(undefined)
+
+    const created = await addCustomCategoryWithSync({
+      label: 'Reembolsos',
+      color: '#112233',
+      isIgnored: true,
+    })
+
+    expect(upsertCustomCategoryMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: created.id, isIgnored: true })
+    )
+
+    await updateCustomCategoryWithSync(created.id, { isIgnored: false })
+
+    expect(upsertCustomCategoryMock).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: created.id, isIgnored: false })
+    )
+  })
 })

@@ -46,6 +46,7 @@ describe('supabase custom categories service', () => {
           label: 'Mates',
           color: '#00AA11',
           icon: '🧉',
+          is_ignored: true,
           is_archived: false,
           created_at: '2026-02-20T00:00:00.000Z',
           updated_at: '2026-02-20T00:00:00.000Z',
@@ -84,6 +85,37 @@ describe('supabase custom categories service', () => {
     expect(categories).toHaveLength(1)
   })
 
+  it('reads the is_ignored flag from stored rows', async () => {
+    const { listCustomCategories } = await import('./custom-categories')
+    const categories = await listCustomCategories(session)
+
+    expect(categories[0].isIgnored).toBe(true)
+  })
+
+  it('defaults is_ignored to false when the column is null', async () => {
+    isMock.mockResolvedValueOnce({
+      data: [
+        {
+          user_id: 'user-1',
+          id: 'mates',
+          label: 'Mates',
+          color: '#00AA11',
+          icon: '🧉',
+          is_ignored: null,
+          is_archived: false,
+          created_at: '2026-02-20T00:00:00.000Z',
+          updated_at: '2026-02-20T00:00:00.000Z',
+        },
+      ],
+      error: null,
+    })
+
+    const { listCustomCategories } = await import('./custom-categories')
+    const categories = await listCustomCategories(session)
+
+    expect(categories[0].isIgnored).toBe(false)
+  })
+
   it('upserts custom category', async () => {
     const { upsertCustomCategory } = await import('./custom-categories')
     await upsertCustomCategory(session, {
@@ -96,6 +128,23 @@ describe('supabase custom categories service', () => {
 
     expect(upsertMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'mates' }),
+      { onConflict: 'user_id,id' }
+    )
+  })
+
+  it('persists the is_ignored flag on upsert', async () => {
+    const { upsertCustomCategory } = await import('./custom-categories')
+    await upsertCustomCategory(session, {
+      id: 'mates',
+      label: 'Mates',
+      color: '#00AA11',
+      icon: '🧉',
+      isIgnored: true,
+      isArchived: false,
+    })
+
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'mates', is_ignored: true }),
       { onConflict: 'user_id,id' }
     )
   })

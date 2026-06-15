@@ -132,6 +132,7 @@ create table if not exists public.custom_categories (
   label text not null check (length(trim(label)) > 0),
   color text not null check (color ~ '^#([0-9A-Fa-f]{6})$'),
   icon text,
+  is_ignored boolean not null default false,
   is_archived boolean not null default false,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
@@ -139,6 +140,7 @@ create table if not exists public.custom_categories (
 );
 
 alter table public.custom_categories
+  add column if not exists is_ignored boolean not null default false,
   add column if not exists is_archived boolean not null default false,
   add column if not exists created_at timestamptz not null default timezone('utc', now()),
   add column if not exists updated_at timestamptz not null default timezone('utc', now());

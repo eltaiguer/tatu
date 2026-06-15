@@ -90,6 +90,7 @@ export async function syncCustomCategoryToCloud(id: string): Promise<void> {
         label: category.label,
         color: category.color,
         icon: category.icon,
+        isIgnored: category.isIgnored ?? false,
         isArchived: false,
       })
     }
@@ -129,6 +130,7 @@ export async function updateCustomCategoryWithSync(
         label: category.label,
         color: category.color,
         icon: category.icon,
+        isIgnored: category.isIgnored ?? false,
         isArchived: false,
       })
     }
