@@ -30,8 +30,9 @@ describe('CSV categorization coverage', () => {
 
     expect(result.transactions.length).toBeGreaterThan(0);
     // Incoming bank transfers (TRANSF INSTANTANEA RECIBIDA, CREDITO POR OPERACION EN SUPERNET
-    // from external parties) are now intentionally Uncategorized so they count as income;
-    // self-transfer pairing is handled by inferInternalTransfers, not the categorizer.
+    // from external parties) are now intentionally Uncategorized so they are no longer
+    // hidden from the Transactions list. Users can categorize them as Income to include
+    // them in income charts; self-transfer pairing is handled by inferInternalTransfers.
     expect(rate).toBeGreaterThanOrEqual(0.40);
   });
 
