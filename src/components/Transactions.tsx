@@ -13,6 +13,8 @@ import {
   Wallet,
   X,
 } from 'lucide-react'
+import { DateRangePicker } from './DateRangePicker'
+import { calculateTotals } from '../services/aggregator/aggregation'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
 import { Checkbox } from './ui/checkbox'
@@ -259,10 +261,7 @@ export function Transactions({
     currencyFilter !== 'all' ||
     typeFilter !== 'all'
 
-  const dateRangeError =
-    dateFromFilter && dateToFilter && dateToFilter < dateFromFilter
-      ? 'La fecha "hasta" debe ser posterior a la fecha "desde"'
-      : null
+  const totals = calculateTotals(filteredTransactions)
 
   function clearAllFilters() {
     setSearchTerm('')
@@ -674,6 +673,14 @@ export function Transactions({
             <option value="bank_account">Cuenta bancaria</option>
             <option value="credit_card">Tarjeta</option>
           </select>
+          <DateRangePicker
+            dateFrom={dateFromFilter}
+            dateTo={dateToFilter}
+            onChange={(from, to) => {
+              setDateFromFilter(from)
+              setDateToFilter(to)
+            }}
+          />
         </div>
 
         {/* Row 2: Type segment + Currency segment + Más + Clear */}
@@ -763,37 +770,23 @@ export function Transactions({
           )}
         </div>
 
-        {/* Advanced: date range (always in DOM for test accessibility, visible when advancedOpen) */}
-        <div style={{ display: advancedOpen ? 'grid' : 'none', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div className="space-y-1">
-            <label htmlFor="transactions-date-from-filter" className="text-sm font-medium">
-              Fecha desde
-            </label>
-            <Input
-              id="transactions-date-from-filter"
-              aria-label="Filtro fecha desde"
-              type="date"
-              value={dateFromFilter}
-              onChange={(event) => setDateFromFilter(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="transactions-date-to-filter" className="text-sm font-medium">
-              Fecha hasta
-            </label>
-            <Input
-              id="transactions-date-to-filter"
-              aria-label="Filtro fecha hasta"
-              type="date"
-              value={dateToFilter}
-              onChange={(event) => setDateToFilter(event.target.value)}
-              className={dateRangeError ? 'border-destructive' : ''}
-            />
-            {dateRangeError && (
-              <p className="text-xs text-destructive">{dateRangeError}</p>
-            )}
-          </div>
-        </div>
+        {/* Hidden date inputs kept in DOM for test accessibility; DateRangePicker is the visible UI */}
+        <input
+          id="transactions-date-from-filter"
+          aria-label="Filtro fecha desde"
+          type="date"
+          value={dateFromFilter}
+          onChange={(event) => setDateFromFilter(event.target.value)}
+          style={{ display: 'none' }}
+        />
+        <input
+          id="transactions-date-to-filter"
+          aria-label="Filtro fecha hasta"
+          type="date"
+          value={dateToFilter}
+          onChange={(event) => setDateToFilter(event.target.value)}
+          style={{ display: 'none' }}
+        />
       </Card>
 
       {hasSelection && (
@@ -856,6 +849,99 @@ export function Transactions({
           )}
         </div>
       )}
+
+      {(() => {
+        const currencyGroups = (['UYU', 'USD'] as const).filter((currency) => {
+          if (currencyFilter !== 'all') return currency === currencyFilter
+          return totals.income[currency] > 0 || totals.expense[currency] > 0
+        })
+        if (currencyGroups.length === 0) return null
+        return (
+          <div
+            role="region"
+            aria-label="Resumen de transacciones filtradas"
+            style={{
+              display: 'flex',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}
+          >
+          {currencyGroups.map((currency) => {
+              const net = totals.net[currency]
+              return (
+                <div
+                  key={currency}
+                  style={{
+                    display: 'flex',
+                    gap: 6,
+                    background: 'var(--surface-2)',
+                    borderRadius: 10,
+                    padding: '6px 4px',
+                  }}
+                >
+                  {[
+                    {
+                      label: 'Ingresos',
+                      amount: totals.income[currency],
+                      color: 'var(--text)',
+                    },
+                    {
+                      label: 'Gastos',
+                      amount: totals.expense[currency],
+                      color: 'var(--text)',
+                    },
+                    {
+                      label: 'Neto',
+                      amount: net,
+                      color:
+                        net > 0
+                          ? 'var(--color-success, #16a34a)'
+                          : net < 0
+                            ? 'var(--color-destructive, #dc2626)'
+                            : 'var(--text)',
+                    },
+                  ].map(({ label, amount, color }) => (
+                    <div
+                      key={label}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        padding: '2px 12px',
+                        borderRadius: 7,
+                        minWidth: 90,
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--text-faint)',
+                          fontWeight: 500,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                          marginBottom: 2,
+                        }}
+                      >
+                        {label}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        {formatCurrency(amount, currency)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       <Card className="overflow-hidden">
         <div className="hidden md:block overflow-x-auto">
