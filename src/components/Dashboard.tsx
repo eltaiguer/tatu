@@ -477,7 +477,7 @@ export function Dashboard({
               }}
             >
               <div>
-                <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+                <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, fontFamily: 'var(--font-sans)' }}>
                   Este mes, todo en{' '}
                   {homeCurrency === 'USD' ? 'dólares' : 'pesos'}
                 </h2>
@@ -566,7 +566,7 @@ export function Dashboard({
                   alignItems: 'center', marginBottom: 18,
                 }}
               >
-                <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
+                <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, fontFamily: 'var(--font-sans)' }}>
                   Gasto por categoría
                 </h2>
                 {onNavigateToAnalysis && (
@@ -642,7 +642,7 @@ export function Dashboard({
                   alignItems: 'center', marginBottom: 14,
                 }}
               >
-                <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
+                <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0, fontFamily: 'var(--font-sans)' }}>
                   Movimientos recientes
                 </h2>
                 {onNavigateToTransactions && (
