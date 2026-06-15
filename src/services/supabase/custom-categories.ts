@@ -6,6 +6,7 @@ interface CustomCategoryRow {
   label: string
   color: string
   icon: string | null
+  is_ignored: boolean | null
   is_archived: boolean
   created_at: string
   updated_at: string
@@ -16,6 +17,7 @@ export interface CustomCategoryRecord {
   label: string
   color: string
   icon?: string
+  isIgnored: boolean
   isArchived: boolean
   createdAt: string
   updatedAt: string
@@ -27,6 +29,7 @@ function rowToRecord(row: CustomCategoryRow): CustomCategoryRecord {
     label: row.label,
     color: row.color,
     icon: row.icon ?? undefined,
+    isIgnored: row.is_ignored ?? false,
     isArchived: row.is_archived,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -57,6 +60,7 @@ export async function upsertCustomCategory(
     label: string
     color: string
     icon?: string
+    isIgnored: boolean
     isArchived?: boolean
   }
 ): Promise<void> {
@@ -68,6 +72,7 @@ export async function upsertCustomCategory(
       label: category.label,
       color: category.color,
       icon: category.icon ?? null,
+      is_ignored: category.isIgnored,
       is_archived: category.isArchived ?? false,
     },
     { onConflict: 'user_id,id' }

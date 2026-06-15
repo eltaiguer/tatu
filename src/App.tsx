@@ -280,6 +280,7 @@ function App() {
             label: category.label,
             color: category.color,
             icon: category.icon,
+            isIgnored: category.isIgnored,
           }))
         )
 
