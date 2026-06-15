@@ -23,6 +23,11 @@ describe('Transaction Categorizer', () => {
     clearAllCustomPatterns()
     invalidateLearnedPatternsCache()
   })
+  it('should not categorize coffee shops as Fees (word-boundary regression)', () => {
+    const result = categorizeTransaction('Sq Blue Bottle Coffee', 'debit')
+    expect(result.category).not.toBe(Category.Fees)
+  })
+
   it('should categorize fees with high confidence', () => {
     const result = categorizeTransaction(
       'COMISION POR COSTO PRODUCTO COMISION COSTO PRODUCTO',

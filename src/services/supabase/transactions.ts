@@ -92,8 +92,6 @@ export async function persistTransactions(
   const rows = transactions.map((tx) => ({
     ...transactionToRow(session.user.id, tx),
     import_id: options?.importId ?? null,
-    is_deleted: false,
-    deleted_at: null,
   }))
 
   const { error } = await client

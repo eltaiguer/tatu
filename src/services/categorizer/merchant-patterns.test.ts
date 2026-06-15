@@ -267,6 +267,51 @@ describe('Merchant Pattern Matcher', () => {
     })
   })
 
+  describe('matchMerchantPattern - Transport', () => {
+    it('should match CPATU as transport', () => {
+      const result = matchMerchantPattern('CPATU')
+      expect(result?.category).toBe(Category.Transport)
+    })
+  })
+
+  describe('matchMerchantPattern - word boundary bugs (regression)', () => {
+    it('should not match UTE inside fruteria', () => {
+      const result = matchMerchantPattern('Fruteria El Sol')
+      expect(result?.category).not.toBe(Category.Utilities)
+    })
+
+    it('should match fruteria as Groceries', () => {
+      const result = matchMerchantPattern('Fruteria El Sol')
+      expect(result?.category).toBe(Category.Groceries)
+    })
+  })
+
+  describe('normalizeMerchantName - POS prefix stripping', () => {
+    it('should strip Sq prefix (Square POS)', () => {
+      expect(normalizeMerchantName('Sq Sopranos')).toBe('sopranos')
+    })
+
+    it('should strip Tst prefix (Toast POS)', () => {
+      expect(normalizeMerchantName('Tst Local Restaurant')).toBe('local restaurant')
+    })
+
+    it('should not strip sq that is part of a word', () => {
+      expect(normalizeMerchantName('Squid Games Cafe')).toBe('squid games cafe')
+    })
+  })
+
+  describe('matchMerchantPattern - POS prefix stripping', () => {
+    it('should match Sq-prefixed merchants after stripping prefix', () => {
+      const result = matchMerchantPattern('Sq Sopranos')
+      expect(result?.category).toBe(Category.Restaurants)
+    })
+
+    it('should match Tst-prefixed merchants after stripping prefix', () => {
+      const result = matchMerchantPattern('Tst Antel Fijo')
+      expect(result?.category).toBe(Category.Utilities)
+    })
+  })
+
   describe('matchMerchantPattern - Fuzzy matching', () => {
     it('should fuzzy match truncated merchant names', () => {
       const result = matchMerchantPattern('Devoto Sup')

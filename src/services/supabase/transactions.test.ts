@@ -115,6 +115,26 @@ describe('supabase transactions service', () => {
     expect(upsertMock.mock.calls[0][0][0].tags).toEqual(['coffee', 'work'])
   })
 
+  it('does not include is_deleted in upsert payload so soft-deleted transactions are not resurrected on re-import', async () => {
+    const { persistTransactions } = await import('./transactions')
+    await persistTransactions(session, [
+      {
+        id: 'tx-deleted',
+        date: new Date('2026-02-03T00:00:00.000Z'),
+        description: 'Supermercado',
+        amount: 200,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'credit_card',
+        rawData: {},
+      },
+    ])
+
+    const row = upsertMock.mock.calls[0][0][0]
+    expect(row).not.toHaveProperty('is_deleted')
+    expect(row).not.toHaveProperty('deleted_at')
+  })
+
   it('soft deletes a transaction', async () => {
     const { softDeleteTransaction } = await import('./transactions')
     await softDeleteTransaction(session, 'tx-99')

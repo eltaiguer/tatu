@@ -30,10 +30,9 @@ import { CategoryBadge } from './CategoryBadge'
 import { ConfidenceBadge } from './ConfidenceBadge'
 import { Category } from '../models'
 import type { Currency, Transaction } from '../models'
-import { isCategoryIgnored } from '../services/categories/category-registry'
+import { isCategoryIgnored, getCategoryDefinition } from '../services/categories/category-registry'
 import { getDescriptionOverride } from '../services/descriptions/description-overrides'
 import { getCategoryDisplay } from '../utils/category-display'
-import { getCategoryDefinitions } from '../services/categories/category-registry'
 import { exportTransactions } from '../services/export/export'
 import {
   addCustomCategory,
@@ -274,12 +273,6 @@ export function Transactions({
     setCurrencyFilter('all')
     setTypeFilter('all')
   }
-
-  const emojiLookup = useMemo(() => {
-    const map = new Map<string, string>()
-    getCategoryDefinitions().forEach((d) => map.set(d.id, d.icon))
-    return map
-  }, [])
 
   const categorySuggestions = useMemo(() => {
     return Array.from(
@@ -983,8 +976,7 @@ export function Transactions({
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                       {(() => {
                         const catId = transaction.category ?? 'uncategorized'
-                        const display = getCategoryDisplay(catId)
-                        const emoji = emojiLookup.get(catId)
+                        const definition = getCategoryDefinition(catId)
                         return (
                           <span
                             aria-hidden="true"
@@ -992,7 +984,7 @@ export function Transactions({
                               width: 30,
                               height: 30,
                               borderRadius: 8,
-                              background: display.color + '1f',
+                              background: definition.color + '1f',
                               display: 'grid',
                               placeItems: 'center',
                               fontSize: 14,
@@ -1000,8 +992,8 @@ export function Transactions({
                               marginTop: 1,
                             }}
                           >
-                            {emoji ?? (
-                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: display.color, display: 'block' }} />
+                            {definition.icon ?? (
+                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: definition.color, display: 'block' }} />
                             )}
                           </span>
                         )
