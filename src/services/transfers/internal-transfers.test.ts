@@ -71,4 +71,57 @@ describe('internal transfer inference', () => {
     expect(isTransferCategory('groceries')).toBe(false)
     expect(isTransferCategory(undefined)).toBe(false)
   })
+
+  it('does not mark TRANSFERENCIA ENVIADA TRF. PLAZA- NAME as Transfer', () => {
+    const result = inferInternalTransfers([
+      makeTransaction('debit-ext', {
+        description:
+          'TRANSFERENCIA ENVIADA 797258TT55557944 TRF. PLAZA- FEDERICO GAZZANO',
+        type: 'debit',
+        amount: 476.81,
+        currency: 'UYU',
+        // No initial category — simulating fresh import
+      }),
+    ])
+
+    const debit = result.find((tx) => tx.id === 'debit-ext')!
+    expect(debit.category).not.toBe(Category.Transfer)
+  })
+
+  it('does not mark TRANSF INSTANTANEA ENVIADA NRR: NAME as Transfer', () => {
+    const result = inferInternalTransfers([
+      makeTransaction('debit-ext', {
+        description:
+          'TRANSF INSTANTANEA ENVIADA 381239LE NRR:182500517 JOSE PREX',
+        type: 'debit',
+        amount: 250,
+        currency: 'UYU',
+        // No initial category — simulating fresh import
+      }),
+    ])
+
+    const debit = result.find((tx) => tx.id === 'debit-ext')!
+    expect(debit.category).not.toBe(Category.Transfer)
+  })
+
+  it('still marks legitimate internal transfers as Transfer', () => {
+    const result = inferInternalTransfers([
+      makeTransaction('debit-int', {
+        description: 'Transferencia enviada supernet ref 999999',
+        type: 'debit',
+        amount: 1500,
+        currency: 'UYU',
+        rawData: { referencia: '999999' },
+      }),
+      makeTransaction('credit-int', {
+        description: 'Transferencia recibida supernet ref 999999',
+        type: 'credit',
+        amount: 1500,
+        currency: 'UYU',
+        rawData: { referencia: '999999' },
+      }),
+    ])
+
+    expect(result.every((tx) => tx.category === Category.Transfer)).toBe(true)
+  })
 })

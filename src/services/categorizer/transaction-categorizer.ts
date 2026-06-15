@@ -14,6 +14,9 @@ import {
   type TemporalPattern,
 } from './temporal-patterns'
 
+// Matches "TRF. PLAZA- NAME", "TRF. BROU- NAME", or "NRR:182500517 JOSE PREX"
+const EXTERNAL_BENEFICIARY_RE = /trf\.\s*\w+\s*-\s*[a-z]|nrr:[a-z0-9]+\s+[a-z]/
+
 const FEE_KEYWORDS = [
   'comision',
   'cargo',
@@ -137,8 +140,11 @@ export function categorizeTransaction(
     }
   }
 
-  // 5. Transfer keywords
-  if (matchesAny(normalized, TRANSFER_KEYWORDS)) {
+  // 5. Transfer keywords — skip if description names an external beneficiary
+  if (
+    matchesAny(normalized, TRANSFER_KEYWORDS) &&
+    !EXTERNAL_BENEFICIARY_RE.test(normalized)
+  ) {
     return {
       category: Category.Transfer,
       confidence: 0.9,
