@@ -70,6 +70,7 @@ describe('chart-data', () => {
       makeTransaction('tx-1', {
         amount: 100,
         type: 'credit',
+        category: Category.Income,
         currency: 'USD',
         date: new Date('2025-01-15T00:00:00.000Z'),
       }),
@@ -95,11 +96,41 @@ describe('chart-data', () => {
     ])
   })
 
+  it('only counts Category.Income credits as income — other credits are neutral', () => {
+    const transactions = [
+      makeTransaction('salary', {
+        amount: 200,
+        type: 'credit',
+        category: Category.Income,
+        currency: 'USD',
+      }),
+      makeTransaction('refund', {
+        amount: 30,
+        type: 'credit',
+        category: Category.Groceries,
+        currency: 'USD',
+      }),
+      makeTransaction('received', {
+        amount: 50,
+        type: 'credit',
+        category: Category.Uncategorized,
+        currency: 'USD',
+      }),
+    ]
+
+    const result = buildIncomeExpenseSummary(transactions, 'USD')
+
+    expect(result.income).toBe(200)
+    expect(result.expense).toBe(0)
+    expect(result.net).toBe(200)
+  })
+
   it('builds income vs expense summary per currency', () => {
     const transactions = [
       makeTransaction('tx-1', {
         amount: 50,
         type: 'credit',
+        category: Category.Income,
         currency: 'USD',
       }),
       makeTransaction('tx-2', {
@@ -199,7 +230,7 @@ describe('chart-data multicurrency converting selectors', () => {
   describe('buildMonthlyTrendsConverted', () => {
     it('combines USD and UYU amounts for same month into home currency', () => {
       const txs = [
-        makeTx('1', { amount: 10, currency: 'USD', type: 'credit', date: new Date('2025-01-10T00:00:00.000Z') }),
+        makeTx('1', { amount: 10, currency: 'USD', type: 'credit', category: Category.Income, date: new Date('2025-01-10T00:00:00.000Z') }),
         makeTx('2', { amount: 200, currency: 'UYU', type: 'debit', date: new Date('2025-01-20T00:00:00.000Z') }),
       ]
       const result = buildMonthlyTrendsConverted(txs, 'UYU', RATE)
@@ -208,6 +239,17 @@ describe('chart-data multicurrency converting selectors', () => {
       expect(result[0].income).toBeCloseTo(400) // 10 USD * 40
       expect(result[0].expense).toBeCloseTo(200) // 200 UYU
       expect(result[0].net).toBeCloseTo(200)
+    })
+
+    it('does not count uncategorized or non-income credits as income', () => {
+      const txs = [
+        makeTx('income', { amount: 50, currency: 'USD', type: 'credit', category: Category.Income }),
+        makeTx('refund', { amount: 10, currency: 'USD', type: 'credit', category: Category.Groceries }),
+        makeTx('unknown', { amount: 5, currency: 'USD', type: 'credit' }),
+      ]
+      const result = buildMonthlyTrendsConverted(txs, 'USD', RATE)
+      expect(result[0].income).toBe(50)
+      expect(result[0].expense).toBe(0)
     })
   })
 
@@ -221,7 +263,7 @@ describe('chart-data multicurrency converting selectors', () => {
     it('computes latest-month totals in home currency', () => {
       const txs = [
         makeTx('old', { date: new Date('2024-11-01T00:00:00.000Z'), type: 'debit', amount: 999 }),
-        makeTx('inc', { date: new Date('2025-01-15T00:00:00.000Z'), type: 'credit', amount: 100, currency: 'USD' }),
+        makeTx('inc', { date: new Date('2025-01-15T00:00:00.000Z'), type: 'credit', category: Category.Income, amount: 100, currency: 'USD' }),
         makeTx('exp-usd', { date: new Date('2025-01-20T00:00:00.000Z'), type: 'debit', amount: 20, currency: 'USD' }),
         makeTx('exp-uyu', { date: new Date('2025-01-25T00:00:00.000Z'), type: 'debit', amount: 400, currency: 'UYU' }),
       ]

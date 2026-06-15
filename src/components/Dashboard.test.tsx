@@ -36,11 +36,11 @@ describe('Dashboard', () => {
     const transactions = [
       makeTransaction({ id: 'uyu-debit', currency: 'UYU', type: 'debit', amount: 1000 }),
       makeTransaction({ id: 'usd-debit', currency: 'USD', type: 'debit', amount: 50 }),
-      makeTransaction({ id: 'usd-credit', currency: 'USD', type: 'credit', amount: 200 }),
+      makeTransaction({ id: 'usd-credit', currency: 'USD', type: 'credit', amount: 200, category: Category.Income }),
     ]
 
     // homeCurrency defaults to 'USD', fxRate defaults to 40.5
-    // income = 200 USD, expenses = 50 USD + 1000/40.5 ≈ 24.69 USD
+    // income = 200 USD (only Category.Income credits count), expenses = 50 USD + 1000/40 ≈ 25 USD
     render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
 
     // income = 200 USD appears in "Este mes" panel
