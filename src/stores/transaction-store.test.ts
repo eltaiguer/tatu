@@ -117,3 +117,109 @@ describe('Transaction Store - Duplicates and Merge', () => {
     ])
   })
 })
+
+describe('Transaction Store - addTransactions', () => {
+  let store: ReturnType<typeof createTransactionStore>
+
+  beforeEach(() => {
+    store = createTransactionStore()
+  })
+
+  it('adds all transactions when store is empty', () => {
+    const result = store
+      .getState()
+      .addTransactions([makeTransaction('tx-1'), makeTransaction('tx-2')])
+
+    expect(result.added).toHaveLength(2)
+    expect(result.duplicates).toHaveLength(0)
+    expect(store.getState().transactions).toHaveLength(2)
+  })
+
+  it('returns duplicates without re-adding them', () => {
+    store.getState().addTransactions([makeTransaction('tx-1')])
+
+    const result = store
+      .getState()
+      .addTransactions([makeTransaction('tx-1'), makeTransaction('tx-2')])
+
+    expect(result.duplicates).toHaveLength(1)
+    expect(result.duplicates[0].id).toBe('tx-1')
+    expect(result.added).toHaveLength(1)
+    expect(result.added[0].id).toBe('tx-2')
+    expect(store.getState().transactions).toHaveLength(2)
+  })
+
+  it('deduplicates within the same batch', () => {
+    const result = store
+      .getState()
+      .addTransactions([makeTransaction('tx-1'), makeTransaction('tx-1')])
+
+    expect(result.added).toHaveLength(1)
+    expect(result.duplicates).toHaveLength(1)
+    expect(store.getState().transactions).toHaveLength(1)
+  })
+
+  it('handles empty batch without errors', () => {
+    const result = store.getState().addTransactions([])
+
+    expect(result.added).toHaveLength(0)
+    expect(result.duplicates).toHaveLength(0)
+    expect(store.getState().transactions).toHaveLength(0)
+  })
+
+  it('infers internal transfers between matching bank transactions', () => {
+    const debit = makeTransaction('tx-debit', {
+      type: 'debit',
+      source: 'bank_account',
+      amount: 1000,
+      currency: 'USD',
+      description: 'pago tarjeta credito',
+      date: new Date('2025-06-01T00:00:00.000Z'),
+    })
+    const credit = makeTransaction('tx-credit', {
+      type: 'credit',
+      source: 'bank_account',
+      amount: 1000,
+      currency: 'USD',
+      description: 'pago tarjeta credito',
+      date: new Date('2025-06-01T00:00:00.000Z'),
+    })
+
+    store.getState().addTransactions([debit, credit])
+
+    const txs = store.getState().transactions
+    expect(txs.find((tx) => tx.id === 'tx-debit')?.category).toBe('transfer')
+    expect(txs.find((tx) => tx.id === 'tx-credit')?.category).toBe('transfer')
+  })
+})
+
+describe('Transaction Store - setTransactions normalization', () => {
+  let store: ReturnType<typeof createTransactionStore>
+
+  beforeEach(() => {
+    store = createTransactionStore()
+  })
+
+  it('normalizes string dates to Date objects', () => {
+    const tx = makeTransaction('tx-1', {
+      date: '2025-06-01' as unknown as Date,
+    })
+
+    store.getState().setTransactions([tx])
+
+    const stored = store.getState().transactions[0]
+    expect(stored.date).toBeInstanceOf(Date)
+    expect(stored.date.toISOString()).toContain('2025-06-01')
+  })
+
+  it('keeps Date instances as-is', () => {
+    const date = new Date('2025-06-01T00:00:00.000Z')
+    const tx = makeTransaction('tx-1', { date })
+
+    store.getState().setTransactions([tx])
+
+    const stored = store.getState().transactions[0]
+    expect(stored.date).toBeInstanceOf(Date)
+    expect(stored.date.toISOString()).toBe(date.toISOString())
+  })
+})
