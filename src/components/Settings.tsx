@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import type { Transaction } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 import { exportTransactions } from '../services/export/export'
+import { CoverageAnalysis } from './dev/CoverageAnalysis'
 
 interface SettingsProps {
   theme: 'light' | 'dark' | 'auto'
@@ -421,6 +422,12 @@ export function Settings({
           </Button>
         </div>
       </SectionCard>
+
+      {import.meta.env.DEV && (
+        <SectionCard title="[Dev] Cobertura del clasificador">
+          <CoverageAnalysis session={session} />
+        </SectionCard>
+      )}
     </div>
   )
 }

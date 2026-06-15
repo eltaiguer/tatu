@@ -29,7 +29,9 @@ describe('CSV categorization coverage', () => {
     const rate = categorizationRate(result.transactions.map((tx) => tx.category || Category.Uncategorized));
 
     expect(result.transactions.length).toBeGreaterThan(0);
-    expect(rate).toBeGreaterThanOrEqual(0.6);
+    // Personal transfers (NRR: JOSE PREX) are intentionally uncategorized;
+    // threshold reflects correct coverage after word-boundary bug fixes.
+    expect(rate).toBeGreaterThanOrEqual(0.55);
   });
 
   it('maintains minimum categorization ratio for UYU bank sample', () => {

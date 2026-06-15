@@ -36,7 +36,7 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
     confidence: 0.85,
   },
   {
-    patterns: ['carniceria', 'panaderia', 'verduleria'],
+    patterns: ['carniceria', 'panaderia', 'verduleria', 'fruteria'],
     category: Category.Groceries,
     confidence: 0.85,
   },
@@ -181,6 +181,11 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
     category: Category.Transport,
     confidence: 0.9,
   },
+  {
+    patterns: ['cpatu'],
+    category: Category.Transport,
+    confidence: 0.95,
+  },
 
   // Insurance
   {
@@ -214,14 +219,22 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
   },
 ]
 
+function matchesWithBoundary(normalized: string, pattern: string): boolean {
+  if (pattern.includes(' ')) return normalized.includes(pattern)
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?<![a-z])${escaped}(?![a-z])`).test(normalized)
+}
+
 /**
  * Normalize merchant name for matching
  * - Converts to lowercase
  * - Trims whitespace
  * - Removes extra spaces
+ * - Strips POS terminal noise prefixes (Square "Sq", Toast "Tst")
  */
 export function normalizeMerchantName(name: string): string {
-  return name.toLowerCase().trim().replace(/\s+/g, ' ')
+  const normalized = name.toLowerCase().trim().replace(/\s+/g, ' ')
+  return normalized.replace(/^(?:sq|tst) /, '').trim()
 }
 
 /**
@@ -244,8 +257,7 @@ export function matchMerchantPattern(
     for (const pattern of merchantPattern.patterns) {
       const normalizedPattern = normalizeMerchantName(pattern)
 
-      // Check if the normalized merchant name contains the pattern
-      if (normalized.includes(normalizedPattern)) {
+      if (matchesWithBoundary(normalized, normalizedPattern)) {
         // Calculate confidence based on match quality
         let confidence = merchantPattern.confidence
 
