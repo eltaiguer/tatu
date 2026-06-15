@@ -21,6 +21,9 @@ const {
   upsertDescriptionOverrideMock,
   listCustomCategoriesMock,
   upsertCustomCategoryMock,
+  listCustomPatternsMock,
+  loadUserPreferencesMock,
+  saveUserPreferencesMock,
 } = vi.hoisted(() => ({
   getCurrentSessionMock: vi.fn(),
   requestPasswordResetMock: vi.fn(),
@@ -40,6 +43,9 @@ const {
   upsertDescriptionOverrideMock: vi.fn(),
   listCustomCategoriesMock: vi.fn(),
   upsertCustomCategoryMock: vi.fn(),
+  listCustomPatternsMock: vi.fn(),
+  loadUserPreferencesMock: vi.fn(),
+  saveUserPreferencesMock: vi.fn(),
 }))
 
 vi.mock('./services/supabase/client', () => ({
@@ -78,6 +84,15 @@ vi.mock('./services/supabase/custom-categories', () => ({
   upsertCustomCategory: upsertCustomCategoryMock,
 }))
 
+vi.mock('./services/supabase/custom-patterns', () => ({
+  listCustomPatterns: listCustomPatternsMock,
+}))
+
+vi.mock('./services/supabase/user-preferences', () => ({
+  loadUserPreferences: loadUserPreferencesMock,
+  saveUserPreferences: saveUserPreferencesMock,
+}))
+
 vi.mock('./services/supabase/import-runs', () => ({
   createImportRun: vi.fn(),
   completeImportRun: vi.fn(),
@@ -103,6 +118,9 @@ describe('App with supabase enabled', () => {
     upsertDescriptionOverrideMock.mockResolvedValue(undefined)
     listCustomCategoriesMock.mockResolvedValue([])
     upsertCustomCategoryMock.mockResolvedValue(undefined)
+    listCustomPatternsMock.mockResolvedValue([])
+    loadUserPreferencesMock.mockResolvedValue(null)
+    saveUserPreferencesMock.mockResolvedValue(undefined)
     requestPasswordResetMock.mockResolvedValue(undefined)
     subscribeToAuthChangesMock.mockReturnValue(() => undefined)
     updatePasswordMock.mockResolvedValue(undefined)
@@ -263,54 +281,6 @@ describe('App with supabase enabled', () => {
       screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
     ).toBeInTheDocument()
     expect(loadUserTransactionsMock).not.toHaveBeenCalled()
-  })
-
-  it('migrates local persisted transactions after sign in', async () => {
-    signInWithPasswordMock.mockResolvedValue({
-      access_token: 'access',
-      refresh_token: 'refresh',
-      token_type: 'bearer',
-      expires_in: 3600,
-      expires_at: 9999,
-      user: { id: 'user-1', email: 'test@example.com' },
-    })
-
-    localStorage.setItem(
-      'tatu:transactions',
-      JSON.stringify({
-        state: {
-          transactions: [
-            {
-              id: 'tx-local-1',
-              date: '2026-02-10T00:00:00.000Z',
-              description: 'Local tx',
-              amount: 100,
-              currency: 'UYU',
-              type: 'debit',
-              source: 'bank_account',
-              rawData: {},
-            },
-          ],
-        },
-        version: 0,
-      })
-    )
-
-    const { default: App } = await import('./App')
-    render(<App />)
-
-    fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
-      target: { value: 'test@example.com' },
-    })
-    fireEvent.change(screen.getByPlaceholderText('Contraseña'), {
-      target: { value: 'secret123' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-
-    await waitFor(() => expect(persistTransactionsMock).toHaveBeenCalledTimes(1))
-    await waitFor(() =>
-      expect(screen.getByText('1 transacciones locales migradas')).toBeInTheDocument()
-    )
   })
 
   it(

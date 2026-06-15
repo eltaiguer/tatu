@@ -1,11 +1,4 @@
-/**
- * User-defined custom pattern rules.
- * Allows users to create reusable patterns like
- * "any merchant containing 'farmacia' = Healthcare".
- */
 import { normalizeMerchantName, type PatternMatch } from './merchant-patterns'
-
-const STORAGE_KEY = 'tatu:customPatterns'
 
 export type MatchType = 'contains' | 'starts_with' | 'exact'
 
@@ -17,37 +10,18 @@ export interface CustomPattern {
   createdAt: string
 }
 
-function hasLocalStorage(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.localStorage !== 'undefined'
-  )
-}
-
-function loadPatterns(): CustomPattern[] {
-  if (!hasLocalStorage()) return []
-
-  const raw = window.localStorage.getItem(STORAGE_KEY)
-  if (!raw) return []
-
-  try {
-    return JSON.parse(raw) as CustomPattern[]
-  } catch {
-    return []
-  }
-}
-
-function savePatterns(patterns: CustomPattern[]): void {
-  if (!hasLocalStorage()) return
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(patterns))
-}
+let patterns: CustomPattern[] = []
 
 function generateId(): string {
   return `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+export function replaceCustomPatterns(nextPatterns: CustomPattern[]): void {
+  patterns = [...nextPatterns]
+}
+
 export function listCustomPatterns(): CustomPattern[] {
-  return loadPatterns()
+  return patterns
 }
 
 export function addCustomPattern(
@@ -60,33 +34,40 @@ export function addCustomPattern(
     createdAt: new Date().toISOString(),
   }
 
-  const patterns = loadPatterns()
-  patterns.push(pattern)
-  savePatterns(patterns)
+  patterns = [...patterns, pattern]
+
+  void import('../supabase/runtime').then(({ getActiveSupabaseSession }) => {
+    const session = getActiveSupabaseSession()
+    if (!session) return
+    import('../supabase/custom-patterns').then(({ upsertCustomPattern }) => {
+      void upsertCustomPattern(session, pattern)
+    })
+  })
+
   return pattern
 }
 
 export function removeCustomPattern(id: string): void {
-  const patterns = loadPatterns().filter((p) => p.id !== id)
-  savePatterns(patterns)
+  patterns = patterns.filter((p) => p.id !== id)
+
+  void import('../supabase/runtime').then(({ getActiveSupabaseSession }) => {
+    const session = getActiveSupabaseSession()
+    if (!session) return
+    import('../supabase/custom-patterns').then(({ deleteCustomPattern }) => {
+      void deleteCustomPattern(session, id)
+    })
+  })
 }
 
 export function clearAllCustomPatterns(): void {
-  if (!hasLocalStorage()) return
-  window.localStorage.removeItem(STORAGE_KEY)
+  patterns = []
 }
 
-/**
- * Match a description against user-defined custom patterns.
- * Returns the first matching pattern with high confidence (0.95).
- */
 export function matchCustomPattern(
   description: string
 ): PatternMatch | null {
   const normalized = normalizeMerchantName(description)
   if (!normalized) return null
-
-  const patterns = loadPatterns()
 
   for (const custom of patterns) {
     const normalizedPattern = normalizeMerchantName(custom.pattern)

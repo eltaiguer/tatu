@@ -1,8 +1,6 @@
 import { normalizeMerchantName } from './merchant-patterns'
 import { invalidateLearnedPatternsCache } from './learned-patterns'
 
-const STORAGE_KEY = 'tatu:categoryOverrides'
-
 export interface CategoryOverride {
   merchantName?: string
   category: string
@@ -11,37 +9,7 @@ export interface CategoryOverride {
 
 export type CategoryOverrides = Record<string, CategoryOverride>
 
-function hasLocalStorage(): boolean {
-  return (
-    typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-  )
-}
-
-function loadOverrides(): CategoryOverrides {
-  if (!hasLocalStorage()) {
-    return {}
-  }
-
-  const raw = window.localStorage.getItem(STORAGE_KEY)
-  if (!raw) {
-    return {}
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as CategoryOverrides
-    return parsed || {}
-  } catch {
-    return {}
-  }
-}
-
-function saveOverrides(overrides: CategoryOverrides): void {
-  if (!hasLocalStorage()) {
-    return
-  }
-
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides))
-}
+let overrides: CategoryOverrides = {}
 
 export function getMerchantCategoryOverride(
   merchantName: string
@@ -51,7 +19,6 @@ export function getMerchantCategoryOverride(
     return null
   }
 
-  const overrides = loadOverrides()
   return overrides[normalized]?.category ?? null
 }
 
@@ -64,13 +31,11 @@ export function setMerchantCategoryOverride(
     return
   }
 
-  const overrides = loadOverrides()
   overrides[normalized] = {
     category,
     merchantName,
     updatedAt: new Date().toISOString(),
   }
-  saveOverrides(overrides)
   invalidateLearnedPatternsCache()
 }
 
@@ -98,7 +63,7 @@ export async function setMerchantCategoryOverrideWithSync(
       })
     }
   } catch {
-    // local override remains as fallback
+    // in-memory override remains
   }
 }
 
@@ -108,10 +73,8 @@ export function clearMerchantCategoryOverride(merchantName: string): void {
     return
   }
 
-  const overrides = loadOverrides()
   if (overrides[normalized]) {
     delete overrides[normalized]
-    saveOverrides(overrides)
     invalidateLearnedPatternsCache()
   }
 }
@@ -135,24 +98,20 @@ export async function clearMerchantCategoryOverrideWithSync(
       await deleteCategoryOverride(session, normalized)
     }
   } catch {
-    // local fallback already applied
+    // in-memory state already updated
   }
 }
 
 export function listMerchantCategoryOverrides(): CategoryOverrides {
-  return loadOverrides()
+  return overrides
 }
 
 export function clearAllCategoryOverrides(): void {
-  if (!hasLocalStorage()) {
-    return
-  }
-
-  window.localStorage.removeItem(STORAGE_KEY)
+  overrides = {}
 }
 
 export function replaceMerchantCategoryOverrides(
-  overrides: CategoryOverrides
+  nextOverrides: CategoryOverrides
 ): void {
-  saveOverrides(overrides)
+  overrides = { ...nextOverrides }
 }

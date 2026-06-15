@@ -3,33 +3,131 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
 import { transactionStore } from './stores/transaction-store'
 
+const MOCK_SESSION = {
+  access_token: 'access',
+  refresh_token: 'refresh',
+  token_type: 'bearer',
+  expires_in: 3600,
+  expires_at: 9999,
+  user: { id: 'user-1', email: 'test@example.com' },
+}
+
+const {
+  getCurrentSessionMock,
+  subscribeToAuthChangesMock,
+  loadUserTransactionsMock,
+  listCategoryOverridesMock,
+  listDescriptionOverridesMock,
+  listCustomCategoriesMock,
+  listCustomPatternsMock,
+  loadUserPreferencesMock,
+  updateTransactionMock,
+} = vi.hoisted(() => ({
+  getCurrentSessionMock: vi.fn(),
+  subscribeToAuthChangesMock: vi.fn(),
+  loadUserTransactionsMock: vi.fn(),
+  listCategoryOverridesMock: vi.fn(),
+  listDescriptionOverridesMock: vi.fn(),
+  listCustomCategoriesMock: vi.fn(),
+  listCustomPatternsMock: vi.fn(),
+  loadUserPreferencesMock: vi.fn(),
+  updateTransactionMock: vi.fn(),
+}))
+
 vi.mock('./services/supabase/client', () => ({
-  isSupabaseConfigured: () => false,
+  isSupabaseConfigured: () => true,
+  getSupabaseClient: vi.fn(),
+}))
+
+vi.mock('./services/supabase/auth', () => ({
+  getCurrentSession: getCurrentSessionMock,
+  subscribeToAuthChanges: subscribeToAuthChangesMock,
+  signOut: vi.fn().mockResolvedValue(undefined),
+  signInWithPassword: vi.fn(),
+  signUpWithPassword: vi.fn(),
+  requestPasswordReset: vi.fn(),
+  updatePassword: vi.fn(),
+}))
+
+vi.mock('./services/supabase/transactions', () => ({
+  loadUserTransactions: loadUserTransactionsMock,
+  persistTransactions: vi.fn().mockResolvedValue(undefined),
+  softDeleteTransaction: vi.fn().mockResolvedValue(undefined),
+  updateTransaction: updateTransactionMock,
+}))
+
+vi.mock('./services/supabase/category-overrides', () => ({
+  listCategoryOverrides: listCategoryOverridesMock,
+  upsertCategoryOverride: vi.fn().mockResolvedValue(undefined),
+  deleteCategoryOverride: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('./services/supabase/description-overrides', () => ({
+  listDescriptionOverrides: listDescriptionOverridesMock,
+  upsertDescriptionOverride: vi.fn().mockResolvedValue(undefined),
+  deleteDescriptionOverride: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('./services/supabase/custom-categories', () => ({
+  listCustomCategories: listCustomCategoriesMock,
+  upsertCustomCategory: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('./services/supabase/custom-patterns', () => ({
+  listCustomPatterns: listCustomPatternsMock,
+}))
+
+vi.mock('./services/supabase/user-preferences', () => ({
+  loadUserPreferences: loadUserPreferencesMock,
+  saveUserPreferences: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('./services/supabase/import-runs', () => ({
+  createImportRun: vi.fn().mockResolvedValue('run-1'),
+  completeImportRun: vi.fn().mockResolvedValue(undefined),
+  failImportRun: vi.fn().mockResolvedValue(undefined),
+  sha256Hex: vi.fn().mockResolvedValue('hash'),
 }))
 
 describe('App', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     transactionStore.getState().clearTransactions()
     localStorage.clear()
+    window.history.replaceState({}, '', '/')
+
+    getCurrentSessionMock.mockReturnValue(MOCK_SESSION)
+    subscribeToAuthChangesMock.mockReturnValue(() => undefined)
+    loadUserTransactionsMock.mockResolvedValue([])
+    listCategoryOverridesMock.mockResolvedValue([])
+    listDescriptionOverridesMock.mockResolvedValue([])
+    listCustomCategoriesMock.mockResolvedValue([])
+    listCustomPatternsMock.mockResolvedValue([])
+    loadUserPreferencesMock.mockResolvedValue(null)
+    updateTransactionMock.mockResolvedValue(undefined)
   })
 
-  it('renders overview (dashboard) view by default', () => {
+  it('renders overview (dashboard) view by default', async () => {
     render(<App />)
 
-    expect(screen.getByRole('heading', { name: /Hola/i })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /Hola/i })).toBeInTheDocument()
+    )
     expect(screen.getByRole('heading', { name: 'Empezá importando tu extracto' })).toBeInTheDocument()
   })
 
-  it('opens import view when clicking the sidebar Importar button', () => {
+  it('opens import view when clicking the sidebar Importar button', async () => {
     render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
     expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
   })
 
-  it('shows supported file types on import view', () => {
+  it('shows supported file types on import view', async () => {
     render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
     expect(screen.getByText('Tarjeta de Crédito')).toBeInTheDocument()
@@ -38,8 +136,9 @@ describe('App', () => {
     expect(screen.getByText(/Extracto de tarjeta Santander/)).toBeInTheDocument()
   })
 
-  it('switches to transactions view from sidebar navigation', () => {
+  it('switches to transactions view from sidebar navigation', async () => {
     render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
@@ -47,7 +146,7 @@ describe('App', () => {
   })
 
   it('auto-categorizes selected transactions from the transactions view', async () => {
-    transactionStore.getState().addTransactions([
+    loadUserTransactionsMock.mockResolvedValue([
       {
         id: 'tx-1',
         date: new Date('2026-01-10T00:00:00.000Z'),
@@ -61,6 +160,7 @@ describe('App', () => {
     ])
 
     render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
     await act(async () => {
       fireEvent.click(
@@ -90,7 +190,7 @@ describe('App', () => {
   })
 
   it('shows a notice when auto-categorization finds no category matches', async () => {
-    transactionStore.getState().addTransactions([
+    loadUserTransactionsMock.mockResolvedValue([
       {
         id: 'tx-1',
         date: new Date('2026-01-10T00:00:00.000Z'),
@@ -104,6 +204,7 @@ describe('App', () => {
     ])
 
     render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     await act(async () => {
@@ -131,15 +232,16 @@ describe('App', () => {
     expect(transactionStore.getState().transactions[0].category).toBe('uncategorized')
   })
 
-  it('switches to categorías view from sidebar navigation', () => {
+  it('switches to categorías view from sidebar navigation', async () => {
     render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Categorías' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Categorías' }))
 
     expect(screen.getByRole('heading', { name: 'Categorías y reglas' })).toBeInTheDocument()
   })
 
   it('filters Transacciones by category when deep-linking from Resumen', async () => {
-    transactionStore.getState().addTransactions([
+    loadUserTransactionsMock.mockResolvedValue([
       {
         id: 'tx-cat',
         date: new Date('2026-01-10T00:00:00.000Z'),
@@ -165,34 +267,36 @@ describe('App', () => {
     ])
 
     render(<App />)
-    // Click top category row to deep-link (Alimentación = groceries, highest amount)
+    await waitFor(() => expect(screen.getByText('Alimentación')).toBeInTheDocument())
     const topCategoryLink = screen.getByText('Alimentación')
     fireEvent.click(topCategoryLink)
 
     expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
   })
 
-  it('opens import as a dialog overlay without navigating away from current view', () => {
+  it('opens import as a dialog overlay without navigating away from current view', async () => {
     render(<App />)
-    // Importar button is in the sidebar
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Importar' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
-    // Import dialog content appears
     expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
   })
 
-  it('applies dark theme from localStorage on initial render', () => {
-    localStorage.setItem('theme', 'dark')
+  it('applies dark theme when user preferences return dark', async () => {
+    loadUserPreferencesMock.mockResolvedValue({ theme: 'dark', currency: 'USD', fxRate: 40.5 })
 
     render(<App />)
 
-    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    await waitFor(() =>
+      expect(document.documentElement.classList.contains('dark')).toBe(true)
+    )
   })
 
-  it('sidebar nav items are visible and functional', () => {
+  it('sidebar nav items are visible and functional', async () => {
     render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Resumen' })).toBeInTheDocument())
 
     expect(screen.getByRole('button', { name: 'Resumen' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
@@ -203,6 +307,7 @@ describe('App', () => {
 
   it('mobile hamburger opens nav sheet and closes on nav item click', async () => {
     render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: /abrir menú/i })).toBeInTheDocument())
 
     const hamburger = screen.getByRole('button', { name: /abrir menú/i })
     expect(hamburger).toBeInTheDocument()
@@ -215,7 +320,6 @@ describe('App', () => {
     expect(hamburger).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('dialog', { name: /menú de navegación/i })).toBeInTheDocument()
 
-    // clicking a nav item closes the sheet (aria-expanded goes back to false)
     const dialogNavButtons = screen
       .getByRole('dialog', { name: /menú de navegación/i })
       .querySelectorAll('button')

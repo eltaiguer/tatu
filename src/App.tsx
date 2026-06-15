@@ -25,10 +25,7 @@ import {
 } from './components/ui/sheet'
 import { Sun, Moon, Menu, Monitor } from 'lucide-react'
 import { useStore } from 'zustand'
-import {
-  getPersistedTransactionsSnapshot,
-  transactionStore,
-} from './stores/transaction-store'
+import { transactionStore } from './stores/transaction-store'
 import {
   getCurrentSession,
   requestPasswordReset,
@@ -38,10 +35,7 @@ import {
   subscribeToAuthChanges,
   updatePassword,
 } from './services/supabase/auth'
-import {
-  isSupabaseConfigured,
-  type SupabaseSession,
-} from './services/supabase/client'
+import type { SupabaseSession } from './services/supabase/client'
 import {
   loadUserTransactions,
   persistTransactions,
@@ -59,18 +53,20 @@ import {
 import {
   clearAllDescriptionOverrides,
   clearDescriptionOverrideWithSync,
-  listDescriptionOverrides as listLocalDescriptionOverrides,
   replaceDescriptionOverrides,
   setDescriptionOverrideWithSync,
 } from './services/descriptions/description-overrides'
 import { buildDescriptionOverrideKey } from './services/descriptions/normalization'
 import { replaceCustomCategories } from './services/categories/category-store'
-import { listCategoryOverrides, upsertCategoryOverride } from './services/supabase/category-overrides'
-import {
-  listDescriptionOverrides as listRemoteDescriptionOverrides,
-  upsertDescriptionOverride,
-} from './services/supabase/description-overrides'
+import { replaceCustomPatterns } from './services/categorizer/custom-patterns'
+import { listCategoryOverrides } from './services/supabase/category-overrides'
+import { listDescriptionOverrides as listRemoteDescriptionOverrides } from './services/supabase/description-overrides'
 import { listCustomCategories } from './services/supabase/custom-categories'
+import { listCustomPatterns as listSupabaseCustomPatterns } from './services/supabase/custom-patterns'
+import {
+  loadUserPreferences,
+  saveUserPreferences,
+} from './services/supabase/user-preferences'
 import {
   completeImportRun,
   createImportRun,
@@ -84,11 +80,6 @@ import {
   type CategorizationContext,
 } from './services/categorizer/transaction-categorizer'
 import { analyzeTemporalPatterns } from './services/categorizer/temporal-patterns'
-
-const CATEGORY_OVERRIDES_MIGRATION_KEY =
-  'tatu:migration:category-overrides:v1'
-const DESCRIPTION_OVERRIDES_MIGRATION_KEY =
-  'tatu:migration:description-overrides:v1'
 
 function isPasswordResetMode(): boolean {
   if (typeof window === 'undefined') {
@@ -129,14 +120,7 @@ function clearPasswordResetModeFromUrl(): void {
 }
 
 function App() {
-  const supabaseEnabled = isSupabaseConfigured()
-
-  // Initialize theme from localStorage
-  const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>(() => {
-    const saved = localStorage.getItem('theme')
-    if (saved === 'light' || saved === 'dark' || saved === 'auto') return saved
-    return 'auto'
-  })
+  const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('auto')
   const [systemDark, setSystemDark] = useState(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches
   )
@@ -146,20 +130,11 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const cycleTheme = () =>
     setTheme((t) => (t === 'light' ? 'dark' : t === 'dark' ? 'auto' : 'light'))
-  const [preferredCurrency, setPreferredCurrencyState] = useState<
-    'UYU' | 'USD'
-  >(() => {
-    const saved = localStorage.getItem('tatu:preferences:currency')
-    return saved === 'UYU' ? 'UYU' : 'USD'
-  })
-  const [fxRate, setFxRateState] = useState<number>(() => {
-    const saved = localStorage.getItem('tatu:preferences:fxRate')
-    const parsed = saved ? parseFloat(saved) : NaN
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 40.5
-  })
+  const [preferredCurrency, setPreferredCurrencyState] = useState<'UYU' | 'USD'>('USD')
+  const [fxRate, setFxRateState] = useState<number>(40.5)
   const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
   const [session, setSession] = useState<SupabaseSession | null>(() =>
-    supabaseEnabled ? getCurrentSession() : null
+    getCurrentSession()
   )
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const [authError, setAuthError] = useState('')
@@ -181,24 +156,27 @@ function App() {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
-  // Apply dark class and persist theme preference
+  // Apply dark class
   useEffect(() => {
     if (isDark) {
       document.documentElement.classList.add('dark')
     } else {
       document.documentElement.classList.remove('dark')
     }
-    localStorage.setItem('theme', theme)
-  }, [isDark, theme])
+  }, [isDark])
+
+  // Persist preferences to Supabase when they change
+  useEffect(() => {
+    if (!session) return
+    void saveUserPreferences(session, { theme, currency: preferredCurrency, fxRate })
+  }, [theme, preferredCurrency, fxRate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function setPreferredCurrency(c: 'UYU' | 'USD') {
     setPreferredCurrencyState(c)
-    localStorage.setItem('tatu:preferences:currency', c)
   }
 
   function setFxRate(r: number) {
     setFxRateState(r)
-    localStorage.setItem('tatu:preferences:fxRate', String(r))
   }
 
   useEffect(() => {
@@ -206,10 +184,6 @@ function App() {
   }, [session])
 
   useEffect(() => {
-    if (!supabaseEnabled) {
-      return
-    }
-
     const unsubscribe = subscribeToAuthChanges(
       (nextSession) => {
         setSession(nextSession)
@@ -224,64 +198,35 @@ function App() {
     return () => {
       unsubscribe()
     }
-  }, [supabaseEnabled])
+  }, [])
 
   useEffect(() => {
     let cancelled = false
 
     async function syncTransactions() {
-      if (!supabaseEnabled) {
-        return
-      }
-
-      if (authMode === 'reset') {
-        return
-      }
-
-      if (!session) {
-        return
-      }
+      if (authMode === 'reset') return
+      if (!session) return
 
       setAuthError('')
       setAuthNotice('')
 
       try {
-        const notices: string[] = []
-        const remoteTransactions = await loadUserTransactions(session)
-        const localTransactions = getPersistedTransactionsSnapshot()
-        const remoteIds = new Set(remoteTransactions.map((tx) => tx.id))
-        const transactionsToMigrate = localTransactions.filter(
-          (tx) => !remoteIds.has(tx.id)
-        )
+        const [
+          remoteTransactions,
+          remoteOverrides,
+          remoteDescriptionOverrides,
+          remoteCustomPatterns,
+          remoteCustomCategories,
+          userPrefs,
+        ] = await Promise.all([
+          loadUserTransactions(session),
+          listCategoryOverrides(session),
+          listRemoteDescriptionOverrides(session),
+          listSupabaseCustomPatterns(session),
+          listCustomCategories(session),
+          loadUserPreferences(session),
+        ])
 
-        if (transactionsToMigrate.length > 0) {
-          await persistTransactions(session, transactionsToMigrate)
-          notices.push(
-            `${transactionsToMigrate.length} transacciones locales migradas`
-          )
-        }
-
-        const shouldMigrateOverrides =
-          localStorage.getItem(CATEGORY_OVERRIDES_MIGRATION_KEY) !== 'done'
-        if (shouldMigrateOverrides) {
-          const localOverrides = listMerchantCategoryOverrides()
-          for (const [merchantNormalized, override] of Object.entries(
-            localOverrides
-          )) {
-            await upsertCategoryOverride(session, {
-              merchantNormalized,
-              merchantOriginal: override.merchantName,
-              category: override.category,
-            })
-          }
-
-          localStorage.setItem(CATEGORY_OVERRIDES_MIGRATION_KEY, 'done')
-          if (Object.keys(localOverrides).length > 0) {
-            notices.push('Reglas de categoría migradas a la nube')
-          }
-        }
-
-        const remoteOverrides = await listCategoryOverrides(session)
         replaceMerchantCategoryOverrides(
           remoteOverrides.reduce(
             (acc, override) => {
@@ -299,29 +244,6 @@ function App() {
           )
         )
 
-        const shouldMigrateDescriptionOverrides =
-          localStorage.getItem(DESCRIPTION_OVERRIDES_MIGRATION_KEY) !== 'done'
-        if (shouldMigrateDescriptionOverrides) {
-          const localDescriptionOverrides = listLocalDescriptionOverrides()
-          for (const [descriptionNormalized, override] of Object.entries(
-            localDescriptionOverrides
-          )) {
-            await upsertDescriptionOverride(session, {
-              descriptionNormalized,
-              descriptionOriginal: override.descriptionOriginal,
-              friendlyDescription: override.friendlyDescription,
-              category: override.category,
-            })
-          }
-
-          localStorage.setItem(DESCRIPTION_OVERRIDES_MIGRATION_KEY, 'done')
-          if (Object.keys(localDescriptionOverrides).length > 0) {
-            notices.push('Reglas de descripción migradas a la nube')
-          }
-        }
-
-        const remoteDescriptionOverrides =
-          await listRemoteDescriptionOverrides(session)
         replaceDescriptionOverrides(
           remoteDescriptionOverrides.reduce(
             (acc, override) => {
@@ -345,7 +267,7 @@ function App() {
           )
         )
 
-        const remoteCustomCategories = await listCustomCategories(session)
+        replaceCustomPatterns(remoteCustomPatterns)
         replaceCustomCategories(
           remoteCustomCategories.map((category) => ({
             id: category.id,
@@ -355,17 +277,14 @@ function App() {
           }))
         )
 
-        if (notices.length > 0) {
-          setAuthNotice(notices.join(' · '))
+        if (userPrefs) {
+          setTheme(userPrefs.theme)
+          setPreferredCurrencyState(userPrefs.currency)
+          setFxRateState(userPrefs.fxRate)
         }
 
-        const mergedTransactions = [
-          ...remoteTransactions,
-          ...transactionsToMigrate,
-        ].sort((a, b) => b.date.getTime() - a.date.getTime())
-
         if (!cancelled) {
-          transactionStore.getState().setTransactions(mergedTransactions)
+          transactionStore.getState().setTransactions(remoteTransactions)
         }
       } catch (error) {
         if (!cancelled) {
@@ -375,8 +294,6 @@ function App() {
               : 'No se pudieron cargar las transacciones'
           )
         }
-      } finally {
-        // sync complete
       }
     }
 
@@ -385,7 +302,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [authMode, session, supabaseEnabled])
+  }, [authMode, session])
 
   async function handleAuth(action: 'signin' | 'signup') {
     setAuthSubmitting(true)
@@ -416,6 +333,12 @@ function App() {
       setAuthMode('signin')
       toast('Sesión cerrada')
       transactionStore.getState().clearTransactions()
+      clearAllCategoryOverrides()
+      clearAllDescriptionOverrides()
+      replaceCustomPatterns([])
+      setTheme('auto')
+      setPreferredCurrencyState('USD')
+      setFxRateState(40.5)
       setCurrentView('overview')
       setImportOpen(false)
       setAuthError('')
@@ -444,7 +367,7 @@ function App() {
       fileName: string
     }
   ) {
-    if (!supabaseEnabled || !session) {
+    if (!session) {
       return transactionStore.getState().addTransactions(transactionsToImport)
     }
 
@@ -544,14 +467,10 @@ function App() {
     transactionStore.getState().clearTransactions()
     clearAllCategoryOverrides()
     clearAllDescriptionOverrides()
+    replaceCustomPatterns([])
     replaceCustomCategories([])
-    localStorage.removeItem('tatu:transactions')
-    localStorage.removeItem('tatu:categoryOverrides')
-    localStorage.removeItem('tatu:descriptionOverrides')
-    localStorage.removeItem(CATEGORY_OVERRIDES_MIGRATION_KEY)
-    localStorage.removeItem(DESCRIPTION_OVERRIDES_MIGRATION_KEY)
 
-    if (supabaseEnabled && session) {
+    if (session) {
       await resetUserSupabaseData(session)
     }
 
@@ -611,7 +530,7 @@ function App() {
           await clearMerchantCategoryOverrideWithSync(current.description)
         }
 
-        if (supabaseEnabled && session) {
+        if (session) {
           await Promise.all(
             matchingTransactions.map((tx) =>
               updateRemoteTransaction(session, tx.id, {
@@ -688,7 +607,7 @@ function App() {
           await clearMerchantCategoryOverrideWithSync(current.description)
         }
 
-        if (supabaseEnabled && session) {
+        if (session) {
           await updateRemoteTransaction(session, transactionId, {
             displayDescription:
               trimmedDisplayDescription &&
@@ -729,7 +648,7 @@ function App() {
           ? trimmedDisplayDescription
           : undefined
 
-      if (supabaseEnabled && session) {
+      if (session) {
         await updateRemoteTransaction(session, transactionId, {
           displayDescription: singleDisplayDescription,
           category: nextCategory,
@@ -758,7 +677,7 @@ function App() {
     const state = transactionStore.getState()
 
     try {
-      if (supabaseEnabled && session) {
+      if (session) {
         await softDeleteTransaction(session, transactionId)
       }
 
@@ -785,7 +704,7 @@ function App() {
     const targetIds = new Set(transactionIds)
 
     try {
-      if (supabaseEnabled && session) {
+      if (session) {
         await Promise.all(
           transactionIds.map((id) =>
             updateRemoteTransaction(session, id, { category, categoryConfidence: 1 })
@@ -823,7 +742,7 @@ function App() {
     const state = transactionStore.getState()
 
     try {
-      if (supabaseEnabled && session) {
+      if (session) {
         await Promise.all(
           transactionIds.map((id) => softDeleteTransaction(session, id))
         )
@@ -862,7 +781,7 @@ function App() {
     const targetIds = new Set(transactionIds)
 
     try {
-      if (supabaseEnabled && session) {
+      if (session) {
         await Promise.all(
           transactionIds.map((id) => {
             const transaction = state.transactions.find((tx) => tx.id === id)
@@ -969,7 +888,7 @@ function App() {
     }
 
     try {
-      if (supabaseEnabled && session) {
+      if (session) {
         await Promise.all(
           categorizedTransactions.map((transaction) =>
             updateRemoteTransaction(session, transaction.id, {
@@ -1018,7 +937,7 @@ function App() {
     }
   }
 
-  if (supabaseEnabled && (!session || authMode === 'reset')) {
+  if (!session || authMode === 'reset') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 space-y-4">
@@ -1089,7 +1008,7 @@ function App() {
         }}
         session={session}
         txCount={transactions.length}
-        supabaseEnabled={supabaseEnabled}
+        supabaseEnabled={true}
       />
 
       {/* Mobile nav sheet */}
@@ -1124,7 +1043,7 @@ function App() {
             }}
             session={session}
             txCount={transactions.length}
-            supabaseEnabled={supabaseEnabled}
+            supabaseEnabled={true}
           />
         </SheetContent>
       </Sheet>
@@ -1250,7 +1169,7 @@ function App() {
                 fxRate={fxRate}
                 onSetFxRate={setFxRate}
                 session={session}
-                supabaseEnabled={supabaseEnabled}
+                supabaseEnabled={true}
                 onSignOut={() => {
                   void handleSignOut()
                 }}

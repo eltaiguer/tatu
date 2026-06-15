@@ -1,9 +1,6 @@
 import { createStore } from 'zustand/vanilla'
-import { createJSONStorage, persist } from 'zustand/middleware'
 import type { Transaction } from '../models'
 import { inferInternalTransfers } from '../services/transfers/internal-transfers'
-
-export const DEFAULT_TRANSACTION_STORAGE_KEY = 'tatu:transactions'
 
 interface TransactionStoreState {
   transactions: Transaction[]
@@ -27,17 +24,6 @@ interface TransactionStoreActions {
 }
 
 export type TransactionStore = TransactionStoreState & TransactionStoreActions
-
-interface TransactionStoreOptions {
-  persist?: boolean
-  storageKey?: string
-}
-
-function hasLocalStorage(): boolean {
-  return (
-    typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-  )
-}
 
 function normalizeTransactions(transactions: Transaction[]): Transaction[] {
   return inferInternalTransfers(
@@ -103,7 +89,7 @@ function createTransactionStoreState(
       })),
     setTransactions: (transactions) =>
       set(() => ({
-        transactions: inferInternalTransfers(transactions),
+        transactions: normalizeTransactions(transactions),
       })),
     findDuplicateIds: (transactions) => {
       const existingIds = new Set(get().transactions.map((tx) => tx.id))
@@ -143,59 +129,10 @@ function createTransactionStoreState(
   }
 }
 
-export function createTransactionStore(options: TransactionStoreOptions = {}) {
-  const {
-    persist: shouldPersist = true,
-    storageKey = DEFAULT_TRANSACTION_STORAGE_KEY,
-  } =
-    options
-
-  if (shouldPersist && hasLocalStorage()) {
-    return createStore<TransactionStore>()(
-      persist((set, get) => createTransactionStoreState(set, get), {
-        name: storageKey,
-        storage: createJSONStorage(() => window.localStorage),
-        partialize: (state) => ({ transactions: state.transactions }),
-        merge: (persistedState, currentState) => {
-          const persisted = persistedState as
-            | Partial<TransactionStoreState>
-            | undefined
-
-          return {
-            ...currentState,
-            ...persisted,
-            transactions: normalizeTransactions(persisted?.transactions ?? []),
-          }
-        },
-      })
-    )
-  }
-
+export function createTransactionStore() {
   return createStore<TransactionStore>()((set, get) =>
     createTransactionStoreState(set, get)
   )
 }
 
 export const transactionStore = createTransactionStore()
-
-export function getPersistedTransactionsSnapshot(
-  storageKey: string = DEFAULT_TRANSACTION_STORAGE_KEY
-): Transaction[] {
-  if (!hasLocalStorage()) {
-    return []
-  }
-
-  const raw = window.localStorage.getItem(storageKey)
-  if (!raw) {
-    return []
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as {
-      state?: { transactions?: Transaction[] }
-    }
-    return normalizeTransactions(parsed.state?.transactions ?? [])
-  } catch {
-    return []
-  }
-}

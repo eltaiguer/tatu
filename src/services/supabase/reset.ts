@@ -23,4 +23,5 @@ export async function resetUserSupabaseData(
   await deleteByUser(session, 'category_overrides')
   await deleteByUser(session, 'description_overrides')
   await deleteByUser(session, 'custom_categories')
+  await deleteByUser(session, 'custom_patterns')
 }

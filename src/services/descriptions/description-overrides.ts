@@ -1,7 +1,5 @@
 import { buildDescriptionOverrideKey } from './normalization'
 
-const STORAGE_KEY = 'tatu:descriptionOverrides'
-
 export interface DescriptionOverride {
   descriptionOriginal?: string
   friendlyDescription: string
@@ -11,37 +9,7 @@ export interface DescriptionOverride {
 
 export type DescriptionOverrides = Record<string, DescriptionOverride>
 
-function hasLocalStorage(): boolean {
-  return (
-    typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
-  )
-}
-
-function loadOverrides(): DescriptionOverrides {
-  if (!hasLocalStorage()) {
-    return {}
-  }
-
-  const raw = window.localStorage.getItem(STORAGE_KEY)
-  if (!raw) {
-    return {}
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as DescriptionOverrides
-    return parsed || {}
-  } catch {
-    return {}
-  }
-}
-
-function saveOverrides(overrides: DescriptionOverrides): void {
-  if (!hasLocalStorage()) {
-    return
-  }
-
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides))
-}
+let overrides: DescriptionOverrides = {}
 
 export function getDescriptionOverride(
   description: string
@@ -51,7 +19,6 @@ export function getDescriptionOverride(
     return null
   }
 
-  const overrides = loadOverrides()
   return overrides[descriptionKey] ?? null
 }
 
@@ -65,14 +32,12 @@ export function setDescriptionOverride(input: {
     return
   }
 
-  const overrides = loadOverrides()
   overrides[descriptionKey] = {
     descriptionOriginal: input.description,
     friendlyDescription: input.friendlyDescription,
     category: input.category,
     updatedAt: new Date().toISOString(),
   }
-  saveOverrides(overrides)
 }
 
 export async function setDescriptionOverrideWithSync(input: {
@@ -101,7 +66,7 @@ export async function setDescriptionOverrideWithSync(input: {
       })
     }
   } catch {
-    // local override remains as fallback
+    // in-memory override remains
   }
 }
 
@@ -111,10 +76,8 @@ export function clearDescriptionOverride(description: string): void {
     return
   }
 
-  const overrides = loadOverrides()
   if (overrides[descriptionKey]) {
     delete overrides[descriptionKey]
-    saveOverrides(overrides)
   }
 }
 
@@ -137,24 +100,20 @@ export async function clearDescriptionOverrideWithSync(
       await deleteDescriptionOverride(session, descriptionKey)
     }
   } catch {
-    // local fallback already applied
+    // in-memory state already updated
   }
 }
 
 export function listDescriptionOverrides(): DescriptionOverrides {
-  return loadOverrides()
+  return overrides
 }
 
 export function clearAllDescriptionOverrides(): void {
-  if (!hasLocalStorage()) {
-    return
-  }
-
-  window.localStorage.removeItem(STORAGE_KEY)
+  overrides = {}
 }
 
 export function replaceDescriptionOverrides(
-  overrides: DescriptionOverrides
+  nextOverrides: DescriptionOverrides
 ): void {
-  saveOverrides(overrides)
+  overrides = { ...nextOverrides }
 }

@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import {
-  createTransactionStore,
-  getPersistedTransactionsSnapshot,
-} from './transaction-store'
+import { createTransactionStore } from './transaction-store'
 import type { Transaction } from '../models'
 
 function makeTransaction(id: string, overrides: Partial<Transaction> = {}) {
@@ -24,7 +21,7 @@ describe('Transaction Store - CRUD', () => {
   let store: ReturnType<typeof createTransactionStore>
 
   beforeEach(() => {
-    store = createTransactionStore({ persist: false })
+    store = createTransactionStore()
   })
 
   it('starts with no transactions', () => {
@@ -87,7 +84,7 @@ describe('Transaction Store - Duplicates and Merge', () => {
   let store: ReturnType<typeof createTransactionStore>
 
   beforeEach(() => {
-    store = createTransactionStore({ persist: false })
+    store = createTransactionStore()
   })
 
   it('detects duplicate ids against existing transactions', () => {
@@ -118,90 +115,5 @@ describe('Transaction Store - Duplicates and Merge', () => {
       'tx-2',
       'tx-3',
     ])
-  })
-})
-
-describe('Transaction Store - Persistence', () => {
-  const storageKey = 'tatu:test:transactions'
-  let store: ReturnType<typeof createTransactionStore>
-
-  beforeEach(() => {
-    window.localStorage.clear()
-    store = createTransactionStore({ persist: true, storageKey })
-  })
-
-  it('persists transactions to localStorage', () => {
-    store.getState().addTransaction(makeTransaction('tx-1'))
-
-    const raw = window.localStorage.getItem(storageKey)
-    expect(raw).toBeTruthy()
-
-    const parsed = JSON.parse(raw ?? '{}')
-    expect(parsed.state.transactions).toHaveLength(1)
-    expect(parsed.state.transactions[0].id).toBe('tx-1')
-  })
-
-  it('persists bulk imported transactions to localStorage', () => {
-    store
-      .getState()
-      .addTransactions([makeTransaction('tx-1'), makeTransaction('tx-2')])
-
-    const raw = window.localStorage.getItem(storageKey)
-    expect(raw).toBeTruthy()
-
-    const parsed = JSON.parse(raw ?? '{}')
-    expect(parsed.state.transactions).toHaveLength(2)
-    expect(parsed.state.transactions.map((tx: { id: string }) => tx.id)).toEqual([
-      'tx-1',
-      'tx-2',
-    ])
-  })
-
-  it('rehydrates transactions from localStorage', async () => {
-    const stored = {
-      state: {
-        transactions: [
-          {
-            ...makeTransaction('tx-1'),
-            date: '2025-01-02T00:00:00.000Z',
-          },
-        ],
-      },
-      version: 0,
-    }
-    window.localStorage.setItem(storageKey, JSON.stringify(stored))
-
-    store = createTransactionStore({ persist: true, storageKey })
-    const persisted = store as typeof store & {
-      persist?: { rehydrate: () => Promise<void> }
-    }
-    await persisted.persist?.rehydrate()
-
-    expect(store.getState().transactions).toHaveLength(1)
-    expect(store.getState().transactions[0].id).toBe('tx-1')
-    expect(store.getState().transactions[0].date).toBeInstanceOf(Date)
-  })
-
-  it('reads persisted snapshot and normalizes dates', () => {
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({
-        state: {
-          transactions: [
-            {
-              ...makeTransaction('tx-9'),
-              date: '2025-01-10T00:00:00.000Z',
-            },
-          ],
-        },
-        version: 0,
-      })
-    )
-
-    const snapshot = getPersistedTransactionsSnapshot(storageKey)
-
-    expect(snapshot).toHaveLength(1)
-    expect(snapshot[0].id).toBe('tx-9')
-    expect(snapshot[0].date).toBeInstanceOf(Date)
   })
 })

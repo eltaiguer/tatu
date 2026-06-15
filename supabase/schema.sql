@@ -143,6 +143,25 @@ alter table public.custom_categories
   add column if not exists created_at timestamptz not null default timezone('utc', now()),
   add column if not exists updated_at timestamptz not null default timezone('utc', now());
 
+create table if not exists public.user_preferences (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  theme text not null default 'auto' check (theme in ('light', 'dark', 'auto')),
+  currency text not null default 'USD' check (currency in ('USD', 'UYU')),
+  fx_rate numeric(10,4) not null default 40.5,
+  updated_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.custom_patterns (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  id text not null,
+  pattern text not null check (length(pattern) > 0),
+  match_type text not null check (match_type in ('contains', 'starts_with', 'exact')),
+  category text not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  primary key (user_id, id)
+);
+
 create index if not exists idx_transactions_user_date_active
   on public.transactions (user_id, date desc)
   where is_deleted = false;
@@ -175,6 +194,9 @@ create index if not exists idx_description_overrides_user_updated
 
 create index if not exists idx_custom_categories_user_active
   on public.custom_categories (user_id, is_archived, label);
+
+create index if not exists idx_custom_patterns_user_created
+  on public.custom_patterns (user_id, created_at);
 
 create or replace function public.set_updated_at_timestamp()
 returns trigger
@@ -231,17 +253,33 @@ before update on public.custom_categories
 for each row
 execute function public.set_updated_at_timestamp();
 
+drop trigger if exists set_user_preferences_updated_at on public.user_preferences;
+create trigger set_user_preferences_updated_at
+before update on public.user_preferences
+for each row
+execute function public.set_updated_at_timestamp();
+
+drop trigger if exists set_custom_patterns_updated_at on public.custom_patterns;
+create trigger set_custom_patterns_updated_at
+before update on public.custom_patterns
+for each row
+execute function public.set_updated_at_timestamp();
+
 alter table public.transactions enable row level security;
 alter table public.import_runs enable row level security;
 alter table public.category_overrides enable row level security;
 alter table public.description_overrides enable row level security;
 alter table public.custom_categories enable row level security;
+alter table public.user_preferences enable row level security;
+alter table public.custom_patterns enable row level security;
 
 grant select, insert, update, delete on table public.transactions to authenticated;
 grant select, insert, update, delete on table public.import_runs to authenticated;
 grant select, insert, update, delete on table public.category_overrides to authenticated;
 grant select, insert, update, delete on table public.description_overrides to authenticated;
 grant select, insert, update, delete on table public.custom_categories to authenticated;
+grant select, insert, update, delete on table public.user_preferences to authenticated;
+grant select, insert, update, delete on table public.custom_patterns to authenticated;
 
 drop policy if exists "transactions_select_own" on public.transactions;
 create policy "transactions_select_own"
@@ -387,3 +425,19 @@ on public.custom_categories
 for delete
 to authenticated
 using (auth.uid() = user_id);
+
+drop policy if exists "user_preferences_all_own" on public.user_preferences;
+create policy "user_preferences_all_own"
+on public.user_preferences
+for all
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "custom_patterns_all_own" on public.custom_patterns;
+create policy "custom_patterns_all_own"
+on public.custom_patterns
+for all
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);

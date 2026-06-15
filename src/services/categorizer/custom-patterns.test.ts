@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Category } from '../../models'
 import {
   addCustomPattern,
@@ -6,11 +6,29 @@ import {
   listCustomPatterns,
   matchCustomPattern,
   removeCustomPattern,
+  replaceCustomPatterns,
 } from './custom-patterns'
+
+const { getActiveSupabaseSessionMock, upsertCustomPatternMock, deleteCustomPatternMock } =
+  vi.hoisted(() => ({
+    getActiveSupabaseSessionMock: vi.fn(),
+    upsertCustomPatternMock: vi.fn(),
+    deleteCustomPatternMock: vi.fn(),
+  }))
+
+vi.mock('../supabase/runtime', () => ({
+  getActiveSupabaseSession: getActiveSupabaseSessionMock,
+}))
+
+vi.mock('../supabase/custom-patterns', () => ({
+  upsertCustomPattern: upsertCustomPatternMock,
+  deleteCustomPattern: deleteCustomPatternMock,
+}))
 
 describe('Custom Patterns', () => {
   beforeEach(() => {
     clearAllCustomPatterns()
+    vi.clearAllMocks()
   })
 
   describe('CRUD', () => {
@@ -64,6 +82,74 @@ describe('Custom Patterns', () => {
       })
 
       expect(listCustomPatterns()[0].pattern).toBe('farmacia')
+    })
+
+    it('should hydrate patterns from remote via replaceCustomPatterns', () => {
+      replaceCustomPatterns([
+        {
+          id: 'cp_remote_1',
+          pattern: 'supermercado',
+          matchType: 'contains',
+          category: Category.Groceries,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ])
+
+      const patterns = listCustomPatterns()
+      expect(patterns).toHaveLength(1)
+      expect(patterns[0].id).toBe('cp_remote_1')
+    })
+  })
+
+  describe('Supabase sync', () => {
+    it('syncs add when session exists', async () => {
+      getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+      upsertCustomPatternMock.mockResolvedValue(undefined)
+
+      addCustomPattern({
+        pattern: 'farmacia',
+        matchType: 'contains',
+        category: Category.Healthcare,
+      })
+
+      await vi.waitFor(() =>
+        expect(upsertCustomPatternMock).toHaveBeenCalledTimes(1)
+      )
+    })
+
+    it('syncs remove when session exists', async () => {
+      getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+      deleteCustomPatternMock.mockResolvedValue(undefined)
+
+      const added = addCustomPattern({
+        pattern: 'farmacia',
+        matchType: 'contains',
+        category: Category.Healthcare,
+      })
+      await vi.waitFor(() =>
+        expect(upsertCustomPatternMock).toHaveBeenCalledTimes(1)
+      )
+
+      removeCustomPattern(added.id)
+      await vi.waitFor(() =>
+        expect(deleteCustomPatternMock).toHaveBeenCalledWith(
+          expect.anything(),
+          added.id
+        )
+      )
+    })
+
+    it('does not sync when no session', async () => {
+      getActiveSupabaseSessionMock.mockReturnValue(null)
+
+      addCustomPattern({
+        pattern: 'farmacia',
+        matchType: 'contains',
+        category: Category.Healthcare,
+      })
+
+      await new Promise((r) => setTimeout(r, 50))
+      expect(upsertCustomPatternMock).not.toHaveBeenCalled()
     })
   })
 
