@@ -124,4 +124,72 @@ describe('internal transfer inference', () => {
 
     expect(result.every((tx) => tx.category === Category.Transfer)).toBe(true)
   })
+
+  it('does not mark an unpaired credit supernet as Transfer (external incoming payment)', () => {
+    // "CREDITO POR OPERACION EN SUPERNET TAIRTAGS/NAME" has no matching debit —
+    // it is an external payment received, not a self-transfer, so it should
+    // remain uncategorized and count as income in charts.
+    const result = inferInternalTransfers([
+      makeTransaction('credit-ext', {
+        description:
+          'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY MARIA CONSTANZA',
+        type: 'credit',
+        amount: 145,
+        currency: 'USD',
+      }),
+    ])
+
+    const credit = result.find((tx) => tx.id === 'credit-ext')!
+    expect(credit.category).not.toBe(Category.Transfer)
+  })
+
+  it('pairs CREDITO POR OPERACION EN SUPERNET P--/NAME with matching debit (self-transfer)', () => {
+    // Same amount, same day — the debit/credit pair is an own-account transfer.
+    const result = inferInternalTransfers([
+      makeTransaction('debit-self', {
+        description: 'DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA 5506',
+        type: 'debit',
+        amount: 6820,
+        currency: 'UYU',
+        rawData: { referencia: '000000' },
+      }),
+      makeTransaction('credit-self', {
+        description:
+          'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE',
+        type: 'credit',
+        amount: 6820,
+        currency: 'UYU',
+        rawData: { referencia: '000000' },
+      }),
+    ])
+
+    expect(result.every((tx) => tx.category === Category.Transfer)).toBe(true)
+  })
+
+  it('does not pair unrelated debit and credit across currencies just because both are transfer descriptions', () => {
+    // PAGO ELECTRONICO TARJETA CREDITO (USD) and TRANSFERENCIA RECIBIDA (UYU)
+    // happen near the same date but are unrelated; score should not reach threshold.
+    const result = inferInternalTransfers([
+      makeTransaction('debit-cc', {
+        description: 'PAGO ELECTRONICO TARJETA CREDITO',
+        type: 'debit',
+        amount: 2238.54,
+        currency: 'USD',
+        date: new Date('2025-11-06T00:00:00.000Z'),
+        category: Category.Transfer,
+        categoryConfidence: 0.9,
+      }),
+      makeTransaction('credit-received', {
+        description:
+          'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA /GAZZANO DE MARCO, FEDERICO J',
+        type: 'credit',
+        amount: 2350,
+        currency: 'UYU',
+        date: new Date('2025-11-04T00:00:00.000Z'),
+      }),
+    ])
+
+    const credit = result.find((tx) => tx.id === 'credit-received')!
+    expect(credit.category).not.toBe(Category.Transfer)
+  })
 })

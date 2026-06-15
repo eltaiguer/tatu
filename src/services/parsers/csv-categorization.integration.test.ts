@@ -29,9 +29,11 @@ describe('CSV categorization coverage', () => {
     const rate = categorizationRate(result.transactions.map((tx) => tx.category || Category.Uncategorized));
 
     expect(result.transactions.length).toBeGreaterThan(0);
-    // Personal transfers (NRR: JOSE PREX) are intentionally uncategorized;
-    // threshold reflects correct coverage after word-boundary bug fixes.
-    expect(rate).toBeGreaterThanOrEqual(0.55);
+    // Incoming bank transfers (TRANSF INSTANTANEA RECIBIDA, CREDITO POR OPERACION EN SUPERNET
+    // from external parties) are now intentionally Uncategorized so they are no longer
+    // hidden from the Transactions list. Users can categorize them as Income to include
+    // them in income charts; self-transfer pairing is handled by inferInternalTransfers.
+    expect(rate).toBeGreaterThanOrEqual(0.40);
   });
 
   it('maintains minimum categorization ratio for UYU bank sample', () => {
@@ -39,7 +41,8 @@ describe('CSV categorization coverage', () => {
     const rate = categorizationRate(result.transactions.map((tx) => tx.category || Category.Uncategorized));
 
     expect(result.transactions.length).toBeGreaterThan(0);
-    expect(rate).toBeGreaterThanOrEqual(0.6);
+    // Same reasoning as USD: received transfers are Uncategorized by the categorizer.
+    expect(rate).toBeGreaterThanOrEqual(0.50);
   });
 
   it('keeps strong overall categorization across all Santander samples', () => {

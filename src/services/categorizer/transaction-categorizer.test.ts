@@ -57,14 +57,16 @@ describe('Transaction Categorizer', () => {
     expect(result.category).toBe(Category.Transfer)
   })
 
-  it('should categorize incoming supernet credits as transfers', () => {
+  it('does not auto-Transfer incoming supernet credits — pairing is handled by inferInternalTransfers', () => {
+    // Self-transfers like "CREDITO POR OPERACION EN SUPERNET P--/..." are left
+    // Uncategorized here so that inferInternalTransfers can pair them with the
+    // matching debit and assign Transfer with high confidence.
     const result = categorizeTransaction(
       'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE',
       'credit'
     )
 
-    expect(result.category).toBe(Category.Transfer)
-    expect(result.confidence).toBeGreaterThanOrEqual(0.85)
+    expect(result.category).not.toBe(Category.Transfer)
   })
 
   it('should categorize cash withdrawals as transfers', () => {
@@ -76,10 +78,39 @@ describe('Transaction Categorizer', () => {
     expect(result.category).toBe(Category.Transfer)
   })
 
-  it('should categorize instant received transfers as transfers', () => {
+  it('does not auto-Transfer incoming bank transfers (recibida) — they are income', () => {
+    // "TRANSF INSTANTANEA RECIBIDA" means money arriving from an external party;
+    // treating it as Transfer would hide legitimate income from the chart.
     const result = categorizeTransaction(
       'TRANSF INSTANTANEA RECIBIDA 644388LR',
       'credit'
+    )
+
+    expect(result.category).not.toBe(Category.Transfer)
+  })
+
+  it('does not auto-Transfer TRANSFERENCIA RECIBIDA credits', () => {
+    const result = categorizeTransaction(
+      'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA /GAZZANO DE MARCO, FEDERICO J',
+      'credit'
+    )
+
+    expect(result.category).not.toBe(Category.Transfer)
+  })
+
+  it('does not auto-Transfer CREDITO POR OPERACION EN SUPERNET with external beneficiary name', () => {
+    const result = categorizeTransaction(
+      'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY MARIA CONSTANZA',
+      'credit'
+    )
+
+    expect(result.category).not.toBe(Category.Transfer)
+  })
+
+  it('still categorizes outgoing transfers (enviada) as Transfer', () => {
+    const result = categorizeTransaction(
+      'TRANSF INSTANTANEA ENVIADA 871947LE',
+      'debit'
     )
 
     expect(result.category).toBe(Category.Transfer)

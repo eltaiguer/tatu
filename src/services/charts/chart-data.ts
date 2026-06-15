@@ -78,10 +78,10 @@ export function buildMonthlyTrends(
       return
     }
 
-    if (tx.type === 'credit') {
+    if (tx.type === 'credit' && tx.category === Category.Income) {
       entry.income += tx.amount
       entry.net += tx.amount
-    } else {
+    } else if (tx.type === 'debit') {
       entry.expense += tx.amount
       entry.net -= tx.amount
     }
@@ -106,10 +106,10 @@ export function buildIncomeExpenseSummary(
         return summary
       }
 
-      if (tx.type === 'credit') {
+      if (tx.type === 'credit' && tx.category === Category.Income) {
         summary.income += tx.amount
         summary.net += tx.amount
-      } else {
+      } else if (tx.type === 'debit') {
         summary.expense += tx.amount
         summary.net -= tx.amount
       }
@@ -179,10 +179,10 @@ export function buildMonthlyTrendsConverted(
     }
     const entry = grouped.get(month)!
     const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    if (tx.type === 'credit') {
+    if (tx.type === 'credit' && tx.category === Category.Income) {
       entry.income += converted
       entry.net += converted
-    } else {
+    } else if (tx.type === 'debit') {
       entry.expense += converted
       entry.net -= converted
     }
@@ -230,9 +230,9 @@ export function buildCurrentMonthSummary(
 
   monthTxs.forEach((tx) => {
     const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    if (tx.type === 'credit') {
+    if (tx.type === 'credit' && tx.category === Category.Income) {
       income += converted
-    } else {
+    } else if (tx.type === 'debit') {
       expense += converted
       split[tx.currency] += tx.amount
     }

@@ -97,8 +97,12 @@ export function inferInternalTransfers(transactions: Transaction[]): Transaction
   const pairedIds = new Set<string>()
 
   next.forEach((transaction) => {
+    // Only speculatively mark debit transactions as Transfer in the first pass.
+    // Credits are handled by the pairing pass below so that unpaired incoming
+    // transfers from external parties are not mistakenly excluded from income.
     if (
       canAutoAssignTransfer(transaction) &&
+      transaction.type !== 'credit' &&
       isTransferDescription(transaction.description) &&
       !hasExternalBeneficiary(transaction.description)
     ) {
@@ -174,7 +178,7 @@ export function inferInternalTransfers(transactions: Transaction[]): Transaction
       (left.currency === bestMatch.currency &&
         Math.abs(left.amount - bestMatch.amount) <= 0.01 &&
         bestScore >= 6) ||
-      (left.currency !== bestMatch.currency && bestScore >= 5)
+      (left.currency !== bestMatch.currency && bestScore >= 6)
 
     if (!isStrongEnough) {
       continue

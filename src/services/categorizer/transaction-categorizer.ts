@@ -31,9 +31,6 @@ const TRANSFER_KEYWORDS = [
   'trf',
   'transf',
   'transf instantanea enviada',
-  'transf instantanea recibida',
-  'transferencia recibida',
-  'credito por operacion en supernet',
   'debito operacion en supernet',
   'retiro corresponsales',
   'nro familia',
@@ -146,10 +143,13 @@ export function categorizeTransaction(
     }
   }
 
-  // 5. Transfer keywords — skip if description names an external beneficiary
+  // 5. Transfer keywords — skip if external beneficiary or incoming credit
+  // "recibida" in a credit transaction means money arriving from an external party;
+  // inferInternalTransfers handles pairing to catch same-account self-transfers.
   if (
     matchesAny(normalized, TRANSFER_KEYWORDS) &&
-    !EXTERNAL_BENEFICIARY_RE.test(normalized)
+    !EXTERNAL_BENEFICIARY_RE.test(normalized) &&
+    !(type === 'credit' && normalized.includes('recibida'))
   ) {
     return {
       category: Category.Transfer,
