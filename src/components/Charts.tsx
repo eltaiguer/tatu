@@ -304,7 +304,7 @@ export function Charts({
 
       {/* Donut + category breakdown */}
       <Card className="p-6">
-        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, fontFamily: 'var(--font-sans)' }}>
           Gasto por categoría
         </h2>
         {!hasExpenseData ? (
@@ -427,7 +427,7 @@ export function Charts({
             alignItems: 'center', marginBottom: 20,
           }}
         >
-          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Ingresos vs Gastos</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, fontFamily: 'var(--font-sans)' }}>Ingresos vs Gastos</h2>
           <div style={{ display: 'flex', gap: 18 }}>
             {[
               { label: 'Ingresos', color: 'var(--pos)' },
@@ -497,7 +497,7 @@ export function Charts({
       {monthlyTrend.length > 0 && (
         <Card className="p-6">
           <div style={{ marginBottom: 20 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, marginBottom: 4 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0, marginBottom: 4, fontFamily: 'var(--font-sans)' }}>
               ¿Estás ahorrando?
             </h2>
             <p className="text-muted-foreground" style={{ fontSize: 13 }}>
@@ -572,7 +572,7 @@ export function Charts({
       {/* Gasto por moneda */}
       {currencySplit.total > 0 && (
         <Card className="p-6">
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 20, fontFamily: 'var(--font-sans)' }}>
             Gasto por moneda
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -624,7 +624,7 @@ export function Charts({
       {/* Top merchants */}
       {topMerchants.length > 0 && (
         <Card className="p-6">
-          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 18 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 18, fontFamily: 'var(--font-sans)' }}>
             Mayores comercios
           </h2>
           <div
