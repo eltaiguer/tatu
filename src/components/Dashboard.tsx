@@ -28,19 +28,17 @@ function toSafeNumber(value: number): number {
 
 function MiniBars({ values, color }: { values: number[]; color: string }) {
   const max = Math.max(...values, 1)
-  const bars = values.slice(-6)
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 24 }}>
-      {bars.map((v, i) => (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 36 }}>
+      {values.map((v, i) => (
         <div
           key={i}
           style={{
             flex: 1,
-            height: `${Math.round((v / max) * 100)}%`,
-            minHeight: 3,
+            height: `${Math.max((v / max) * 100, 6)}%`,
             background: color,
             borderRadius: 2,
-            opacity: i === bars.length - 1 ? 1 : 0.35,
+            opacity: 0.25 + 0.75 * (i / values.length),
           }}
         />
       ))}
@@ -197,7 +195,7 @@ export function Dashboard({
         }}
       >
         <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
+          <h1 style={{ marginBottom: 4 }}>
             {greeting}
           </h1>
           <p className="text-muted-foreground" style={{ fontSize: 14 }}>
@@ -288,9 +286,17 @@ export function Dashboard({
                 </span>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14 }}>Tarjeta de Crédito</div>
-                  <div className="text-muted-foreground" style={{ fontSize: 12 }}>
-                    Santander Mastercard
-                  </div>
+                  {(() => {
+                    const raw = creditCardTransactions[0]?.rawData as
+                      | { numeroTarjeta?: string }
+                      | undefined
+                    const last4 = raw?.numeroTarjeta?.split('-').pop()
+                    return (
+                      <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+                        Tarjeta de crédito{last4 ? ` ·· ${last4}` : ''}
+                      </div>
+                    )
+                  })()}
                 </div>
               </div>
               <div>
@@ -309,10 +315,35 @@ export function Dashboard({
                 </div>
               </div>
               <div
-                className="text-muted-foreground"
-                style={{ fontSize: 12, marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)' }}
+                style={{
+                  fontSize: 11.5,
+                  marginTop: 'auto',
+                  paddingTop: 8,
+                  borderTop: '1px solid var(--border)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  color: 'var(--text-faint)',
+                }}
               >
-                {creditCardTransactions.length} movimientos este período
+                <span>{creditCardTransactions.length} movimientos</span>
+                <span className="font-mono">
+                  ≈{' '}
+                  {formatCurrency(
+                    convert(
+                      creditCardSummaryUYU.expenses,
+                      'UYU',
+                      homeCurrency,
+                      fxRate,
+                    ) +
+                      convert(
+                        creditCardSummaryUSD.expenses,
+                        'USD',
+                        homeCurrency,
+                        fxRate,
+                      ),
+                    homeCurrency,
+                  )}
+                </span>
               </div>
             </Card>
 
@@ -354,10 +385,24 @@ export function Dashboard({
                 </div>
               </div>
               <div
-                className="text-muted-foreground"
-                style={{ fontSize: 12, marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)' }}
+                style={{
+                  fontSize: 11.5,
+                  marginTop: 'auto',
+                  paddingTop: 8,
+                  borderTop: '1px solid var(--border)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  color: 'var(--text-faint)',
+                }}
               >
-                {usdBankTransactions.length} movimientos este período
+                <span>{usdBankTransactions.length} movimientos</span>
+                <span className="font-mono">
+                  ≈{' '}
+                  {formatCurrency(
+                    convert(usdBankSummary.expenses, 'USD', homeCurrency, fxRate),
+                    homeCurrency,
+                  )}
+                </span>
               </div>
             </Card>
 
@@ -399,10 +444,24 @@ export function Dashboard({
                 </div>
               </div>
               <div
-                className="text-muted-foreground"
-                style={{ fontSize: 12, marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border)' }}
+                style={{
+                  fontSize: 11.5,
+                  marginTop: 'auto',
+                  paddingTop: 8,
+                  borderTop: '1px solid var(--border)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  color: 'var(--text-faint)',
+                }}
               >
-                {uyuBankTransactions.length} movimientos este período
+                <span>{uyuBankTransactions.length} movimientos</span>
+                <span className="font-mono">
+                  ≈{' '}
+                  {formatCurrency(
+                    convert(uyuBankSummary.expenses, 'UYU', homeCurrency, fxRate),
+                    homeCurrency,
+                  )}
+                </span>
               </div>
             </Card>
           </div>
@@ -413,13 +472,26 @@ export function Dashboard({
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 marginBottom: 20,
               }}
             >
-              <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-                Este mes
-              </h2>
+              <div>
+                <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
+                  Este mes, todo en{' '}
+                  {homeCurrency === 'USD' ? 'dólares' : 'pesos'}
+                </h2>
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-faint)',
+                    marginTop: 4,
+                    marginBottom: 0,
+                  }}
+                >
+                  Combina tus movimientos en US$ y $U usando el tipo de cambio.
+                </p>
+              </div>
               {onNavigateToAnalysis && (
                 <button
                   onClick={onNavigateToAnalysis}
@@ -456,17 +528,14 @@ export function Dashboard({
                 </div>
                 {homeCurrency === 'USD' && monthSummary.split.UYU > 0 && (
                   <div className="text-muted-foreground" style={{ fontSize: 12, marginTop: 4 }}>
-                    {formatCurrency(monthSummary.split.USD, 'USD')} + {formatCurrency(monthSummary.split.UYU, 'UYU')} nativo
+                    {formatCurrency(monthSummary.split.USD, 'USD')} +{' '}
+                    {formatCurrency(monthSummary.split.UYU, 'UYU')}
                   </div>
                 )}
                 {homeCurrency === 'UYU' && monthSummary.split.USD > 0 && (
                   <div className="text-muted-foreground" style={{ fontSize: 12, marginTop: 4 }}>
-                    {formatCurrency(monthSummary.split.UYU, 'UYU')} + {formatCurrency(monthSummary.split.USD, 'USD')} nativo
-                  </div>
-                )}
-                {monthlyTrend.length > 1 && (
-                  <div style={{ marginTop: 12 }}>
-                    <MiniBars values={monthlyTrend.map((m) => m.expense)} color="var(--neg)" />
+                    {formatCurrency(monthSummary.split.UYU, 'UYU')} +{' '}
+                    {formatCurrency(monthSummary.split.USD, 'USD')}
                   </div>
                 )}
               </div>

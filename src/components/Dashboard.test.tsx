@@ -48,7 +48,7 @@ describe('Dashboard', () => {
     // UYU transaction native amount appears in recent list
     expect(screen.getAllByText('$U 1.000,00').length).toBeGreaterThan(0)
     // Converted secondary line appears for the UYU tx (≈ USD)
-    expect(screen.getByText(/≈ US\$/)).toBeInTheDocument()
+    expect(screen.getAllByText(/≈ US\$/).length).toBeGreaterThan(0)
   })
 
   it('does not count transfer debits as expenses in converted totals', () => {
