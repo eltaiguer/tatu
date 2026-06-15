@@ -222,7 +222,7 @@ const MERCHANT_PATTERNS: MerchantPattern[] = [
 function matchesWithBoundary(normalized: string, pattern: string): boolean {
   if (pattern.includes(' ')) return normalized.includes(pattern)
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`(?<![a-z])${escaped}(?![a-z])`).test(normalized)
+  return new RegExp(`(?<![a-záéíóúüñ])${escaped}(?![a-záéíóúüñ])`).test(normalized)
 }
 
 /**

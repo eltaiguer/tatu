@@ -59,7 +59,7 @@ const INCOME_KEYWORDS = [
 function matchesWord(normalized: string, keyword: string): boolean {
   if (keyword.includes(' ')) return normalized.includes(keyword)
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`(?<![a-z])${escaped}(?![a-z])`).test(normalized)
+  return new RegExp(`(?<![a-záéíóúüñ])${escaped}(?![a-záéíóúüñ])`).test(normalized)
 }
 
 function matchesAny(normalized: string, keywords: string[]): boolean {
