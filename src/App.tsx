@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { Toaster } from './components/ui/sonner'
 import { TatuLogo } from './components/TatuLogo'
@@ -148,6 +148,10 @@ function App() {
   // Get transactions from store
   const transactions = useStore(transactionStore, (state) => state.transactions)
 
+  // True once remote prefs have been loaded — prevents overwriting Supabase prefs
+  // with local defaults on first mount before syncTransactions completes.
+  const prefsLoadedRef = useRef(false)
+
   // Listen for system color-scheme changes (used when theme === 'auto')
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -165,9 +169,11 @@ function App() {
     }
   }, [isDark])
 
-  // Persist preferences to Supabase when they change
+  // Persist preferences to Supabase when they change.
+  // Guard on prefsLoadedRef so initial defaults are never written before
+  // syncTransactions has read the real values from Supabase.
   useEffect(() => {
-    if (!session) return
+    if (!session || !prefsLoadedRef.current) return
     void saveUserPreferences(session, { theme, currency: preferredCurrency, fxRate })
   }, [theme, preferredCurrency, fxRate]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -282,6 +288,8 @@ function App() {
           setPreferredCurrencyState(userPrefs.currency)
           setFxRateState(userPrefs.fxRate)
         }
+        // Allow preference saves now that remote values are applied.
+        prefsLoadedRef.current = true
 
         if (!cancelled) {
           transactionStore.getState().setTransactions(remoteTransactions)
@@ -339,6 +347,7 @@ function App() {
       setTheme('auto')
       setPreferredCurrencyState('USD')
       setFxRateState(40.5)
+      prefsLoadedRef.current = false
       setCurrentView('overview')
       setImportOpen(false)
       setAuthError('')
@@ -469,6 +478,10 @@ function App() {
     clearAllDescriptionOverrides()
     replaceCustomPatterns([])
     replaceCustomCategories([])
+    setTheme('auto')
+    setPreferredCurrencyState('USD')
+    setFxRateState(40.5)
+    prefsLoadedRef.current = false
 
     if (session) {
       await resetUserSupabaseData(session)

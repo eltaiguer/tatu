@@ -36,13 +36,15 @@ export function addCustomPattern(
 
   patterns = [...patterns, pattern]
 
-  void import('../supabase/runtime').then(({ getActiveSupabaseSession }) => {
-    const session = getActiveSupabaseSession()
-    if (!session) return
-    import('../supabase/custom-patterns').then(({ upsertCustomPattern }) => {
-      void upsertCustomPattern(session, pattern)
+  void import('../supabase/runtime')
+    .then(({ getActiveSupabaseSession }) => {
+      const session = getActiveSupabaseSession()
+      if (!session) return
+      return import('../supabase/custom-patterns').then(
+        ({ upsertCustomPattern }) => upsertCustomPattern(session, pattern)
+      )
     })
-  })
+    .catch(console.error)
 
   return pattern
 }
@@ -50,13 +52,15 @@ export function addCustomPattern(
 export function removeCustomPattern(id: string): void {
   patterns = patterns.filter((p) => p.id !== id)
 
-  void import('../supabase/runtime').then(({ getActiveSupabaseSession }) => {
-    const session = getActiveSupabaseSession()
-    if (!session) return
-    import('../supabase/custom-patterns').then(({ deleteCustomPattern }) => {
-      void deleteCustomPattern(session, id)
+  void import('../supabase/runtime')
+    .then(({ getActiveSupabaseSession }) => {
+      const session = getActiveSupabaseSession()
+      if (!session) return
+      return import('../supabase/custom-patterns').then(
+        ({ deleteCustomPattern }) => deleteCustomPattern(session, id)
+      )
     })
-  })
+    .catch(console.error)
 }
 
 export function clearAllCustomPatterns(): void {
