@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import type { MutableRefObject } from 'react'
 import type { SupabaseSession } from '../services/supabase/client'
 import { transactionStore } from '../stores/transaction-store'
 import { loadUserTransactions } from '../services/supabase/transactions'
@@ -13,16 +12,25 @@ import { listCustomCategories } from '../services/supabase/custom-categories'
 import { listCustomPatterns as listSupabaseCustomPatterns } from '../services/supabase/custom-patterns'
 import { loadUserPreferences } from '../services/supabase/user-preferences'
 
-export function useTransactionSync(
-  session: SupabaseSession | null,
-  authMode: 'signin' | 'reset',
-  prefsLoadedRef: MutableRefObject<boolean>,
-  setError: (msg: string) => void,
-  setNotice: (msg: string) => void,
-  setTheme: (t: 'light' | 'dark' | 'auto') => void,
-  setPreferredCurrency: (c: 'UYU' | 'USD') => void,
-  setFxRate: (r: number) => void,
-) {
+export function useTransactionSync({
+  session,
+  authMode,
+  markPrefsLoaded,
+  setError,
+  setNotice,
+  setTheme,
+  setPreferredCurrency,
+  setFxRate,
+}: {
+  session: SupabaseSession | null
+  authMode: 'signin' | 'reset'
+  markPrefsLoaded: () => void
+  setError: (msg: string) => void
+  setNotice: (msg: string) => void
+  setTheme: (t: 'light' | 'dark' | 'auto') => void
+  setPreferredCurrency: (c: 'UYU' | 'USD') => void
+  setFxRate: (r: number) => void
+}) {
   useEffect(() => {
     let cancelled = false
 
@@ -101,15 +109,14 @@ export function useTransactionSync(
           }))
         )
 
-        if (userPrefs) {
-          setTheme(userPrefs.theme)
-          setPreferredCurrency(userPrefs.currency)
-          setFxRate(userPrefs.fxRate)
-        }
-        // Allow preference saves now that remote values are applied.
-        prefsLoadedRef.current = true
-
         if (!cancelled) {
+          if (userPrefs) {
+            setTheme(userPrefs.theme)
+            setPreferredCurrency(userPrefs.currency)
+            setFxRate(userPrefs.fxRate)
+          }
+          // Allow preference saves now that remote values are applied.
+          markPrefsLoaded()
           transactionStore.getState().setTransactions(remoteTransactions)
         }
       } catch (error) {

@@ -80,7 +80,7 @@ describe('Transaction Store - CRUD', () => {
   })
 })
 
-describe('Transaction Store - Duplicates and Merge', () => {
+describe('Transaction Store - Duplicates', () => {
   let store: ReturnType<typeof createTransactionStore>
 
   beforeEach(() => {
@@ -99,23 +99,6 @@ describe('Transaction Store - Duplicates and Merge', () => {
     expect(duplicates).toEqual(['tx-2'])
   })
 
-  it('merges new transactions without duplicating existing ones', () => {
-    store
-      .getState()
-      .setTransactions([makeTransaction('tx-1'), makeTransaction('tx-2')])
-
-    const result = store
-      .getState()
-      .mergeTransactions([makeTransaction('tx-2'), makeTransaction('tx-3')])
-
-    expect(result.duplicates).toHaveLength(1)
-    expect(result.added).toHaveLength(1)
-    expect(store.getState().transactions.map((tx) => tx.id)).toEqual([
-      'tx-1',
-      'tx-2',
-      'tx-3',
-    ])
-  })
 })
 
 describe('Transaction Store - addTransactions', () => {
@@ -147,6 +130,10 @@ describe('Transaction Store - addTransactions', () => {
     expect(result.added).toHaveLength(1)
     expect(result.added[0].id).toBe('tx-2')
     expect(store.getState().transactions).toHaveLength(2)
+    expect(store.getState().transactions.map((tx) => tx.id)).toEqual([
+      'tx-1',
+      'tx-2',
+    ])
   })
 
   it('deduplicates within the same batch', () => {

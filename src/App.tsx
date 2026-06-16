@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Toaster } from './components/ui/sonner'
 import { TatuLogo } from './components/TatuLogo'
@@ -68,10 +68,6 @@ function App() {
   // Get transactions from store
   const transactions = useStore(transactionStore, (state) => state.transactions)
 
-  // True once remote prefs have been loaded — prevents overwriting Supabase prefs
-  // with local defaults on first mount before syncTransactions completes.
-  const prefsLoadedRef = useRef(false)
-
   const {
     theme,
     setTheme,
@@ -81,23 +77,26 @@ function App() {
     setPreferredCurrency,
     fxRate,
     setFxRate,
-  } = useUserPreferences(session, prefsLoadedRef)
+    markPrefsLoaded,
+    resetPrefsLoaded,
+  } = useUserPreferences(session)
 
-  useTransactionSync(
+  useTransactionSync({
     session,
     authMode,
-    prefsLoadedRef,
-    setAuthError,
-    setAuthNotice,
+    markPrefsLoaded,
+    setError: setAuthError,
+    setNotice: setAuthNotice,
     setTheme,
     setPreferredCurrency,
     setFxRate,
-  )
+  })
 
   async function handleSignOut() {
     setAuthSubmitting(true)
     try {
       await signOut(session)
+      clearPasswordResetModeFromUrl()
       setSession(null)
       setAuthMode('signin')
       toast('Sesión cerrada')
@@ -108,7 +107,7 @@ function App() {
       setTheme('auto')
       setPreferredCurrency('USD')
       setFxRate(40.5)
-      prefsLoadedRef.current = false
+      resetPrefsLoaded()
       setCurrentView('overview')
       setImportOpen(false)
       setAuthError('')
@@ -131,7 +130,7 @@ function App() {
     setTheme('auto')
     setPreferredCurrency('USD')
     setFxRate(40.5)
-    prefsLoadedRef.current = false
+    resetPrefsLoaded()
 
     if (session) {
       await resetUserSupabaseData(session)
@@ -153,7 +152,7 @@ function App() {
     handleBulkDeleteTransactions,
     handleBulkTagTransactions,
     handleAutoCategorizeTransactions,
-  } = useTransactionHandlers(session, setAuthError, setAuthNotice)
+  } = useTransactionHandlers({ session, setError: setAuthError, setNotice: setAuthNotice })
 
   if (!session || authMode === 'reset') {
     return (

@@ -1,12 +1,9 @@
-import { useState, useEffect } from 'react'
-import type { MutableRefObject } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { SupabaseSession } from '../services/supabase/client'
 import { saveUserPreferences } from '../services/supabase/user-preferences'
 
-export function useUserPreferences(
-  session: SupabaseSession | null,
-  prefsLoadedRef: MutableRefObject<boolean>,
-) {
+export function useUserPreferences(session: SupabaseSession | null) {
+  const prefsLoadedRef = useRef(false)
   const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('auto')
   const [systemDark, setSystemDark] = useState(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -43,7 +40,7 @@ export function useUserPreferences(
   useEffect(() => {
     if (!session || !prefsLoadedRef.current) return
     void saveUserPreferences(session, { theme, currency: preferredCurrency, fxRate })
-  }, [theme, preferredCurrency, fxRate]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session, theme, preferredCurrency, fxRate])
 
   return {
     theme,
@@ -54,5 +51,11 @@ export function useUserPreferences(
     setPreferredCurrency,
     fxRate,
     setFxRate,
+    markPrefsLoaded: () => {
+      prefsLoadedRef.current = true
+    },
+    resetPrefsLoaded: () => {
+      prefsLoadedRef.current = false
+    },
   }
 }

@@ -38,16 +38,26 @@ function clearPasswordResetModeFromUrl(): void {
   }
 
   const url = new URL(window.location.href)
-  if (!url.searchParams.has('mode')) {
+  const hasQueryMode = url.searchParams.has('mode')
+
+  const rawHash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash
+  const hashParams = new URLSearchParams(rawHash)
+  const hasRecoveryHash =
+    hashParams.get('type') === 'recovery' && hashParams.has('access_token')
+
+  if (!hasQueryMode && !hasRecoveryHash) {
     return
   }
 
-  url.searchParams.delete('mode')
+  if (hasQueryMode) {
+    url.searchParams.delete('mode')
+  }
+
   const nextQuery = url.searchParams.toString()
   window.history.replaceState(
     {},
     '',
-    `${url.pathname}${nextQuery ? `?${nextQuery}` : ''}${url.hash}`
+    `${url.pathname}${nextQuery ? `?${nextQuery}` : ''}${hasRecoveryHash ? '' : url.hash}`
   )
 }
 
