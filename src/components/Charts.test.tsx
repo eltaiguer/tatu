@@ -80,4 +80,25 @@ describe('Charts', () => {
     expect(screen.queryByText('EMPLOYER DEPOSIT')).not.toBeInTheDocument()
     expect(screen.getByText('GROCERY STORE')).toBeInTheDocument()
   })
+
+  it('renders all major chart section headings', () => {
+    const transactions = [
+      makeTransaction({ id: 'food-1', category: 'food', amount: 200 }),
+      makeTransaction({ id: 'transport-1', category: 'transport', amount: 80 }),
+      makeTransaction({
+        id: 'income-1',
+        type: 'credit',
+        category: 'income',
+        amount: 500,
+      }),
+    ]
+
+    render(<Charts transactions={transactions} />)
+
+    expect(screen.getByText('Gasto por categoría')).toBeInTheDocument()
+    expect(screen.getByText('Ingresos vs Gastos')).toBeInTheDocument()
+    expect(screen.getByText('¿Estás ahorrando?')).toBeInTheDocument()
+    expect(screen.getByText('Gasto por moneda')).toBeInTheDocument()
+    expect(screen.getByText('Mayores comercios')).toBeInTheDocument()
+  })
 })

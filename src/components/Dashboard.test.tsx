@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { Dashboard } from './Dashboard'
 import type { Transaction } from '../models'
 import { Category } from '../models'
+import * as descriptionOverrides from '../services/descriptions/description-overrides'
 
 function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -51,14 +52,19 @@ describe('Dashboard', () => {
     expect(screen.getAllByText(/≈ US\$/).length).toBeGreaterThan(0)
   })
 
-  it('shows displayDescription in recent transactions panel instead of raw description', () => {
+  it('uses description-overrides service when displayDescription is absent', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-15T12:00:00.000Z'))
+    vi.spyOn(descriptionOverrides, 'getDescriptionOverride').mockImplementation(
+      (desc) =>
+        desc === 'SUPERMERCADO DEVOTO SA 0032'
+          ? { friendlyDescription: 'Devoto', updatedAt: '2026-01-01' }
+          : null,
+    )
 
     const tx = makeTransaction({
       id: 'tx-override',
       description: 'SUPERMERCADO DEVOTO SA 0032',
-      displayDescription: 'Devoto',
       amount: 500,
       currency: 'UYU',
       type: 'debit',
@@ -70,6 +76,7 @@ describe('Dashboard', () => {
     expect(screen.getByText('Devoto')).toBeInTheDocument()
     expect(screen.queryByText('SUPERMERCADO DEVOTO SA 0032')).not.toBeInTheDocument()
 
+    vi.restoreAllMocks()
     vi.useRealTimers()
   })
 

@@ -23,6 +23,9 @@ import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
 import { formatCurrency, toSafeNumber } from '../utils/formatting'
 import { getDisplayDescription } from '../utils/transaction-display'
+import { AccountCard } from './AccountCard'
+import { CategoryBreakdownList } from './CategoryBreakdownList'
+import type { CategoryBreakdownRow } from './CategoryBreakdownList'
 
 function MiniBars({ values, color }: { values: number[]; color: string }) {
   const max = Math.max(...values, 1)
@@ -170,6 +173,24 @@ export function Dashboard({
   const firstName = userName ? userName.split('@')[0] : null
   const greeting = firstName ? `Hola, ${firstName} 👋` : 'Hola 👋'
 
+  const creditCardSubtitle = (() => {
+    const raw = creditCardTransactions[0]?.rawData as
+      | { numeroTarjeta?: string }
+      | undefined
+    const last4 = raw?.numeroTarjeta?.split('-').pop()
+    return `Tarjeta de crédito${last4 ? ` ·· ${last4}` : ''}`
+  })()
+
+  const categoryBreakdownRows: CategoryBreakdownRow[] = categoryBreakdown.map(
+    (row) => ({
+      id: row.category,
+      label: row.display.label,
+      color: row.display.color,
+      amount: row.total,
+      pct: row.pct,
+    }),
+  )
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -253,205 +274,95 @@ export function Dashboard({
         <>
           {/* 3 Account cards (native amounts) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card
-              className={onNavigateToTransactions ? 'p-5 cursor-pointer' : 'p-5'}
+            <AccountCard
+              icon={<CreditCard size={18} />}
+              title="Tarjeta de Crédito"
+              subtitle={creditCardSubtitle}
+              label="Consumo del período"
+              primaryAmount={creditCardSummaryUYU.expenses}
+              primaryCurrency="UYU"
+              primaryColor="var(--neg)"
+              primaryFontSize={22}
+              secondaryAmount={creditCardSummaryUSD.expenses}
+              secondaryCurrency="USD"
+              movimientos={creditCardTransactions.length}
+              convertedAmount={
+                convert(
+                  creditCardSummaryUYU.expenses,
+                  'UYU',
+                  homeCurrency,
+                  fxRate,
+                ) +
+                convert(
+                  creditCardSummaryUSD.expenses,
+                  'USD',
+                  homeCurrency,
+                  fxRate,
+                )
+              }
+              homeCurrency={homeCurrency}
               onClick={
                 onNavigateToTransactions
                   ? () => onNavigateToTransactions({ accountType: 'credit_card' })
                   : undefined
               }
-              style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span
-                  style={{
-                    width: 36, height: 36, borderRadius: 10,
-                    background: 'var(--surface-2)', color: 'var(--brand)',
-                    display: 'grid', placeItems: 'center', flexShrink: 0,
-                  }}
-                >
-                  <CreditCard size={18} />
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>Tarjeta de Crédito</div>
-                  {(() => {
-                    const raw = creditCardTransactions[0]?.rawData as
-                      | { numeroTarjeta?: string }
-                      | undefined
-                    const last4 = raw?.numeroTarjeta?.split('-').pop()
-                    return (
-                      <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-                        Tarjeta de crédito{last4 ? ` ·· ${last4}` : ''}
-                      </div>
-                    )
-                  })()}
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500 }}>
-                  Consumo del período
-                </div>
-                <div style={{ marginTop: 4 }}>
-                  <div className="font-mono" style={{ fontSize: 22, color: 'var(--neg)' }}>
-                    {formatCurrency(creditCardSummaryUYU.expenses, 'UYU')}
-                  </div>
-                  {creditCardSummaryUSD.expenses > 0 && (
-                    <div className="font-mono text-muted-foreground" style={{ fontSize: 14, marginTop: 2 }}>
-                      {formatCurrency(creditCardSummaryUSD.expenses, 'USD')}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div
-                style={{
-                  fontSize: 11.5,
-                  marginTop: 'auto',
-                  paddingTop: 8,
-                  borderTop: '1px solid var(--border)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: 'var(--text-faint)',
-                }}
-              >
-                <span>{creditCardTransactions.length} movimientos</span>
-                <span className="font-mono">
-                  ≈{' '}
-                  {formatCurrency(
-                    convert(
-                      creditCardSummaryUYU.expenses,
-                      'UYU',
-                      homeCurrency,
-                      fxRate,
-                    ) +
-                      convert(
-                        creditCardSummaryUSD.expenses,
-                        'USD',
-                        homeCurrency,
-                        fxRate,
-                      ),
-                    homeCurrency,
-                  )}
-                </span>
-              </div>
-            </Card>
-
-            <Card
-              className={onNavigateToTransactions ? 'p-5 cursor-pointer' : 'p-5'}
+            />
+            <AccountCard
+              icon={<DollarSign size={18} />}
+              title="Cuenta en Dólares"
+              subtitle="Caja de ahorro USD"
+              label="Saldo disponible"
+              primaryAmount={usdBankSummary.balance}
+              primaryCurrency="USD"
+              primaryColor={
+                usdBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)'
+              }
+              movimientos={usdBankTransactions.length}
+              convertedAmount={convert(
+                usdBankSummary.expenses,
+                'USD',
+                homeCurrency,
+                fxRate,
+              )}
+              homeCurrency={homeCurrency}
               onClick={
                 onNavigateToTransactions
-                  ? () => onNavigateToTransactions({ accountType: 'bank_account', currency: 'USD' })
+                  ? () =>
+                      onNavigateToTransactions({
+                        accountType: 'bank_account',
+                        currency: 'USD',
+                      })
                   : undefined
               }
-              style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span
-                  style={{
-                    width: 36, height: 36, borderRadius: 10,
-                    background: 'var(--surface-2)', color: 'var(--brand)',
-                    display: 'grid', placeItems: 'center', flexShrink: 0,
-                  }}
-                >
-                  <DollarSign size={18} />
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>Cuenta en Dólares</div>
-                  <div className="text-muted-foreground" style={{ fontSize: 12 }}>
-                    Caja de ahorro USD
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500 }}>
-                  Saldo disponible
-                </div>
-                <div
-                  className="font-mono"
-                  style={{ fontSize: 24, marginTop: 4, color: usdBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)' }}
-                >
-                  {formatCurrency(usdBankSummary.balance, 'USD')}
-                </div>
-              </div>
-              <div
-                style={{
-                  fontSize: 11.5,
-                  marginTop: 'auto',
-                  paddingTop: 8,
-                  borderTop: '1px solid var(--border)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: 'var(--text-faint)',
-                }}
-              >
-                <span>{usdBankTransactions.length} movimientos</span>
-                <span className="font-mono">
-                  ≈{' '}
-                  {formatCurrency(
-                    convert(usdBankSummary.expenses, 'USD', homeCurrency, fxRate),
-                    homeCurrency,
-                  )}
-                </span>
-              </div>
-            </Card>
-
-            <Card
-              className={onNavigateToTransactions ? 'p-5 cursor-pointer' : 'p-5'}
+            />
+            <AccountCard
+              icon={<Landmark size={18} />}
+              title="Cuenta en Pesos"
+              subtitle="Caja de ahorro UYU"
+              label="Saldo disponible"
+              primaryAmount={uyuBankSummary.balance}
+              primaryCurrency="UYU"
+              primaryColor={
+                uyuBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)'
+              }
+              movimientos={uyuBankTransactions.length}
+              convertedAmount={convert(
+                uyuBankSummary.expenses,
+                'UYU',
+                homeCurrency,
+                fxRate,
+              )}
+              homeCurrency={homeCurrency}
               onClick={
                 onNavigateToTransactions
-                  ? () => onNavigateToTransactions({ accountType: 'bank_account', currency: 'UYU' })
+                  ? () =>
+                      onNavigateToTransactions({
+                        accountType: 'bank_account',
+                        currency: 'UYU',
+                      })
                   : undefined
               }
-              style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span
-                  style={{
-                    width: 36, height: 36, borderRadius: 10,
-                    background: 'var(--surface-2)', color: 'var(--brand)',
-                    display: 'grid', placeItems: 'center', flexShrink: 0,
-                  }}
-                >
-                  <Landmark size={18} />
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>Cuenta en Pesos</div>
-                  <div className="text-muted-foreground" style={{ fontSize: 12 }}>
-                    Caja de ahorro UYU
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="text-muted-foreground" style={{ fontSize: 12, fontWeight: 500 }}>
-                  Saldo disponible
-                </div>
-                <div
-                  className="font-mono"
-                  style={{ fontSize: 24, marginTop: 4, color: uyuBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)' }}
-                >
-                  {formatCurrency(uyuBankSummary.balance, 'UYU')}
-                </div>
-              </div>
-              <div
-                style={{
-                  fontSize: 11.5,
-                  marginTop: 'auto',
-                  paddingTop: 8,
-                  borderTop: '1px solid var(--border)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  color: 'var(--text-faint)',
-                }}
-              >
-                <span>{uyuBankTransactions.length} movimientos</span>
-                <span className="font-mono">
-                  ≈{' '}
-                  {formatCurrency(
-                    convert(uyuBankSummary.expenses, 'UYU', homeCurrency, fxRate),
-                    homeCurrency,
-                  )}
-                </span>
-              </div>
-            </Card>
+            />
           </div>
 
           {/* Este mes panel — converted + combined in home currency */}
@@ -569,57 +480,20 @@ export function Dashboard({
                   </button>
                 )}
               </div>
-              {categoryBreakdown.length === 0 ? (
+              {categoryBreakdownRows.length === 0 ? (
                 <p className="text-muted-foreground" style={{ fontSize: 13 }}>
                   Sin gastos registrados este mes.
                 </p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {categoryBreakdown.map((row) => (
-                    <div
-                      key={row.category}
-                      onClick={() => onNavigateToTransactions?.({ category: row.category })}
-                      style={{ cursor: onNavigateToTransactions ? 'pointer' : 'default' }}
-                    >
-                      <div
-                        style={{
-                          display: 'flex', justifyContent: 'space-between',
-                          alignItems: 'baseline', marginBottom: 5,
-                        }}
-                      >
-                        <span
-                          style={{
-                            display: 'inline-flex', alignItems: 'center',
-                            gap: 7, fontSize: 13.5, fontWeight: 500,
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: 9, height: 9, borderRadius: 3,
-                              background: row.display.color, display: 'inline-block', flexShrink: 0,
-                            }}
-                          />
-                          {row.display.label}
-                        </span>
-                        <span className="font-mono" style={{ fontSize: 13 }}>
-                          {formatCurrency(row.total, homeCurrency)}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          height: 4, borderRadius: 2, background: 'var(--surface-2)', overflow: 'hidden',
-                        }}
-                      >
-                        <div
-                          style={{
-                            height: '100%', width: `${row.pct}%`,
-                            background: row.display.color, borderRadius: 2,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <CategoryBreakdownList
+                  rows={categoryBreakdownRows}
+                  currency={homeCurrency}
+                  onClickRow={
+                    onNavigateToTransactions
+                      ? (id) => onNavigateToTransactions({ category: id })
+                      : undefined
+                  }
+                />
               )}
             </Card>
 
