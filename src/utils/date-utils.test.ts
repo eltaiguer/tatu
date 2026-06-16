@@ -5,6 +5,7 @@ import {
   getDateRangeForPeriod,
   isDateInPeriod,
   filterByPeriod,
+  generatePeriodOptions,
 } from './date-utils';
 
 describe('date-utils', () => {
@@ -142,5 +143,72 @@ describe('date-utils', () => {
       expect(filtered).toHaveLength(1);
       expect(filtered[0].id).toBe(1);
     });
+  });
+});
+
+describe('generatePeriodOptions', () => {
+  // Fixed reference: Sunday 15 June 2025 (Q2)
+  const TODAY = new Date('2025-06-15T12:00:00');
+
+  it('always returns "all" as the first option with label "Todo"', () => {
+    const options = generatePeriodOptions([], TODAY);
+    expect(options[0].id).toBe('all');
+    expect(options[0].label).toBe('Todo');
+    expect(options[0].period).toBe('all');
+  });
+
+  it('always includes week, current month, previous month, current quarter, and current year', () => {
+    const options = generatePeriodOptions([], TODAY);
+    const ids = options.map((o) => o.id);
+    expect(ids).toContain('this-week');
+    expect(ids).toContain('this-month');
+    expect(ids).toContain('prev-month');
+    expect(ids).toContain('q2-2025');
+    expect(ids).toContain('year-2025');
+  });
+
+  it('includes the previous quarter when it differs from the current quarter', () => {
+    // June is Q2; previous quarter is Q1 2025
+    const options = generatePeriodOptions([], TODAY);
+    const ids = options.map((o) => o.id);
+    expect(ids).toContain('q1-2025');
+  });
+
+  it('labels current and previous month in Spanish', () => {
+    const options = generatePeriodOptions([], TODAY);
+    const thisMonth = options.find((o) => o.id === 'this-month');
+    const prevMonth = options.find((o) => o.id === 'prev-month');
+    expect(thisMonth?.label).toMatch(/Este mes \(jun/i);
+    expect(prevMonth?.label).toMatch(/Mes anterior \(may/i);
+  });
+
+  it('includes previous year when transactionDates has a date from that year', () => {
+    const dates = [new Date('2024-11-01T12:00:00'), new Date('2025-03-15T12:00:00')];
+    const options = generatePeriodOptions(dates, TODAY);
+    const ids = options.map((o) => o.id);
+    expect(ids).toContain('year-2024');
+  });
+
+  it('does not include previous year when no transaction dates from that year', () => {
+    // Use noon to avoid UTC-offset dates crossing the year boundary
+    const dates = [new Date('2025-03-15T12:00:00'), new Date('2025-05-15T12:00:00')];
+    const options = generatePeriodOptions(dates, TODAY);
+    const ids = options.map((o) => o.id);
+    expect(ids).not.toContain('year-2024');
+  });
+
+  it('does not include previous year for an empty transactionDates array', () => {
+    const options = generatePeriodOptions([], TODAY);
+    const ids = options.map((o) => o.id);
+    expect(ids).not.toContain('year-2024');
+  });
+
+  it('respects the referenceDate parameter — January reference uses Jan/Dec labels', () => {
+    const january = new Date('2025-01-15T12:00:00');
+    const options = generatePeriodOptions([], january);
+    const thisMonth = options.find((o) => o.id === 'this-month');
+    const prevMonth = options.find((o) => o.id === 'prev-month');
+    expect(thisMonth?.label).toMatch(/ene/i);
+    expect(prevMonth?.label).toMatch(/dic/i);
   });
 });

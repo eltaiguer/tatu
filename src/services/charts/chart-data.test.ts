@@ -149,6 +149,31 @@ describe('chart-data', () => {
     })
   })
 
+  it('ignores transactions in a different currency', () => {
+    const transactions = [
+      makeTransaction('usd-income', {
+        amount: 100,
+        type: 'credit',
+        category: Category.Income,
+        currency: 'USD',
+      }),
+      makeTransaction('usd-expense', { amount: 30, type: 'debit', currency: 'USD' }),
+      makeTransaction('uyu-income', {
+        amount: 1000,
+        type: 'credit',
+        category: Category.Income,
+        currency: 'UYU',
+      }),
+      makeTransaction('uyu-expense', { amount: 500, type: 'debit', currency: 'UYU' }),
+    ]
+
+    const result = buildIncomeExpenseSummary(transactions, 'USD')
+
+    expect(result.income).toBe(100)
+    expect(result.expense).toBe(30)
+    expect(result.net).toBe(70)
+  })
+
   it('excludes transfer category from spending and summary metrics (original)', () => {
     const transactions = [
       makeTransaction('tx-1', {

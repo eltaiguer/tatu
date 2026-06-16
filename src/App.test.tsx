@@ -22,6 +22,7 @@ const {
   listCustomPatternsMock,
   loadUserPreferencesMock,
   updateTransactionMock,
+  softDeleteTransactionMock,
 } = vi.hoisted(() => ({
   getCurrentSessionMock: vi.fn(),
   subscribeToAuthChangesMock: vi.fn(),
@@ -32,6 +33,7 @@ const {
   listCustomPatternsMock: vi.fn(),
   loadUserPreferencesMock: vi.fn(),
   updateTransactionMock: vi.fn(),
+  softDeleteTransactionMock: vi.fn(),
 }))
 
 vi.mock('./services/supabase/client', () => ({
@@ -52,7 +54,7 @@ vi.mock('./services/supabase/auth', () => ({
 vi.mock('./services/supabase/transactions', () => ({
   loadUserTransactions: loadUserTransactionsMock,
   persistTransactions: vi.fn().mockResolvedValue(undefined),
-  softDeleteTransaction: vi.fn().mockResolvedValue(undefined),
+  softDeleteTransaction: softDeleteTransactionMock,
   updateTransaction: updateTransactionMock,
 }))
 
@@ -105,6 +107,7 @@ describe('App', () => {
     listCustomPatternsMock.mockResolvedValue([])
     loadUserPreferencesMock.mockResolvedValue(null)
     updateTransactionMock.mockResolvedValue(undefined)
+    softDeleteTransactionMock.mockResolvedValue(undefined)
   })
 
   it('renders overview (dashboard) view by default', async () => {
@@ -303,6 +306,179 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Análisis' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Categorías' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Configuración' })).toBeInTheDocument()
+  })
+
+  it('bulk categorizes selected transactions and updates the store', async () => {
+    loadUserTransactionsMock.mockResolvedValue([
+      {
+        id: 'tx-1',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        description: 'Comercio A',
+        amount: 100,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+      {
+        id: 'tx-2',
+        date: new Date('2026-01-11T00:00:00.000Z'),
+        description: 'Comercio B',
+        amount: 50,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+    ])
+
+    render(<App />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+
+    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0])
+    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0])
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
+    })
+
+    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
+      target: { value: 'entretenimiento' },
+    })
+    const popoverButtons = screen.getAllByText('Entretenimiento')
+    fireEvent.click(popoverButtons[popoverButtons.length - 1])
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    })
+
+    await waitFor(() => {
+      const txs = transactionStore.getState().transactions
+      expect(txs.find((t) => t.id === 'tx-1')?.category).toBe('entertainment')
+      expect(txs.find((t) => t.id === 'tx-2')?.category).toBe('entertainment')
+    })
+    expect(updateTransactionMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('bulk deletes selected transactions and removes them from the store', async () => {
+    loadUserTransactionsMock.mockResolvedValue([
+      {
+        id: 'tx-1',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        description: 'Comercio A',
+        amount: 100,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+      {
+        id: 'tx-2',
+        date: new Date('2026-01-11T00:00:00.000Z'),
+        description: 'Comercio B',
+        amount: 50,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+    ])
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(<App />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+
+    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0])
+    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0])
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
+    })
+
+    await waitFor(() => {
+      expect(transactionStore.getState().transactions).toHaveLength(0)
+    })
+    expect(softDeleteTransactionMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('bulk tags selected transactions and updates the store', async () => {
+    loadUserTransactionsMock.mockResolvedValue([
+      {
+        id: 'tx-1',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        description: 'Comercio A',
+        amount: 100,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+    ])
+
+    render(<App />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+
+    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0])
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
+    })
+
+    fireEvent.click(screen.getByLabelText('Tags bulk dropdown'))
+    fireEvent.change(screen.getByLabelText('Buscar o crear tag'), {
+      target: { value: 'recurrente' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Crear tag "recurrente"/ }))
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    })
+
+    await waitFor(() => {
+      const tx = transactionStore.getState().transactions.find((t) => t.id === 'tx-1')
+      expect(tx?.tags).toContain('recurrente')
+    })
+    expect(updateTransactionMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('bulk action buttons are disabled when no transactions are selected', async () => {
+    loadUserTransactionsMock.mockResolvedValue([
+      {
+        id: 'tx-1',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        description: 'Comercio A',
+        amount: 100,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+    ])
+
+    render(<App />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+
+    await waitFor(() =>
+      expect(screen.getAllByText('Comercio A').length).toBeGreaterThan(0)
+    )
+
+    // No checkboxes selected — the bulk selection toolbar should not be visible
+    // (the toolbar is identified by its selection count status span)
+    expect(screen.queryByRole('status', { name: /seleccionada/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Eliminar$/ })).not.toBeInTheDocument()
   })
 
   it('mobile hamburger opens nav sheet and closes on nav item click', async () => {
