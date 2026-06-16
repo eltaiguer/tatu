@@ -132,21 +132,6 @@ export const calculateTotals = memoizeByReference(
   }
 )
 
-export function convertAmount(
-  amount: number,
-  from: Currency,
-  to: Currency,
-  rate: number
-): number {
-  if (from === to) {
-    return amount
-  }
-  if (!Number.isFinite(rate) || rate <= 0) {
-    throw new Error('Conversion rate must be a positive number.')
-  }
-  return amount * rate
-}
-
 export function calculateRunningBalance(
   transactions: Transaction[],
   currency: Currency,
