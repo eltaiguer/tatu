@@ -1,6 +1,8 @@
 import { Category, CATEGORY_COLORS, CATEGORY_LABELS } from '../models';
-import { ID_ALIASES } from '../services/categories/category-registry';
-import { listCustomCategories } from '../services/categories/category-store';
+import {
+  getCategoryDefinition,
+  ID_ALIASES,
+} from '../services/categories/category-registry';
 
 export type CategoryIconName =
   | 'groceries'
@@ -29,81 +31,26 @@ export interface CategoryDisplay {
   icon: CategoryIconName;
 }
 
-const MODERN_META: Record<Category, { icon: CategoryIconName; color: string }> =
-  {
-    [Category.Groceries]: {
-      icon: 'groceries',
-      color: CATEGORY_COLORS[Category.Groceries],
-    },
-    [Category.Restaurants]: {
-      icon: 'restaurants',
-      color: CATEGORY_COLORS[Category.Restaurants],
-    },
-    [Category.Transport]: {
-      icon: 'transport',
-      color: CATEGORY_COLORS[Category.Transport],
-    },
-    [Category.Utilities]: {
-      icon: 'utilities',
-      color: CATEGORY_COLORS[Category.Utilities],
-    },
-    [Category.Healthcare]: {
-      icon: 'healthcare',
-      color: CATEGORY_COLORS[Category.Healthcare],
-    },
-    [Category.Shopping]: {
-      icon: 'shopping',
-      color: CATEGORY_COLORS[Category.Shopping],
-    },
-    [Category.Entertainment]: {
-      icon: 'entertainment',
-      color: CATEGORY_COLORS[Category.Entertainment],
-    },
-    [Category.Software]: {
-      icon: 'software',
-      color: CATEGORY_COLORS[Category.Software],
-    },
-    [Category.Education]: {
-      icon: 'education',
-      color: CATEGORY_COLORS[Category.Education],
-    },
-    [Category.Automotive]: {
-      icon: 'automotive',
-      color: CATEGORY_COLORS[Category.Automotive],
-    },
-    [Category.Housing]: {
-      icon: 'housing',
-      color: CATEGORY_COLORS[Category.Housing],
-    },
-    [Category.Personal]: {
-      icon: 'personal',
-      color: CATEGORY_COLORS[Category.Personal],
-    },
-    [Category.Insurance]: {
-      icon: 'insurance',
-      color: CATEGORY_COLORS[Category.Insurance],
-    },
-    [Category.Income]: {
-      icon: 'income',
-      color: CATEGORY_COLORS[Category.Income],
-    },
-    [Category.Transfer]: {
-      icon: 'transfer',
-      color: CATEGORY_COLORS[Category.Transfer],
-    },
-    [Category.Fees]: {
-      icon: 'fees',
-      color: CATEGORY_COLORS[Category.Fees],
-    },
-    [Category.Ignored]: {
-      icon: 'ignored',
-      color: CATEGORY_COLORS[Category.Ignored],
-    },
-    [Category.Uncategorized]: {
-      icon: 'uncategorized',
-      color: CATEGORY_COLORS[Category.Uncategorized],
-    },
-  };
+const MODERN_META: Record<Category, { icon: CategoryIconName }> = {
+  [Category.Groceries]: { icon: 'groceries' },
+  [Category.Restaurants]: { icon: 'restaurants' },
+  [Category.Transport]: { icon: 'transport' },
+  [Category.Utilities]: { icon: 'utilities' },
+  [Category.Healthcare]: { icon: 'healthcare' },
+  [Category.Shopping]: { icon: 'shopping' },
+  [Category.Entertainment]: { icon: 'entertainment' },
+  [Category.Software]: { icon: 'software' },
+  [Category.Education]: { icon: 'education' },
+  [Category.Automotive]: { icon: 'automotive' },
+  [Category.Housing]: { icon: 'housing' },
+  [Category.Personal]: { icon: 'personal' },
+  [Category.Insurance]: { icon: 'insurance' },
+  [Category.Income]: { icon: 'income' },
+  [Category.Transfer]: { icon: 'transfer' },
+  [Category.Fees]: { icon: 'fees' },
+  [Category.Ignored]: { icon: 'ignored' },
+  [Category.Uncategorized]: { icon: 'uncategorized' },
+};
 
 function isModernCategory(id: string): id is Category {
   return Object.values(Category).includes(id as Category);
@@ -130,20 +77,19 @@ export function getCategoryDisplay(categoryId?: string | null): CategoryDisplay 
 
   const modernId = ID_ALIASES[normalizedId] ?? normalizedId;
   if (isModernCategory(modernId)) {
-    const meta = MODERN_META[modernId];
-    const override = listCustomCategories().find((c) => c.id === modernId);
+    const def = getCategoryDefinition(modernId);
     return {
       id: modernId,
-      label: override?.label ?? CATEGORY_LABELS[modernId],
-      color: override?.color ?? meta.color,
-      icon: meta.icon,
+      label: def.label,
+      color: def.color,
+      icon: MODERN_META[modernId].icon,
     };
   }
 
   return {
     id: normalizedId,
     label: humanizeCategoryId(normalizedId),
-    color: MODERN_META[Category.Uncategorized].color,
+    color: CATEGORY_COLORS[Category.Uncategorized],
     icon: MODERN_META[Category.Uncategorized].icon,
   };
 }
