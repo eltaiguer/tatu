@@ -22,6 +22,7 @@ import {
 import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
 import { formatCurrency, toSafeNumber } from '../utils/formatting'
+import { getDisplayDescription } from '../utils/transaction-display'
 
 function MiniBars({ values, color }: { values: number[]; color: string }) {
   const max = Math.max(...values, 1)
@@ -679,7 +680,7 @@ export function Dashboard({
                             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                           }}
                         >
-                          {tx.displayDescription ?? tx.description}
+                          {getDisplayDescription(tx)}
                         </div>
                         <div className="text-muted-foreground" style={{ fontSize: 11.5 }}>
                           {tx.date.toLocaleDateString('es-UY', { day: 'numeric', month: 'short' })}
