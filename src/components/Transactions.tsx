@@ -31,10 +31,11 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { CategoryBadge } from './CategoryBadge'
 import { ConfidenceBadge } from './ConfidenceBadge'
 import { Category } from '../models'
-import type { Currency, Transaction } from '../models'
+import type { Transaction } from '../models'
 import { isCategoryIgnored, getCategoryDefinition } from '../services/categories/category-registry'
 import { getDescriptionOverride } from '../services/descriptions/description-overrides'
 import { getCategoryDisplay } from '../utils/category-display'
+import { formatCurrency, formatDate } from '../utils/formatting'
 import { exportTransactions } from '../services/export/export'
 import {
   addCustomCategory,
@@ -76,25 +77,6 @@ function getDisplayDescription(transaction: Transaction): string {
   }
 
   return transaction.description
-}
-
-function formatCurrency(amount: number, currency: Currency): string {
-  const absAmount = Math.abs(amount)
-  const formatted = new Intl.NumberFormat('es-UY', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(absAmount)
-
-  const symbol = currency === 'UYU' ? '$U' : 'US$'
-  return `${symbol} ${formatted}`
-}
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('es-UY', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date)
 }
 
 export function Transactions({

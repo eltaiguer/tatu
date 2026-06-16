@@ -3,6 +3,7 @@ import { Category } from '../../models'
 import { isTransferCategory } from '../transfers/internal-transfers'
 import { isCategoryIgnored } from '../categories/category-registry'
 import { convert } from '../currency/convert'
+import { toMonthKey } from '../../utils/date-utils'
 
 export interface CategorySpendingDatum {
   category: string
@@ -20,12 +21,6 @@ export interface IncomeExpenseSummary {
   income: number
   expense: number
   net: number
-}
-
-function toMonthKey(date: Date): string {
-  const year = date.getUTCFullYear()
-  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0')
-  return `${year}-${month}`
 }
 
 export function buildCategorySpending(
