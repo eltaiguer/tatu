@@ -232,7 +232,9 @@ describe('App', () => {
         screen.getByText('No se encontraron categorías automáticas para las transacciones seleccionadas')
       ).toBeInTheDocument()
     )
-    expect(transactionStore.getState().transactions[0].category).toBe('uncategorized')
+    // Category must not be overwritten when nothing matched — previously a bug
+    // where 'uncategorized' would be written over any existing user-set category
+    expect(transactionStore.getState().transactions[0].category).toBeUndefined()
   })
 
   it('switches to categorías view from sidebar navigation', async () => {

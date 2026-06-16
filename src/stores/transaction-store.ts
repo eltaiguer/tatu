@@ -17,15 +17,11 @@ interface TransactionStoreActions {
   clearTransactions: () => void
   setTransactions: (transactions: Transaction[]) => void
   findDuplicateIds: (transactions: Transaction[]) => string[]
-  mergeTransactions: (transactions: Transaction[]) => {
-    added: Transaction[]
-    duplicates: Transaction[]
-  }
 }
 
 export type TransactionStore = TransactionStoreState & TransactionStoreActions
 
-function normalizeTransactions(transactions: Transaction[]): Transaction[] {
+export function normalizeTransactions(transactions: Transaction[]): Transaction[] {
   return inferInternalTransfers(
     transactions.map((tx) => {
       const date =
@@ -102,29 +98,6 @@ function createTransactionStoreState(
       })
 
       return Array.from(duplicates)
-    },
-    mergeTransactions: (transactions) => {
-      const added: Transaction[] = []
-      const duplicates: Transaction[] = []
-
-      set((state) => {
-        const existingIds = new Set(state.transactions.map((tx) => tx.id))
-        const next = [...state.transactions]
-
-        transactions.forEach((tx) => {
-          if (existingIds.has(tx.id)) {
-            duplicates.push(tx)
-          } else {
-            existingIds.add(tx.id)
-            added.push(tx)
-            next.push(tx)
-          }
-        })
-
-        return { transactions: inferInternalTransfers(next) }
-      })
-
-      return { added, duplicates }
     },
   }
 }

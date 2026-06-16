@@ -28,11 +28,15 @@ import {
 } from '../services/categorizer/transaction-categorizer'
 import { analyzeTemporalPatterns } from '../services/categorizer/temporal-patterns'
 
-export function useTransactionHandlers(
-  session: SupabaseSession | null,
-  setError: (msg: string) => void,
-  setNotice: (msg: string) => void,
-) {
+export function useTransactionHandlers({
+  session,
+  setError,
+  setNotice,
+}: {
+  session: SupabaseSession | null
+  setError: (msg: string) => void
+  setNotice: (msg: string) => void
+}) {
   async function handleTransactionsImported(
     transactionsToImport: Transaction[],
     context?: {
@@ -497,14 +501,17 @@ export function useTransactionHandlers(
       (transaction) => transaction.category !== 'uncategorized'
     )
 
-    if (categorizedTransactions.length === 0) {
+    if (matchedTransactions.length === 0) {
+      setNotice(
+        'No se encontraron categorías automáticas para las transacciones seleccionadas'
+      )
       return
     }
 
     try {
       if (session) {
         await Promise.all(
-          categorizedTransactions.map((transaction) =>
+          matchedTransactions.map((transaction) =>
             updateRemoteTransaction(session, transaction.id, {
               category: transaction.category,
               categoryConfidence: transaction.categoryConfidence,
@@ -515,7 +522,7 @@ export function useTransactionHandlers(
 
       state.setTransactions(
         state.transactions.map((transaction) => {
-          const categorized = categorizedTransactions.find(
+          const categorized = matchedTransactions.find(
             (entry) => entry.id === transaction.id
           )
 
@@ -531,13 +538,6 @@ export function useTransactionHandlers(
         })
       )
       setError('')
-      if (matchedTransactions.length === 0) {
-        setNotice(
-          'No se encontraron categorías automáticas para las transacciones seleccionadas'
-        )
-        return
-      }
-
       setNotice(
         `${matchedTransactions.length} transacción${matchedTransactions.length === 1 ? '' : 'es'} auto-categorizada${matchedTransactions.length === 1 ? '' : 's'}`
       )
