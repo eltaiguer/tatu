@@ -32,6 +32,8 @@ import {
 import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
 import { formatCurrency, formatCurrencyShort } from '../utils/formatting'
+import { CategoryBreakdownList } from './CategoryBreakdownList'
+import type { CategoryBreakdownRow } from './CategoryBreakdownList'
 
 interface ChartsProps {
   transactions: Transaction[]
@@ -345,66 +347,25 @@ export function Charts({
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-              {categoryData.slice(0, 7).map((row) => (
-                <div
-                  key={row.categoryId}
-                  onClick={() => onNavigateToTransactions?.({ category: row.categoryId })}
-                  style={{ cursor: onNavigateToTransactions ? 'pointer' : 'default' }}
-                >
-                  <div
-                    style={{
-                      display: 'flex', justifyContent: 'space-between',
-                      alignItems: 'baseline', marginBottom: 5,
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: 'inline-flex', alignItems: 'center',
-                        gap: 8, fontSize: 13.5, fontWeight: 500,
-                      }}
-                    >
-                      {row.emoji ? (
-                        <span style={{ fontSize: 14 }}>{row.emoji}</span>
-                      ) : (
-                        <span
-                          style={{
-                            width: 9, height: 9, borderRadius: 3,
-                            background: row.color, display: 'inline-block',
-                          }}
-                        />
-                      )}
-                      {row.label}
-                    </span>
-                    <span
-                      style={{ display: 'inline-flex', gap: 10, alignItems: 'baseline' }}
-                    >
-                      <span className="font-mono" style={{ fontSize: 13 }}>
-                        {formatCurrency(row.value, homeCurrency)}
-                      </span>
-                      <span
-                        className="font-mono text-muted-foreground"
-                        style={{ fontSize: 11.5, width: 38, textAlign: 'right' }}
-                      >
-                        {row.pct.toFixed(1)}%
-                      </span>
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      height: 4, borderRadius: 2, background: 'var(--surface-2)', overflow: 'hidden',
-                    }}
-                  >
-                    <div
-                      style={{
-                        height: '100%', width: `${row.pct}%`,
-                        background: row.color, borderRadius: 2,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CategoryBreakdownList
+              rows={
+                categoryData.slice(0, 7).map<CategoryBreakdownRow>((row) => ({
+                  id: row.categoryId,
+                  label: row.label,
+                  color: row.color,
+                  emoji: row.emoji,
+                  amount: row.value,
+                  pct: row.pct,
+                }))
+              }
+              currency={homeCurrency}
+              showPercent
+              onClickRow={
+                onNavigateToTransactions
+                  ? (id) => onNavigateToTransactions({ category: id })
+                  : undefined
+              }
+            />
           </div>
         )}
       </Card>
