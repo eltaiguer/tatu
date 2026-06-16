@@ -51,6 +51,28 @@ describe('Dashboard', () => {
     expect(screen.getAllByText(/≈ US\$/).length).toBeGreaterThan(0)
   })
 
+  it('shows displayDescription in recent transactions panel instead of raw description', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-15T12:00:00.000Z'))
+
+    const tx = makeTransaction({
+      id: 'tx-override',
+      description: 'SUPERMERCADO DEVOTO SA 0032',
+      displayDescription: 'Devoto',
+      amount: 500,
+      currency: 'UYU',
+      type: 'debit',
+      date: new Date('2026-01-10T00:00:00.000Z'),
+    })
+
+    render(<Dashboard transactions={[tx]} />)
+
+    expect(screen.getByText('Devoto')).toBeInTheDocument()
+    expect(screen.queryByText('SUPERMERCADO DEVOTO SA 0032')).not.toBeInTheDocument()
+
+    vi.useRealTimers()
+  })
+
   it('does not count transfer debits as expenses in converted totals', () => {
     const transactions = [
       makeTransaction({
