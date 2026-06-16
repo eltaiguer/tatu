@@ -26,16 +26,7 @@ import {
 import { Sun, Moon, Menu, Monitor } from 'lucide-react'
 import { useStore } from 'zustand'
 import { transactionStore } from './stores/transaction-store'
-import {
-  getCurrentSession,
-  requestPasswordReset,
-  signInWithPassword,
-  signOut,
-  signUpWithPassword,
-  subscribeToAuthChanges,
-  updatePassword,
-} from './services/supabase/auth'
-import type { SupabaseSession } from './services/supabase/client'
+import { signOut } from './services/supabase/auth'
 import { loadUserTransactions } from './services/supabase/transactions'
 import {
   clearAllCategoryOverrides,
@@ -52,65 +43,36 @@ import { listDescriptionOverrides as listRemoteDescriptionOverrides } from './se
 import { listCustomCategories } from './services/supabase/custom-categories'
 import { listCustomPatterns as listSupabaseCustomPatterns } from './services/supabase/custom-patterns'
 import { loadUserPreferences } from './services/supabase/user-preferences'
-import { setActiveSupabaseSession } from './services/supabase/runtime'
 import { resetUserSupabaseData } from './services/supabase/reset'
 import { useUserPreferences } from './hooks/useUserPreferences'
+import { useAuthSession } from './hooks/useAuthSession'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
-
-function isPasswordResetMode(): boolean {
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  const hash = window.location.hash.startsWith('#')
-    ? window.location.hash.slice(1)
-    : window.location.hash
-  const hashParams = new URLSearchParams(hash)
-  const isRecoveryHash =
-    hashParams.get('type') === 'recovery' &&
-    hashParams.has('access_token')
-
-  return (
-    new URLSearchParams(window.location.search).get('mode') ===
-      'reset-password' || isRecoveryHash
-  )
-}
-
-function clearPasswordResetModeFromUrl(): void {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  const url = new URL(window.location.href)
-  if (!url.searchParams.has('mode')) {
-    return
-  }
-
-  url.searchParams.delete('mode')
-  const nextQuery = url.searchParams.toString()
-  window.history.replaceState(
-    {},
-    '',
-    `${url.pathname}${nextQuery ? `?${nextQuery}` : ''}${url.hash}`
-  )
-}
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('overview')
   const [importOpen, setImportOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
-  const [session, setSession] = useState<SupabaseSession | null>(() =>
-    getCurrentSession()
-  )
-  const [authSubmitting, setAuthSubmitting] = useState(false)
-  const [authError, setAuthError] = useState('')
-  const [authNotice, setAuthNotice] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [authMode, setAuthMode] = useState<'signin' | 'reset'>(() =>
-    isPasswordResetMode() ? 'reset' : 'signin'
-  )
+  const {
+    session,
+    setSession,
+    authSubmitting,
+    setAuthSubmitting,
+    authError,
+    setAuthError,
+    authNotice,
+    setAuthNotice,
+    email,
+    setEmail,
+    password,
+    setPassword,
+    authMode,
+    setAuthMode,
+    handleAuth,
+    handlePasswordReset,
+    handlePasswordUpdate,
+    clearPasswordResetModeFromUrl,
+  } = useAuthSession()
 
   // Get transactions from store
   const transactions = useStore(transactionStore, (state) => state.transactions)
@@ -129,27 +91,6 @@ function App() {
     fxRate,
     setFxRate,
   } = useUserPreferences(session, prefsLoadedRef)
-
-  useEffect(() => {
-    setActiveSupabaseSession(session)
-  }, [session])
-
-  useEffect(() => {
-    const unsubscribe = subscribeToAuthChanges(
-      (nextSession) => {
-        setSession(nextSession)
-      },
-      () => {
-        setAuthMode('reset')
-        setAuthError('')
-        setAuthNotice('Ingresá una nueva contraseña para tu cuenta')
-      }
-    )
-
-    return () => {
-      unsubscribe()
-    }
-  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -258,27 +199,6 @@ function App() {
     }
   }, [authMode, session])
 
-  async function handleAuth(action: 'signin' | 'signup') {
-    setAuthSubmitting(true)
-    setAuthError('')
-    setAuthNotice('')
-
-    try {
-      const nextSession =
-        action === 'signin'
-          ? await signInWithPassword(email, password)
-          : await signUpWithPassword(email, password)
-      setSession(nextSession)
-      toast.success('Sesión iniciada')
-    } catch (error) {
-      setAuthError(
-        error instanceof Error ? error.message : 'Error de autenticación'
-      )
-    } finally {
-      setAuthSubmitting(false)
-    }
-  }
-
   async function handleSignOut() {
     setAuthSubmitting(true)
     try {
@@ -301,54 +221,6 @@ function App() {
     } catch (error) {
       setAuthError(
         error instanceof Error ? error.message : 'No se pudo cerrar sesión'
-      )
-    } finally {
-      setAuthSubmitting(false)
-    }
-  }
-
-  async function handlePasswordReset() {
-    setAuthSubmitting(true)
-    setAuthError('')
-    setAuthNotice('')
-
-    try {
-      await requestPasswordReset(email)
-      setAuthNotice('Te enviamos un email para restablecer tu contraseña')
-    } catch (error) {
-      setAuthError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo enviar el email de recuperación'
-      )
-    } finally {
-      setAuthSubmitting(false)
-    }
-  }
-
-  async function handlePasswordUpdate() {
-    setAuthSubmitting(true)
-    setAuthError('')
-    setAuthNotice('')
-
-    try {
-      await updatePassword(password)
-      try {
-        await signOut(session)
-      } catch {
-        // Ignore sign-out errors after a successful password change.
-      }
-      setSession(null)
-      transactionStore.getState().clearTransactions()
-      setPassword('')
-      setAuthMode('signin')
-      clearPasswordResetModeFromUrl()
-      setAuthNotice('Contraseña actualizada. Iniciá sesión nuevamente')
-    } catch (error) {
-      setAuthError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo actualizar la contraseña'
       )
     } finally {
       setAuthSubmitting(false)
