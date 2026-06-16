@@ -114,8 +114,6 @@ export function Transactions({
   const [accountFilter, setAccountFilter] = useState<'all' | 'credit_card' | 'bank_account'>('all')
   const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'UYU'>('all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>('all')
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-
   useEffect(() => {
     if (initialFilter) {
       setCategoryFilter(initialFilter.category ?? '')
@@ -262,6 +260,14 @@ export function Transactions({
     typeFilter !== 'all'
 
   const totals = calculateTotals(filteredTransactions)
+
+  const activeCurrencies = useMemo(
+    () =>
+      (['UYU', 'USD'] as const).filter((c) =>
+        transactions.some((tx) => tx.currency === c)
+      ),
+    [transactions]
+  )
 
   function clearAllFilters() {
     setSearchTerm('')
@@ -740,28 +746,6 @@ export function Transactions({
             ))}
           </div>
 
-          {/* Más button */}
-          <button
-            onClick={() => setAdvancedOpen(!advancedOpen)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '4px 12px',
-              height: 32,
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 500,
-              background: advancedOpen ? 'var(--brand-soft)' : 'var(--surface-2)',
-              color: advancedOpen ? 'var(--brand-text)' : 'var(--text-faint)',
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <SlidersHorizontal size={13} />
-            Más
-          </button>
-
           {hasActiveFilters && (
             <Button variant="outline" size="sm" onClick={clearAllFilters} style={{ gap: 5 }}>
               <X size={13} />
@@ -851,10 +835,9 @@ export function Transactions({
       )}
 
       {(() => {
-        const currencyGroups = (['UYU', 'USD'] as const).filter((currency) => {
-          if (currencyFilter !== 'all') return currency === currencyFilter
-          return totals.income[currency] > 0 || totals.expense[currency] > 0
-        })
+        const currencyGroups = activeCurrencies.filter((currency) =>
+          currencyFilter !== 'all' ? currency === currencyFilter : true
+        )
         if (currencyGroups.length === 0) return null
         return (
           <div
