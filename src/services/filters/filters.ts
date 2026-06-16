@@ -32,9 +32,8 @@ function memoizeByReference<TInput extends object, TResult>(
       cache.set(input, byOptions)
     }
 
-    const cached = byOptions.get(key)
-    if (cached) {
-      return cached
+    if (byOptions.has(key)) {
+      return byOptions.get(key) as TResult
     }
 
     const result = fn(input, options)
