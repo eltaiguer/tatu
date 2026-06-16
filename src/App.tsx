@@ -51,12 +51,10 @@ import { listCategoryOverrides } from './services/supabase/category-overrides'
 import { listDescriptionOverrides as listRemoteDescriptionOverrides } from './services/supabase/description-overrides'
 import { listCustomCategories } from './services/supabase/custom-categories'
 import { listCustomPatterns as listSupabaseCustomPatterns } from './services/supabase/custom-patterns'
-import {
-  loadUserPreferences,
-  saveUserPreferences,
-} from './services/supabase/user-preferences'
+import { loadUserPreferences } from './services/supabase/user-preferences'
 import { setActiveSupabaseSession } from './services/supabase/runtime'
 import { resetUserSupabaseData } from './services/supabase/reset'
+import { useUserPreferences } from './hooks/useUserPreferences'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
 
 function isPasswordResetMode(): boolean {
@@ -98,18 +96,9 @@ function clearPasswordResetModeFromUrl(): void {
 }
 
 function App() {
-  const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('auto')
-  const [systemDark, setSystemDark] = useState(() =>
-    window.matchMedia('(prefers-color-scheme: dark)').matches
-  )
-  const isDark = theme === 'dark' || (theme === 'auto' && systemDark)
   const [currentView, setCurrentView] = useState<View>('overview')
   const [importOpen, setImportOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const cycleTheme = () =>
-    setTheme((t) => (t === 'light' ? 'dark' : t === 'dark' ? 'auto' : 'light'))
-  const [preferredCurrency, setPreferredCurrencyState] = useState<'UYU' | 'USD'>('USD')
-  const [fxRate, setFxRateState] = useState<number>(40.5)
   const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
   const [session, setSession] = useState<SupabaseSession | null>(() =>
     getCurrentSession()
@@ -130,38 +119,16 @@ function App() {
   // with local defaults on first mount before syncTransactions completes.
   const prefsLoadedRef = useRef(false)
 
-  // Listen for system color-scheme changes (used when theme === 'auto')
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = (e: MediaQueryListEvent) => setSystemDark(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-
-  // Apply dark class
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-    }
-  }, [isDark])
-
-  // Persist preferences to Supabase when they change.
-  // Guard on prefsLoadedRef so initial defaults are never written before
-  // syncTransactions has read the real values from Supabase.
-  useEffect(() => {
-    if (!session || !prefsLoadedRef.current) return
-    void saveUserPreferences(session, { theme, currency: preferredCurrency, fxRate })
-  }, [theme, preferredCurrency, fxRate]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  function setPreferredCurrency(c: 'UYU' | 'USD') {
-    setPreferredCurrencyState(c)
-  }
-
-  function setFxRate(r: number) {
-    setFxRateState(r)
-  }
+  const {
+    theme,
+    setTheme,
+    isDark,
+    cycleTheme,
+    preferredCurrency,
+    setPreferredCurrency,
+    fxRate,
+    setFxRate,
+  } = useUserPreferences(session, prefsLoadedRef)
 
   useEffect(() => {
     setActiveSupabaseSession(session)
@@ -264,8 +231,8 @@ function App() {
 
         if (userPrefs) {
           setTheme(userPrefs.theme)
-          setPreferredCurrencyState(userPrefs.currency)
-          setFxRateState(userPrefs.fxRate)
+          setPreferredCurrency(userPrefs.currency)
+          setFxRate(userPrefs.fxRate)
         }
         // Allow preference saves now that remote values are applied.
         prefsLoadedRef.current = true
@@ -324,8 +291,8 @@ function App() {
       clearAllDescriptionOverrides()
       replaceCustomPatterns([])
       setTheme('auto')
-      setPreferredCurrencyState('USD')
-      setFxRateState(40.5)
+      setPreferredCurrency('USD')
+      setFxRate(40.5)
       prefsLoadedRef.current = false
       setCurrentView('overview')
       setImportOpen(false)
@@ -395,8 +362,8 @@ function App() {
     replaceCustomPatterns([])
     replaceCustomCategories([])
     setTheme('auto')
-    setPreferredCurrencyState('USD')
-    setFxRateState(40.5)
+    setPreferredCurrency('USD')
+    setFxRate(40.5)
     prefsLoadedRef.current = false
 
     if (session) {
