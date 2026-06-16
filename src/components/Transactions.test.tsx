@@ -308,6 +308,36 @@ describe('Transactions', () => {
     expect(screen.queryByText(/seleccionada/)).not.toBeInTheDocument()
   })
 
+  it('unchecking page header only deselects current page — other pages remain selected', () => {
+    // 25 transactions split across 2 pages (12 on page 1, 13 on page 2)
+    const transactions = Array.from({ length: 25 }, (_, index) =>
+      makeTransaction(index, `merchant ${index}`)
+    )
+
+    render(<Transactions transactions={transactions} />)
+
+    // Select all 25 via header + "select all" link
+    const headerCheckboxes = screen.getAllByRole('checkbox', {
+      name: 'Seleccionar todas',
+    })
+    fireEvent.click(headerCheckboxes[0])
+    fireEvent.click(screen.getByText('Seleccionar las 25 transacciones'))
+    expect(screen.getAllByText('25 seleccionadas').length).toBeGreaterThan(0)
+
+    // Navigate to page 2, then navigate back to page 1 — all page-1 items remain checked
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior' }))
+
+    // Uncheck header on page 1 — should only deselect the 12 page-1 items
+    const page1HeaderCheckboxes = screen.getAllByRole('checkbox', {
+      name: 'Seleccionar todas',
+    })
+    fireEvent.click(page1HeaderCheckboxes[0])
+
+    // 13 page-2 selections remain (not 0, which the old bug would have caused)
+    expect(screen.getAllByText('13 seleccionadas').length).toBeGreaterThan(0)
+  })
+
   it('shows select-all link after selecting full page on multi-page results', () => {
     const transactions = Array.from({ length: 25 }, (_, index) =>
       makeTransaction(index, `merchant ${index}`)
