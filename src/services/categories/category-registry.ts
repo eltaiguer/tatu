@@ -18,7 +18,7 @@ export interface CategoryDefinition {
 
 const DEFAULT_CUSTOM_ICON = '🏷️'
 
-const ID_ALIASES: Partial<Record<string, Category>> = {
+export const ID_ALIASES: Partial<Record<string, Category>> = {
   food: Category.Groceries,
   restaurant: Category.Restaurants,
   restaurants: Category.Restaurants,
