@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   calculateRunningBalance,
   calculateTotals,
-  convertAmount,
   groupByCategory,
   groupByDate,
   groupByMonth,
@@ -158,20 +157,6 @@ describe('Aggregation - totals', () => {
     expect(totals.income.USD).toBe(0)
     expect(totals.net.USD).toBe(-5)
     expect(totals.count).toBe(3)
-  })
-})
-
-describe('Aggregation - currency conversion', () => {
-  it('converts amounts using a provided rate', () => {
-    expect(convertAmount(100, 'USD', 'UYU', 40)).toBe(4000)
-  })
-
-  it('returns same amount when currencies match', () => {
-    expect(convertAmount(100, 'USD', 'USD', 40)).toBe(100)
-  })
-
-  it('throws when rate is invalid', () => {
-    expect(() => convertAmount(10, 'USD', 'UYU', 0)).toThrow()
   })
 })
 

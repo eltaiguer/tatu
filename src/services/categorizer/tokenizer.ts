@@ -74,23 +74,6 @@ export function tokenize(name: string): string[] {
 }
 
 /**
- * Dice coefficient between two token sets.
- * Returns 0–1 where 1 means identical sets.
- */
-export function diceCoefficient(a: string[], b: string[]): number {
-  if (a.length === 0 && b.length === 0) return 0
-  if (a.length === 0 || b.length === 0) return 0
-
-  const setB = new Set(b)
-  let intersection = 0
-  for (const token of a) {
-    if (setB.has(token)) intersection++
-  }
-
-  return (2 * intersection) / (a.length + b.length)
-}
-
-/**
  * Character bigram set for a string.
  * "hello" → {"he", "el", "ll", "lo"}
  */

@@ -28,19 +28,7 @@ export interface TransactionsFilter {
   accountType?: 'all' | 'credit_card' | 'bank_account'
   currency?: 'all' | 'USD' | 'UYU'
 }
-export type { CategoryOverride } from './category-override'
 export type { CustomCategoryRecord } from './custom-category'
 
 // Category system
-export {
-  Category,
-  CATEGORY_LABELS,
-  CATEGORY_ICONS,
-  CATEGORY_COLORS,
-  isExpenseCategory,
-  isIncomeCategory,
-  isTransferCategory,
-  isIgnoredCategory,
-  getAllCategories,
-  getExpenseCategories,
-} from './category'
+export { Category, CATEGORY_LABELS, CATEGORY_ICONS, CATEGORY_COLORS } from './category'

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
   tokenize,
-  diceCoefficient,
   bigramSimilarity,
   fuzzyTokenSimilarity,
 } from './tokenizer'
@@ -58,30 +57,6 @@ describe('Tokenizer', () => {
       expect(tokens).toContain('casa')
       expect(tokens).toContain('anon')
       expect(tokens).not.toContain('sa')
-    })
-  })
-
-  describe('diceCoefficient', () => {
-    it('should return 1 for identical sets', () => {
-      expect(diceCoefficient(['a', 'b'], ['a', 'b'])).toBe(1)
-    })
-
-    it('should return 0 for disjoint sets', () => {
-      expect(diceCoefficient(['a', 'b'], ['c', 'd'])).toBe(0)
-    })
-
-    it('should return expected value for partial overlap', () => {
-      // 2 * 1 / (2 + 3) = 0.4
-      expect(diceCoefficient(['a', 'b'], ['a', 'c', 'd'])).toBeCloseTo(0.4)
-    })
-
-    it('should return 0 when either set is empty', () => {
-      expect(diceCoefficient([], ['a'])).toBe(0)
-      expect(diceCoefficient(['a'], [])).toBe(0)
-    })
-
-    it('should return 0 for two empty sets', () => {
-      expect(diceCoefficient([], [])).toBe(0)
     })
   })
 
