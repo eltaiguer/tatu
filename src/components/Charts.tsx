@@ -31,22 +31,7 @@ import {
 } from '../services/charts/chart-data'
 import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
-
-function formatAmt(amount: number, currency: Currency): string {
-  const formatted = Math.abs(amount).toLocaleString('es-UY', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  return currency === 'UYU' ? `$U ${formatted}` : `US$ ${formatted}`
-}
-
-function formatAmtShort(amount: number, currency: Currency): string {
-  const abs = Math.abs(amount)
-  const sym = currency === 'UYU' ? '$U' : 'US$'
-  if (abs >= 1_000_000) return `${sym} ${(abs / 1_000_000).toFixed(1)}M`
-  if (abs >= 1_000) return `${sym} ${(abs / 1_000).toFixed(0)}k`
-  return formatAmt(amount, currency)
-}
+import { formatCurrency, formatCurrencyShort } from '../utils/formatting'
 
 interface ChartsProps {
   transactions: Transaction[]
@@ -182,7 +167,7 @@ export function Charts({
         >
           <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{payload[0].name}</p>
           <p className="font-mono" style={{ fontSize: 13, color: 'var(--text-faint)' }}>
-            {formatAmt(value, homeCurrency)}
+            {formatCurrency(value, homeCurrency)}
           </p>
         </div>
       )
@@ -275,7 +260,7 @@ export function Charts({
             Gasto promedio mensual
           </div>
           <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-            {formatAmtShort(avgMonthly, homeCurrency)}
+            {formatCurrencyShort(avgMonthly, homeCurrency)}
           </div>
           <div className="text-muted-foreground" style={{ fontSize: 12 }}>
             Últimos {monthlyTrend.length} meses
@@ -355,7 +340,7 @@ export function Charts({
                   TOTAL
                 </div>
                 <div className="font-mono" style={{ fontSize: 15, fontWeight: 700 }}>
-                  {formatAmtShort(totalExpenses, homeCurrency)}
+                  {formatCurrencyShort(totalExpenses, homeCurrency)}
                 </div>
               </div>
             </div>
@@ -395,7 +380,7 @@ export function Charts({
                       style={{ display: 'inline-flex', gap: 10, alignItems: 'baseline' }}
                     >
                       <span className="font-mono" style={{ fontSize: 13 }}>
-                        {formatAmt(row.value, homeCurrency)}
+                        {formatCurrency(row.value, homeCurrency)}
                       </span>
                       <span
                         className="font-mono text-muted-foreground"
@@ -476,13 +461,13 @@ export function Charts({
             <YAxis
               stroke="var(--text-faint)" tick={{ fontSize: 12 }}
               axisLine={false} tickLine={false}
-              tickFormatter={(v) => formatAmtShort(v, homeCurrency)} width={70}
+              tickFormatter={(v) => formatCurrencyShort(v, homeCurrency)} width={70}
             />
             <Tooltip
               contentStyle={{
                 background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
               }}
-              formatter={(value: ValueType) => formatAmt(Number(value), homeCurrency)}
+              formatter={(value: ValueType) => formatCurrency(Number(value), homeCurrency)}
             />
             <Area
               type="monotone" dataKey="ingresos" stroke="var(--pos)"
@@ -519,13 +504,13 @@ export function Charts({
               <YAxis
                 stroke="var(--text-faint)" tick={{ fontSize: 12 }}
                 axisLine={false} tickLine={false}
-                tickFormatter={(v) => formatAmtShort(v, homeCurrency)} width={70}
+                tickFormatter={(v) => formatCurrencyShort(v, homeCurrency)} width={70}
               />
               <Tooltip
                 contentStyle={{
                   background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
                 }}
-                formatter={(value: ValueType) => [formatAmt(Number(value), homeCurrency), 'Neto']}
+                formatter={(value: ValueType) => [formatCurrency(Number(value), homeCurrency), 'Neto']}
               />
               <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1.5} />
               <Bar dataKey="neto" radius={[3, 3, 0, 0]}>
@@ -551,7 +536,7 @@ export function Charts({
                   color: (totalIncome - totalExpenseTrend) >= 0 ? 'var(--pos)' : 'var(--neg)',
                 }}
               >
-                {formatAmtShort(
+                {formatCurrencyShort(
                   monthlyTrend.length > 0
                     ? (totalIncome - totalExpenseTrend) / monthlyTrend.length
                     : 0,
@@ -597,7 +582,7 @@ export function Charts({
                   <span style={{ fontSize: 13.5, fontWeight: 500 }}>{row.label}</span>
                   <span style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
                     <span className="font-mono" style={{ fontSize: 13 }}>
-                      {formatAmt(row.amount, homeCurrency)}
+                      {formatCurrency(row.amount, homeCurrency)}
                     </span>
                     <span
                       className="font-mono text-muted-foreground"
@@ -680,7 +665,7 @@ export function Charts({
                     </div>
                   </div>
                   <span className="font-mono" style={{ fontSize: 13 }}>
-                    {formatAmt(m.total, homeCurrency)}
+                    {formatCurrency(m.total, homeCurrency)}
                   </span>
                 </div>
               )

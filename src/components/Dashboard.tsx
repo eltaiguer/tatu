@@ -21,10 +21,7 @@ import {
 } from '../services/charts/chart-data'
 import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
-
-function toSafeNumber(value: number): number {
-  return Number.isFinite(value) ? value : 0
-}
+import { formatCurrency, toSafeNumber } from '../utils/formatting'
 
 function MiniBars({ values, color }: { values: number[]; color: string }) {
   const max = Math.max(...values, 1)
@@ -44,16 +41,6 @@ function MiniBars({ values, color }: { values: number[]; color: string }) {
       ))}
     </div>
   )
-}
-
-function formatCurrency(amount: number, currency: Currency): string {
-  const absAmount = Math.abs(toSafeNumber(amount))
-  const formatted = new Intl.NumberFormat('es-UY', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(absAmount)
-  const symbol = currency === 'UYU' ? '$U' : 'US$'
-  return `${symbol} ${formatted}`
 }
 
 function calculateAccountSummary(transactions: Transaction[], currency: Currency) {

@@ -2,6 +2,8 @@ import type { Currency, Transaction } from '../../models'
 import { Category } from '../../models'
 import { isTransferCategory } from '../transfers/internal-transfers'
 import { isCategoryIgnored } from '../categories/category-registry'
+import { toDateKey, toMonthKey } from '../../utils/date-utils'
+import { memoizeByReference } from '../../utils/memo'
 
 export interface CurrencyTotals {
   USD: number
@@ -28,19 +30,6 @@ function emptySummary(): SummaryTotals {
   }
 }
 
-function toDateKey(date: Date): string {
-  const year = date.getUTCFullYear()
-  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0')
-  const day = `${date.getUTCDate()}`.padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function toMonthKey(date: Date): string {
-  const year = date.getUTCFullYear()
-  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0')
-  return `${year}-${month}`
-}
-
 function applyTransaction(summary: SummaryTotals, tx: Transaction): void {
   if (isCategoryIgnored(tx.category)) {
     return
@@ -62,21 +51,6 @@ function applyTransaction(summary: SummaryTotals, tx: Transaction): void {
   summary.count += 1
 }
 
-function memoizeByReference<TInput extends object, TResult>(
-  fn: (input: TInput) => TResult
-): (input: TInput) => TResult {
-  const cache = new WeakMap<TInput, TResult>()
-
-  return (input: TInput) => {
-    const cached = cache.get(input)
-    if (cached) {
-      return cached
-    }
-    const result = fn(input)
-    cache.set(input, result)
-    return result
-  }
-}
 
 export const groupByCategory = memoizeByReference(
   (transactions: Transaction[]) => {
