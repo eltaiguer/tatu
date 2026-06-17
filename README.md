@@ -117,56 +117,41 @@ Firebase config lives in `.firebaserc` and `firebase.json`.
 ```
 tatu/
 ├── samples/                     # Sample CSV files
-│   ├── CreditCardsMovementsDetail.csv
-│   ├── USDmovements.csv
-│   └── UYUmovements.csv
 ├── src/
-│   ├── components/             # React components
-│   ├── services/               # Business logic
-│   │   ├── parsers/           # CSV parsers
-│   │   ├── categorizer/       # Category inference
-│   │   └── aggregator/        # Data aggregation
-│   ├── models/                # TypeScript interfaces
-│   ├── stores/                # State management
-│   ├── test/                  # Test utilities
-│   │   └── setup.ts
+│   ├── components/             # React UI components (sidebar, views, dialogs)
+│   ├── hooks/                  # Custom React hooks (auth, preferences, handlers)
+│   ├── services/               # Business logic (parsers, categorizer, export, currency, supabase)
+│   ├── models/                 # TypeScript interfaces + Category enum
+│   ├── stores/                 # Zustand store (in-memory, Supabase-backed)
+│   ├── styles/                 # CSS tokens, fonts, theme (light + dark)
+│   ├── utils/                  # Helpers (dates, formatting, category display)
 │   ├── App.tsx
 │   └── main.tsx
-├── PROJECT_BOARD.md           # Development roadmap
+├── supabase/
+│   └── schema.sql              # PostgreSQL schema + RLS policies
 ├── package.json
 ├── tsconfig.json
-├── vite.config.ts
-└── tailwind.config.js
+└── vite.config.ts
 ```
 
-## Development Workflow (TDD)
+## Development Workflow
 
-This project follows strict Test-Driven Development:
-
-1. 🔴 **RED**: Write failing test first
-2. 🟢 **GREEN**: Write minimal code to pass
-3. 🔵 **REFACTOR**: Clean up code
-4. ♻️ **REPEAT**: Next test
+Behavior testing — tests verify what the system does, not how it does it. Write tests alongside implementation; bug fixes require a regression test. Run `npm run tdd:verify` before committing.
 
 ### Commit Convention
 
-- `test:` for test files
 - `feat:` for new features
 - `fix:` for bug fixes
 - `refactor:` for code improvements
+- `test:` for test-only commits
 
 All commits must have passing tests.
 
 ## Current Status
 
-**Heat 5 - COMPLETED ✅**
-- Advanced filtering, search, and export tools
-- Category management with custom rules
-- UX polish and accessibility improvements
+**Fully shipped.** Sidebar navigation with 5 views (Resumen, Transacciones, Análisis, Categorías, Configuración). Multicurrency support (USD + UYU, combined into home currency via editable FX rate). Auth + cloud persistence via Supabase. Deployed to Firebase Hosting.
 
-**Next**: Heat 6 - Currency & Insights
-
-See [PROJECT_BOARD.md](./PROJECT_BOARD.md) for detailed roadmap.
+**Next**: AI-powered categorization.
 
 ## CSV File Formats
 
