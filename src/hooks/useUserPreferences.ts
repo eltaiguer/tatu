@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import type { SupabaseSession } from '../services/supabase/client'
 import { saveUserPreferences } from '../services/supabase/user-preferences'
+import { setAiConfig } from '../services/ai/ai-config'
 
 export function useUserPreferences(session: SupabaseSession | null) {
   const prefsLoadedRef = useRef(false)
@@ -13,6 +15,9 @@ export function useUserPreferences(session: SupabaseSession | null) {
     'USD'
   )
   const [fxRate, setFxRate] = useState<number>(40.5)
+  const [claudeApiKey, setClaudeApiKey] = useState<string>('')
+  const [aiEnabled, setAiEnabled] = useState<boolean>(false)
+  const [aiModel, setAiModel] = useState<string>('claude-haiku-4-5')
 
   const cycleTheme = () =>
     setTheme((t) => (t === 'light' ? 'dark' : t === 'dark' ? 'auto' : 'light'))
@@ -34,13 +39,33 @@ export function useUserPreferences(session: SupabaseSession | null) {
     }
   }, [isDark])
 
+  // Sync AI config singleton whenever AI settings change
+  useEffect(() => {
+    if (aiEnabled && claudeApiKey) {
+      setAiConfig({ apiKey: claudeApiKey, enabled: true, model: aiModel })
+    } else {
+      setAiConfig(null)
+    }
+  }, [aiEnabled, claudeApiKey, aiModel])
+
   // Persist preferences to Supabase when they change.
   // Guard on prefsLoadedRef so initial defaults are never written before
   // syncTransactions has read the real values from Supabase.
   useEffect(() => {
     if (!session || !prefsLoadedRef.current) return
-    void saveUserPreferences(session, { theme, currency: preferredCurrency, fxRate })
-  }, [session, theme, preferredCurrency, fxRate])
+    saveUserPreferences(session, {
+      theme,
+      currency: preferredCurrency,
+      fxRate,
+      claudeApiKey,
+      aiEnabled,
+      aiModel,
+    }).catch((err) => {
+      toast.error(
+        `Error al guardar preferencias: ${err instanceof Error ? err.message : 'Error desconocido'}`
+      )
+    })
+  }, [session, theme, preferredCurrency, fxRate, claudeApiKey, aiEnabled, aiModel])
 
   return {
     theme,
@@ -51,6 +76,12 @@ export function useUserPreferences(session: SupabaseSession | null) {
     setPreferredCurrency,
     fxRate,
     setFxRate,
+    claudeApiKey,
+    setClaudeApiKey,
+    aiEnabled,
+    setAiEnabled,
+    aiModel,
+    setAiModel,
     markPrefsLoaded: () => {
       prefsLoadedRef.current = true
     },

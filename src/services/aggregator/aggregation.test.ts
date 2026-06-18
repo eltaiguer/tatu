@@ -135,13 +135,13 @@ describe('Aggregation - totals', () => {
         amount: 20,
         type: 'debit',
         currency: 'USD',
-        category: Category.Transfer,
+        category: Category.InternalTransfer,
       }),
       makeTransaction('tx-2', {
         amount: 20,
         type: 'credit',
         currency: 'USD',
-        category: Category.Transfer,
+        category: Category.InternalTransfer,
       }),
       makeTransaction('tx-3', {
         amount: 5,

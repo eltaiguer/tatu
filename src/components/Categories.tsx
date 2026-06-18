@@ -6,7 +6,10 @@ import { Badge } from './ui/badge'
 import { Checkbox } from './ui/checkbox'
 import type { Transaction } from '../models'
 import { Category } from '../models'
-import { getCategoryDefinitions } from '../services/categories/category-registry'
+import {
+  getCategoryDefinition,
+  getCategoryDefinitions,
+} from '../services/categories/category-registry'
 import {
   addCustomCategoryWithSync,
   removeCustomCategoryWithSync,
@@ -18,6 +21,7 @@ import {
   addCustomPattern,
   listCustomPatterns,
   removeCustomPattern,
+  testPattern,
   type MatchType,
 } from '../services/categorizer/custom-patterns'
 
@@ -54,13 +58,12 @@ export function Categories({ transactions }: CategoriesProps) {
     pattern: '',
     matchType: 'contains' as MatchType,
     category: Category.Groceries as string,
+    description: '',
+    applyScope: 'future_only' as 'future_only' | 'past_and_future',
   })
 
   const categoryDefinitions = getCategoryDefinitions()
   const isEditing = form.id.length > 0
-  const isEditingBuiltin =
-    isEditing &&
-    !categoryDefinitions.find((c) => c.id === form.id)?.isCustom
 
   function resetForm() {
     setForm({ id: '', label: '', color: '#0ea5e9', icon: '🏷️', isIgnored: false })
@@ -94,6 +97,7 @@ export function Categories({ transactions }: CategoriesProps) {
         await upsertBuiltinOverrideWithSync(form.id, {
           label: form.label.trim(),
           color: form.color,
+          icon: form.icon.trim() || undefined,
           isIgnored: form.isIgnored,
         })
       }
@@ -115,14 +119,69 @@ export function Categories({ transactions }: CategoriesProps) {
     setCategoriesVersion((v) => v + 1)
   }
 
-  function handleAddPattern() {
+  async function handleAddPattern() {
     if (!patternForm.pattern.trim()) return
-    addCustomPattern({
+    const newPattern = addCustomPattern({
       pattern: patternForm.pattern,
       matchType: patternForm.matchType,
       category: patternForm.category,
+      description: patternForm.description.trim() || undefined,
     })
-    setPatternForm({ pattern: '', matchType: 'contains', category: Category.Groceries })
+
+    if (patternForm.applyScope === 'past_and_future') {
+      const matching = transactions.filter((tx) =>
+        testPattern(tx.description, newPattern)
+      )
+      if (matching.length > 0) {
+        void import('../services/supabase/runtime')
+          .then(({ getActiveSupabaseSession }) => {
+            const session = getActiveSupabaseSession()
+            if (!session) return
+            return import('../services/supabase/transactions').then(
+              ({ updateRemoteTransaction }) =>
+                Promise.all(
+                  matching.map((tx) =>
+                    updateRemoteTransaction(session, tx.id, {
+                      category: newPattern.category,
+                      categoryConfidence: 0.95,
+                      ...(newPattern.description
+                        ? { displayDescription: newPattern.description }
+                        : {}),
+                    })
+                  )
+                )
+            )
+          })
+          .catch(console.error)
+
+        void import('../stores/transaction-store').then(
+          ({ transactionStore }) => {
+            const state = transactionStore.getState()
+            state.setTransactions(
+              state.transactions.map((tx) => {
+                if (!testPattern(tx.description, newPattern)) return tx
+                return {
+                  ...tx,
+                  category: newPattern.category,
+                  categoryConfidence: 0.95 as const,
+                  ...(newPattern.description
+                    ? { displayDescription: newPattern.description }
+                    : {}),
+                }
+              })
+            )
+          }
+        )
+      }
+    }
+
+    setPatternForm({
+      pattern: '',
+      matchType: 'contains',
+      category: Category.Groceries,
+      description: '',
+      applyScope: 'future_only',
+    })
     setCustomPatterns(listCustomPatterns())
   }
 
@@ -222,7 +281,7 @@ export function Categories({ transactions }: CategoriesProps) {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: isEditingBuiltin ? '1fr 120px' : '1fr 120px 120px', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: 12, marginBottom: 16 }}>
             <div>
               <label
                 htmlFor="cat-label"
@@ -254,24 +313,22 @@ export function Categories({ transactions }: CategoriesProps) {
                 className="h-10"
               />
             </div>
-            {!isEditingBuiltin && (
-              <div>
-                <label
-                  htmlFor="cat-icon"
-                  style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
-                >
-                  Icono
-                </label>
-                <Input
-                  id="cat-icon"
-                  aria-label="Icono de categoría"
-                  value={form.icon}
-                  onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
-                  placeholder="🏷️"
-                  maxLength={2}
-                />
-              </div>
-            )}
+            <div>
+              <label
+                htmlFor="cat-icon"
+                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+              >
+                Icono
+              </label>
+              <Input
+                id="cat-icon"
+                aria-label="Icono de categoría"
+                value={form.icon}
+                onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
+                placeholder="🏷️"
+                maxLength={2}
+              />
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
@@ -451,108 +508,187 @@ export function Categories({ transactions }: CategoriesProps) {
         </p>
 
         {/* Add pattern form */}
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 10,
-            marginBottom: 16,
-            alignItems: 'flex-end',
-          }}
-        >
-          <div style={{ flex: '1 1 auto', minWidth: 160 }}>
-            <label
-              htmlFor="pattern-text"
-              style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
-            >
-              Patrón
-            </label>
-            <Input
-              id="pattern-text"
-              value={patternForm.pattern}
-              onChange={(e) =>
-                setPatternForm((p) => ({ ...p, pattern: e.target.value }))
-              }
-              placeholder='Ej. "farmacia"'
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="pattern-match"
-              style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
-            >
-              Tipo
-            </label>
-            <select
-              id="pattern-match"
-              value={patternForm.matchType}
-              onChange={(e) =>
-                setPatternForm((p) => ({
-                  ...p,
-                  matchType: e.target.value as MatchType,
-                }))
-              }
-              style={{
-                padding: '8px 10px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border)',
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                fontSize: 13,
-                height: 40,
-              }}
-            >
-              <option value="contains">Contiene</option>
-              <option value="starts_with">Empieza con</option>
-              <option value="exact">Exacto</option>
-            </select>
-          </div>
-          <div>
-            <label
-              htmlFor="pattern-category"
-              style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
-            >
-              Categoría
-            </label>
-            <select
-              id="pattern-category"
-              value={patternForm.category}
-              onChange={(e) =>
-                setPatternForm((p) => ({ ...p, category: e.target.value }))
-              }
-              style={{
-                padding: '8px 10px',
-                borderRadius: 'var(--radius-sm)',
-                border: '1px solid var(--border)',
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                fontSize: 13,
-                height: 40,
-              }}
-            >
-              {getCategoryDefinitions()
-                .filter((c) => c.id !== Category.Uncategorized)
-                .map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.icon} {cat.label}
-                  </option>
-                ))}
-            </select>
-          </div>
-          <Button
-            onClick={handleAddPattern}
-            disabled={!patternForm.pattern.trim()}
-            aria-label="Agregar regla"
-            style={{ height: 40 }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+          {/* Row 1: pattern + type + category */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 10,
+              alignItems: 'flex-end',
+            }}
           >
-            <Plus size={15} />
-          </Button>
+            <div style={{ flex: '1 1 auto', minWidth: 160 }}>
+              <label
+                htmlFor="pattern-text"
+                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+              >
+                Patrón
+              </label>
+              <Input
+                id="pattern-text"
+                value={patternForm.pattern}
+                onChange={(e) =>
+                  setPatternForm((p) => ({ ...p, pattern: e.target.value }))
+                }
+                placeholder='Ej. "farmacia"'
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="pattern-match"
+                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+              >
+                Tipo
+              </label>
+              <select
+                id="pattern-match"
+                value={patternForm.matchType}
+                onChange={(e) =>
+                  setPatternForm((p) => ({
+                    ...p,
+                    matchType: e.target.value as MatchType,
+                  }))
+                }
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  fontSize: 13,
+                  height: 40,
+                }}
+              >
+                <option value="contains">Contiene</option>
+                <option value="starts_with">Empieza con</option>
+                <option value="exact">Exacto</option>
+              </select>
+            </div>
+            <div>
+              <label
+                htmlFor="pattern-category"
+                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+              >
+                Categoría
+              </label>
+              <select
+                id="pattern-category"
+                value={patternForm.category}
+                onChange={(e) =>
+                  setPatternForm((p) => ({ ...p, category: e.target.value }))
+                }
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  fontSize: 13,
+                  height: 40,
+                }}
+              >
+                {getCategoryDefinitions()
+                  .filter((c) => c.id !== Category.Uncategorized)
+                  .map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.icon} {cat.label}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Row 2: description + apply scope + add button */}
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 10,
+              alignItems: 'flex-end',
+            }}
+          >
+            <div style={{ flex: '1 1 auto', minWidth: 160 }}>
+              <label
+                htmlFor="pattern-description"
+                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+              >
+                Descripción (opcional)
+              </label>
+              <Input
+                id="pattern-description"
+                value={patternForm.description}
+                onChange={(e) =>
+                  setPatternForm((p) => ({ ...p, description: e.target.value }))
+                }
+                placeholder='Ej. "Farmacia Del Sol"'
+              />
+            </div>
+            <div>
+              <label
+                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+              >
+                Aplicar a
+              </label>
+              <div
+                style={{
+                  display: 'flex',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
+                  height: 40,
+                }}
+              >
+                {(
+                  [
+                    { value: 'future_only', label: 'Solo futuras' },
+                    { value: 'past_and_future', label: 'Pasadas y futuras' },
+                  ] as const
+                ).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() =>
+                      setPatternForm((p) => ({ ...p, applyScope: value }))
+                    }
+                    style={{
+                      padding: '0 12px',
+                      fontSize: 13,
+                      cursor: 'pointer',
+                      border: 'none',
+                      borderRight: value === 'future_only' ? '1px solid var(--border)' : 'none',
+                      background:
+                        patternForm.applyScope === value
+                          ? 'var(--brand)'
+                          : 'var(--surface)',
+                      color:
+                        patternForm.applyScope === value
+                          ? '#fff'
+                          : 'var(--text)',
+                      fontWeight: patternForm.applyScope === value ? 600 : 400,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Button
+              onClick={handleAddPattern}
+              disabled={!patternForm.pattern.trim()}
+              aria-label="Agregar regla"
+              style={{ height: 40 }}
+            >
+              <Plus size={15} />
+            </Button>
+          </div>
         </div>
 
         {customPatterns.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {customPatterns.map((cp) => {
-              const catDisplay = getCategoryDisplay(cp.category)
+              const catDisplay = getCategoryDefinition(cp.category)
               const matchLabel =
                 cp.matchType === 'contains'
                   ? 'contiene'
@@ -604,6 +740,19 @@ export function Categories({ transactions }: CategoriesProps) {
                     >
                       {catDisplay.icon} {catDisplay.label}
                     </Badge>
+                    {cp.description && (
+                      <span
+                        style={{
+                          fontSize: 12,
+                          color: 'var(--text-faint)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        · &quot;{cp.description}&quot;
+                      </span>
+                    )}
                   </div>
                   <button
                     onClick={() => handleRemovePattern(cp.id)}

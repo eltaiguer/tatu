@@ -39,8 +39,8 @@ describe('Category System', () => {
       expect(Category.Income).toBe('income')
     })
 
-    it('should have Transfer category', () => {
-      expect(Category.Transfer).toBe('transfer')
+    it('should have InternalTransfer category', () => {
+      expect(Category.InternalTransfer).toBe('internal_transfer')
     })
 
     it('should have Fees category', () => {
@@ -144,7 +144,7 @@ describe('Category System', () => {
 
       expenseCategories.forEach((category) => {
         expect(category).not.toBe(Category.Income)
-        expect(category).not.toBe(Category.Transfer)
+        expect(category).not.toBe(Category.InternalTransfer)
       })
     })
 
@@ -153,7 +153,7 @@ describe('Category System', () => {
     })
 
     it('should identify transfer category', () => {
-      expect(Category.Transfer).toBe('transfer')
+      expect(Category.InternalTransfer).toBe('internal_transfer')
     })
   })
 })

@@ -159,7 +159,7 @@ function parseTransactions(
       (currency === 'UYU' && pesosAmount < 0)
 
     // Auto-categorize based on transaction details
-    const { category, confidence } = categorizeTransaction(
+    const { category, confidence, description: patternDescription } = categorizeTransaction(
       rawTransaction.descripcion,
       isCredit ? 'credit' : 'debit'
     )
@@ -173,6 +173,7 @@ function parseTransactions(
       ),
       date: parseSantanderDate(rawTransaction.fecha),
       description: rawTransaction.descripcion,
+      displayDescription: patternDescription,
       amount,
       currency,
       type: isCredit ? 'credit' : 'debit',

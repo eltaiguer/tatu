@@ -35,6 +35,7 @@ import { replaceCustomCategories } from './services/categories/category-store'
 import { replaceCustomPatterns } from './services/categorizer/custom-patterns'
 import { resetUserSupabaseData } from './services/supabase/reset'
 import { useUserPreferences } from './hooks/useUserPreferences'
+import { setAiConfig } from './services/ai/ai-config'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useTransactionSync } from './hooks/useTransactionSync'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
@@ -77,6 +78,12 @@ function App() {
     setPreferredCurrency,
     fxRate,
     setFxRate,
+    claudeApiKey,
+    setClaudeApiKey,
+    aiEnabled,
+    setAiEnabled,
+    aiModel,
+    setAiModel,
     markPrefsLoaded,
     resetPrefsLoaded,
   } = useUserPreferences(session)
@@ -90,6 +97,9 @@ function App() {
     setTheme,
     setPreferredCurrency,
     setFxRate,
+    setClaudeApiKey,
+    setAiEnabled,
+    setAiModel,
   })
 
   async function handleSignOut() {
@@ -104,6 +114,7 @@ function App() {
       clearAllCategoryOverrides()
       clearAllDescriptionOverrides()
       replaceCustomPatterns([])
+      setAiConfig(null)
       setTheme('auto')
       setPreferredCurrency('USD')
       setFxRate(40.5)
@@ -127,6 +138,7 @@ function App() {
     clearAllDescriptionOverrides()
     replaceCustomPatterns([])
     replaceCustomCategories([])
+    setAiConfig(null)
     setTheme('auto')
     setPreferredCurrency('USD')
     setFxRate(40.5)
@@ -392,6 +404,12 @@ function App() {
                 }}
                 transactions={transactions}
                 onResetAllData={handleResetAllData}
+                claudeApiKey={claudeApiKey}
+                onSetClaudeApiKey={setClaudeApiKey}
+                aiEnabled={aiEnabled}
+                onSetAiEnabled={setAiEnabled}
+                aiModel={aiModel}
+                onSetAiModel={setAiModel}
               />
             )}
         </div>

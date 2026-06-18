@@ -10,10 +10,12 @@ import {
   listMerchantCategoryOverrides,
   clearMerchantCategoryOverrideWithSync,
   setMerchantCategoryOverrideWithSync,
+  getMerchantCategoryOverride,
 } from '../services/categorizer/category-overrides'
 import {
   clearDescriptionOverrideWithSync,
   setDescriptionOverrideWithSync,
+  getDescriptionOverride,
 } from '../services/descriptions/description-overrides'
 import { buildDescriptionOverrideKey } from '../services/descriptions/normalization'
 import {
@@ -27,6 +29,14 @@ import {
   type CategorizationContext,
 } from '../services/categorizer/transaction-categorizer'
 import { analyzeTemporalPatterns } from '../services/categorizer/temporal-patterns'
+import { normalizeMerchantName } from '../services/categorizer/merchant-patterns'
+
+import {
+  getAiConfig,
+  enrichTransactionsWithAi,
+  applyAiEnrichment,
+} from '../services/ai'
+import { buildCorrectionContext } from '../services/ai/correction-context'
 
 export function useTransactionHandlers({
   session,
@@ -68,11 +78,45 @@ export function useTransactionHandlers({
       duplicateIds.has(tx.id)
     )
 
+    const aiConfig = getAiConfig()
+    let toStore = added
+
+    if (aiConfig?.enabled && aiConfig.apiKey && added.length > 0) {
+      const toEnrich = added.filter((tx) => {
+        const hasDescOverride = !!getDescriptionOverride(tx.description)
+        const hasCatOverride = !!getMerchantCategoryOverride(
+          normalizeMerchantName(tx.description)
+        )
+        return !hasDescOverride && !hasCatOverride
+      })
+
+      if (toEnrich.length > 0) {
+        try {
+          const correctionContext = buildCorrectionContext()
+          const results = await enrichTransactionsWithAi(
+            toEnrich.map((tx) => ({
+              id: tx.id,
+              description: tx.description,
+              type: tx.type,
+              amount: tx.amount,
+              currency: tx.currency,
+              source: tx.source,
+            })),
+            aiConfig,
+            correctionContext
+          )
+          toStore = applyAiEnrichment(added, results)
+        } catch {
+          // AI failed — fall through with rule-based results already on transactions
+        }
+      }
+    }
+
     try {
-      await persistTransactions(session, added, {
+      await persistTransactions(session, toStore, {
         importId: importRunId ?? undefined,
       })
-      state.addTransactions(added)
+      state.addTransactions(toStore)
 
       if (importRunId) {
         await completeImportRun(session, importRunId, {

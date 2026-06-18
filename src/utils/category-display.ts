@@ -19,9 +19,9 @@ export type CategoryIconName =
   | 'personal'
   | 'insurance'
   | 'income'
-  | 'transfer'
+  | 'internal_transfer'
+  | 'external_transfer'
   | 'fees'
-  | 'ignored'
   | 'uncategorized';
 
 export interface CategoryDisplay {
@@ -46,9 +46,9 @@ const MODERN_META: Record<Category, { icon: CategoryIconName }> = {
   [Category.Personal]: { icon: 'personal' },
   [Category.Insurance]: { icon: 'insurance' },
   [Category.Income]: { icon: 'income' },
-  [Category.Transfer]: { icon: 'transfer' },
+  [Category.InternalTransfer]: { icon: 'internal_transfer' },
+  [Category.ExternalTransfer]: { icon: 'external_transfer' },
   [Category.Fees]: { icon: 'fees' },
-  [Category.Ignored]: { icon: 'ignored' },
   [Category.Uncategorized]: { icon: 'uncategorized' },
 };
 
@@ -84,6 +84,16 @@ export function getCategoryDisplay(categoryId?: string | null): CategoryDisplay 
       color: def.color,
       icon: MODERN_META[modernId].icon,
     };
+  }
+
+  const customDef = getCategoryDefinition(normalizedId)
+  if (customDef.isCustom) {
+    return {
+      id: normalizedId,
+      label: customDef.label,
+      color: customDef.color,
+      icon: MODERN_META[Category.Uncategorized].icon,
+    }
   }
 
   return {

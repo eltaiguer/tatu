@@ -73,7 +73,18 @@ function canAutoAssignTransfer(transaction: Transaction): boolean {
 function markTransfer(transaction: Transaction, confidence: number): Transaction {
   return {
     ...transaction,
-    category: Category.Transfer,
+    category: Category.InternalTransfer,
+    categoryConfidence: Math.max(transaction.categoryConfidence ?? 0, confidence),
+  }
+}
+
+function markExternalTransfer(
+  transaction: Transaction,
+  confidence: number
+): Transaction {
+  return {
+    ...transaction,
+    category: Category.ExternalTransfer,
     categoryConfidence: Math.max(transaction.categoryConfidence ?? 0, confidence),
   }
 }
@@ -84,7 +95,8 @@ function dayDistance(left: Date, right: Date): number {
 }
 
 export function isTransferCategory(category: string | undefined): boolean {
-  return normalizeText(category) === Category.Transfer
+  const c = normalizeText(category)
+  return c === Category.InternalTransfer || c === Category.ExternalTransfer
 }
 
 /**
@@ -97,25 +109,28 @@ export function inferInternalTransfers(transactions: Transaction[]): Transaction
   const pairedIds = new Set<string>()
 
   next.forEach((transaction) => {
-    // Only speculatively mark debit transactions as Transfer in the first pass.
-    // Credits are handled by the pairing pass below so that unpaired incoming
-    // transfers from external parties are not mistakenly excluded from income.
+    // Only speculatively mark debit transactions in the first pass.
+    // Credits are handled by the pairing pass so that unpaired incoming
+    // transfers from external parties are not excluded from income.
     if (
       canAutoAssignTransfer(transaction) &&
       transaction.type !== 'credit' &&
-      isTransferDescription(transaction.description) &&
-      !hasExternalBeneficiary(transaction.description)
+      isTransferDescription(transaction.description)
     ) {
-      byId.set(transaction.id, markTransfer(transaction, 0.9))
+      if (hasExternalBeneficiary(transaction.description)) {
+        byId.set(transaction.id, markExternalTransfer(transaction, 0.9))
+      } else {
+        byId.set(transaction.id, markTransfer(transaction, 0.9))
+      }
     }
   })
 
   const candidates = next.filter(
     (transaction) =>
-      isBankTransaction(transaction) &&
       !hasExternalBeneficiary(transaction.description) &&
       (isTransferCategory(transaction.category) ||
-        isTransferDescription(transaction.description))
+        (isBankTransaction(transaction) &&
+          isTransferDescription(transaction.description)))
   )
 
   for (const left of candidates) {

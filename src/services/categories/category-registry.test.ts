@@ -41,13 +41,7 @@ describe('getCategoryDefinitions', () => {
     }
   })
 
-  it('marks built-in Ignored category as isIgnored', () => {
-    const defs = getCategoryDefinitions()
-    const ignored = defs.find((d) => d.id === Category.Ignored)
-    expect(ignored?.isIgnored).toBe(true)
-  })
-
-  it('marks other built-in categories as not ignored', () => {
+  it('marks built-in categories as not ignored by default', () => {
     const defs = getCategoryDefinitions()
     const groceries = defs.find((d) => d.id === Category.Groceries)
     expect(groceries?.isIgnored).toBe(false)
@@ -110,6 +104,26 @@ describe('getCategoryDefinitions', () => {
     const defs = getCategoryDefinitions()
     const shopping = defs.find((d) => d.id === Category.Shopping)
     expect(shopping?.isIgnored).toBe(true)
+  })
+
+  it('uses override icon when a built-in category has a custom icon override', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: Category.Groceries, label: 'Comida', color: '#ff0000', icon: '🛒✨' },
+    ])
+
+    const defs = getCategoryDefinitions()
+    const groceries = defs.find((d) => d.id === Category.Groceries)
+    expect(groceries?.icon).toBe('🛒✨')
+  })
+
+  it('falls back to built-in icon when override has no icon', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: Category.Groceries, label: 'Comida', color: '#ff0000' },
+    ])
+
+    const defs = getCategoryDefinitions()
+    const groceries = defs.find((d) => d.id === Category.Groceries)
+    expect(groceries?.icon).toBe('🛒')
   })
 })
 
@@ -174,6 +188,24 @@ describe('getCategoryDefinition', () => {
     expect(def.isOverridden).toBe(true)
   })
 
+  it('uses override icon for a built-in when override has an icon', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: Category.InternalTransfer, label: 'Mis transferencias', color: '#0000ff', icon: '💼' },
+    ])
+
+    const def = getCategoryDefinition(Category.InternalTransfer)
+    expect(def.icon).toBe('💼')
+  })
+
+  it('falls back to built-in icon for a built-in override with no icon', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: Category.InternalTransfer, label: 'Mis transferencias', color: '#0000ff' },
+    ])
+
+    const def = getCategoryDefinition(Category.InternalTransfer)
+    expect(def.icon).toBe('↔️')
+  })
+
   it('returns a custom category definition when found', () => {
     listCustomCategoriesMock.mockReturnValue([
       { id: 'my-custom', label: 'Mi categoría', color: '#ff0000' },
@@ -190,11 +222,11 @@ describe('isCategoryIgnored', () => {
     listCustomCategoriesMock.mockReturnValue([])
   })
 
-  it('returns true for the built-in Ignored category', () => {
-    expect(isCategoryIgnored(Category.Ignored)).toBe(true)
+  it('returns true for legacy ignored string (backward compat)', () => {
+    expect(isCategoryIgnored('ignored')).toBe(true)
   })
 
-  it('returns false for other built-in categories', () => {
+  it('returns false for built-in categories', () => {
     expect(isCategoryIgnored(Category.Groceries)).toBe(false)
     expect(isCategoryIgnored(Category.Income)).toBe(false)
   })

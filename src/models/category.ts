@@ -24,9 +24,9 @@ export enum Category {
 
   // Special categories
   Income = 'income',
-  Transfer = 'transfer',
+  InternalTransfer = 'internal_transfer',
+  ExternalTransfer = 'external_transfer',
   Fees = 'fees',
-  Ignored = 'ignored',
 
   // Default
   Uncategorized = 'uncategorized',
@@ -50,9 +50,9 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   [Category.Personal]: 'Personal',
   [Category.Insurance]: 'Seguros',
   [Category.Income]: 'Ingresos',
-  [Category.Transfer]: 'Transferencias',
+  [Category.InternalTransfer]: 'Transferencias internas',
+  [Category.ExternalTransfer]: 'Transferencias externas',
   [Category.Fees]: 'Comisiones',
-  [Category.Ignored]: 'Ignorada',
   [Category.Uncategorized]: 'Sin categoría',
 }
 
@@ -74,9 +74,9 @@ export const CATEGORY_ICONS: Record<Category, string> = {
   [Category.Personal]: '💇',
   [Category.Insurance]: '🛡️',
   [Category.Income]: '💰',
-  [Category.Transfer]: '💸',
+  [Category.InternalTransfer]: '↔️',
+  [Category.ExternalTransfer]: '💸',
   [Category.Fees]: '💳',
-  [Category.Ignored]: '🚫',
   [Category.Uncategorized]: '❓',
 }
 
@@ -98,9 +98,9 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   [Category.Personal]: '#f43f5e',
   [Category.Insurance]: '#10b981',
   [Category.Income]: '#16a34a',
-  [Category.Transfer]: '#0284c7',
+  [Category.InternalTransfer]: '#0284c7',
+  [Category.ExternalTransfer]: '#7c3aed',
   [Category.Fees]: '#fb7185',
-  [Category.Ignored]: '#94a3b8',
   [Category.Uncategorized]: '#94a3b8',
 }
 

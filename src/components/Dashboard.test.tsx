@@ -94,7 +94,7 @@ describe('Dashboard', () => {
         currency: 'USD',
         type: 'debit',
         amount: 100,
-        category: Category.Transfer,
+        category: Category.InternalTransfer,
       }),
     ]
 

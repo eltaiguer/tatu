@@ -80,4 +80,26 @@ describe('getCategoryDisplay', () => {
     expect(result.label).toBe('Transporte')
     expect(result.icon).toBe('transport')
   })
+
+  it('returns correct label and color for a custom (non-built-in) category', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: 'transferencias-internas', label: 'Transferencias internas', color: '#0284c7' },
+    ])
+
+    const result = getCategoryDisplay('transferencias-internas')
+
+    expect(result.id).toBe('transferencias-internas')
+    expect(result.label).toBe('Transferencias internas')
+    expect(result.color).toBe('#0284c7')
+    expect(result.icon).toBe('uncategorized')
+  })
+
+  it('still humanizes label for truly unknown ids not in custom store', () => {
+    listCustomCategoriesMock.mockReturnValue([])
+
+    const result = getCategoryDisplay('home_office')
+
+    expect(result.label).toBe('Home office')
+    expect(result.icon).toBe('uncategorized')
+  })
 })

@@ -7,6 +7,7 @@ export interface CustomPattern {
   pattern: string
   matchType: MatchType
   category: string
+  description?: string
   createdAt: string
 }
 
@@ -67,6 +68,26 @@ export function clearAllCustomPatterns(): void {
   patterns = []
 }
 
+export function testPattern(
+  description: string,
+  pattern: CustomPattern
+): boolean {
+  const normalized = normalizeMerchantName(description)
+  if (!normalized) return false
+
+  const normalizedPattern = normalizeMerchantName(pattern.pattern)
+  if (!normalizedPattern) return false
+
+  switch (pattern.matchType) {
+    case 'contains':
+      return normalized.includes(normalizedPattern)
+    case 'starts_with':
+      return normalized.startsWith(normalizedPattern)
+    case 'exact':
+      return normalized === normalizedPattern
+  }
+}
+
 export function matchCustomPattern(
   description: string
 ): PatternMatch | null {
@@ -96,6 +117,7 @@ export function matchCustomPattern(
         category: custom.category as PatternMatch['category'],
         confidence: 0.95,
         matchedPattern: `custom:${custom.pattern}(${custom.matchType})`,
+        description: custom.description,
       }
     }
   }
