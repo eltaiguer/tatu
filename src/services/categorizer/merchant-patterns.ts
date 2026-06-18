@@ -8,6 +8,7 @@ export interface PatternMatch {
   category: Category
   confidence: number
   matchedPattern?: string
+  description?: string
 }
 
 /**

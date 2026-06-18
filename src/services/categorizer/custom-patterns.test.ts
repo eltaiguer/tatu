@@ -7,6 +7,7 @@ import {
   matchCustomPattern,
   removeCustomPattern,
   replaceCustomPatterns,
+  testPattern,
 } from './custom-patterns'
 
 const { getActiveSupabaseSessionMock, upsertCustomPatternMock, deleteCustomPatternMock } =
@@ -199,6 +200,31 @@ describe('Custom Patterns', () => {
       expect(matchCustomPattern('Devoto Supermercado')).toBeNull()
     })
 
+    it('returns description when pattern has one', () => {
+      addCustomPattern({
+        pattern: 'farmacia del sol',
+        matchType: 'contains',
+        category: Category.Healthcare,
+        description: 'Farmacia Del Sol',
+      })
+
+      const result = matchCustomPattern('COMPRA FARMACIA DEL SOL 01/12')
+      expect(result).not.toBeNull()
+      expect(result!.description).toBe('Farmacia Del Sol')
+    })
+
+    it('returns undefined description when pattern has none', () => {
+      addCustomPattern({
+        pattern: 'farmacia',
+        matchType: 'contains',
+        category: Category.Healthcare,
+      })
+
+      const result = matchCustomPattern('Farmacia del Sol')
+      expect(result).not.toBeNull()
+      expect(result!.description).toBeUndefined()
+    })
+
     it('should return null for empty description', () => {
       expect(matchCustomPattern('')).toBeNull()
     })
@@ -214,6 +240,47 @@ describe('Custom Patterns', () => {
 
       removeCustomPattern(added.id)
       expect(matchCustomPattern('Farmacia Sol')).toBeNull()
+    })
+  })
+
+  describe('testPattern', () => {
+    it('matches contains type', () => {
+      const pattern = addCustomPattern({
+        pattern: 'farmacia',
+        matchType: 'contains',
+        category: Category.Healthcare,
+      })
+      expect(testPattern('FARMACIA DEL SOL', pattern)).toBe(true)
+      expect(testPattern('Devoto Supermercado', pattern)).toBe(false)
+    })
+
+    it('matches starts_with type', () => {
+      const pattern = addCustomPattern({
+        pattern: 'taxi',
+        matchType: 'starts_with',
+        category: Category.Transport,
+      })
+      expect(testPattern('Taxi Express', pattern)).toBe(true)
+      expect(testPattern('My Taxi', pattern)).toBe(false)
+    })
+
+    it('matches exact type', () => {
+      const pattern = addCustomPattern({
+        pattern: 'spotify',
+        matchType: 'exact',
+        category: Category.Entertainment,
+      })
+      expect(testPattern('Spotify', pattern)).toBe(true)
+      expect(testPattern('Spotify Premium', pattern)).toBe(false)
+    })
+
+    it('returns false for empty description', () => {
+      const pattern = addCustomPattern({
+        pattern: 'farmacia',
+        matchType: 'contains',
+        category: Category.Healthcare,
+      })
+      expect(testPattern('', pattern)).toBe(false)
     })
   })
 })

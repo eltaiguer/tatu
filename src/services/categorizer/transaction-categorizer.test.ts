@@ -336,4 +336,34 @@ describe('Transaction Categorizer', () => {
       expect(result.category).toBe(Category.Uncategorized)
     })
   })
+
+  it('passes through description from a custom pattern', () => {
+    addCustomPattern({
+      pattern: 'farmacia del sol',
+      matchType: 'contains',
+      category: Category.Healthcare,
+      description: 'Farmacia Del Sol',
+    })
+
+    const result = categorizeTransaction(
+      'COMPRA FARMACIA DEL SOL 01/12 REF:1234',
+      'debit'
+    )
+
+    expect(result.category).toBe(Category.Healthcare)
+    expect(result.description).toBe('Farmacia Del Sol')
+  })
+
+  it('returns no description when custom pattern has none', () => {
+    addCustomPattern({
+      pattern: 'farmacia',
+      matchType: 'contains',
+      category: Category.Healthcare,
+    })
+
+    const result = categorizeTransaction('Farmacia Cruz Verde', 'debit')
+
+    expect(result.category).toBe(Category.Healthcare)
+    expect(result.description).toBeUndefined()
+  })
 })

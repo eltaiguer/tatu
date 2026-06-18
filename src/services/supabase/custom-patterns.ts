@@ -7,6 +7,7 @@ interface CustomPatternRow {
   pattern: string
   match_type: string
   category: string
+  description: string | null
   created_at: string
 }
 
@@ -16,6 +17,7 @@ function rowToPattern(row: CustomPatternRow): CustomPattern {
     pattern: row.pattern,
     matchType: row.match_type as CustomPattern['matchType'],
     category: row.category,
+    description: row.description ?? undefined,
     createdAt: row.created_at,
   }
 }
@@ -49,6 +51,7 @@ export async function upsertCustomPattern(
       pattern: pattern.pattern,
       match_type: pattern.matchType,
       category: pattern.category,
+      description: pattern.description ?? null,
       created_at: pattern.createdAt,
     },
     { onConflict: 'user_id,id' }

@@ -155,7 +155,7 @@ function parseTransactions(
       .trim()
 
     // Auto-categorize based on transaction details
-    const { category, confidence } = categorizeTransaction(description, type)
+    const { category, confidence, description: patternDescription } = categorizeTransaction(description, type)
 
     const transaction: Transaction = {
       id: generateTransactionId(
@@ -166,6 +166,7 @@ function parseTransactions(
       ),
       date: parseSantanderDate(rawTransaction.fecha),
       description,
+      displayDescription: patternDescription,
       amount,
       currency,
       type,

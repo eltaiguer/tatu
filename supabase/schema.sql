@@ -168,6 +168,7 @@ create table if not exists public.custom_patterns (
   pattern text not null check (length(pattern) > 0),
   match_type text not null check (match_type in ('contains', 'starts_with', 'exact')),
   category text not null,
+  description text,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now()),
   primary key (user_id, id)

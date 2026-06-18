@@ -98,6 +98,7 @@ export function categorizeTransaction(
 ): {
   category: string
   confidence: number
+  description?: string
 } {
   const normalized = normalizeMerchantName(description)
 
@@ -132,6 +133,7 @@ export function categorizeTransaction(
     return {
       category: customMatch.category,
       confidence: customMatch.confidence,
+      description: customMatch.description,
     }
   }
 
