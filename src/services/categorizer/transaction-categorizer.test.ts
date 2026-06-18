@@ -44,7 +44,7 @@ describe('Transaction Categorizer', () => {
       'debit'
     )
 
-    expect(result.category).toBe(Category.Transfer)
+    expect(result.category).toBe(Category.InternalTransfer)
     expect(result.confidence).toBeGreaterThanOrEqual(0.85)
   })
 
@@ -54,7 +54,7 @@ describe('Transaction Categorizer', () => {
       'debit'
     )
 
-    expect(result.category).toBe(Category.Transfer)
+    expect(result.category).toBe(Category.InternalTransfer)
   })
 
   it('does not auto-Transfer incoming supernet credits — pairing is handled by inferInternalTransfers', () => {
@@ -66,7 +66,7 @@ describe('Transaction Categorizer', () => {
       'credit'
     )
 
-    expect(result.category).not.toBe(Category.Transfer)
+    expect(result.category).not.toBe(Category.InternalTransfer)
   })
 
   it('should categorize cash withdrawals as transfers', () => {
@@ -75,7 +75,7 @@ describe('Transaction Categorizer', () => {
       'debit'
     )
 
-    expect(result.category).toBe(Category.Transfer)
+    expect(result.category).toBe(Category.InternalTransfer)
   })
 
   it('does not auto-Transfer incoming bank transfers (recibida) — they are income', () => {
@@ -86,7 +86,7 @@ describe('Transaction Categorizer', () => {
       'credit'
     )
 
-    expect(result.category).not.toBe(Category.Transfer)
+    expect(result.category).not.toBe(Category.InternalTransfer)
   })
 
   it('does not auto-Transfer TRANSFERENCIA RECIBIDA credits', () => {
@@ -95,7 +95,7 @@ describe('Transaction Categorizer', () => {
       'credit'
     )
 
-    expect(result.category).not.toBe(Category.Transfer)
+    expect(result.category).not.toBe(Category.InternalTransfer)
   })
 
   it('does not auto-Transfer CREDITO POR OPERACION EN SUPERNET with external beneficiary name', () => {
@@ -104,7 +104,7 @@ describe('Transaction Categorizer', () => {
       'credit'
     )
 
-    expect(result.category).not.toBe(Category.Transfer)
+    expect(result.category).not.toBe(Category.InternalTransfer)
   })
 
   it('still categorizes outgoing transfers (enviada) as Transfer', () => {
@@ -113,7 +113,7 @@ describe('Transaction Categorizer', () => {
       'debit'
     )
 
-    expect(result.category).toBe(Category.Transfer)
+    expect(result.category).toBe(Category.InternalTransfer)
   })
 
   it('should not categorize TRF. PLAZA- NAME transfers as Transfer', () => {
@@ -122,7 +122,7 @@ describe('Transaction Categorizer', () => {
       'debit'
     )
 
-    expect(result.category).not.toBe(Category.Transfer)
+    expect(result.category).not.toBe(Category.InternalTransfer)
   })
 
   it('should not categorize DEBITO OPERACION EN BANCA DIGITAL TRF. PLAZA- NAME as Transfer', () => {
@@ -131,7 +131,7 @@ describe('Transaction Categorizer', () => {
       'debit'
     )
 
-    expect(result.category).not.toBe(Category.Transfer)
+    expect(result.category).not.toBe(Category.InternalTransfer)
   })
 
   it('should not categorize TRANSF INSTANTANEA ENVIADA NRR: NAME as Transfer', () => {
@@ -140,7 +140,7 @@ describe('Transaction Categorizer', () => {
       'debit'
     )
 
-    expect(result.category).not.toBe(Category.Transfer)
+    expect(result.category).not.toBe(Category.InternalTransfer)
   })
 
   it('should not categorize DEBITO OPERACION EN SUPERNET TRF. PLAZA- NAME as Transfer', () => {
@@ -149,7 +149,7 @@ describe('Transaction Categorizer', () => {
       'debit'
     )
 
-    expect(result.category).not.toBe(Category.Transfer)
+    expect(result.category).not.toBe(Category.InternalTransfer)
   })
 
   it('should still categorize TRF. PLAZA without a named recipient as Transfer', () => {
@@ -158,7 +158,7 @@ describe('Transaction Categorizer', () => {
       'debit'
     )
 
-    expect(result.category).toBe(Category.Transfer)
+    expect(result.category).toBe(Category.InternalTransfer)
   })
 
   it('should categorize income when credit matches income keywords', () => {

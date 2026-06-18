@@ -19,7 +19,8 @@ export type CategoryIconName =
   | 'personal'
   | 'insurance'
   | 'income'
-  | 'transfer'
+  | 'internal_transfer'
+  | 'external_transfer'
   | 'fees'
   | 'ignored'
   | 'uncategorized';
@@ -46,7 +47,8 @@ const MODERN_META: Record<Category, { icon: CategoryIconName }> = {
   [Category.Personal]: { icon: 'personal' },
   [Category.Insurance]: { icon: 'insurance' },
   [Category.Income]: { icon: 'income' },
-  [Category.Transfer]: { icon: 'transfer' },
+  [Category.InternalTransfer]: { icon: 'internal_transfer' },
+  [Category.ExternalTransfer]: { icon: 'external_transfer' },
   [Category.Fees]: { icon: 'fees' },
   [Category.Ignored]: { icon: 'ignored' },
   [Category.Uncategorized]: { icon: 'uncategorized' },

@@ -29,7 +29,7 @@ describe('internal transfer inference', () => {
       }),
     ])
 
-    expect(result[0].category).toBe(Category.Transfer)
+    expect(result[0].category).toBe(Category.InternalTransfer)
     expect((result[0].categoryConfidence ?? 0) > 0).toBe(true)
   })
 
@@ -51,7 +51,7 @@ describe('internal transfer inference', () => {
       }),
     ])
 
-    expect(result.every((tx) => tx.category === Category.Transfer)).toBe(true)
+    expect(result.every((tx) => tx.category === Category.InternalTransfer)).toBe(true)
   })
 
   it('does not override explicit non-transfer category with confidence 1', () => {
@@ -67,12 +67,13 @@ describe('internal transfer inference', () => {
   })
 
   it('checks transfer category helper', () => {
-    expect(isTransferCategory('transfer')).toBe(true)
+    expect(isTransferCategory('internal_transfer')).toBe(true)
+    expect(isTransferCategory('external_transfer')).toBe(true)
     expect(isTransferCategory('groceries')).toBe(false)
     expect(isTransferCategory(undefined)).toBe(false)
   })
 
-  it('does not mark TRANSFERENCIA ENVIADA TRF. PLAZA- NAME as Transfer', () => {
+  it('marks TRANSFERENCIA ENVIADA TRF. PLAZA- NAME as external transfer', () => {
     const result = inferInternalTransfers([
       makeTransaction('debit-ext', {
         description:
@@ -80,15 +81,14 @@ describe('internal transfer inference', () => {
         type: 'debit',
         amount: 476.81,
         currency: 'UYU',
-        // No initial category — simulating fresh import
       }),
     ])
 
     const debit = result.find((tx) => tx.id === 'debit-ext')!
-    expect(debit.category).not.toBe(Category.Transfer)
+    expect(debit.category).toBe(Category.ExternalTransfer)
   })
 
-  it('does not mark TRANSF INSTANTANEA ENVIADA NRR: NAME as Transfer', () => {
+  it('marks TRANSF INSTANTANEA ENVIADA NRR: NAME as external transfer', () => {
     const result = inferInternalTransfers([
       makeTransaction('debit-ext', {
         description:
@@ -96,12 +96,11 @@ describe('internal transfer inference', () => {
         type: 'debit',
         amount: 250,
         currency: 'UYU',
-        // No initial category — simulating fresh import
       }),
     ])
 
     const debit = result.find((tx) => tx.id === 'debit-ext')!
-    expect(debit.category).not.toBe(Category.Transfer)
+    expect(debit.category).toBe(Category.ExternalTransfer)
   })
 
   it('still marks legitimate internal transfers as Transfer', () => {
@@ -122,7 +121,7 @@ describe('internal transfer inference', () => {
       }),
     ])
 
-    expect(result.every((tx) => tx.category === Category.Transfer)).toBe(true)
+    expect(result.every((tx) => tx.category === Category.InternalTransfer)).toBe(true)
   })
 
   it('does not mark an unpaired credit supernet as Transfer (external incoming payment)', () => {
@@ -140,7 +139,7 @@ describe('internal transfer inference', () => {
     ])
 
     const credit = result.find((tx) => tx.id === 'credit-ext')!
-    expect(credit.category).not.toBe(Category.Transfer)
+    expect(credit.category).not.toBe(Category.InternalTransfer)
   })
 
   it('pairs CREDITO POR OPERACION EN SUPERNET P--/NAME with matching debit (self-transfer)', () => {
@@ -163,7 +162,35 @@ describe('internal transfer inference', () => {
       }),
     ])
 
-    expect(result.every((tx) => tx.category === Category.Transfer)).toBe(true)
+    expect(result.every((tx) => tx.category === Category.InternalTransfer)).toBe(true)
+  })
+
+  it('pairs a credit card payment credit (AI-tagged) with a bank account debit', () => {
+    // Credit card shows "PAGO RECIBIDO" — AI tagged it as transfer (confidence 0.85).
+    // Bank account shows "PAGO ELECTRONICO TARJETA CREDITO" — rule-based transfer.
+    // The fix to candidates filter allows the credit card tx to be a pairing candidate.
+    const result = inferInternalTransfers([
+      makeTransaction('cc-payment', {
+        description: 'PAGO RECIBIDO',
+        type: 'credit',
+        source: 'credit_card',
+        amount: 1500,
+        currency: 'UYU',
+        category: Category.InternalTransfer,
+        categoryConfidence: 0.85,
+        date: new Date('2025-03-15T00:00:00.000Z'),
+      }),
+      makeTransaction('bank-debit', {
+        description: 'PAGO ELECTRONICO TARJETA CREDITO',
+        type: 'debit',
+        source: 'bank_account',
+        amount: 1500,
+        currency: 'UYU',
+        date: new Date('2025-03-15T00:00:00.000Z'),
+      }),
+    ])
+
+    expect(result.every((tx) => tx.category === Category.InternalTransfer)).toBe(true)
   })
 
   it('does not pair unrelated debit and credit across currencies just because both are transfer descriptions', () => {
@@ -176,7 +203,7 @@ describe('internal transfer inference', () => {
         amount: 2238.54,
         currency: 'USD',
         date: new Date('2025-11-06T00:00:00.000Z'),
-        category: Category.Transfer,
+        category: Category.InternalTransfer,
         categoryConfidence: 0.9,
       }),
       makeTransaction('credit-received', {
@@ -190,6 +217,6 @@ describe('internal transfer inference', () => {
     ])
 
     const credit = result.find((tx) => tx.id === 'credit-received')!
-    expect(credit.category).not.toBe(Category.Transfer)
+    expect(credit.category).not.toBe(Category.InternalTransfer)
   })
 })

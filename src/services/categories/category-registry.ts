@@ -25,6 +25,9 @@ export const ID_ALIASES: Partial<Record<string, Category>> = {
   health: Category.Healthcare,
   salary: Category.Income,
   other: Category.Uncategorized,
+  // backward-compat: old string values before rename
+  transfer: Category.InternalTransfer,
+  transfers: Category.ExternalTransfer,
 }
 
 export function getCategoryDefinitions(): CategoryDefinition[] {

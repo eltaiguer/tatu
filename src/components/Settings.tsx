@@ -1,10 +1,13 @@
-import { Download } from 'lucide-react'
+import { useState } from 'react'
+import { Download, Eye, EyeOff } from 'lucide-react'
 import { Button } from './ui/button'
 import { toast } from 'sonner'
 import type { Transaction } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 import { exportTransactions } from '../services/export/export'
 import { CoverageAnalysis } from './dev/CoverageAnalysis'
+import { AiCategorizationPreview } from './dev/AiCategorizationPreview'
+import { AiPatternAnalysis } from './dev/AiPatternAnalysis'
 
 interface SettingsProps {
   theme: 'light' | 'dark' | 'auto'
@@ -18,6 +21,12 @@ interface SettingsProps {
   onSignOut: () => void
   transactions: Transaction[]
   onResetAllData?: () => Promise<void> | void
+  claudeApiKey: string
+  onSetClaudeApiKey: (key: string) => void
+  aiEnabled: boolean
+  onSetAiEnabled: (enabled: boolean) => void
+  aiModel: string
+  onSetAiModel: (model: string) => void
 }
 
 function SegmentControl({
@@ -151,10 +160,17 @@ export function Settings({
   onSignOut,
   transactions,
   onResetAllData,
+  claudeApiKey,
+  onSetClaudeApiKey,
+  aiEnabled,
+  onSetAiEnabled,
+  aiModel,
+  onSetAiModel,
 }: SettingsProps) {
   const userEmail = session?.user?.email ?? ''
   const userName = userEmail ? userEmail.split('@')[0] : 'Usuario'
   const avatarInitial = userName.charAt(0).toUpperCase()
+  const [showKey, setShowKey] = useState(false)
 
   function handleExport(format: 'csv' | 'pdf') {
     exportTransactions(transactions, { format })
@@ -263,6 +279,118 @@ export function Settings({
             </div>
           }
         />
+      </SectionCard>
+
+      {/* Inteligencia Artificial */}
+      <SectionCard title="Inteligencia Artificial">
+        <SettingRow
+          label="Categorización con IA"
+          description="Usa Claude para categorizar y limpiar los nombres de transacciones al importar"
+          control={
+            <button
+              role="switch"
+              aria-checked={aiEnabled}
+              onClick={() => onSetAiEnabled(!aiEnabled)}
+              style={{
+                width: 44,
+                height: 24,
+                borderRadius: 12,
+                border: 'none',
+                cursor: 'pointer',
+                background: aiEnabled ? 'var(--accent)' : 'var(--border)',
+                position: 'relative',
+                transition: 'background 0.2s',
+                flexShrink: 0,
+              }}
+            >
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 2,
+                  left: aiEnabled ? 22 : 2,
+                  width: 20,
+                  height: 20,
+                  borderRadius: '50%',
+                  background: 'white',
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }}
+              />
+            </button>
+          }
+        />
+        <SettingRow
+          label="Clave API de Anthropic"
+          description="Obtenela en console.anthropic.com · Se guarda en tu cuenta"
+          control={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={claudeApiKey}
+                onChange={(e) => onSetClaudeApiKey(e.target.value)}
+                placeholder="sk-ant-..."
+                disabled={!aiEnabled}
+                style={{
+                  fontSize: 13,
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  border: '1px solid var(--border)',
+                  background: aiEnabled ? 'var(--input)' : 'var(--muted)',
+                  color: aiEnabled ? 'var(--foreground)' : 'var(--text-muted)',
+                  width: 180,
+                  fontFamily: 'var(--font-mono)',
+                }}
+              />
+              <button
+                onClick={() => setShowKey((v) => !v)}
+                disabled={!aiEnabled}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: aiEnabled ? 'pointer' : 'default',
+                  color: 'var(--text-muted)',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          }
+        />
+        <SettingRow
+          label="Modelo"
+          description="Haiku es más rápido y económico; Sonnet es más preciso"
+          control={
+            <div style={{ opacity: aiEnabled ? 1 : 0.5, pointerEvents: aiEnabled ? 'auto' : 'none' }}>
+              <SegmentControl
+                options={[
+                  { label: 'Haiku', value: 'claude-haiku-4-5' },
+                  { label: 'Sonnet', value: 'claude-sonnet-4-6' },
+                ]}
+                value={aiModel}
+                onChange={onSetAiModel}
+              />
+            </div>
+          }
+        />
+        {aiEnabled && claudeApiKey && (
+          <div
+            style={{
+              padding: '8px 16px',
+              borderTop: '1px solid var(--border)',
+              fontSize: 12,
+              color: 'var(--text-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span style={{ color: '#22c55e' }}>✓</span>
+            IA activa · se aplicará en tu próxima importación
+          </div>
+        )}
       </SectionCard>
 
       {/* Cuenta */}
@@ -426,6 +554,26 @@ export function Settings({
       {import.meta.env.DEV && (
         <SectionCard title="[Dev] Cobertura del clasificador">
           <CoverageAnalysis session={session} />
+        </SectionCard>
+      )}
+
+      {import.meta.env.DEV && (
+        <SectionCard title="[Dev] Preview de categorización IA">
+          <AiCategorizationPreview
+            transactions={transactions}
+            claudeApiKey={claudeApiKey}
+            aiModel={aiModel}
+          />
+        </SectionCard>
+      )}
+
+      {import.meta.env.DEV && (
+        <SectionCard title="[Dev] Análisis de patrones para prompt">
+          <AiPatternAnalysis
+            transactions={transactions}
+            claudeApiKey={claudeApiKey}
+            aiModel={aiModel}
+          />
         </SectionCard>
       )}
     </div>

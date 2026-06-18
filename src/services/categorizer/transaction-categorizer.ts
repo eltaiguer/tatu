@@ -152,7 +152,7 @@ export function categorizeTransaction(
     !(type === 'credit' && normalized.includes('recibida'))
   ) {
     return {
-      category: Category.Transfer,
+      category: Category.InternalTransfer,
       confidence: 0.9,
     }
   }

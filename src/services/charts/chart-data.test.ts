@@ -180,13 +180,13 @@ describe('chart-data', () => {
         amount: 200,
         type: 'debit',
         currency: 'USD',
-        category: Category.Transfer,
+        category: Category.InternalTransfer,
       }),
       makeTransaction('tx-2', {
         amount: 100,
         type: 'credit',
         currency: 'USD',
-        category: Category.Transfer,
+        category: Category.InternalTransfer,
       }),
       makeTransaction('tx-3', {
         amount: 80,
@@ -243,7 +243,7 @@ describe('chart-data multicurrency converting selectors', () => {
     it('excludes credits and transfers', () => {
       const txs = [
         makeTx('1', { type: 'credit', category: Category.Groceries }),
-        makeTx('2', { type: 'debit', category: Category.Transfer }),
+        makeTx('2', { type: 'debit', category: Category.InternalTransfer }),
         makeTx('3', { type: 'debit', category: Category.Groceries, amount: 20 }),
       ]
       const result = buildCategorySpendingConverted(txs, 'USD', RATE)
@@ -302,7 +302,7 @@ describe('chart-data multicurrency converting selectors', () => {
 
     it('excludes transfers', () => {
       const txs = [
-        makeTx('t', { date: new Date('2025-01-10T00:00:00.000Z'), type: 'debit', amount: 100, category: Category.Transfer }),
+        makeTx('t', { date: new Date('2025-01-10T00:00:00.000Z'), type: 'debit', amount: 100, category: Category.InternalTransfer }),
         makeTx('e', { date: new Date('2025-01-10T00:00:00.000Z'), type: 'debit', amount: 50 }),
       ]
       const result = buildCurrentMonthSummary(txs, 'USD', RATE)
@@ -325,7 +325,7 @@ describe('chart-data multicurrency converting selectors', () => {
     it('excludes credits and transfers from the split', () => {
       const txs = [
         makeTx('credit', { type: 'credit', amount: 100 }),
-        makeTx('transfer', { type: 'debit', category: Category.Transfer, amount: 100 }),
+        makeTx('transfer', { type: 'debit', category: Category.InternalTransfer, amount: 100 }),
         makeTx('real', { type: 'debit', amount: 50, currency: 'USD' }),
       ]
       const result = buildCurrencySplit(txs, 'USD', RATE)
