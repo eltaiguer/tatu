@@ -1,6 +1,7 @@
 import type { Transaction } from '../../models'
 import { applyFilters } from '../filters/filters'
 import { getCategoryDisplay } from '../../utils/category-display'
+import { isCategoryIgnored } from '../categories/category-registry'
 
 export type ExportFormat = 'csv' | 'pdf'
 
@@ -52,7 +53,7 @@ export function filterTransactionsForExport(
   return applyFilters(transactions, {
     dateFrom: options.dateFrom,
     dateTo: options.dateTo,
-  })
+  }).filter((tx) => !isCategoryIgnored(tx.category))
 }
 
 export function buildPdfReportHtml(
