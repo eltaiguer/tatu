@@ -39,6 +39,9 @@ describe('user-preferences service', () => {
         theme: 'dark',
         currency: 'UYU',
         fx_rate: 42.5,
+        claude_api_key: null,
+        ai_enabled: false,
+        ai_model: 'claude-haiku-4-5',
         updated_at: '2026-01-01T00:00:00.000Z',
       },
       error: null,
@@ -83,7 +86,14 @@ describe('user-preferences service', () => {
       const { loadUserPreferences } = await import('./user-preferences')
       const prefs = await loadUserPreferences(session)
 
-      expect(prefs).toEqual({ theme: 'dark', currency: 'UYU', fxRate: 42.5 })
+      expect(prefs).toEqual({
+        theme: 'dark',
+        currency: 'UYU',
+        fxRate: 42.5,
+        claudeApiKey: '',
+        aiEnabled: false,
+        aiModel: 'claude-haiku-4-5',
+      })
     })
 
     it('applies defaults when row fields are null', async () => {
@@ -114,10 +124,21 @@ describe('user-preferences service', () => {
         theme: 'light',
         currency: 'USD',
         fxRate: 38,
+        claudeApiKey: '',
+        aiEnabled: false,
+        aiModel: 'claude-haiku-4-5',
       })
 
       expect(upsertMock).toHaveBeenCalledWith(
-        { user_id: 'user-1', theme: 'light', currency: 'USD', fx_rate: 38 },
+        {
+          user_id: 'user-1',
+          theme: 'light',
+          currency: 'USD',
+          fx_rate: 38,
+          claude_api_key: null,
+          ai_enabled: false,
+          ai_model: 'claude-haiku-4-5',
+        },
         { onConflict: 'user_id' }
       )
     })
@@ -129,7 +150,14 @@ describe('user-preferences service', () => {
 
       const { saveUserPreferences } = await import('./user-preferences')
       await expect(
-        saveUserPreferences(session, { theme: 'auto', currency: 'UYU', fxRate: 40.5 })
+        saveUserPreferences(session, {
+          theme: 'auto',
+          currency: 'UYU',
+          fxRate: 40.5,
+          claudeApiKey: '',
+          aiEnabled: false,
+          aiModel: 'claude-haiku-4-5',
+        })
       ).rejects.toThrow('permission denied')
     })
   })

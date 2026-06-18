@@ -27,6 +27,15 @@ const mockSession: SupabaseSession = {
   user: { id: 'user-1', email: 'jose@example.uy' },
 } as unknown as SupabaseSession
 
+const defaultAiProps = {
+  claudeApiKey: '',
+  onSetClaudeApiKey: () => {},
+  aiEnabled: false,
+  onSetAiEnabled: () => {},
+  aiModel: 'claude-haiku-4-5',
+  onSetAiModel: () => {},
+}
+
 describe('Settings', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -42,7 +51,7 @@ describe('Settings', () => {
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
-        transactions={[]}
+        transactions={[]} {...defaultAiProps}
       />
     )
 
@@ -66,7 +75,7 @@ describe('Settings', () => {
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
-        transactions={[]}
+        transactions={[]} {...defaultAiProps}
       />
     )
 
@@ -88,7 +97,7 @@ describe('Settings', () => {
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
-        transactions={[]}
+        transactions={[]} {...defaultAiProps}
       />
     )
 
@@ -106,7 +115,7 @@ describe('Settings', () => {
         session={mockSession}
         supabaseEnabled={true}
         onSignOut={() => {}}
-        transactions={[]}
+        transactions={[]} {...defaultAiProps}
       />
     )
 
@@ -125,7 +134,7 @@ describe('Settings', () => {
         session={mockSession}
         supabaseEnabled={true}
         onSignOut={onSignOut}
-        transactions={[]}
+        transactions={[]} {...defaultAiProps}
       />
     )
 
@@ -143,7 +152,7 @@ describe('Settings', () => {
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
-        transactions={[]}
+        transactions={[]} {...defaultAiProps}
       />
     )
 
@@ -170,6 +179,7 @@ describe('Settings', () => {
         onSignOut={() => {}}
         transactions={[makeTx()]}
         onResetAllData={onReset}
+        {...defaultAiProps}
       />
     )
 

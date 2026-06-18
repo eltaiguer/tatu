@@ -21,6 +21,9 @@ export function useTransactionSync({
   setTheme,
   setPreferredCurrency,
   setFxRate,
+  setClaudeApiKey,
+  setAiEnabled,
+  setAiModel,
 }: {
   session: SupabaseSession | null
   authMode: 'signin' | 'reset'
@@ -30,6 +33,9 @@ export function useTransactionSync({
   setTheme: (t: 'light' | 'dark' | 'auto') => void
   setPreferredCurrency: (c: 'UYU' | 'USD') => void
   setFxRate: (r: number) => void
+  setClaudeApiKey: (k: string) => void
+  setAiEnabled: (e: boolean) => void
+  setAiModel: (m: string) => void
 }) {
   useEffect(() => {
     let cancelled = false
@@ -114,6 +120,9 @@ export function useTransactionSync({
             setTheme(userPrefs.theme)
             setPreferredCurrency(userPrefs.currency)
             setFxRate(userPrefs.fxRate)
+            setClaudeApiKey(userPrefs.claudeApiKey)
+            setAiEnabled(userPrefs.aiEnabled)
+            setAiModel(userPrefs.aiModel)
           }
           // Allow preference saves now that remote values are applied.
           markPrefsLoaded()

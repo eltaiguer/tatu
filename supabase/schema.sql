@@ -150,8 +150,17 @@ create table if not exists public.user_preferences (
   theme text not null default 'auto' check (theme in ('light', 'dark', 'auto')),
   currency text not null default 'USD' check (currency in ('USD', 'UYU')),
   fx_rate numeric(10,4) not null default 40.5,
+  claude_api_key text,
+  ai_enabled boolean not null default false,
+  ai_model text not null default 'claude-haiku-4-5',
   updated_at timestamptz not null default timezone('utc', now())
 );
+
+-- Migration for existing databases:
+-- alter table public.user_preferences
+--   add column if not exists claude_api_key text,
+--   add column if not exists ai_enabled boolean not null default false,
+--   add column if not exists ai_model text not null default 'claude-haiku-4-5';
 
 create table if not exists public.custom_patterns (
   user_id uuid not null references auth.users(id) on delete cascade,
