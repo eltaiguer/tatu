@@ -1,12 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '../ui/button'
 import { CategoryBadge } from '../CategoryBadge'
 import type { Transaction } from '../../models'
 import type { AiConfig } from '../../services/ai/ai-config'
 import type { AiEnrichmentInput } from '../../services/ai/transaction-ai'
 import { enrichTransactionsWithAi } from '../../services/ai/transaction-ai'
-import { listCustomCategories } from '../../services/categories/category-store'
+import { buildCorrectionContext } from '../../services/ai/correction-context'
 import { getCategoryDefinition } from '../../services/categories/category-registry'
+import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
+import { getDescriptionOverride } from '../../services/descriptions/description-overrides'
+import { getMerchantCategoryOverride } from '../../services/categorizer/category-overrides'
+import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
 
 interface Props {
   transactions: Transaction[]
@@ -14,13 +18,18 @@ interface Props {
   aiModel: string
 }
 
+type Source = 'override' | 'ai' | 'rules'
+
 interface PreviewRow {
   id: string
   date: Date
   originalDescription: string
-  currentCategory: string
-  aiCategory: string
+  storedCategory: string
+  ruleCategory: string
+  finalCategory: string
   aiDisplayDescription: string
+  aiConfidence: number
+  source: Source
   isDifferent: boolean
 }
 
@@ -34,6 +43,29 @@ function formatDate(date: Date): string {
   })
 }
 
+function getLastMonthRange(): { year: number; month: number; label: string } {
+  const now = new Date()
+  const month = now.getMonth() === 0 ? 11 : now.getMonth() - 1
+  const year = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()
+  const label = new Date(year, month, 1).toLocaleDateString('es-UY', {
+    month: 'long',
+    year: 'numeric',
+  })
+  return { year, month, label }
+}
+
+const SOURCE_LABEL: Record<Source, string> = {
+  override: 'Override',
+  ai: 'IA',
+  rules: 'Reglas',
+}
+
+const SOURCE_COLOR: Record<Source, string> = {
+  override: 'var(--text-muted)',
+  ai: 'var(--accent)',
+  rules: 'var(--text-muted)',
+}
+
 export function AiCategorizationPreview({
   transactions,
   claudeApiKey,
@@ -44,8 +76,19 @@ export function AiCategorizationPreview({
   const [error, setError] = useState<string | null>(null)
   const [showOnlyDiffs, setShowOnlyDiffs] = useState(false)
 
+  const { year, month, label } = getLastMonthRange()
+
+  const sample = useMemo(
+    () =>
+      transactions.filter((tx) => {
+        const d = tx.date
+        return d.getFullYear() === year && d.getMonth() === month
+      }),
+    [transactions, year, month]
+  )
+
   const noKey = !claudeApiKey
-  const noTransactions = transactions.length === 0
+  const noSample = sample.length === 0
 
   async function handleRun() {
     setRunState('running')
@@ -59,7 +102,30 @@ export function AiCategorizationPreview({
         model: aiModel,
       }
 
-      const inputs: AiEnrichmentInput[] = transactions.map((tx) => ({
+      // Step 1: rule-based categorization on every transaction (no context,
+      // matching what the CSV parsers do at import time)
+      const ruleResults = new Map(
+        sample.map((tx) => [tx.id, categorizeTransaction(tx.description, tx.type)])
+      )
+
+      // Step 2: apply same override filter as production
+      const toEnrich: Transaction[] = []
+      const overriddenIds = new Set<string>()
+
+      for (const tx of sample) {
+        const hasDescOverride = !!getDescriptionOverride(tx.description)
+        const hasCatOverride = !!getMerchantCategoryOverride(
+          normalizeMerchantName(tx.description)
+        )
+        if (hasDescOverride || hasCatOverride) {
+          overriddenIds.add(tx.id)
+        } else {
+          toEnrich.push(tx)
+        }
+      }
+
+      // Step 3: run AI only on non-overridden transactions
+      const inputs: AiEnrichmentInput[] = toEnrich.map((tx) => ({
         id: tx.id,
         description: tx.description,
         type: tx.type,
@@ -68,35 +134,53 @@ export function AiCategorizationPreview({
         source: tx.source,
       }))
 
-      // Empty corrections — pure AI judgment, no learned overrides
-      const results = await enrichTransactionsWithAi(inputs, config, {
-        descriptionExamples: [],
-        categoryExamples: [],
-        customCategories: listCustomCategories(),
-      })
+      const aiResults = toEnrich.length > 0
+        ? await enrichTransactionsWithAi(inputs, config, buildCorrectionContext())
+        : new Map()
 
-      const built: PreviewRow[] = transactions.map((tx) => {
-        const result = results.get(tx.id)
-        const currentCat = getCategoryDefinition(tx.category ?? 'uncategorized').id
-        const aiCat = result
-          ? getCategoryDefinition(result.category).id
-          : currentCat
+      // Step 4: build rows
+      const built: PreviewRow[] = sample.map((tx) => {
+        const ruleCat = getCategoryDefinition(
+          ruleResults.get(tx.id)?.category ?? 'uncategorized'
+        ).id
+        const storedCat = getCategoryDefinition(tx.category ?? 'uncategorized').id
+        const aiResult = aiResults.get(tx.id)
+
+        let finalCategory: string
+        let source: Source
+        let aiDisplayDescription = tx.description
+        let aiConfidence = 0
+
+        if (overriddenIds.has(tx.id)) {
+          finalCategory = ruleCat
+          source = 'override'
+        } else if (aiResult) {
+          finalCategory = getCategoryDefinition(aiResult.category).id
+          aiDisplayDescription = aiResult.displayDescription
+          aiConfidence = aiResult.confidence
+          source = 'ai'
+        } else {
+          finalCategory = ruleCat
+          source = 'rules'
+        }
+
         return {
           id: tx.id,
           date: tx.date,
           originalDescription: tx.description,
-          currentCategory: currentCat,
-          aiCategory: aiCat,
-          aiDisplayDescription: result?.displayDescription ?? tx.description,
-          isDifferent: currentCat !== aiCat,
+          storedCategory: storedCat,
+          ruleCategory: ruleCat,
+          finalCategory,
+          aiDisplayDescription,
+          aiConfidence,
+          source,
+          isDifferent: storedCat !== finalCategory,
         }
       })
 
       setRows(built)
       setRunState('done')
-      // Log to console so the raw AI output is inspectable during dev
-      console.debug('[AI Preview] results:', Object.fromEntries(results))
-      console.debug('[AI Preview] rows built:', built.length, 'processed:', built.filter(r => r.aiDisplayDescription !== r.originalDescription || r.isDifferent).length)
+      console.debug('[AI Preview] sample:', sample.length, 'overridden:', overriddenIds.size, 'to AI:', toEnrich.length)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido')
       setRunState('error')
@@ -105,9 +189,8 @@ export function AiCategorizationPreview({
 
   const visibleRows = showOnlyDiffs ? rows.filter((r) => r.isDifferent) : rows
   const diffCount = rows.filter((r) => r.isDifferent).length
-  const processedCount = rows.filter(
-    (r) => r.aiDisplayDescription !== r.originalDescription || r.isDifferent
-  ).length
+  const overrideCount = rows.filter((r) => r.source === 'override').length
+  const aiCount = rows.filter((r) => r.source === 'ai').length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -121,17 +204,18 @@ export function AiCategorizationPreview({
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <Button
           onClick={handleRun}
-          disabled={noKey || noTransactions || runState === 'running'}
+          disabled={noKey || noSample || runState === 'running'}
           size="sm"
         >
           {runState === 'running' ? 'Procesando…' : 'Ejecutar preview de IA'}
         </Button>
-        {runState === 'running' && (
-          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            Procesando {transactions.length} transacciones — llamadas reales a
-            la API de Anthropic
-          </span>
-        )}
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          {runState === 'running'
+            ? `Procesando ${sample.length} transacciones de ${label}…`
+            : noSample
+              ? `Sin transacciones en ${label}`
+              : `${sample.length} transacciones de ${label}`}
+        </span>
       </div>
 
       {runState === 'error' && error && (
@@ -161,9 +245,8 @@ export function AiCategorizationPreview({
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               <strong style={{ color: 'var(--foreground)' }}>{diffCount}</strong>{' '}
               diferencia{diffCount !== 1 ? 's' : ''} ·{' '}
-              <strong style={{ color: 'var(--foreground)' }}>{processedCount}</strong>{' '}
-              con resultado IA de{' '}
-              {rows.length} transacciones
+              <strong style={{ color: 'var(--foreground)' }}>{aiCount}</strong> por IA ·{' '}
+              <strong style={{ color: 'var(--foreground)' }}>{overrideCount}</strong> con override
             </span>
             <label
               style={{
@@ -208,7 +291,7 @@ export function AiCategorizationPreview({
                     zIndex: 1,
                   }}
                 >
-                  {['Fecha', 'Descripción original', 'Nombre sugerido', 'Categoría actual', 'Categoría IA'].map(
+                  {['Fecha', 'Descripción', 'Nombre sugerido', 'Almacenada', 'Final', 'Fuente', 'Confianza'].map(
                     (h) => (
                       <th
                         key={h}
@@ -240,26 +323,16 @@ export function AiCategorizationPreview({
                         : 'transparent',
                     }}
                   >
+                    <td style={cellStyle}>{formatDate(row.date)}</td>
                     <td
                       style={{
-                        padding: '8px 12px',
-                        color: 'var(--text-muted)',
-                        whiteSpace: 'nowrap',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                    >
-                      {formatDate(row.date)}
-                    </td>
-                    <td
-                      style={{
-                        padding: '8px 12px',
+                        ...cellStyle,
                         fontFamily: 'var(--font-mono)',
                         fontSize: 12,
-                        maxWidth: 220,
+                        maxWidth: 200,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        borderBottom: '1px solid var(--border)',
                       }}
                       title={row.originalDescription}
                     >
@@ -267,32 +340,56 @@ export function AiCategorizationPreview({
                     </td>
                     <td
                       style={{
-                        padding: '8px 12px',
-                        maxWidth: 180,
+                        ...cellStyle,
+                        maxWidth: 160,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        borderBottom: '1px solid var(--border)',
+                        color: row.source === 'ai' && row.aiDisplayDescription !== row.originalDescription
+                          ? 'var(--foreground)'
+                          : 'var(--text-muted)',
                       }}
                       title={row.aiDisplayDescription}
                     >
-                      {row.aiDisplayDescription}
+                      {row.source === 'ai' ? row.aiDisplayDescription : '—'}
+                    </td>
+                    <td style={cellStyle}>
+                      <CategoryBadge categoryId={row.storedCategory} size="sm" />
+                    </td>
+                    <td style={cellStyle}>
+                      <CategoryBadge categoryId={row.finalCategory} size="sm" />
+                    </td>
+                    <td style={cellStyle}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: SOURCE_COLOR[row.source],
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        {SOURCE_LABEL[row.source]}
+                      </span>
                     </td>
                     <td
                       style={{
-                        padding: '8px 12px',
-                        borderBottom: '1px solid var(--border)',
+                        ...cellStyle,
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 12,
+                        color:
+                          row.source !== 'ai'
+                            ? 'var(--text-muted)'
+                            : row.aiConfidence >= 0.8
+                              ? 'var(--pos)'
+                              : row.aiConfidence >= 0.55
+                                ? 'var(--accent)'
+                                : 'var(--neg)',
                       }}
                     >
-                      <CategoryBadge categoryId={row.currentCategory} size="sm" />
-                    </td>
-                    <td
-                      style={{
-                        padding: '8px 12px',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                    >
-                      <CategoryBadge categoryId={row.aiCategory} size="sm" />
+                      {row.source === 'ai'
+                        ? `${Math.round(row.aiConfidence * 100)}%`
+                        : '—'}
                     </td>
                   </tr>
                 ))}
@@ -303,4 +400,11 @@ export function AiCategorizationPreview({
       )}
     </div>
   )
+}
+
+const cellStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  borderBottom: '1px solid var(--border)',
+  color: 'var(--text-muted)',
+  whiteSpace: 'nowrap',
 }
