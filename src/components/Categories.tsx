@@ -138,10 +138,10 @@ export function Categories({ transactions }: CategoriesProps) {
             const session = getActiveSupabaseSession()
             if (!session) return
             return import('../services/supabase/transactions').then(
-              ({ updateRemoteTransaction }) =>
+              ({ updateTransaction }) =>
                 Promise.all(
                   matching.map((tx) =>
-                    updateRemoteTransaction(session, tx.id, {
+                    updateTransaction(session, tx.id, {
                       category: newPattern.category,
                       categoryConfidence: 0.95,
                       ...(newPattern.description
