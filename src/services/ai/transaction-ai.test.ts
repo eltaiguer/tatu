@@ -21,6 +21,7 @@ import {
   enrichTransactionsWithAi,
 } from './transaction-ai'
 import type { AiEnrichmentResult } from './transaction-ai'
+import type { CustomPattern } from '../categorizer/custom-patterns'
 
 function makeTx(id: string, description: string, overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -42,7 +43,7 @@ const customCategories: CustomCategory[] = [
 ]
 
 const baseConfig = { apiKey: 'sk-test', enabled: true, model: 'claude-haiku-4-5' }
-const emptyContext = { descriptionExamples: [], categoryExamples: [], customCategories: noCustomCategories }
+const emptyContext = { descriptionExamples: [], categoryExamples: [], customCategories: noCustomCategories, customPatterns: [] }
 
 describe('validateCategory', () => {
   it('accepts valid built-in categories', () => {
@@ -110,7 +111,7 @@ describe('enrichTransactionsWithAi', () => {
   it('parses valid response and returns map keyed by id', async () => {
     messagesCreateMock.mockResolvedValue({
       content: [{ type: 'text', text: JSON.stringify([
-        { id: 'tx1', displayDescription: 'Devoto', category: 'groceries' },
+        { id: 'tx1', displayDescription: 'Devoto', category: 'groceries', confidence: 0.9 },
       ])}],
     })
     const results = await enrichTransactionsWithAi(
@@ -120,7 +121,40 @@ describe('enrichTransactionsWithAi', () => {
     )
     expect(results.get('tx1')?.category).toBe('groceries')
     expect(results.get('tx1')?.displayDescription).toBe('Devoto')
-    expect(results.get('tx1')?.confidence).toBe(0.85)
+    expect(results.get('tx1')?.confidence).toBe(0.9)
+  })
+
+  it('falls back to 0.7 confidence when AI omits the field', async () => {
+    messagesCreateMock.mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify([
+        { id: 'tx1', displayDescription: 'Unknown', category: 'uncategorized' },
+      ])}],
+    })
+    const results = await enrichTransactionsWithAi(
+      [{ id: 'tx1', description: 'XXXX', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' }],
+      baseConfig,
+      emptyContext
+    )
+    expect(results.get('tx1')?.confidence).toBe(0.7)
+  })
+
+  it('clamps out-of-range confidence values to [0, 1]', async () => {
+    messagesCreateMock.mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify([
+        { id: 'tx1', displayDescription: 'Netflix', category: 'entertainment', confidence: 1.5 },
+        { id: 'tx2', displayDescription: 'Unknown', category: 'uncategorized', confidence: -0.2 },
+      ])}],
+    })
+    const results = await enrichTransactionsWithAi(
+      [
+        { id: 'tx1', description: 'NETFLIX', type: 'debit', amount: 9.99, currency: 'USD', source: 'credit_card' },
+        { id: 'tx2', description: 'XXXX', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' },
+      ],
+      baseConfig,
+      emptyContext
+    )
+    expect(results.get('tx1')?.confidence).toBe(1)
+    expect(results.get('tx2')?.confidence).toBe(0)
   })
 
   it('includes custom categories in the system prompt', async () => {
@@ -209,11 +243,46 @@ describe('enrichTransactionsWithAi', () => {
         descriptionExamples: [{ raw: 'SUPERM DEVOTO', friendly: 'Devoto', category: 'groceries' }],
         categoryExamples: [{ merchant: 'tintoreria', category: 'personal' }],
         customCategories: noCustomCategories,
+        customPatterns: [],
       }
     )
     const userMessage = messagesCreateMock.mock.calls[0][0].messages[0].content as string
     expect(userMessage).toContain('SUPERM DEVOTO')
     expect(userMessage).toContain('tintoreria')
+  })
+
+  it('includes custom pattern rules in the user message', async () => {
+    messagesCreateMock.mockResolvedValue({
+      content: [{ type: 'text', text: '[]' }],
+    })
+    const customPatterns: CustomPattern[] = [
+      { id: 'cp1', pattern: 'farmacia', matchType: 'contains', category: 'healthcare', createdAt: '' },
+      { id: 'cp2', pattern: 'ute ', matchType: 'starts_with', category: 'utilities', createdAt: '' },
+      { id: 'cp3', pattern: 'salario empresa srl', matchType: 'exact', category: 'income', createdAt: '' },
+    ]
+    await enrichTransactionsWithAi(
+      [{ id: 'tx1', description: 'FARMACIA DEVOTO', type: 'debit', amount: 200, currency: 'UYU', source: 'bank_account' }],
+      baseConfig,
+      { ...emptyContext, customPatterns }
+    )
+    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0].content as string
+    expect(userMessage).toContain('USER RULES (always apply these')
+    expect(userMessage).toContain('contains "farmacia" → healthcare')
+    expect(userMessage).toContain('starts with "ute " → utilities')
+    expect(userMessage).toContain('exact "salario empresa srl" → income')
+  })
+
+  it('omits USER RULES block when no custom patterns exist', async () => {
+    messagesCreateMock.mockResolvedValue({
+      content: [{ type: 'text', text: '[]' }],
+    })
+    await enrichTransactionsWithAi(
+      [{ id: 'tx1', description: 'NETFLIX', type: 'debit', amount: 9.99, currency: 'USD', source: 'credit_card' }],
+      baseConfig,
+      emptyContext
+    )
+    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0].content as string
+    expect(userMessage).not.toContain('USER RULES')
   })
 
   it('throws when API call fails (caller handles fallback)', async () => {

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { Category, CATEGORY_LABELS } from '../../models'
 import type { Transaction } from '../../models'
 import type { CustomCategory } from '../categories/category-store'
+import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { AiConfig } from './ai-config'
 
 export interface AiEnrichmentInput {
@@ -24,6 +25,7 @@ export interface AiCorrectionContext {
   descriptionExamples: Array<{ raw: string; friendly: string; category?: string }>
   categoryExamples: Array<{ merchant: string; category: string }>
   customCategories: CustomCategory[]
+  customPatterns: CustomPattern[]
 }
 
 const BATCH_SIZE = 150
@@ -105,8 +107,21 @@ CATEGORY HINTS (for ambiguous cases):
   • B2B SaaS/cloud (GitHub, Atlassian, Google Cloud, Cloudflare, Upwork) → check custom categories first
   • Debit card purchase at supermarket/grocery chain → groceries even if name is unfamiliar
 
+confidence — 0.0–1.0: certainty about both displayDescription and category.
+  1.0 = known brand with obvious category (Netflix, Uber, Spotify)
+  0.8–0.95 = clear merchant, unambiguous category
+  0.55–0.79 = recognized but category could be debated
+  0.3–0.54 = partially decoded name or ambiguous context
+  < 0.3 = truly uncertain
+
 Respond ONLY with a JSON array. No explanation. No markdown fences.
-FORMAT: [{"id":"<id>","displayDescription":"<name>","category":"<category>"},...]`
+FORMAT: [{"id":"<id>","displayDescription":"<name>","category":"<category>","confidence":<0.0-1.0>},...]`
+}
+
+const MATCH_TYPE_LABEL: Record<string, string> = {
+  contains: 'contains',
+  starts_with: 'starts with',
+  exact: 'exact',
 }
 
 function buildUserMessage(
@@ -114,6 +129,15 @@ function buildUserMessage(
   context: AiCorrectionContext
 ): string {
   const parts: string[] = []
+
+  if (context.customPatterns.length > 0) {
+    parts.push('USER RULES (always apply these, they override all other patterns):')
+    for (const p of context.customPatterns) {
+      const matchLabel = MATCH_TYPE_LABEL[p.matchType] ?? p.matchType
+      parts.push(`${matchLabel} "${p.pattern}" → ${p.category}`)
+    }
+    parts.push('')
+  }
 
   const descExamples = context.descriptionExamples.slice(0, 20)
   const catExamples = context.categoryExamples.slice(0, 20)
@@ -196,7 +220,7 @@ export async function enrichTransactionsWithAi(
         `Respuesta inesperada del modelo (tipo: ${block.type})`
       )
 
-    let parsed: Array<{ id: string; displayDescription: string; category: string }>
+    let parsed: Array<{ id: string; displayDescription: string; category: string; confidence?: number }>
     try {
       // Claude occasionally wraps output in markdown fences despite instructions
       const raw = block.text.trim()
@@ -212,11 +236,12 @@ export async function enrichTransactionsWithAi(
 
     for (const item of parsed) {
       if (!item.id || typeof item.displayDescription !== 'string') continue
+      const rawConfidence = typeof item.confidence === 'number' ? item.confidence : 0.7
       results.set(item.id, {
         id: item.id,
         category: validateCategory(item.category ?? '', context.customCategories),
         displayDescription: item.displayDescription.trim() || (inputs.find((t) => t.id === item.id)?.description ?? item.id),
-        confidence: 0.85,
+        confidence: Math.min(1, Math.max(0, rawConfidence)),
       })
     }
   }

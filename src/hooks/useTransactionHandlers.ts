@@ -32,6 +32,7 @@ import {
 import { analyzeTemporalPatterns } from '../services/categorizer/temporal-patterns'
 import { normalizeMerchantName } from '../services/categorizer/merchant-patterns'
 import { listCustomCategories } from '../services/categories/category-store'
+import { listCustomPatterns } from '../services/categorizer/custom-patterns'
 import {
   getAiConfig,
   enrichTransactionsWithAi,
@@ -64,6 +65,7 @@ function buildCorrectionContext(): AiCorrectionContext {
     descriptionExamples,
     categoryExamples,
     customCategories: listCustomCategories(),
+    customPatterns: listCustomPatterns(),
   }
 }
 
