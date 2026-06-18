@@ -54,7 +54,7 @@ describe('Charts', () => {
     expect(screen.getAllByText('Transporte').length).toBeGreaterThan(0)
   })
 
-  it('excludes merchants from built-in ignored category in top merchants', () => {
+  it('excludes merchants with legacy ignored category string (backward compat)', () => {
     const transactions = [
       makeTransaction({ id: 'ignored-1', description: 'MERCHANT IGNORED', category: 'ignored', amount: 9999 }),
       makeTransaction({ id: 'normal-1', description: 'NORMAL MERCHANT', category: 'transport', amount: 10 }),

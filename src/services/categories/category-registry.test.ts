@@ -41,13 +41,7 @@ describe('getCategoryDefinitions', () => {
     }
   })
 
-  it('marks built-in Ignored category as isIgnored', () => {
-    const defs = getCategoryDefinitions()
-    const ignored = defs.find((d) => d.id === Category.Ignored)
-    expect(ignored?.isIgnored).toBe(true)
-  })
-
-  it('marks other built-in categories as not ignored', () => {
+  it('marks built-in categories as not ignored by default', () => {
     const defs = getCategoryDefinitions()
     const groceries = defs.find((d) => d.id === Category.Groceries)
     expect(groceries?.isIgnored).toBe(false)
@@ -190,11 +184,11 @@ describe('isCategoryIgnored', () => {
     listCustomCategoriesMock.mockReturnValue([])
   })
 
-  it('returns true for the built-in Ignored category', () => {
-    expect(isCategoryIgnored(Category.Ignored)).toBe(true)
+  it('returns true for legacy ignored string (backward compat)', () => {
+    expect(isCategoryIgnored('ignored')).toBe(true)
   })
 
-  it('returns false for other built-in categories', () => {
+  it('returns false for built-in categories', () => {
     expect(isCategoryIgnored(Category.Groceries)).toBe(false)
     expect(isCategoryIgnored(Category.Income)).toBe(false)
   })

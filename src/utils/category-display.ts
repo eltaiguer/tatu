@@ -22,7 +22,6 @@ export type CategoryIconName =
   | 'internal_transfer'
   | 'external_transfer'
   | 'fees'
-  | 'ignored'
   | 'uncategorized';
 
 export interface CategoryDisplay {
@@ -50,7 +49,6 @@ const MODERN_META: Record<Category, { icon: CategoryIconName }> = {
   [Category.InternalTransfer]: { icon: 'internal_transfer' },
   [Category.ExternalTransfer]: { icon: 'external_transfer' },
   [Category.Fees]: { icon: 'fees' },
-  [Category.Ignored]: { icon: 'ignored' },
   [Category.Uncategorized]: { icon: 'uncategorized' },
 };
 

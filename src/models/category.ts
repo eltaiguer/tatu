@@ -27,7 +27,6 @@ export enum Category {
   InternalTransfer = 'internal_transfer',
   ExternalTransfer = 'external_transfer',
   Fees = 'fees',
-  Ignored = 'ignored',
 
   // Default
   Uncategorized = 'uncategorized',
@@ -54,7 +53,6 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   [Category.InternalTransfer]: 'Transferencias internas',
   [Category.ExternalTransfer]: 'Transferencias externas',
   [Category.Fees]: 'Comisiones',
-  [Category.Ignored]: 'Ignorada',
   [Category.Uncategorized]: 'Sin categoría',
 }
 
@@ -79,7 +77,6 @@ export const CATEGORY_ICONS: Record<Category, string> = {
   [Category.InternalTransfer]: '↔️',
   [Category.ExternalTransfer]: '💸',
   [Category.Fees]: '💳',
-  [Category.Ignored]: '🚫',
   [Category.Uncategorized]: '❓',
 }
 
@@ -104,7 +101,6 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   [Category.InternalTransfer]: '#0284c7',
   [Category.ExternalTransfer]: '#7c3aed',
   [Category.Fees]: '#fb7185',
-  [Category.Ignored]: '#94a3b8',
   [Category.Uncategorized]: '#94a3b8',
 }
 

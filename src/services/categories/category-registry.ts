@@ -45,7 +45,7 @@ export function getCategoryDefinitions(): CategoryDefinition[] {
       color: override?.color ?? CATEGORY_COLORS[category],
       icon: CATEGORY_ICONS[category],
       isCustom: false,
-      isIgnored: override?.isIgnored ?? (category === Category.Ignored),
+      isIgnored: override?.isIgnored ?? false,
     }
   })
 
@@ -98,7 +98,7 @@ export function getCategoryDefinition(
       label: override?.label ?? CATEGORY_LABELS[category],
       color: override?.color ?? CATEGORY_COLORS[category],
       icon: CATEGORY_ICONS[category],
-      isIgnored: override?.isIgnored ?? (category === Category.Ignored),
+      isIgnored: override?.isIgnored ?? false,
       isOverridden: !!override,
     }
   }
@@ -122,5 +122,6 @@ export function isCategoryIgnored(id: string | undefined): boolean {
   if (!id) return false
   const override = listCustomCategories().find((c) => c.id === id)
   if (override?.isIgnored !== undefined) return override.isIgnored
-  return id === Category.Ignored
+  // backward-compat: existing DB rows with category='ignored' stay excluded from charts
+  return id === 'ignored'
 }
