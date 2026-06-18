@@ -43,7 +43,7 @@ export function getCategoryDefinitions(): CategoryDefinition[] {
       id: category,
       label: override?.label ?? CATEGORY_LABELS[category],
       color: override?.color ?? CATEGORY_COLORS[category],
-      icon: CATEGORY_ICONS[category],
+      icon: override?.icon ?? CATEGORY_ICONS[category],
       isCustom: false,
       isIgnored: override?.isIgnored ?? false,
     }
@@ -97,7 +97,7 @@ export function getCategoryDefinition(
       id: category,
       label: override?.label ?? CATEGORY_LABELS[category],
       color: override?.color ?? CATEGORY_COLORS[category],
-      icon: CATEGORY_ICONS[category],
+      icon: override?.icon ?? CATEGORY_ICONS[category],
       isIgnored: override?.isIgnored ?? false,
       isOverridden: !!override,
     }

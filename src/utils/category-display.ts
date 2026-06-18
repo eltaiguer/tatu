@@ -86,6 +86,16 @@ export function getCategoryDisplay(categoryId?: string | null): CategoryDisplay 
     };
   }
 
+  const customDef = getCategoryDefinition(normalizedId)
+  if (customDef.isCustom) {
+    return {
+      id: normalizedId,
+      label: customDef.label,
+      color: customDef.color,
+      icon: MODERN_META[Category.Uncategorized].icon,
+    }
+  }
+
   return {
     id: normalizedId,
     label: humanizeCategoryId(normalizedId),

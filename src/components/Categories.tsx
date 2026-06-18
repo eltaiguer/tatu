@@ -6,7 +6,10 @@ import { Badge } from './ui/badge'
 import { Checkbox } from './ui/checkbox'
 import type { Transaction } from '../models'
 import { Category } from '../models'
-import { getCategoryDefinitions } from '../services/categories/category-registry'
+import {
+  getCategoryDefinition,
+  getCategoryDefinitions,
+} from '../services/categories/category-registry'
 import {
   addCustomCategoryWithSync,
   removeCustomCategoryWithSync,
@@ -61,9 +64,6 @@ export function Categories({ transactions }: CategoriesProps) {
 
   const categoryDefinitions = getCategoryDefinitions()
   const isEditing = form.id.length > 0
-  const isEditingBuiltin =
-    isEditing &&
-    !categoryDefinitions.find((c) => c.id === form.id)?.isCustom
 
   function resetForm() {
     setForm({ id: '', label: '', color: '#0ea5e9', icon: '🏷️', isIgnored: false })
@@ -97,6 +97,7 @@ export function Categories({ transactions }: CategoriesProps) {
         await upsertBuiltinOverrideWithSync(form.id, {
           label: form.label.trim(),
           color: form.color,
+          icon: form.icon.trim() || undefined,
           isIgnored: form.isIgnored,
         })
       }
@@ -280,7 +281,7 @@ export function Categories({ transactions }: CategoriesProps) {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: isEditingBuiltin ? '1fr 120px' : '1fr 120px 120px', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: 12, marginBottom: 16 }}>
             <div>
               <label
                 htmlFor="cat-label"
@@ -312,24 +313,22 @@ export function Categories({ transactions }: CategoriesProps) {
                 className="h-10"
               />
             </div>
-            {!isEditingBuiltin && (
-              <div>
-                <label
-                  htmlFor="cat-icon"
-                  style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
-                >
-                  Icono
-                </label>
-                <Input
-                  id="cat-icon"
-                  aria-label="Icono de categoría"
-                  value={form.icon}
-                  onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
-                  placeholder="🏷️"
-                  maxLength={2}
-                />
-              </div>
-            )}
+            <div>
+              <label
+                htmlFor="cat-icon"
+                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+              >
+                Icono
+              </label>
+              <Input
+                id="cat-icon"
+                aria-label="Icono de categoría"
+                value={form.icon}
+                onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
+                placeholder="🏷️"
+                maxLength={2}
+              />
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
@@ -689,7 +688,7 @@ export function Categories({ transactions }: CategoriesProps) {
         {customPatterns.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {customPatterns.map((cp) => {
-              const catDisplay = getCategoryDisplay(cp.category)
+              const catDisplay = getCategoryDefinition(cp.category)
               const matchLabel =
                 cp.matchType === 'contains'
                   ? 'contiene'

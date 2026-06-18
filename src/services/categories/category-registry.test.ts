@@ -105,6 +105,26 @@ describe('getCategoryDefinitions', () => {
     const shopping = defs.find((d) => d.id === Category.Shopping)
     expect(shopping?.isIgnored).toBe(true)
   })
+
+  it('uses override icon when a built-in category has a custom icon override', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: Category.Groceries, label: 'Comida', color: '#ff0000', icon: '🛒✨' },
+    ])
+
+    const defs = getCategoryDefinitions()
+    const groceries = defs.find((d) => d.id === Category.Groceries)
+    expect(groceries?.icon).toBe('🛒✨')
+  })
+
+  it('falls back to built-in icon when override has no icon', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: Category.Groceries, label: 'Comida', color: '#ff0000' },
+    ])
+
+    const defs = getCategoryDefinitions()
+    const groceries = defs.find((d) => d.id === Category.Groceries)
+    expect(groceries?.icon).toBe('🛒')
+  })
 })
 
 describe('getCategoryDefinition', () => {
@@ -166,6 +186,24 @@ describe('getCategoryDefinition', () => {
     const def = getCategoryDefinition(Category.Transport)
     expect(def.label).toBe('Movilidad')
     expect(def.isOverridden).toBe(true)
+  })
+
+  it('uses override icon for a built-in when override has an icon', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: Category.InternalTransfer, label: 'Mis transferencias', color: '#0000ff', icon: '💼' },
+    ])
+
+    const def = getCategoryDefinition(Category.InternalTransfer)
+    expect(def.icon).toBe('💼')
+  })
+
+  it('falls back to built-in icon for a built-in override with no icon', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: Category.InternalTransfer, label: 'Mis transferencias', color: '#0000ff' },
+    ])
+
+    const def = getCategoryDefinition(Category.InternalTransfer)
+    expect(def.icon).toBe('↔️')
   })
 
   it('returns a custom category definition when found', () => {

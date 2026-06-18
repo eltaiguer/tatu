@@ -141,7 +141,7 @@ export async function updateCustomCategoryWithSync(
 
 export function upsertBuiltinOverride(
   id: string,
-  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'isIgnored'>>
+  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>>
 ): void {
   const existing = _customCategories.find((c) => c.id === id)
   if (existing) {
@@ -163,7 +163,7 @@ export function upsertBuiltinOverride(
 
 export async function upsertBuiltinOverrideWithSync(
   id: string,
-  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'isIgnored'>>
+  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>>
 ): Promise<void> {
   upsertBuiltinOverride(id, updates)
   await syncCustomCategoryToCloud(id)
