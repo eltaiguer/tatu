@@ -16,7 +16,6 @@ import {
   clearDescriptionOverrideWithSync,
   setDescriptionOverrideWithSync,
   getDescriptionOverride,
-  listDescriptionOverrides,
 } from '../services/descriptions/description-overrides'
 import { buildDescriptionOverrideKey } from '../services/descriptions/normalization'
 import {
@@ -31,43 +30,13 @@ import {
 } from '../services/categorizer/transaction-categorizer'
 import { analyzeTemporalPatterns } from '../services/categorizer/temporal-patterns'
 import { normalizeMerchantName } from '../services/categorizer/merchant-patterns'
-import { listCustomCategories } from '../services/categories/category-store'
-import { listCustomPatterns } from '../services/categorizer/custom-patterns'
+
 import {
   getAiConfig,
   enrichTransactionsWithAi,
   applyAiEnrichment,
 } from '../services/ai'
-import type { AiCorrectionContext } from '../services/ai'
-
-function buildCorrectionContext(): AiCorrectionContext {
-  const descOverrides = listDescriptionOverrides()
-  const catOverrides = listMerchantCategoryOverrides()
-
-  const descriptionExamples = Object.values(descOverrides)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 20)
-    .map((o) => ({
-      raw: o.descriptionOriginal ?? '',
-      friendly: o.friendlyDescription,
-      category: o.category,
-    }))
-
-  const categoryExamples = Object.values(catOverrides)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 20)
-    .map((o) => ({
-      merchant: o.merchantName ?? '',
-      category: o.category,
-    }))
-
-  return {
-    descriptionExamples,
-    categoryExamples,
-    customCategories: listCustomCategories(),
-    customPatterns: listCustomPatterns(),
-  }
-}
+import { buildCorrectionContext } from '../services/ai/correction-context'
 
 export function useTransactionHandlers({
   session,
