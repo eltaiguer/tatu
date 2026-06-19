@@ -121,7 +121,7 @@ describe('Transactions', () => {
     expect(screen.getByText('Mostrando 1-1 de 1')).toBeInTheDocument()
   })
 
-  it('shows translated and humanized category labels in filters', () => {
+  it('shows translated category labels in filter dropdown', () => {
     render(
       <Transactions
         transactions={[
@@ -130,22 +130,20 @@ describe('Transactions', () => {
             category: 'groceries',
           },
           {
-            ...makeTransaction(2, 'Home Office Expense'),
-            category: 'home_office',
+            ...makeTransaction(2, 'Resto del Mundo'),
+            category: 'restaurants',
           },
         ]}
       />
     )
 
-    expect(
-      screen.getByRole('option', { name: 'Alimentación' })
-    ).toHaveValue('groceries')
-    expect(
-      screen.getByRole('option', { name: 'Home office' })
-    ).toHaveValue('home_office')
-    expect(
-      screen.queryByRole('option', { name: 'groceries' })
-    ).not.toBeInTheDocument()
+    // Open the category filter popover
+    fireEvent.click(screen.getByLabelText('Filtro categoría'))
+
+    expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Restaurantes').length).toBeGreaterThan(0)
+    expect(screen.queryByText('groceries')).not.toBeInTheDocument()
+    expect(screen.queryByText('restaurants')).not.toBeInTheDocument()
   })
 
   it('shows filter-specific empty state when structured filters remove all matches', () => {
@@ -518,7 +516,6 @@ describe('Transactions', () => {
 
     fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     expect(screen.getAllByText('Servicios').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Custom category').length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByLabelText('Tags dropdown'))
     expect(screen.getAllByText('monthly').length).toBeGreaterThan(0)

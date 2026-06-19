@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { calculateTotals } from '../services/aggregator/aggregation'
+import { isCategoryIgnored } from '../services/categories/category-registry'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
 import type { Transaction, TransactionsFilter } from '../models'
@@ -29,6 +30,7 @@ export function useTransactionFiltering({
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>(
     'all'
   )
+  const [showIgnored, setShowIgnored] = useState(true)
 
   useEffect(() => {
     if (initialFilter) {
@@ -69,6 +71,7 @@ export function useTransactionFiltering({
       if (currencyFilter !== 'all' && transaction.currency !== currencyFilter)
         return false
       if (typeFilter !== 'all' && transaction.type !== typeFilter) return false
+      if (!showIgnored && isCategoryIgnored(transaction.category)) return false
       return true
     })
 
@@ -101,6 +104,7 @@ export function useTransactionFiltering({
     typeFilter,
     sortField,
     sortDirection,
+    showIgnored,
   ])
 
   const availableCategories = useMemo(
@@ -127,7 +131,8 @@ export function useTransactionFiltering({
     Boolean(categoryFilter) ||
     accountFilter !== 'all' ||
     currencyFilter !== 'all' ||
-    typeFilter !== 'all'
+    typeFilter !== 'all' ||
+    !showIgnored
 
   const totals = calculateTotals(filteredTransactions)
 
@@ -147,6 +152,7 @@ export function useTransactionFiltering({
     setAccountFilter('all')
     setCurrencyFilter('all')
     setTypeFilter('all')
+    setShowIgnored(true)
   }
 
   function handleSort(field: SortField) {
@@ -188,6 +194,8 @@ export function useTransactionFiltering({
     setCurrencyFilter,
     typeFilter,
     setTypeFilter,
+    showIgnored,
+    setShowIgnored,
     sortField,
     sortDirection,
     handleSort,

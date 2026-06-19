@@ -64,6 +64,8 @@ export function Transactions({
     setCurrencyFilter,
     typeFilter,
     setTypeFilter,
+    showIgnored,
+    setShowIgnored,
     sortField,
     sortDirection,
     handleSort,
@@ -432,6 +434,7 @@ export function Transactions({
         accountFilter={accountFilter}
         currencyFilter={currencyFilter}
         typeFilter={typeFilter}
+        showIgnored={showIgnored}
         availableCategories={availableCategories}
         hasActiveFilters={hasActiveFilters}
         onSearchChange={setSearchTerm}
@@ -441,6 +444,7 @@ export function Transactions({
         onAccountChange={setAccountFilter}
         onCurrencyChange={setCurrencyFilter}
         onTypeChange={setTypeFilter}
+        onShowIgnoredChange={setShowIgnored}
         onClearAll={clearAllFilters}
       />
 

@@ -1,9 +1,15 @@
-import { Search, X } from 'lucide-react'
+import { ChevronDown, Eye, EyeOff, Search, X } from 'lucide-react'
 import { DateRangePicker } from './DateRangePicker'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
 import { Input } from './ui/input'
-import { getCategoryDisplay } from '../utils/category-display'
+import {
+  Popover,
+  PopoverClose,
+  PopoverContent,
+  PopoverTrigger,
+} from './ui/popover'
+import { CategoryBadge } from './CategoryBadge'
 
 interface TransactionFiltersProps {
   searchTerm: string
@@ -13,6 +19,7 @@ interface TransactionFiltersProps {
   accountFilter: 'all' | 'credit_card' | 'bank_account'
   currencyFilter: 'all' | 'USD' | 'UYU'
   typeFilter: 'all' | 'credit' | 'debit'
+  showIgnored: boolean
   availableCategories: string[]
   hasActiveFilters: boolean
   onSearchChange: (value: string) => void
@@ -22,6 +29,7 @@ interface TransactionFiltersProps {
   onAccountChange: (value: 'all' | 'credit_card' | 'bank_account') => void
   onCurrencyChange: (value: 'all' | 'USD' | 'UYU') => void
   onTypeChange: (value: 'all' | 'credit' | 'debit') => void
+  onShowIgnoredChange: (value: boolean) => void
   onClearAll: () => void
 }
 
@@ -33,6 +41,7 @@ export function TransactionFilters({
   accountFilter,
   currencyFilter,
   typeFilter,
+  showIgnored,
   availableCategories,
   hasActiveFilters,
   onSearchChange,
@@ -42,6 +51,7 @@ export function TransactionFilters({
   onAccountChange,
   onCurrencyChange,
   onTypeChange,
+  onShowIgnoredChange,
   onClearAll,
 }: TransactionFiltersProps) {
   return (
@@ -63,21 +73,47 @@ export function TransactionFilters({
             style={{ fontSize: 13 }}
           />
         </div>
-        <select
-          id="transactions-category-filter"
-          aria-label="Filtro categoría"
-          value={categoryFilter}
-          onChange={(event) => onCategoryChange(event.target.value)}
-          className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
-          style={{ minWidth: 130 }}
-        >
-          <option value="">Categoría</option>
-          {availableCategories.map((category) => (
-            <option key={category} value={category}>
-              {getCategoryDisplay(category).label}
-            </option>
-          ))}
-        </select>
+
+        {/* Category picker */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              id="transactions-category-filter"
+              aria-label="Filtro categoría"
+              className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
+              style={{ minWidth: 130 }}
+            >
+              {categoryFilter ? (
+                <CategoryBadge categoryId={categoryFilter} size="sm" />
+              ) : (
+                <span className="text-muted-foreground">Categoría</span>
+              )}
+              <ChevronDown size={14} className="text-muted-foreground ml-auto shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="p-1 w-[220px]" align="start">
+            <PopoverClose asChild>
+              <button
+                className="w-full rounded px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50"
+                onClick={() => onCategoryChange('')}
+              >
+                Todas las categorías
+              </button>
+            </PopoverClose>
+            {availableCategories.map((cat) => (
+              <PopoverClose key={cat} asChild>
+                <button
+                  className="w-full rounded px-3 py-1.5 text-left hover:bg-muted/50"
+                  onClick={() => onCategoryChange(cat)}
+                >
+                  <CategoryBadge categoryId={cat} size="sm" />
+                </button>
+              </PopoverClose>
+            ))}
+          </PopoverContent>
+        </Popover>
+
         <select
           id="transactions-account-filter"
           aria-label="Filtro cuenta"
@@ -104,7 +140,7 @@ export function TransactionFilters({
         />
       </div>
 
-      {/* Row 2: Type segment + Currency segment + Clear */}
+      {/* Row 2: Type segment + Currency segment + Ignored toggle + Clear */}
       <div
         style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
       >
@@ -194,6 +230,27 @@ export function TransactionFilters({
             </button>
           ))}
         </div>
+
+        {/* Ignored categories toggle */}
+        <button
+          aria-label={showIgnored ? 'Ocultar categorías ignoradas' : 'Mostrar categorías ignoradas'}
+          title={showIgnored ? 'Ocultar categorías ignoradas' : 'Mostrar categorías ignoradas'}
+          onClick={() => onShowIgnoredChange(!showIgnored)}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            border: '1px solid var(--border)',
+            background: showIgnored ? 'transparent' : 'var(--surface-2)',
+            color: showIgnored ? 'var(--text-faint)' : 'var(--text)',
+            cursor: 'pointer',
+          }}
+        >
+          {showIgnored ? <Eye size={15} /> : <EyeOff size={15} />}
+        </button>
 
         {hasActiveFilters && (
           <Button
