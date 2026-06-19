@@ -589,7 +589,7 @@ export function Charts({
                   key={i}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '11px 0', borderBottom: '1px solid var(--border)',
+                    padding: '11px 0', borderBottom: '1px solid var(--border)', minWidth: 0,
                   }}
                 >
                   <span className="font-mono text-muted-foreground" style={{ fontSize: 12, width: 16 }}>
