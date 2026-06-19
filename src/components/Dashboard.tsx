@@ -272,8 +272,8 @@ export function Dashboard({
 
       {hasTransactions && (
         <>
-          {/* 3 Account cards (native amounts) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 3 Account cards (native amounts) — hidden, kept for future use */}
+          {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <AccountCard
               icon={<CreditCard size={18} />}
               title="Tarjeta de Crédito"
@@ -363,7 +363,7 @@ export function Dashboard({
                   : undefined
               }
             />
-          </div>
+          </div> */}
 
           {/* Este mes panel — converted + combined in home currency */}
           <Card className="p-6">

@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
 import { transactionStore } from './stores/transaction-store'
@@ -93,6 +93,8 @@ vi.mock('./services/supabase/import-runs', () => ({
 
 describe('App', () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 0, 15))
     vi.clearAllMocks()
     transactionStore.getState().clearTransactions()
     localStorage.clear()
@@ -108,6 +110,10 @@ describe('App', () => {
     loadUserPreferencesMock.mockResolvedValue(null)
     updateTransactionMock.mockResolvedValue(undefined)
     softDeleteTransactionMock.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders overview (dashboard) view by default', async () => {
