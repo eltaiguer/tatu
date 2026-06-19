@@ -46,8 +46,8 @@ describe('Dashboard', () => {
 
     // income = 200 USD appears in "Este mes" panel
     expect(screen.getByText('US$ 200,00')).toBeInTheDocument()
-    // UYU transaction native amount appears in recent list
-    expect(screen.getAllByText('$U 1.000,00').length).toBeGreaterThan(0)
+    // UYU transaction native amount appears in recent list (sign and amount share one span)
+    expect(screen.getAllByText(/\$U 1\.000,00/).length).toBeGreaterThan(0)
     // Converted secondary line appears for the UYU tx (≈ USD)
     expect(screen.getAllByText(/≈ US\$/).length).toBeGreaterThan(0)
   })

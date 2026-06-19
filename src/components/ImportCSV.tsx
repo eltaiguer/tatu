@@ -347,9 +347,9 @@ export function ImportCSV({
 
       <Card className="p-4 bg-primary-50 dark:bg-primary-900/10 border-primary/20">
         <p className="text-sm">
-          <strong>Tu privacidad es importante:</strong> Los archivos se procesan
-          localmente en tu navegador. Tatú no envía tus datos financieros a
-          ningún servidor externo.
+          <strong>Tus datos son tuyos:</strong> Los movimientos se guardan en tu
+          cuenta de Supabase bajo tu propio usuario. Nadie más tiene acceso a
+          tu información financiera.
         </p>
       </Card>
     </div>

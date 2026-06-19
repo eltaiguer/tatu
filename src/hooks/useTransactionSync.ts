@@ -15,9 +15,11 @@ import { loadUserPreferences } from '../services/supabase/user-preferences'
 export function useTransactionSync({
   session,
   authMode,
+  syncKey,
   markPrefsLoaded,
   setError,
   setNotice,
+  setSyncStatus,
   setTheme,
   setPreferredCurrency,
   setFxRate,
@@ -27,9 +29,11 @@ export function useTransactionSync({
 }: {
   session: SupabaseSession | null
   authMode: 'signin' | 'reset'
+  syncKey: number
   markPrefsLoaded: () => void
   setError: (msg: string) => void
   setNotice: (msg: string) => void
+  setSyncStatus: (s: 'loading' | 'ready' | 'error') => void
   setTheme: (t: 'light' | 'dark' | 'auto') => void
   setPreferredCurrency: (c: 'UYU' | 'USD') => void
   setFxRate: (r: number) => void
@@ -44,6 +48,7 @@ export function useTransactionSync({
       if (authMode === 'reset') return
       if (!session) return
 
+      setSyncStatus('loading')
       setError('')
       setNotice('')
 
@@ -127,14 +132,11 @@ export function useTransactionSync({
           // Allow preference saves now that remote values are applied.
           markPrefsLoaded()
           transactionStore.getState().setTransactions(remoteTransactions)
+          setSyncStatus('ready')
         }
-      } catch (error) {
+      } catch {
         if (!cancelled) {
-          setError(
-            error instanceof Error
-              ? error.message
-              : 'No se pudieron cargar las transacciones'
-          )
+          setSyncStatus('error')
         }
       }
     }
@@ -144,5 +146,5 @@ export function useTransactionSync({
     return () => {
       cancelled = true
     }
-  }, [authMode, session]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [authMode, session, syncKey]) // eslint-disable-line react-hooks/exhaustive-deps
 }

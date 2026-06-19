@@ -1,4 +1,11 @@
 import { useState } from 'react'
+import {
+  DashboardSkeleton,
+  TransactionTableSkeleton,
+  AnalysisSkeleton,
+} from './components/StateSkeletons'
+import { ConnectionLostState } from './components/ConnectionLostState'
+import { Onboarding } from './components/Onboarding'
 import { toast } from 'sonner'
 import { Toaster } from './components/ui/sonner'
 import { TatuLogo } from './components/TatuLogo'
@@ -45,6 +52,12 @@ function App() {
   const [importOpen, setImportOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
+  const [syncStatus, setSyncStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [syncKey, setSyncKey] = useState(0)
+
+  function refetch() {
+    setSyncKey((k) => k + 1)
+  }
   const {
     session,
     setSession,
@@ -91,9 +104,11 @@ function App() {
   useTransactionSync({
     session,
     authMode,
+    syncKey,
     markPrefsLoaded,
     setError: setAuthError,
     setNotice: setAuthNotice,
+    setSyncStatus,
     setTheme,
     setPreferredCurrency,
     setFxRate,
@@ -123,6 +138,8 @@ function App() {
       setImportOpen(false)
       setAuthError('')
       setAuthNotice('')
+      setSyncStatus('loading')
+      setSyncKey(0)
     } catch (error) {
       setAuthError(
         error instanceof Error ? error.message : 'No se pudo cerrar sesión'
@@ -351,67 +368,93 @@ function App() {
             </p>
           )}
 
-          {currentView === 'overview' && (
-              <Dashboard
-                transactions={transactions}
-                userName={session?.user?.email ?? undefined}
-                onNavigateToImport={() => setImportOpen(true)}
-                onNavigateToTransactions={navigateToTransactions}
-                onNavigateToAnalysis={() => setCurrentView('analysis')}
-                homeCurrency={preferredCurrency}
-                fxRate={fxRate}
-                onSetHomeCurrency={setPreferredCurrency}
-                onSetFxRate={setFxRate}
-              />
-            )}
-            {currentView === 'transactions' && (
-              <Transactions
-                transactions={transactions}
-                initialFilter={pendingTxFilter ?? undefined}
-                onUpdateTransaction={handleUpdateTransaction}
-                onDeleteTransaction={handleDeleteTransaction}
-                onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
-                onBulkCategorize={handleBulkCategorizeTransactions}
-                onBulkDelete={handleBulkDeleteTransactions}
-                onBulkTag={handleBulkTagTransactions}
-              />
-            )}
-            {currentView === 'analysis' && (
-              <Charts
-                transactions={transactions}
-                onNavigateToTransactions={navigateToTransactions}
-                homeCurrency={preferredCurrency}
-                fxRate={fxRate}
-                onSetHomeCurrency={setPreferredCurrency}
-                onSetFxRate={setFxRate}
-              />
-            )}
-            {currentView === 'categories' && (
-              <Categories transactions={transactions} />
-            )}
-            {currentView === 'settings' && (
-              <Settings
-                theme={theme}
-                onSetTheme={setTheme}
-                preferredCurrency={preferredCurrency}
-                onSetCurrency={setPreferredCurrency}
-                fxRate={fxRate}
-                onSetFxRate={setFxRate}
-                session={session}
-                supabaseEnabled={true}
-                onSignOut={() => {
-                  void handleSignOut()
-                }}
-                transactions={transactions}
-                onResetAllData={handleResetAllData}
-                claudeApiKey={claudeApiKey}
-                onSetClaudeApiKey={setClaudeApiKey}
-                aiEnabled={aiEnabled}
-                onSetAiEnabled={setAiEnabled}
-                aiModel={aiModel}
-                onSetAiModel={setAiModel}
-              />
-            )}
+          {syncStatus === 'loading' ? (
+            currentView === 'transactions' ? (
+              <TransactionTableSkeleton />
+            ) : currentView === 'analysis' ? (
+              <AnalysisSkeleton />
+            ) : (
+              <DashboardSkeleton />
+            )
+          ) : syncStatus === 'error' ? (
+            <ConnectionLostState onRetry={refetch} />
+          ) : transactions.length === 0 &&
+            currentView !== 'settings' &&
+            currentView !== 'categories' ? (
+            <Onboarding
+              onImport={() => setImportOpen(true)}
+              userName={
+                session?.user?.user_metadata?.full_name as string | undefined ??
+                session?.user?.email?.split('@')[0]?.replace(/^./, (c) =>
+                  c.toUpperCase()
+                )
+              }
+            />
+          ) : (
+            <>
+              {currentView === 'overview' && (
+                <Dashboard
+                  transactions={transactions}
+                  userName={session?.user?.email ?? undefined}
+                  onNavigateToImport={() => setImportOpen(true)}
+                  onNavigateToTransactions={navigateToTransactions}
+                  onNavigateToAnalysis={() => setCurrentView('analysis')}
+                  homeCurrency={preferredCurrency}
+                  fxRate={fxRate}
+                  onSetHomeCurrency={setPreferredCurrency}
+                  onSetFxRate={setFxRate}
+                />
+              )}
+              {currentView === 'transactions' && (
+                <Transactions
+                  transactions={transactions}
+                  initialFilter={pendingTxFilter ?? undefined}
+                  onUpdateTransaction={handleUpdateTransaction}
+                  onDeleteTransaction={handleDeleteTransaction}
+                  onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
+                  onBulkCategorize={handleBulkCategorizeTransactions}
+                  onBulkDelete={handleBulkDeleteTransactions}
+                  onBulkTag={handleBulkTagTransactions}
+                />
+              )}
+              {currentView === 'analysis' && (
+                <Charts
+                  transactions={transactions}
+                  onNavigateToTransactions={navigateToTransactions}
+                  homeCurrency={preferredCurrency}
+                  fxRate={fxRate}
+                  onSetHomeCurrency={setPreferredCurrency}
+                  onSetFxRate={setFxRate}
+                />
+              )}
+              {currentView === 'categories' && (
+                <Categories transactions={transactions} />
+              )}
+              {currentView === 'settings' && (
+                <Settings
+                  theme={theme}
+                  onSetTheme={setTheme}
+                  preferredCurrency={preferredCurrency}
+                  onSetCurrency={setPreferredCurrency}
+                  fxRate={fxRate}
+                  onSetFxRate={setFxRate}
+                  session={session}
+                  supabaseEnabled={true}
+                  onSignOut={() => {
+                    void handleSignOut()
+                  }}
+                  transactions={transactions}
+                  onResetAllData={handleResetAllData}
+                  claudeApiKey={claudeApiKey}
+                  onSetClaudeApiKey={setClaudeApiKey}
+                  aiEnabled={aiEnabled}
+                  onSetAiEnabled={setAiEnabled}
+                  aiModel={aiModel}
+                  onSetAiModel={setAiModel}
+                />
+              )}
+            </>
+          )}
         </div>
       </main>
 

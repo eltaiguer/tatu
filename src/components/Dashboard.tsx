@@ -2,18 +2,11 @@
 
 import { Card } from './ui/card'
 import { Button } from './ui/button'
-import {
-  CreditCard,
-  DollarSign,
-  Landmark,
-  Upload,
-  ArrowRight,
-} from 'lucide-react'
+import { Upload, ArrowRight } from 'lucide-react'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
 import { useMemo } from 'react'
 import { getCategoryDisplay } from '../utils/category-display'
-import { isTransferCategory } from '../services/transfers/internal-transfers'
-import { isCategoryIgnored, getCategoryDefinition } from '../services/categories/category-registry'
+import { getCategoryDefinition } from '../services/categories/category-registry'
 import {
   buildCurrentMonthSummary,
   buildCategorySpendingConverted,
@@ -21,9 +14,8 @@ import {
 } from '../services/charts/chart-data'
 import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
-import { formatCurrency, toSafeNumber } from '../utils/formatting'
+import { formatCurrency } from '../utils/formatting'
 import { getDisplayDescription } from '../utils/transaction-display'
-import { AccountCard } from './AccountCard'
 import { CategoryBreakdownList } from './CategoryBreakdownList'
 import type { CategoryBreakdownRow } from './CategoryBreakdownList'
 
@@ -47,21 +39,6 @@ function MiniBars({ values, color }: { values: number[]; color: string }) {
   )
 }
 
-function calculateAccountSummary(transactions: Transaction[], currency: Currency) {
-  const filtered = transactions.filter((tx) => tx.currency === currency)
-  const income = filtered
-    .filter((tx) => tx.type === 'credit' && !isTransferCategory(tx.category) && !isCategoryIgnored(tx.category))
-    .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
-  const expenses = filtered
-    .filter((tx) => tx.type === 'debit' && !isTransferCategory(tx.category) && !isCategoryIgnored(tx.category))
-    .reduce((sum, tx) => sum + toSafeNumber(tx.amount), 0)
-  return {
-    income: toSafeNumber(income),
-    expenses: toSafeNumber(expenses),
-    balance: toSafeNumber(income - expenses),
-    transactionCount: filtered.length,
-  }
-}
 
 interface DashboardProps {
   transactions: Transaction[]
@@ -96,36 +73,6 @@ export function Dashboard({
       transactions[0].date,
     )
   }, [transactions])
-
-  // Per-source account summaries (native currency, not converted)
-  const creditCardTransactions = useMemo(
-    () => transactions.filter((tx) => tx.source === 'credit_card'),
-    [transactions],
-  )
-  const creditCardSummaryUYU = useMemo(
-    () => calculateAccountSummary(creditCardTransactions, 'UYU'),
-    [creditCardTransactions],
-  )
-  const creditCardSummaryUSD = useMemo(
-    () => calculateAccountSummary(creditCardTransactions, 'USD'),
-    [creditCardTransactions],
-  )
-  const usdBankTransactions = useMemo(
-    () => transactions.filter((tx) => tx.source === 'bank_account' && tx.currency === 'USD'),
-    [transactions],
-  )
-  const usdBankSummary = useMemo(
-    () => calculateAccountSummary(usdBankTransactions, 'USD'),
-    [usdBankTransactions],
-  )
-  const uyuBankTransactions = useMemo(
-    () => transactions.filter((tx) => tx.source === 'bank_account' && tx.currency === 'UYU'),
-    [transactions],
-  )
-  const uyuBankSummary = useMemo(
-    () => calculateAccountSummary(uyuBankTransactions, 'UYU'),
-    [uyuBankTransactions],
-  )
 
   // "Este mes" — converted + combined totals in home currency
   const monthSummary = useMemo(
@@ -172,14 +119,6 @@ export function Dashboard({
 
   const firstName = userName ? userName.split('@')[0] : null
   const greeting = firstName ? `Hola, ${firstName} 👋` : 'Hola 👋'
-
-  const creditCardSubtitle = (() => {
-    const raw = creditCardTransactions[0]?.rawData as
-      | { numeroTarjeta?: string }
-      | undefined
-    const last4 = raw?.numeroTarjeta?.split('-').pop()
-    return `Tarjeta de crédito${last4 ? ` ·· ${last4}` : ''}`
-  })()
 
   const categoryBreakdownRows: CategoryBreakdownRow[] = categoryBreakdown.map(
     (row) => ({

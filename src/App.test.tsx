@@ -119,10 +119,10 @@ describe('App', () => {
   it('renders overview (dashboard) view by default', async () => {
     render(<App />)
 
+    // With no transactions, Onboarding is shown after sync completes
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: /Hola/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /Bienvenido a Tatú/i })).toBeInTheDocument()
     )
-    expect(screen.getByRole('heading', { name: 'Empezá importando tu extracto' })).toBeInTheDocument()
   })
 
   it('opens import view when clicking the sidebar Importar button', async () => {
@@ -146,11 +146,25 @@ describe('App', () => {
   })
 
   it('switches to transactions view from sidebar navigation', async () => {
+    loadUserTransactionsMock.mockResolvedValue([
+      {
+        id: 'tx-nav',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        description: 'Comercio Nav',
+        amount: 100,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+    ])
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
-    expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
+    )
     expect(screen.getByText(/movimientos/)).toBeInTheDocument()
   })
 
@@ -490,6 +504,18 @@ describe('App', () => {
   })
 
   it('mobile hamburger opens nav sheet and closes on nav item click', async () => {
+    loadUserTransactionsMock.mockResolvedValue([
+      {
+        id: 'tx-mobile',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        description: 'Comercio Mobile',
+        amount: 200,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+      },
+    ])
     render(<App />)
     await waitFor(() => expect(screen.getByRole('button', { name: /abrir menú/i })).toBeInTheDocument())
 

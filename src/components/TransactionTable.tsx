@@ -1,5 +1,6 @@
-import { ArrowUpDown, CreditCard, Pencil, SlidersHorizontal, Trash2, Wallet } from 'lucide-react'
+import { ArrowUpDown, CreditCard, Pencil, Search, Trash2, Wallet } from 'lucide-react'
 import { Button } from './ui/button'
+import { EmptyState } from './EmptyState'
 import { Card } from './ui/card'
 import { Checkbox } from './ui/checkbox'
 import { CategoryBadge } from './CategoryBadge'
@@ -166,31 +167,21 @@ export function TransactionTable({
             </tr>
           </thead>
           <tbody>
-            {paginatedTransactions.length === 0 && (
+            {paginatedTransactions.length === 0 && hasActiveFilters && (
               <tr>
-                <td colSpan={8} className="p-10 text-center">
-                  {hasActiveFilters ? (
-                    <div className="flex flex-col items-center gap-3">
-                      <SlidersHorizontal
-                        className="text-muted-foreground"
-                        size={32}
-                      />
-                      <p className="font-medium">Sin resultados</p>
-                      <p className="text-sm text-muted-foreground">
-                        Probá ajustar los filtros o{' '}
-                        <button
-                          onClick={onClearFilters}
-                          className="text-primary underline-offset-2 hover:underline"
-                        >
-                          limpiá los filtros
-                        </button>
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      No hay transacciones para mostrar
-                    </p>
-                  )}
+                <td colSpan={8}>
+                  <EmptyState
+                    compact
+                    tone="neutral"
+                    icon={Search}
+                    title="Sin resultados"
+                    description="Ningún movimiento coincide con estos filtros. Probá ampliar el rango o limpiarlos."
+                    action={
+                      <Button size="sm" onClick={onClearFilters}>
+                        Limpiar filtros
+                      </Button>
+                    }
+                  />
                 </td>
               </tr>
             )}
@@ -377,31 +368,19 @@ export function TransactionTable({
             </span>
           </div>
         )}
-        {paginatedTransactions.length === 0 && (
-          <div className="p-8 text-center">
-            {hasActiveFilters ? (
-              <div className="flex flex-col items-center gap-3">
-                <SlidersHorizontal
-                  className="text-muted-foreground"
-                  size={28}
-                />
-                <p className="font-medium text-sm">Sin resultados</p>
-                <p className="text-xs text-muted-foreground">
-                  Probá ajustar los filtros o{' '}
-                  <button
-                    onClick={onClearFilters}
-                    className="text-primary underline-offset-2 hover:underline"
-                  >
-                    limpiá los filtros
-                  </button>
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No hay transacciones para mostrar
-              </p>
-            )}
-          </div>
+        {paginatedTransactions.length === 0 && hasActiveFilters && (
+          <EmptyState
+            compact
+            tone="neutral"
+            icon={Search}
+            title="Sin resultados"
+            description="Ningún movimiento coincide con estos filtros. Probá ampliar el rango o limpiarlos."
+            action={
+              <Button size="sm" onClick={onClearFilters}>
+                Limpiar filtros
+              </Button>
+            }
+          />
         )}
         {paginatedTransactions.map((transaction) =>
           (() => {

@@ -46,12 +46,11 @@ describe('Transactions', () => {
     expect(screen.getByText('Mostrando 1-1 de 1')).toBeInTheDocument()
   })
 
-  it('shows empty state when there are no transactions', () => {
+  it('shows pagination zero count when there are no transactions', () => {
     render(<Transactions transactions={[]} />)
 
-    expect(
-      screen.getAllByText('No hay transacciones para mostrar').length
-    ).toBeGreaterThan(0)
+    // No-data empty state is handled at App level (Onboarding); the component itself
+    // renders fine with an empty table and correct pagination text.
     expect(screen.getByText('Mostrando 0 de 0')).toBeInTheDocument()
   })
 

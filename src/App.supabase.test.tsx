@@ -181,7 +181,7 @@ describe('App with supabase enabled', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole('heading', { name: /Hola/i })
+        screen.getByRole('heading', { name: /Bienvenido a Tatú/i })
       ).toBeInTheDocument()
     )
   })
