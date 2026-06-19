@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { transactionStore } from './stores/transaction-store'
 
@@ -102,8 +102,6 @@ vi.mock('./services/supabase/import-runs', () => ({
 
 describe('App with supabase enabled', () => {
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date(2026, 1, 15))
     vi.clearAllMocks()
     window.history.replaceState({}, '', '/')
     localStorage.clear()
@@ -135,10 +133,6 @@ describe('App with supabase enabled', () => {
       expires_at: 9999,
       user: { id: 'user-1', email: 'test@example.com' },
     })
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
   })
 
   it('renders authentication form when no session exists', async () => {

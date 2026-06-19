@@ -4,18 +4,6 @@ import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
 import type { Transaction, TransactionsFilter } from '../models'
 
-function fmtDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function currentMonthBounds(): { start: string; end: string } {
-  const now = new Date()
-  return {
-    start: fmtDate(new Date(now.getFullYear(), now.getMonth(), 1)),
-    end: fmtDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)),
-  }
-}
-
 export type SortField = 'date' | 'amount' | 'description' | 'category'
 export type SortDirection = 'asc' | 'desc'
 
@@ -28,14 +16,9 @@ export function useTransactionFiltering({
   transactions: Transaction[]
   initialFilter?: TransactionsFilter
 }) {
-  const defaultBounds = useMemo(() => currentMonthBounds(), [])
   const [searchTerm, setSearchTerm] = useState('')
-  const [dateFromFilter, setDateFromFilter] = useState(
-    () => currentMonthBounds().start
-  )
-  const [dateToFilter, setDateToFilter] = useState(
-    () => currentMonthBounds().end
-  )
+  const [dateFromFilter, setDateFromFilter] = useState('')
+  const [dateToFilter, setDateToFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [accountFilter, setAccountFilter] = useState<
     'all' | 'credit_card' | 'bank_account'
@@ -139,8 +122,8 @@ export function useTransactionFiltering({
 
   const hasActiveFilters =
     Boolean(searchTerm.trim()) ||
-    dateFromFilter !== defaultBounds.start ||
-    dateToFilter !== defaultBounds.end ||
+    Boolean(dateFromFilter) ||
+    Boolean(dateToFilter) ||
     Boolean(categoryFilter) ||
     accountFilter !== 'all' ||
     currencyFilter !== 'all' ||
@@ -158,8 +141,8 @@ export function useTransactionFiltering({
 
   function clearAllFilters() {
     setSearchTerm('')
-    setDateFromFilter(defaultBounds.start)
-    setDateToFilter(defaultBounds.end)
+    setDateFromFilter('')
+    setDateToFilter('')
     setCategoryFilter('')
     setAccountFilter('all')
     setCurrencyFilter('all')

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Transactions } from './Transactions'
 import type { Transaction } from '../models'
@@ -18,13 +18,7 @@ function makeTransaction(index: number, description?: string): Transaction {
 
 describe('Transactions', () => {
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date(2026, 0, 15))
     vi.restoreAllMocks()
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
   })
 
   it('clamps pagination when filtering reduces total pages', () => {
