@@ -83,7 +83,7 @@ export function Charts({
     return buildMonthlyTrendsConverted(transactions, homeCurrency, fxRate)
       .slice(-12)
       .map((m) => ({
-        month: new Intl.DateTimeFormat('es-UY', { year: 'numeric', month: 'short' }).format(
+        month: new Intl.DateTimeFormat('es-UY', { year: 'numeric', month: 'short', timeZone: 'UTC' }).format(
           new Date(m.month + '-01T00:00:00.000Z')
         ),
         ingresos: m.income,
