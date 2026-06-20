@@ -12,6 +12,7 @@ import {
 } from '../services/supabase/auth'
 import type { SupabaseSession } from '../services/supabase/client'
 import { setActiveSupabaseSession } from '../services/supabase/runtime'
+import { mapAuthError } from '../utils/auth-errors'
 
 function isPasswordResetMode(): boolean {
   if (typeof window === 'undefined') {
@@ -108,9 +109,7 @@ export function useAuthSession() {
       setSession(nextSession)
       toast.success('Sesión iniciada')
     } catch (error) {
-      setAuthError(
-        error instanceof Error ? error.message : 'Error de autenticación'
-      )
+      setAuthError(mapAuthError(error))
     } finally {
       setAuthSubmitting(false)
     }
@@ -125,11 +124,7 @@ export function useAuthSession() {
       await requestPasswordReset(email)
       setAuthNotice('Te enviamos un email para restablecer tu contraseña')
     } catch (error) {
-      setAuthError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo enviar el email de recuperación'
-      )
+      setAuthError(mapAuthError(error))
     } finally {
       setAuthSubmitting(false)
     }
@@ -154,11 +149,7 @@ export function useAuthSession() {
       clearPasswordResetModeFromUrl()
       setAuthNotice('Contraseña actualizada. Iniciá sesión nuevamente')
     } catch (error) {
-      setAuthError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo actualizar la contraseña'
-      )
+      setAuthError(mapAuthError(error))
     } finally {
       setAuthSubmitting(false)
     }

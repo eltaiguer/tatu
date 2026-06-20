@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { transactionStore } from './stores/transaction-store'
 
 const {
@@ -143,6 +143,29 @@ describe('App with supabase enabled', () => {
       screen.getByRole('heading', { name: 'Ingresar a Tatú' })
     ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('email@ejemplo.com')).toBeInTheDocument()
+  })
+
+  it('shows Spanish error when signin fails with Supabase credentials error', async () => {
+    signInWithPasswordMock.mockRejectedValue(
+      new Error('Invalid login credentials')
+    )
+
+    const { default: App } = await import('./App')
+    render(<App />)
+
+    fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
+      target: { value: 'test@example.com' },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Contraseña'), {
+      target: { value: 'wrongpass' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Email o contraseña incorrectos.')
+      ).toBeInTheDocument()
+    )
   })
 
   it('signs in and loads transactions', async () => {
@@ -307,8 +330,6 @@ describe('App with supabase enabled', () => {
       },
     ])
 
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-
     const { default: App } = await import('./App')
     render(<App />)
 
@@ -328,16 +349,16 @@ describe('App with supabase enabled', () => {
       target: { value: 'services' },
     })
     fireEvent.click(screen.getByLabelText('Crear categoría'))
-    fireEvent.click(screen.getByLabelText('Tags dropdown'))
-    fireEvent.change(screen.getByLabelText('Nuevo tag'), {
+    fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
+    fireEvent.change(screen.getByLabelText('Nueva etiqueta'), {
       target: { value: 'monthly' },
     })
-    fireEvent.click(screen.getByLabelText('Crear tag'))
-    fireEvent.click(screen.getByLabelText('Tags dropdown'))
-    fireEvent.change(screen.getByLabelText('Nuevo tag'), {
+    fireEvent.click(screen.getByLabelText('Crear etiqueta'))
+    fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
+    fireEvent.change(screen.getByLabelText('Nueva etiqueta'), {
       target: { value: 'fixed' },
     })
-    fireEvent.click(screen.getByLabelText('Crear tag'))
+    fireEvent.click(screen.getByLabelText('Crear etiqueta'))
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
     await waitFor(() =>
@@ -357,6 +378,13 @@ describe('App with supabase enabled', () => {
 
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Eliminar New merchant' })[0]
+    )
+
+    await waitFor(() => screen.getByRole('alertdialog'))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Eliminar',
+      })
     )
 
     await waitFor(() =>

@@ -81,6 +81,22 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+function SectionCard({
+  title,
+  children,
+  className,
+  ...props
+}: { title: string; children: React.ReactNode } & React.ComponentProps<"div">) {
+  return (
+    <Card className={cn("overflow-hidden mb-4", className)} {...props}>
+      <div className="px-6 py-4 border-b border-border">
+        <h3 className="text-[15px] font-semibold">{title}</h3>
+      </div>
+      <div>{children}</div>
+    </Card>
+  );
+}
+
 export {
   Card,
   CardHeader,
@@ -89,4 +105,5 @@ export {
   CardAction,
   CardDescription,
   CardContent,
+  SectionCard,
 };

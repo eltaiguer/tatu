@@ -29,3 +29,11 @@ export function formatDate(date: Date): string {
     year: 'numeric',
   }).format(date)
 }
+
+export function formatDateCompact(date: Date): string {
+  return new Intl.DateTimeFormat('es-UY', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  }).format(date)
+}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Download, Eye, EyeOff } from 'lucide-react'
+import { getFriendlyName } from '../utils/user-display'
 import { Button } from './ui/button'
 import { toast } from 'sonner'
 import type { Transaction } from '../models'
@@ -8,6 +9,10 @@ import { exportTransactions } from '../services/export/export'
 import { CoverageAnalysis } from './dev/CoverageAnalysis'
 import { AiCategorizationPreview } from './dev/AiCategorizationPreview'
 import { AiPatternAnalysis } from './dev/AiPatternAnalysis'
+import { SectionCard } from './ui/card'
+import { IconTile } from './ui/icon-tile'
+import { SegmentedToggle } from './ui/segmented-toggle'
+import { useConfirm } from './ConfirmDialog'
 
 interface SettingsProps {
   theme: 'light' | 'dark' | 'auto'
@@ -29,83 +34,7 @@ interface SettingsProps {
   onSetAiModel: (model: string) => void
 }
 
-function SegmentControl({
-  options,
-  value,
-  onChange,
-}: {
-  options: { label: string; value: string }[]
-  value: string
-  onChange: (v: string) => void
-}) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        background: 'var(--surface-2)',
-        borderRadius: 'var(--radius-sm)',
-        padding: 3,
-        gap: 2,
-      }}
-    >
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={() => onChange(opt.value)}
-          style={{
-            padding: '6px 14px',
-            borderRadius: 7,
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: value === opt.value ? 600 : 500,
-            background:
-              value === opt.value ? 'var(--surface)' : 'transparent',
-            color:
-              value === opt.value ? 'var(--text)' : 'var(--text-muted)',
-            boxShadow:
-              value === opt.value
-                ? '0 1px 3px oklch(0 0 0 / 0.08)'
-                : 'none',
-            transition: 'background 0.12s, color 0.12s',
-          }}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  )
-}
 
-function SectionCard({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <div
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius-lg)',
-        overflow: 'hidden',
-        marginBottom: 16,
-      }}
-    >
-      <div
-        style={{
-          padding: '16px 24px',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        <h3 style={{ fontSize: 15, fontWeight: 600 }}>{title}</h3>
-      </div>
-      <div>{children}</div>
-    </div>
-  )
-}
 
 function SettingRow({
   label,
@@ -113,7 +42,7 @@ function SettingRow({
   control,
 }: {
   label: string
-  description?: string
+  description?: React.ReactNode
   control: React.ReactNode
 }) {
   return (
@@ -168,9 +97,10 @@ export function Settings({
   onSetAiModel,
 }: SettingsProps) {
   const userEmail = session?.user?.email ?? ''
-  const userName = userEmail ? userEmail.split('@')[0] : 'Usuario'
+  const userName = getFriendlyName(session) || 'Usuario'
   const avatarInitial = userName.charAt(0).toUpperCase()
   const [showKey, setShowKey] = useState(false)
+  const { confirm: confirmReset, dialog: confirmDialog } = useConfirm()
 
   function handleExport(format: 'csv' | 'pdf') {
     exportTransactions(transactions, { format })
@@ -182,10 +112,14 @@ export function Settings({
   }
 
   async function handleResetAllData() {
-    const confirmed = window.confirm(
-      'Esto eliminará todas tus transacciones y configuraciones. ¿Querés continuar?'
-    )
-    if (!confirmed || !onResetAllData) return
+    if (!onResetAllData) return
+    const confirmed = await confirmReset({
+      title: '¿Eliminar todos los datos?',
+      description:
+        'Esto eliminará todas tus transacciones, categorías y reglas guardadas. Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar todo',
+    })
+    if (!confirmed) return
     await onResetAllData()
   }
 
@@ -216,14 +150,15 @@ export function Settings({
           label="Tema"
           description="Elegí cómo se ve Tatú"
           control={
-            <SegmentControl
+            <SegmentedToggle
               options={[
-                { label: 'Claro', value: 'light' },
-                { label: 'Auto', value: 'auto' },
-                { label: 'Oscuro', value: 'dark' },
+                { label: 'Claro', value: 'light' as const },
+                { label: 'Auto', value: 'auto' as const },
+                { label: 'Oscuro', value: 'dark' as const },
               ]}
               value={theme}
-              onChange={(v) => onSetTheme(v as 'light' | 'dark' | 'auto')}
+              onChange={(v) => onSetTheme(v)}
+              aria-label="Tema"
             />
           }
         />
@@ -235,13 +170,14 @@ export function Settings({
           label="Moneda principal"
           description="Moneda en la que se convierten y combinan todos los totales"
           control={
-            <SegmentControl
+            <SegmentedToggle
               options={[
-                { label: 'Pesos $U', value: 'UYU' },
-                { label: 'Dólares US$', value: 'USD' },
+                { label: 'Pesos $U', value: 'UYU' as const },
+                { label: 'Dólares US$', value: 'USD' as const },
               ]}
               value={preferredCurrency}
-              onChange={(v) => onSetCurrency(v as 'UYU' | 'USD')}
+              onChange={(v) => onSetCurrency(v)}
+              aria-label="Moneda principal"
             />
           }
         />
@@ -321,7 +257,20 @@ export function Settings({
         />
         <SettingRow
           label="Clave API de Anthropic"
-          description="Obtenela en console.anthropic.com · Se guarda en tu cuenta"
+          description={
+            <>
+              Obtenela en{' '}
+              <a
+                href="https://console.anthropic.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--brand)', textDecoration: 'underline' }}
+              >
+                console.anthropic.com
+              </a>
+              {' '}· El costo de uso es tuyo · Se guarda en tu cuenta
+            </>
+          }
           control={
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input
@@ -364,13 +313,14 @@ export function Settings({
           description="Haiku es más rápido y económico; Sonnet es más preciso"
           control={
             <div style={{ opacity: aiEnabled ? 1 : 0.5, pointerEvents: aiEnabled ? 'auto' : 'none' }}>
-              <SegmentControl
+              <SegmentedToggle
                 options={[
-                  { label: 'Haiku', value: 'claude-haiku-4-5' },
-                  { label: 'Sonnet', value: 'claude-sonnet-4-6' },
+                  { label: 'Haiku', value: 'claude-haiku-4-5' as const },
+                  { label: 'Sonnet', value: 'claude-sonnet-4-6' as const },
                 ]}
                 value={aiModel}
                 onChange={onSetAiModel}
+                aria-label="Modelo de IA"
               />
             </div>
           }
@@ -387,7 +337,7 @@ export function Settings({
               gap: 6,
             }}
           >
-            <span style={{ color: '#22c55e' }}>✓</span>
+            <span style={{ color: 'var(--pos)' }}>✓</span>
             IA activa · se aplicará en tu próxima importación
           </div>
         )}
@@ -407,22 +357,14 @@ export function Settings({
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: 'var(--accent-soft)',
-                    color: 'var(--accent)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    fontWeight: 700,
-                    fontSize: 15,
-                    flexShrink: 0,
-                  }}
+                <IconTile
+                  size="lg"
+                  bg="var(--accent-soft)"
+                  color="var(--accent)"
+                  className="font-bold"
                 >
                   {avatarInitial}
-                </span>
+                </IconTile>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>
                     {userName}
@@ -576,6 +518,8 @@ export function Settings({
           />
         </SectionCard>
       )}
+
+      {confirmDialog}
     </div>
   )
 }

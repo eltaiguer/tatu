@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { CalendarIcon } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
+import { es } from 'date-fns/locale'
 import { Calendar } from './ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 
@@ -232,6 +233,7 @@ export function DateRangePicker({
               mode="range"
               numberOfMonths={2}
               weekStartsOn={1}
+              locale={es}
               selected={calendarSelected}
               onSelect={handleSelect}
               defaultMonth={defaultMonth}

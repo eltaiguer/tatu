@@ -1,7 +1,8 @@
-import { ArrowUpDown, CreditCard, Pencil, Search, Trash2, Wallet } from 'lucide-react'
+import { ArrowUpDown, CreditCard, Info, Pencil, Search, Trash2, Wallet } from 'lucide-react'
 import { Button } from './ui/button'
 import { EmptyState } from './EmptyState'
 import { Card } from './ui/card'
+import { IconTile } from './ui/icon-tile'
 import { Checkbox } from './ui/checkbox'
 import { CategoryBadge } from './CategoryBadge'
 import { ConfidenceBadge } from './ConfidenceBadge'
@@ -140,8 +141,15 @@ export function TransactionTable({
               <th className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
                 Cuenta
               </th>
-              <th className="text-center px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-14">
-                Conf.
+              <th className="text-center px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-20">
+                <span className="inline-flex items-center gap-1">
+                  Confianza
+                  <Info
+                    size={12}
+                    className="text-muted-foreground/60"
+                    title="Confianza de la categorización automática. Más barras = más seguridad."
+                  />
+                </span>
               </th>
               <th
                 className="text-right px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
@@ -221,19 +229,11 @@ export function TransactionTable({
                           const catId = transaction.category ?? 'uncategorized'
                           const definition = getCategoryDefinition(catId)
                           return (
-                            <span
+                            <IconTile
                               aria-hidden="true"
-                              style={{
-                                width: 30,
-                                height: 30,
-                                borderRadius: 8,
-                                background: definition.color + '1f',
-                                display: 'grid',
-                                placeItems: 'center',
-                                fontSize: 14,
-                                flexShrink: 0,
-                                marginTop: 1,
-                              }}
+                              size="sm"
+                              color={definition.color}
+                              style={{ marginTop: 1 }}
                             >
                               {definition.icon ?? (
                                 <span
@@ -246,7 +246,7 @@ export function TransactionTable({
                                   }}
                                 />
                               )}
-                            </span>
+                            </IconTile>
                           )
                         })()}
                         <div style={{ minWidth: 0 }}>
@@ -316,7 +316,7 @@ export function TransactionTable({
                       </div>
                     </td>
                     <td className="px-3.5 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-[120ms]">
+                      <div className="flex items-center justify-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity duration-[120ms]">
                         <Button
                           variant="ghost"
                           size="sm"

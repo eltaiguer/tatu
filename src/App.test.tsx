@@ -1,7 +1,8 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import App from './App'
 import { transactionStore } from './stores/transaction-store'
+import { listCustomCategories } from './services/categories/category-store'
 
 const MOCK_SESSION = {
   access_token: 'access',
@@ -403,8 +404,6 @@ describe('App', () => {
         rawData: {},
       },
     ])
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
-
     render(<App />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
@@ -414,9 +413,14 @@ describe('App', () => {
     fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0])
     fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0])
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
-    })
+    fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
+
+    await waitFor(() => screen.getByRole('alertdialog'))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Eliminar',
+      })
+    )
 
     await waitFor(() => {
       expect(transactionStore.getState().transactions).toHaveLength(0)
@@ -450,11 +454,11 @@ describe('App', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Tags bulk dropdown'))
-    fireEvent.change(screen.getByLabelText('Buscar o crear tag'), {
+    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'recurrente' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /Crear tag "recurrente"/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Crear etiqueta "recurrente"/ }))
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
@@ -536,5 +540,34 @@ describe('App', () => {
 
     expect(hamburger).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
+  })
+
+  it('clears custom categories from memory on sign out', async () => {
+    listCustomCategoriesMock.mockResolvedValue([
+      {
+        id: 'mi-cat',
+        label: 'Mi Categoría',
+        color: '#ff0000',
+        isIgnored: false,
+        isArchived: false,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ])
+
+    render(<App />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Categorías' })).toBeInTheDocument()
+    )
+
+    // After sync, the custom category is in memory
+    expect(listCustomCategories().map((c) => c.id)).toContain('mi-cat')
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
+    })
+
+    // After sign out, the in-memory store must be empty
+    expect(listCustomCategories()).toHaveLength(0)
   })
 })

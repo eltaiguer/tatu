@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Currency } from '../models'
 import { Card } from './ui/card'
+import { IconTile } from './ui/icon-tile'
 import { formatCurrency } from '../utils/formatting'
 
 interface AccountCardProps {
@@ -43,20 +44,9 @@ export function AccountCard({
       style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: 'var(--surface-2)',
-            color: 'var(--brand)',
-            display: 'grid',
-            placeItems: 'center',
-            flexShrink: 0,
-          }}
-        >
+        <IconTile size="lg" bg="var(--surface-2)" color="var(--brand)">
           {icon}
-        </span>
+        </IconTile>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 14 }}>{title}</div>
           <div className="text-muted-foreground" style={{ fontSize: 12 }}>{subtitle}</div>

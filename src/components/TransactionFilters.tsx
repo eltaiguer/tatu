@@ -10,6 +10,7 @@ import {
   PopoverTrigger,
 } from './ui/popover'
 import { CategoryBadge } from './CategoryBadge'
+import { SegmentedToggle } from './ui/segmented-toggle'
 
 interface TransactionFiltersProps {
   searchTerm: string
@@ -114,22 +115,45 @@ export function TransactionFilters({
           </PopoverContent>
         </Popover>
 
-        <select
-          id="transactions-account-filter"
-          aria-label="Filtro cuenta"
-          value={accountFilter}
-          onChange={(event) =>
-            onAccountChange(
-              event.target.value as 'all' | 'credit_card' | 'bank_account'
-            )
-          }
-          className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 flex h-9 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
-          style={{ minWidth: 120 }}
-        >
-          <option value="all">Cuenta</option>
-          <option value="bank_account">Cuenta bancaria</option>
-          <option value="credit_card">Tarjeta</option>
-        </select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              id="transactions-account-filter"
+              aria-label="Filtro cuenta"
+              className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
+              style={{ minWidth: 130 }}
+            >
+              <span className={accountFilter === 'all' ? 'text-muted-foreground' : ''}>
+                {accountFilter === 'all'
+                  ? 'Cuenta'
+                  : accountFilter === 'bank_account'
+                    ? 'Cuenta bancaria'
+                    : 'Tarjeta'}
+              </span>
+              <ChevronDown size={14} className="text-muted-foreground ml-auto shrink-0" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="p-1 w-[180px]" align="start">
+            {(
+              [
+                { value: 'all', label: 'Todas las cuentas' },
+                { value: 'bank_account', label: 'Cuenta bancaria' },
+                { value: 'credit_card', label: 'Tarjeta' },
+              ] as const
+            ).map(({ value, label }) => (
+              <PopoverClose key={value} asChild>
+                <button
+                  className="w-full rounded px-3 py-1.5 text-left text-sm hover:bg-muted/50"
+                  style={{ fontWeight: accountFilter === value ? 600 : 400 }}
+                  onClick={() => onAccountChange(value)}
+                >
+                  {label}
+                </button>
+              </PopoverClose>
+            ))}
+          </PopoverContent>
+        </Popover>
         <DateRangePicker
           dateFrom={dateFromFilter}
           dateTo={dateToFilter}
@@ -145,91 +169,30 @@ export function TransactionFilters({
         style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
       >
         {/* Type filter */}
-        <div
-          style={{
-            display: 'inline-flex',
-            background: 'var(--surface-2)',
-            borderRadius: 10,
-            padding: 3,
-            gap: 2,
-          }}
-        >
-          {(
-            [
-              { value: 'all', label: 'Todos' },
-              { value: 'credit', label: 'Ingresos' },
-              { value: 'debit', label: 'Gastos' },
-            ] as const
-          ).map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => onTypeChange(value)}
-              style={{
-                padding: '4px 12px',
-                borderRadius: 7,
-                fontSize: 13,
-                fontWeight: 500,
-                background:
-                  typeFilter === value ? 'var(--bg)' : 'transparent',
-                color:
-                  typeFilter === value ? 'var(--text)' : 'var(--text-faint)',
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow:
-                  typeFilter === value
-                    ? '0 1px 3px rgba(0,0,0,.08)'
-                    : 'none',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle
+          options={[
+            { value: 'all' as const, label: 'Todos' },
+            { value: 'credit' as const, label: 'Ingresos' },
+            { value: 'debit' as const, label: 'Gastos' },
+          ]}
+          value={typeFilter}
+          onChange={onTypeChange}
+          size="sm"
+          aria-label="Tipo de transacción"
+        />
 
         {/* Currency filter */}
-        <div
-          style={{
-            display: 'inline-flex',
-            background: 'var(--surface-2)',
-            borderRadius: 10,
-            padding: 3,
-            gap: 2,
-          }}
-        >
-          {(
-            [
-              { value: 'all', label: 'Todo' },
-              { value: 'UYU', label: '$U' },
-              { value: 'USD', label: 'US$' },
-            ] as const
-          ).map(({ value, label }) => (
-            <button
-              key={value}
-              aria-label={`Filtro moneda ${label}`}
-              onClick={() => onCurrencyChange(value)}
-              style={{
-                padding: '4px 12px',
-                borderRadius: 7,
-                fontSize: 13,
-                fontWeight: 500,
-                background:
-                  currencyFilter === value ? 'var(--bg)' : 'transparent',
-                color:
-                  currencyFilter === value
-                    ? 'var(--text)'
-                    : 'var(--text-faint)',
-                border: 'none',
-                cursor: 'pointer',
-                boxShadow:
-                  currencyFilter === value
-                    ? '0 1px 3px rgba(0,0,0,.08)'
-                    : 'none',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle
+          options={[
+            { value: 'all' as const, label: 'Todo' },
+            { value: 'UYU' as const, label: '$U' },
+            { value: 'USD' as const, label: 'US$' },
+          ]}
+          value={currencyFilter}
+          onChange={onCurrencyChange}
+          size="sm"
+          aria-label="Moneda"
+        />
 
         {/* Ignored categories toggle */}
         <button
@@ -239,17 +202,20 @@ export function TransactionFilters({
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            width: 36,
+            gap: 5,
             height: 36,
+            padding: '0 10px',
             borderRadius: 8,
             border: '1px solid var(--border)',
             background: showIgnored ? 'transparent' : 'var(--surface-2)',
             color: showIgnored ? 'var(--text-faint)' : 'var(--text)',
             cursor: 'pointer',
+            fontSize: 13,
+            fontWeight: 500,
           }}
         >
           {showIgnored ? <Eye size={15} /> : <EyeOff size={15} />}
+          Ignoradas
         </button>
 
         {hasActiveFilters && (

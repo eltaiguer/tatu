@@ -87,7 +87,7 @@ export function EditTransactionDialog({
         <DialogHeader>
           <DialogTitle>Editar transacción</DialogTitle>
           <DialogDescription>
-            Actualizá descripción visible, categoría y tags.
+            Actualizá descripción visible, categoría y etiquetas.
           </DialogDescription>
         </DialogHeader>
 
@@ -231,28 +231,28 @@ export function EditTransactionDialog({
           </div>
 
           <div>
-            <label className="text-sm font-medium">Tags</label>
+            <label className="text-sm font-medium">Etiquetas</label>
             <Popover open={tagPickerOpen} onOpenChange={onTagPickerOpenChange}>
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  aria-label="Tags dropdown"
+                  aria-label="Etiquetas dropdown"
                   className="mt-1 w-full h-9 rounded-md border border-input bg-input-background px-3 text-sm text-left hover:bg-muted/50"
                 >
                   {editTagList.length > 0
-                    ? `${editTagList.length} tags seleccionados`
-                    : 'Sin tags'}
+                    ? `${editTagList.length} ${editTagList.length === 1 ? 'etiqueta seleccionada' : 'etiquetas seleccionadas'}`
+                    : 'Sin etiquetas'}
                 </button>
               </PopoverTrigger>
               <PopoverContent className="p-0 w-[320px]" align="start">
                 <div className="p-2 space-y-2">
                   <Input
-                    aria-label="Nuevo tag"
+                    aria-label="Nueva etiqueta"
                     value={newTagInput}
                     onChange={(event) =>
                       onNewTagInputChange(event.target.value)
                     }
-                    placeholder="Buscar o crear tag"
+                    placeholder="Buscar o crear etiqueta"
                   />
                   <div
                     className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2"
@@ -277,14 +277,14 @@ export function EditTransactionDialog({
                   <Button
                     type="button"
                     variant="outline"
-                    aria-label="Crear tag"
+                    aria-label="Crear etiqueta"
                     className="w-full"
                     onClick={() => {
                       onAddInlineTag()
                       onTagPickerOpenChange(false)
                     }}
                   >
-                    Crear tag
+                    Crear etiqueta
                   </Button>
                 </div>
               </PopoverContent>
@@ -296,7 +296,7 @@ export function EditTransactionDialog({
                   <button
                     key={tag}
                     type="button"
-                    aria-label={`Quitar tag ${tag}`}
+                    aria-label={`Quitar etiqueta ${tag}`}
                     onClick={() => onRemoveTag(tag)}
                     className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs"
                   >
