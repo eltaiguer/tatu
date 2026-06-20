@@ -110,7 +110,9 @@ export function SidebarInner({
   ]
 
   const userEmail = session?.user?.email ?? ''
-  const userName = userEmail ? userEmail.split('@')[0] : 'Usuario'
+  const userName =
+    session?.user?.user_metadata?.display_name ||
+    (userEmail ? userEmail.split('@')[0] : 'Usuario')
   const avatarInitial = userName.charAt(0).toUpperCase()
 
   return (
