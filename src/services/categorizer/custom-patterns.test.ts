@@ -2,10 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Category } from '../../models'
 import {
   addCustomPattern,
+  addCustomPatternWithSync,
   clearAllCustomPatterns,
   listCustomPatterns,
   matchCustomPattern,
   removeCustomPattern,
+  removeCustomPatternWithSync,
   replaceCustomPatterns,
   testPattern,
 } from './custom-patterns'
@@ -107,49 +109,42 @@ describe('Custom Patterns', () => {
       getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
       upsertCustomPatternMock.mockResolvedValue(undefined)
 
-      addCustomPattern({
+      await addCustomPatternWithSync({
         pattern: 'farmacia',
         matchType: 'contains',
         category: Category.Healthcare,
       })
 
-      await vi.waitFor(() =>
-        expect(upsertCustomPatternMock).toHaveBeenCalledTimes(1)
-      )
+      expect(upsertCustomPatternMock).toHaveBeenCalledTimes(1)
     })
 
     it('syncs remove when session exists', async () => {
       getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+      upsertCustomPatternMock.mockResolvedValue(undefined)
       deleteCustomPatternMock.mockResolvedValue(undefined)
 
-      const added = addCustomPattern({
+      const added = await addCustomPatternWithSync({
         pattern: 'farmacia',
         matchType: 'contains',
         category: Category.Healthcare,
       })
-      await vi.waitFor(() =>
-        expect(upsertCustomPatternMock).toHaveBeenCalledTimes(1)
-      )
 
-      removeCustomPattern(added.id)
-      await vi.waitFor(() =>
-        expect(deleteCustomPatternMock).toHaveBeenCalledWith(
-          expect.anything(),
-          added.id
-        )
+      await removeCustomPatternWithSync(added.id)
+      expect(deleteCustomPatternMock).toHaveBeenCalledWith(
+        expect.anything(),
+        added.id
       )
     })
 
     it('does not sync when no session', async () => {
       getActiveSupabaseSessionMock.mockReturnValue(null)
 
-      addCustomPattern({
+      await addCustomPatternWithSync({
         pattern: 'farmacia',
         matchType: 'contains',
         category: Category.Healthcare,
       })
 
-      await new Promise((r) => setTimeout(r, 50))
       expect(upsertCustomPatternMock).not.toHaveBeenCalled()
     })
   })

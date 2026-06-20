@@ -19,9 +19,9 @@ import {
 } from '../services/categories/category-store'
 import { getCategoryDisplay } from '../utils/category-display'
 import {
-  addCustomPattern,
+  addCustomPatternWithSync,
   listCustomPatterns,
-  removeCustomPattern,
+  removeCustomPatternWithSync,
   testPattern,
   type MatchType,
 } from '../services/categorizer/custom-patterns'
@@ -122,7 +122,7 @@ export function Categories({ transactions }: CategoriesProps) {
 
   async function handleAddPattern() {
     if (!patternForm.pattern.trim()) return
-    const newPattern = addCustomPattern({
+    const newPattern = await addCustomPatternWithSync({
       pattern: patternForm.pattern,
       matchType: patternForm.matchType,
       category: patternForm.category,
@@ -187,7 +187,7 @@ export function Categories({ transactions }: CategoriesProps) {
   }
 
   function handleRemovePattern(id: string) {
-    removeCustomPattern(id)
+    void removeCustomPatternWithSync(id)
     setCustomPatterns(listCustomPatterns())
   }
 

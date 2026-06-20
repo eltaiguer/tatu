@@ -115,7 +115,7 @@ describe('Categories', () => {
     expect(listCustomCategories()).toHaveLength(0)
   })
 
-  it('adds and removes a pattern rule', () => {
+  it('adds and removes a pattern rule', async () => {
     render(<Categories transactions={[]} />)
 
     fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
@@ -123,7 +123,7 @@ describe('Categories', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
 
-    expect(screen.getByText(/"farmashop"/)).toBeInTheDocument()
+    await screen.findByText(/"farmashop"/)
 
     const removeBtn = screen.getByRole('button', {
       name: 'Eliminar regla farmashop',

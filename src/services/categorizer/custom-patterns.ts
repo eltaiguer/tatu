@@ -34,34 +34,51 @@ export function addCustomPattern(
     id: generateId(),
     createdAt: new Date().toISOString(),
   }
-
   patterns = [...patterns, pattern]
+  return pattern
+}
 
-  void import('../supabase/runtime')
-    .then(({ getActiveSupabaseSession }) => {
-      const session = getActiveSupabaseSession()
-      if (!session) return
-      return import('../supabase/custom-patterns').then(
-        ({ upsertCustomPattern }) => upsertCustomPattern(session, pattern)
-      )
-    })
-    .catch(console.error)
+async function syncCustomPatternToCloud(pattern: CustomPattern): Promise<void> {
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { upsertCustomPattern } = await import('../supabase/custom-patterns')
+      await upsertCustomPattern(session, pattern)
+    }
+  } catch (err) {
+    console.error('[custom-patterns] failed to sync to cloud:', err)
+  }
+}
 
+export async function addCustomPatternWithSync(
+  input: Omit<CustomPattern, 'id' | 'createdAt'>
+): Promise<CustomPattern> {
+  const pattern = addCustomPattern(input)
+  await syncCustomPatternToCloud(pattern)
   return pattern
 }
 
 export function removeCustomPattern(id: string): void {
   patterns = patterns.filter((p) => p.id !== id)
+}
 
-  void import('../supabase/runtime')
-    .then(({ getActiveSupabaseSession }) => {
-      const session = getActiveSupabaseSession()
-      if (!session) return
-      return import('../supabase/custom-patterns').then(
-        ({ deleteCustomPattern }) => deleteCustomPattern(session, id)
-      )
-    })
-    .catch(console.error)
+async function deleteCustomPatternFromCloud(id: string): Promise<void> {
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { deleteCustomPattern } = await import('../supabase/custom-patterns')
+      await deleteCustomPattern(session, id)
+    }
+  } catch (err) {
+    console.error('[custom-patterns] failed to delete from cloud:', err)
+  }
+}
+
+export async function removeCustomPatternWithSync(id: string): Promise<void> {
+  removeCustomPattern(id)
+  await deleteCustomPatternFromCloud(id)
 }
 
 export function clearAllCustomPatterns(): void {
