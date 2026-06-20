@@ -13,10 +13,12 @@ import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
 import { formatCurrency } from '../utils/formatting'
 import { exportTransactions } from '../services/export/export'
+import { useConfirm } from './ConfirmDialog'
 import {
   addCustomCategory,
   listCustomCategories,
   syncCustomCategoryToCloud,
+  DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
 import type { TransactionsFilter } from '../models'
 
@@ -64,6 +66,8 @@ export function Transactions({
     setCurrencyFilter,
     typeFilter,
     setTypeFilter,
+    showIgnored,
+    setShowIgnored,
     sortField,
     sortDirection,
     handleSort,
@@ -109,6 +113,7 @@ export function Transactions({
     'single' | 'matching_past_and_future' | 'future_matching_only'
   >('single')
   const [editError, setEditError] = useState('')
+  const { confirm: confirmDeletion, dialog: confirmDialog } = useConfirm()
 
   const categorySuggestions = useMemo(() => {
     return Array.from(
@@ -197,7 +202,7 @@ export function Transactions({
   function handleAddCategory() {
     const value = newCategoryInput.trim()
     if (!value) return
-    const created = addCustomCategory({ label: value, color: '#0ea5e9', icon: '🏷️' })
+    const created = addCustomCategory({ label: value, color: DEFAULT_CATEGORY_COLOR, icon: '🏷️' })
     setEditCategory(created.id)
     setNewCategoryInput('')
     void syncCustomCategoryToCloud(created.id)
@@ -245,9 +250,11 @@ export function Transactions({
   async function handleDeleteTransaction(transaction: Transaction) {
     if (!onDeleteTransaction) return
 
-    const confirmed = window.confirm(
-      `¿Eliminar la transacción "${getDisplayDescription(transaction)}"?`
-    )
+    const confirmed = await confirmDeletion({
+      title: '¿Eliminar transacción?',
+      description: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar',
+    })
     if (!confirmed) return
 
     setPendingTransactionId(transaction.id)
@@ -329,12 +336,13 @@ export function Transactions({
       return
     }
 
-    const confirmed = window.confirm(
-      `¿Eliminar ${selectedTransactionIds.length} transacción${selectedTransactionIds.length === 1 ? '' : 'es'}?`
-    )
-    if (!confirmed) return
-
     const count = selectedTransactionIds.length
+    const confirmed = await confirmDeletion({
+      title: `¿Eliminar ${count} transacción${count === 1 ? '' : 'es'}?`,
+      description: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar',
+    })
+    if (!confirmed) return
     setIsBulkOperating(true)
     try {
       await onBulkDelete(selectedTransactionIds)
@@ -432,6 +440,7 @@ export function Transactions({
         accountFilter={accountFilter}
         currencyFilter={currencyFilter}
         typeFilter={typeFilter}
+        showIgnored={showIgnored}
         availableCategories={availableCategories}
         hasActiveFilters={hasActiveFilters}
         onSearchChange={setSearchTerm}
@@ -441,6 +450,7 @@ export function Transactions({
         onAccountChange={setAccountFilter}
         onCurrencyChange={setCurrencyFilter}
         onTypeChange={setTypeFilter}
+        onShowIgnoredChange={setShowIgnored}
         onClearAll={clearAllFilters}
       />
 
@@ -537,21 +547,21 @@ export function Transactions({
                     {
                       label: 'Ingresos',
                       amount: totals.income[currency],
-                      color: 'var(--text)',
+                      color: 'var(--pos)',
                     },
                     {
                       label: 'Gastos',
                       amount: totals.expense[currency],
-                      color: 'var(--text)',
+                      color: 'var(--neg)',
                     },
                     {
                       label: 'Neto',
                       amount: net,
                       color:
                         net > 0
-                          ? 'var(--color-success, #16a34a)'
+                          ? 'var(--pos)'
                           : net < 0
-                            ? 'var(--color-destructive, #dc2626)'
+                            ? 'var(--neg)'
                             : 'var(--text)',
                     },
                   ].map(({ label, amount, color }) => (
@@ -736,6 +746,8 @@ export function Transactions({
           </Button>
         </div>
       </div>
+
+      {confirmDialog}
     </div>
   )
 }

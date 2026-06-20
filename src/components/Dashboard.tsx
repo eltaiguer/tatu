@@ -14,7 +14,9 @@ import {
 } from '../services/charts/chart-data'
 import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
-import { formatCurrency } from '../utils/formatting'
+import { CurrencyToggle } from './CurrencyToggle'
+import { formatCurrency, formatDateCompact } from '../utils/formatting'
+import { IconTile } from './ui/icon-tile'
 import { getDisplayDescription } from '../utils/transaction-display'
 import { CategoryBreakdownList } from './CategoryBreakdownList'
 import type { CategoryBreakdownRow } from './CategoryBreakdownList'
@@ -117,8 +119,7 @@ export function Dashboard({
     [transactions],
   )
 
-  const firstName = userName ? userName.split('@')[0] : null
-  const greeting = firstName ? `Hola, ${firstName} 👋` : 'Hola 👋'
+  const greeting = userName ? `Hola, ${userName} 👋` : 'Hola 👋'
 
   const categoryBreakdownRows: CategoryBreakdownRow[] = categoryBreakdown.map(
     (row) => ({
@@ -147,42 +148,16 @@ export function Dashboard({
             {greeting}
           </h1>
           <p className="text-muted-foreground" style={{ fontSize: 14 }}>
-            Esto es lo que pasó en tus cuentas Santander · {monthSummary.monthLabel || latestDate.toLocaleDateString('es-UY', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
+            Esto es lo que pasó en tus cuentas · {monthSummary.monthLabel || latestDate.toLocaleDateString('es-UY', { month: 'long', year: 'numeric', timeZone: 'UTC' })}
           </p>
         </div>
         {hasTransactions && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <FxChip fxRate={fxRate} onSetFxRate={onSetFxRate} />
-            <div
-              style={{
-                display: 'flex',
-                background: 'var(--surface-2)',
-                borderRadius: 10,
-                padding: 3,
-                gap: 2,
-              }}
-            >
-              {(['USD', 'UYU'] as const).map((val) => (
-                <button
-                  key={val}
-                  onClick={() => onSetHomeCurrency?.(val)}
-                  style={{
-                    padding: '5px 14px',
-                    borderRadius: 7,
-                    fontSize: 13,
-                    fontWeight: 500,
-                    background: homeCurrency === val ? 'var(--bg)' : 'transparent',
-                    color: homeCurrency === val ? 'var(--text)' : 'var(--text-faint)',
-                    border: 'none',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s',
-                    boxShadow: homeCurrency === val ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
-                  }}
-                >
-                  {val === 'USD' ? 'US$' : '$U'}
-                </button>
-              ))}
-            </div>
+            <CurrencyToggle
+              value={homeCurrency}
+              onChange={(c) => onSetHomeCurrency?.(c)}
+            />
           </div>
         )}
       </div>
@@ -211,99 +186,6 @@ export function Dashboard({
 
       {hasTransactions && (
         <>
-          {/* 3 Account cards (native amounts) — hidden, kept for future use */}
-          {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <AccountCard
-              icon={<CreditCard size={18} />}
-              title="Tarjeta de Crédito"
-              subtitle={creditCardSubtitle}
-              label="Consumo del período"
-              primaryAmount={creditCardSummaryUYU.expenses}
-              primaryCurrency="UYU"
-              primaryColor="var(--neg)"
-              primaryFontSize={22}
-              secondaryAmount={creditCardSummaryUSD.expenses}
-              secondaryCurrency="USD"
-              movimientos={creditCardTransactions.length}
-              convertedAmount={
-                convert(
-                  creditCardSummaryUYU.expenses,
-                  'UYU',
-                  homeCurrency,
-                  fxRate,
-                ) +
-                convert(
-                  creditCardSummaryUSD.expenses,
-                  'USD',
-                  homeCurrency,
-                  fxRate,
-                )
-              }
-              homeCurrency={homeCurrency}
-              onClick={
-                onNavigateToTransactions
-                  ? () => onNavigateToTransactions({ accountType: 'credit_card' })
-                  : undefined
-              }
-            />
-            <AccountCard
-              icon={<DollarSign size={18} />}
-              title="Cuenta en Dólares"
-              subtitle="Caja de ahorro USD"
-              label="Saldo disponible"
-              primaryAmount={usdBankSummary.balance}
-              primaryCurrency="USD"
-              primaryColor={
-                usdBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)'
-              }
-              movimientos={usdBankTransactions.length}
-              convertedAmount={convert(
-                usdBankSummary.expenses,
-                'USD',
-                homeCurrency,
-                fxRate,
-              )}
-              homeCurrency={homeCurrency}
-              onClick={
-                onNavigateToTransactions
-                  ? () =>
-                      onNavigateToTransactions({
-                        accountType: 'bank_account',
-                        currency: 'USD',
-                      })
-                  : undefined
-              }
-            />
-            <AccountCard
-              icon={<Landmark size={18} />}
-              title="Cuenta en Pesos"
-              subtitle="Caja de ahorro UYU"
-              label="Saldo disponible"
-              primaryAmount={uyuBankSummary.balance}
-              primaryCurrency="UYU"
-              primaryColor={
-                uyuBankSummary.balance >= 0 ? 'var(--text)' : 'var(--neg)'
-              }
-              movimientos={uyuBankTransactions.length}
-              convertedAmount={convert(
-                uyuBankSummary.expenses,
-                'UYU',
-                homeCurrency,
-                fxRate,
-              )}
-              homeCurrency={homeCurrency}
-              onClick={
-                onNavigateToTransactions
-                  ? () =>
-                      onNavigateToTransactions({
-                        accountType: 'bank_account',
-                        currency: 'UYU',
-                      })
-                  : undefined
-              }
-            />
-          </div> */}
-
           {/* Este mes panel — converted + combined in home currency */}
           <Card className="p-6">
             <div
@@ -476,16 +358,9 @@ export function Dashboard({
                         borderBottom: i < recentTransactions.length - 1 ? '1px solid var(--border)' : 'none',
                       }}
                     >
-                      <span
-                        style={{
-                          width: 32, height: 32, borderRadius: 9,
-                          background: catDef.color + '1f',
-                          display: 'grid', placeItems: 'center',
-                          flexShrink: 0, fontSize: 15,
-                        }}
-                      >
+                      <IconTile size="md" color={catDef.color}>
                         {catDef.icon}
-                      </span>
+                      </IconTile>
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div
                           style={{
@@ -496,7 +371,7 @@ export function Dashboard({
                           {getDisplayDescription(tx)}
                         </div>
                         <div className="text-muted-foreground" style={{ fontSize: 11.5 }}>
-                          {tx.date.toLocaleDateString('es-UY', { day: 'numeric', month: 'short' })}
+                          {formatDateCompact(tx.date)}
                         </div>
                       </div>
                       <div style={{ flexShrink: 0, textAlign: 'right' }}>
@@ -507,7 +382,7 @@ export function Dashboard({
                           {isCredit ? '+' : '−'}
                           {formatCurrency(tx.amount, tx.currency)}
                         </span>
-                        {showConverted && convertedAmt !== null && (
+                        {showConverted && convertedAmt !== null && Math.abs(convertedAmt) >= 0.005 && (
                           <span
                             className="font-mono text-muted-foreground"
                             style={{ fontSize: 11, display: 'block' }}

@@ -22,6 +22,7 @@ import {
 import type { TooltipProps } from 'recharts'
 import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent'
 import { getCategoryDisplay } from '../utils/category-display'
+import { IconTile } from './ui/icon-tile'
 import { getCategoryDefinitions, isCategoryIgnored } from '../services/categories/category-registry'
 import { isTransferCategory } from '../services/transfers/internal-transfers'
 import {
@@ -31,6 +32,7 @@ import {
 } from '../services/charts/chart-data'
 import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
+import { CurrencyToggle } from './CurrencyToggle'
 import { formatCurrency, formatCurrencyShort } from '../utils/formatting'
 import { CategoryBreakdownList } from './CategoryBreakdownList'
 import type { CategoryBreakdownRow } from './CategoryBreakdownList'
@@ -164,7 +166,7 @@ export function Charts({
         <div
           style={{
             background: 'var(--bg)', border: '1px solid var(--border)',
-            borderRadius: 10, padding: '10px 14px', boxShadow: '0 4px 16px rgba(0,0,0,.08)',
+            borderRadius: 'var(--radius)', padding: '10px 14px', boxShadow: 'var(--shadow-md)',
           }}
         >
           <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{payload[0].name}</p>
@@ -219,28 +221,10 @@ export function Charts({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <FxChip fxRate={fxRate} onSetFxRate={onSetFxRate} />
-          <div
-            style={{
-              display: 'flex', background: 'var(--surface-2)',
-              borderRadius: 10, padding: 3, gap: 2,
-            }}
-          >
-            {(['USD', 'UYU'] as const).map((val) => (
-              <button
-                key={val}
-                onClick={() => onSetHomeCurrency?.(val)}
-                style={{
-                  padding: '5px 14px', borderRadius: 7, fontSize: 13, fontWeight: 500,
-                  background: homeCurrency === val ? 'var(--bg)' : 'transparent',
-                  color: homeCurrency === val ? 'var(--text)' : 'var(--text-faint)',
-                  border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-                  boxShadow: homeCurrency === val ? '0 1px 3px rgba(0,0,0,.08)' : 'none',
-                }}
-              >
-                {val === 'USD' ? 'US$' : '$U'}
-              </button>
-            ))}
-          </div>
+          <CurrencyToggle
+            value={homeCurrency}
+            onChange={(c) => onSetHomeCurrency?.(c)}
+          />
         </div>
       </div>
 
@@ -262,7 +246,7 @@ export function Charts({
             Gasto promedio mensual
           </div>
           <div className="font-mono" style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-            {formatCurrencyShort(avgMonthly, homeCurrency)}
+            {formatCurrency(avgMonthly, homeCurrency)}
           </div>
           <div className="text-muted-foreground" style={{ fontSize: 12 }}>
             Últimos {monthlyTrend.length} meses
@@ -342,7 +326,7 @@ export function Charts({
                   TOTAL
                 </div>
                 <div className="font-mono" style={{ fontSize: 15, fontWeight: 700 }}>
-                  {formatCurrencyShort(totalExpenses, homeCurrency)}
+                  {formatCurrency(totalExpenses, homeCurrency)}
                 </div>
               </div>
             </div>
@@ -426,7 +410,7 @@ export function Charts({
             />
             <Tooltip
               contentStyle={{
-                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
+                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
               }}
               formatter={(value: ValueType) => formatCurrency(Number(value), homeCurrency)}
             />
@@ -469,7 +453,7 @@ export function Charts({
               />
               <Tooltip
                 contentStyle={{
-                  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10,
+                  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
                 }}
                 formatter={(value: ValueType) => [formatCurrency(Number(value), homeCurrency), 'Neto']}
               />
@@ -497,7 +481,7 @@ export function Charts({
                   color: (totalIncome - totalExpenseTrend) >= 0 ? 'var(--pos)' : 'var(--neg)',
                 }}
               >
-                {formatCurrencyShort(
+                {formatCurrency(
                   monthlyTrend.length > 0
                     ? (totalIncome - totalExpenseTrend) / monthlyTrend.length
                     : 0,
@@ -589,20 +573,13 @@ export function Charts({
                   key={i}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
-                    padding: '11px 0', borderBottom: '1px solid var(--border)',
+                    padding: '11px 0', borderBottom: '1px solid var(--border)', minWidth: 0,
                   }}
                 >
                   <span className="font-mono text-muted-foreground" style={{ fontSize: 12, width: 16 }}>
                     {i + 1}
                   </span>
-                  <span
-                    style={{
-                      width: 30, height: 30, borderRadius: 8,
-                      background: display.color + '1f',
-                      display: 'grid', placeItems: 'center',
-                      fontSize: 14, flexShrink: 0,
-                    }}
-                  >
+                  <IconTile size="sm" color={display.color}>
                     {emoji ?? (
                       <span
                         style={{
@@ -611,7 +588,7 @@ export function Charts({
                         }}
                       />
                     )}
-                  </span>
+                  </IconTile>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{

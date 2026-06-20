@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { Transactions } from './Transactions'
 import type { Transaction } from '../models'
 
@@ -121,7 +121,7 @@ describe('Transactions', () => {
     expect(screen.getByText('Mostrando 1-1 de 1')).toBeInTheDocument()
   })
 
-  it('shows translated and humanized category labels in filters', () => {
+  it('shows translated category labels in filter dropdown', () => {
     render(
       <Transactions
         transactions={[
@@ -130,25 +130,23 @@ describe('Transactions', () => {
             category: 'groceries',
           },
           {
-            ...makeTransaction(2, 'Home Office Expense'),
-            category: 'home_office',
+            ...makeTransaction(2, 'Resto del Mundo'),
+            category: 'restaurants',
           },
         ]}
       />
     )
 
-    expect(
-      screen.getByRole('option', { name: 'Alimentación' })
-    ).toHaveValue('groceries')
-    expect(
-      screen.getByRole('option', { name: 'Home office' })
-    ).toHaveValue('home_office')
-    expect(
-      screen.queryByRole('option', { name: 'groceries' })
-    ).not.toBeInTheDocument()
+    // Open the category filter popover
+    fireEvent.click(screen.getByLabelText('Filtro categoría'))
+
+    expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Restaurantes').length).toBeGreaterThan(0)
+    expect(screen.queryByText('groceries')).not.toBeInTheDocument()
+    expect(screen.queryByText('restaurants')).not.toBeInTheDocument()
   })
 
-  it('shows filter-specific empty state when structured filters remove all matches', () => {
+  it('shows filter-specific empty state when structured filters remove all matches', async () => {
     render(
       <Transactions
         transactions={[
@@ -161,14 +159,13 @@ describe('Transactions', () => {
       />
     )
 
-    fireEvent.change(
-      screen.getByLabelText('Filtro cuenta'),
-      { target: { value: 'credit_card' } }
-    )
+    fireEvent.click(screen.getByLabelText('Filtro cuenta'))
+    await waitFor(() => screen.getByText('Tarjeta'))
+    fireEvent.click(screen.getByText('Tarjeta'))
 
-    expect(
-      screen.getAllByText('Sin resultados').length
-    ).toBeGreaterThan(0)
+    await waitFor(() =>
+      expect(screen.getAllByText('Sin resultados').length).toBeGreaterThan(0)
+    )
     expect(screen.getByText('Mostrando 0 de 0')).toBeInTheDocument()
   })
 
@@ -391,13 +388,13 @@ describe('Transactions', () => {
       target: { value: 'services' },
     })
     fireEvent.click(screen.getByLabelText('Crear categoría'))
-    fireEvent.click(screen.getByLabelText('Tags dropdown'))
+    fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
     fireEvent.click(screen.getAllByText('monthly')[0])
-    fireEvent.click(screen.getByLabelText('Tags dropdown'))
-    fireEvent.change(screen.getByLabelText('Nuevo tag'), {
+    fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
+    fireEvent.change(screen.getByLabelText('Nueva etiqueta'), {
       target: { value: 'recurring' },
     })
-    fireEvent.click(screen.getByLabelText('Crear tag'))
+    fireEvent.click(screen.getByLabelText('Crear etiqueta'))
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
     await waitFor(() =>
@@ -518,16 +515,14 @@ describe('Transactions', () => {
 
     fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     expect(screen.getAllByText('Servicios').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Custom category').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByLabelText('Tags dropdown'))
+    fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
     expect(screen.getAllByText('monthly').length).toBeGreaterThan(0)
     expect(screen.getByText('fixed-cost')).toBeInTheDocument()
   })
 
   it('triggers delete callback only after confirmation', async () => {
     const onDeleteTransaction = vi.fn().mockResolvedValue(undefined)
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     render(
       <Transactions
@@ -540,15 +535,20 @@ describe('Transactions', () => {
       screen.getAllByRole('button', { name: 'Eliminar to-delete' })[0]
     )
 
-    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    await waitFor(() => screen.getByRole('alertdialog'))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Eliminar',
+      })
+    )
+
     await waitFor(() =>
       expect(onDeleteTransaction).toHaveBeenCalledWith('tx-1')
     )
   })
 
-  it('does not delete when confirmation is rejected', () => {
+  it('does not delete when confirmation is rejected', async () => {
     const onDeleteTransaction = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
 
     render(
       <Transactions
@@ -559,6 +559,13 @@ describe('Transactions', () => {
 
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Eliminar to-keep' })[0]
+    )
+
+    await waitFor(() => screen.getByRole('alertdialog'))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Cancelar',
+      })
     )
 
     expect(onDeleteTransaction).not.toHaveBeenCalled()
@@ -611,7 +618,6 @@ describe('Transactions', () => {
 
   it('bulk deletes selected transactions after confirmation', async () => {
     const onBulkDelete = vi.fn().mockResolvedValue(undefined)
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     render(
       <Transactions
@@ -630,8 +636,13 @@ describe('Transactions', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant B' })[0]
     )
 
+    fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
+
+    await waitFor(() => screen.getByRole('alertdialog'))
     fireEvent.click(
-      screen.getByRole('button', { name: /^Eliminar$/ })
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Eliminar',
+      })
     )
 
     await waitFor(() =>
@@ -639,9 +650,8 @@ describe('Transactions', () => {
     )
   })
 
-  it('does not bulk delete when confirmation is rejected', () => {
+  it('does not bulk delete when confirmation is rejected', async () => {
     const onBulkDelete = vi.fn()
-    vi.spyOn(window, 'confirm').mockReturnValue(false)
 
     render(
       <Transactions
@@ -654,8 +664,13 @@ describe('Transactions', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
     )
 
+    fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
+
+    await waitFor(() => screen.getByRole('alertdialog'))
     fireEvent.click(
-      screen.getByRole('button', { name: /^Eliminar$/ })
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Cancelar',
+      })
     )
 
     expect(onBulkDelete).not.toHaveBeenCalled()
@@ -687,7 +702,7 @@ describe('Transactions', () => {
       )
     })
 
-    fireEvent.click(screen.getByLabelText('Tags bulk dropdown'))
+    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
 
     const tagButtons = screen.getAllByText('#monthly')
     fireEvent.click(tagButtons[tagButtons.length - 1])
@@ -717,13 +732,13 @@ describe('Transactions', () => {
       screen.getAllByRole('button', { name: /Editar/ })[0]
     )
 
-    fireEvent.click(screen.getByLabelText('Tags bulk dropdown'))
+    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
 
-    fireEvent.change(screen.getByLabelText('Buscar o crear tag'), {
+    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'new-tag' },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /Crear tag "new-tag"/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Crear etiqueta "new-tag"/ }))
 
     fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
 

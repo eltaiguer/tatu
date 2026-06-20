@@ -295,6 +295,8 @@
   --color-brand-hover: var(--brand-hover);
   --color-brand-soft: var(--brand-soft);
   --color-brand-text: var(--brand-text);
+  /* Semantic income/expense tokens. Use var(--pos)/var(--neg) in inline styles;
+     use text-pos / text-neg / bg-pos / bg-neg as Tailwind utilities. */
   --color-pos: var(--pos);
   --color-pos-soft: var(--pos-soft);
   --color-neg: var(--neg);

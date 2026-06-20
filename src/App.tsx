@@ -46,6 +46,7 @@ import { setAiConfig } from './services/ai/ai-config'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useTransactionSync } from './hooks/useTransactionSync'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
+import { getFriendlyName } from './utils/user-display'
 
 function App() {
   const [currentView, setCurrentView] = useState<View>('overview')
@@ -129,6 +130,7 @@ function App() {
       clearAllCategoryOverrides()
       clearAllDescriptionOverrides()
       replaceCustomPatterns([])
+      replaceCustomCategories([])
       setAiConfig(null)
       setTheme('auto')
       setPreferredCurrency('USD')
@@ -383,19 +385,14 @@ function App() {
             currentView !== 'categories' ? (
             <Onboarding
               onImport={() => setImportOpen(true)}
-              userName={
-                session?.user?.user_metadata?.full_name as string | undefined ??
-                session?.user?.email?.split('@')[0]?.replace(/^./, (c) =>
-                  c.toUpperCase()
-                )
-              }
+              userName={getFriendlyName(session) || undefined}
             />
           ) : (
             <>
               {currentView === 'overview' && (
                 <Dashboard
                   transactions={transactions}
-                  userName={session?.user?.email ?? undefined}
+                  userName={getFriendlyName(session) || undefined}
                   onNavigateToImport={() => setImportOpen(true)}
                   onNavigateToTransactions={navigateToTransactions}
                   onNavigateToAnalysis={() => setCurrentView('analysis')}

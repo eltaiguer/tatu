@@ -15,6 +15,7 @@ import {
   removeCustomCategoryWithSync,
   updateCustomCategoryWithSync,
   upsertBuiltinOverrideWithSync,
+  DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
 import { getCategoryDisplay } from '../utils/category-display'
 import {
@@ -46,7 +47,7 @@ export function Categories({ transactions }: CategoriesProps) {
   const [form, setForm] = useState({
     id: '',
     label: '',
-    color: '#0ea5e9',
+    color: DEFAULT_CATEGORY_COLOR,
     icon: '🏷️',
     isIgnored: false,
   })
@@ -66,12 +67,12 @@ export function Categories({ transactions }: CategoriesProps) {
   const isEditing = form.id.length > 0
 
   function resetForm() {
-    setForm({ id: '', label: '', color: '#0ea5e9', icon: '🏷️', isIgnored: false })
+    setForm({ id: '', label: '', color: DEFAULT_CATEGORY_COLOR, icon: '🏷️', isIgnored: false })
     setShowForm(false)
   }
 
   function openNewForm() {
-    setForm({ id: '', label: '', color: '#0ea5e9', icon: '🏷️', isIgnored: false })
+    setForm({ id: '', label: '', color: DEFAULT_CATEGORY_COLOR, icon: '🏷️', isIgnored: false })
     setShowForm(true)
   }
 

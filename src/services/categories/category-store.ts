@@ -1,3 +1,5 @@
+export const DEFAULT_CATEGORY_COLOR = '#0ea5e9'
+
 export interface CustomCategory {
   id: string
   label: string

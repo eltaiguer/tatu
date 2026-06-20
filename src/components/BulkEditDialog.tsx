@@ -153,7 +153,7 @@ export function BulkEditDialog({
 
           {showTagSection && (
             <div>
-              <label className="text-sm font-medium">Tags</label>
+              <label className="text-sm font-medium">Etiquetas</label>
               <Popover
                 open={bulkTagPickerOpen}
                 onOpenChange={onBulkTagPickerOpenChange}
@@ -161,23 +161,23 @@ export function BulkEditDialog({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    aria-label="Tags bulk dropdown"
+                    aria-label="Etiquetas bulk dropdown"
                     className="mt-1 w-full h-9 rounded-md border border-input bg-input-background px-3 text-sm text-left hover:bg-muted/50"
                   >
                     {bulkEditTagList.length > 0
-                      ? `${bulkEditTagList.length} tag${bulkEditTagList.length === 1 ? '' : 's'} a agregar`
+                      ? `${bulkEditTagList.length} ${bulkEditTagList.length === 1 ? 'etiqueta' : 'etiquetas'} a agregar`
                       : 'Sin cambios'}
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="p-0 w-[320px]" align="start">
                   <div className="p-2 space-y-2">
                     <Input
-                      aria-label="Buscar o crear tag"
+                      aria-label="Buscar o crear etiqueta"
                       value={bulkTagSearch}
                       onChange={(event) =>
                         onBulkTagSearchChange(event.target.value)
                       }
-                      placeholder="Buscar o crear tag..."
+                      placeholder="Buscar o crear etiqueta..."
                     />
                     <div
                       className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2"
@@ -219,7 +219,7 @@ export function BulkEditDialog({
                             onBulkTagSearchChange('')
                           }}
                         >
-                          Crear tag &quot;{bulkTagSearch.trim()}&quot;
+                          Crear etiqueta &quot;{bulkTagSearch.trim()}&quot;
                         </Button>
                       )}
                   </div>
@@ -232,7 +232,7 @@ export function BulkEditDialog({
                     <button
                       key={tag}
                       type="button"
-                      aria-label={`Quitar tag ${tag}`}
+                      aria-label={`Quitar etiqueta ${tag}`}
                       onClick={() =>
                         onBulkEditTagListChange(
                           bulkEditTagList.filter((t) => t !== tag)

@@ -18,14 +18,14 @@ export function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
   return (
     <span
       title={`Confianza ${level} · ${Math.round(confidence * 100)}%`}
-      style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}
+      style={{ display: 'inline-flex', gap: 2, alignItems: 'flex-end' }}
     >
       {[0, 1, 2].map((i) => (
         <span
           key={i}
           style={{
             width: 4,
-            height: 11,
+            height: [8, 11, 14][i],
             borderRadius: 2,
             background: filled > i ? color : 'var(--surface-3)',
           }}
