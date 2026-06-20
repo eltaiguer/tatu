@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 
 interface SegmentedToggleProps<T extends string> {
-  options: { label: string; value: T }[]
+  options: ReadonlyArray<{ label: string; value: T }>
   value: T
   onChange: (v: T) => void
   size?: 'sm' | 'md'

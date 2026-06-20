@@ -142,13 +142,12 @@ export function TransactionTable({
                 Cuenta
               </th>
               <th className="text-center px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-20">
-                <span className="inline-flex items-center gap-1">
+                <span
+                  className="inline-flex items-center gap-1"
+                  title="Confianza de la categorización automática. Más barras = más seguridad."
+                >
                   Confianza
-                  <Info
-                    size={12}
-                    className="text-muted-foreground/60"
-                    title="Confianza de la categorización automática. Más barras = más seguridad."
-                  />
+                  <Info size={12} className="text-muted-foreground/60" />
                 </span>
               </th>
               <th
