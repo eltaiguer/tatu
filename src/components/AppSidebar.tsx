@@ -7,6 +7,7 @@ import {
   LogOut,
 } from 'lucide-react'
 import type { SupabaseSession } from '../services/supabase/client'
+import { getFriendlyName } from '../utils/user-display'
 
 export type View = 'overview' | 'transactions' | 'categories' | 'settings'
 
@@ -103,9 +104,7 @@ export function SidebarInner({
   ]
 
   const userEmail = session?.user?.email ?? ''
-  const userName =
-    session?.user?.user_metadata?.display_name ||
-    (userEmail ? userEmail.split('@')[0] : 'Usuario')
+  const userName = getFriendlyName(session) || (userEmail ? userEmail.split('@')[0] : 'Usuario')
   const avatarInitial = userName.charAt(0).toUpperCase()
 
   return (
