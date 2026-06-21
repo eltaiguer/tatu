@@ -3,9 +3,11 @@ import type { SupabaseSession } from '../services/supabase/client'
 export function getFriendlyName(session: SupabaseSession | null): string {
   if (!session?.user) return ''
 
-  const fullName = session.user.user_metadata?.full_name
-  if (typeof fullName === 'string' && fullName.trim()) {
-    const first = fullName.trim().split(/\s+/)[0]
+  const displayName =
+    session.user.user_metadata?.display_name ||
+    session.user.user_metadata?.full_name
+  if (typeof displayName === 'string' && displayName.trim()) {
+    const first = displayName.trim().split(/\s+/)[0]
     return first.charAt(0).toUpperCase() + first.slice(1)
   }
 
