@@ -32,11 +32,12 @@ export async function createImportRun(
     .single()
 
   if (error) {
-    throw new Error(error.message)
+    console.error('createImportRun failed:', error.message)
+    throw new Error('No se pudo iniciar la importación. Intentá de nuevo.')
   }
 
   if (!data?.id) {
-    throw new Error('No se pudo crear el registro de importación')
+    throw new Error('No se pudo iniciar la importación. Intentá de nuevo.')
   }
 
   return data.id as string

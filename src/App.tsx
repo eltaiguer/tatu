@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   DashboardSkeleton,
   TransactionTableSkeleton,
-  AnalysisSkeleton,
 } from './components/StateSkeletons'
 import { ConnectionLostState } from './components/ConnectionLostState'
 import { Onboarding } from './components/Onboarding'
@@ -13,7 +12,6 @@ import { AppSidebar, SidebarInner } from './components/AppSidebar'
 import type { View } from './components/AppSidebar'
 import { Dashboard } from './components/Dashboard'
 import { Transactions } from './components/Transactions'
-import { Charts } from './components/Charts'
 import { Categories } from './components/Categories'
 import { Settings } from './components/Settings'
 import { ImportCSV } from './components/ImportCSV'
@@ -30,7 +28,8 @@ import {
   SheetTitle,
   SheetDescription,
 } from './components/ui/sheet'
-import { Sun, Moon, Menu, Monitor } from 'lucide-react'
+import { Sun, Moon, Menu, Monitor, Upload } from 'lucide-react'
+import { Button } from './components/ui/button'
 import { useStore } from 'zustand'
 import { transactionStore } from './stores/transaction-store'
 import { signOut } from './services/supabase/auth'
@@ -373,36 +372,45 @@ function App() {
           {syncStatus === 'loading' ? (
             currentView === 'transactions' ? (
               <TransactionTableSkeleton />
-            ) : currentView === 'analysis' ? (
-              <AnalysisSkeleton />
             ) : (
               <DashboardSkeleton />
             )
           ) : syncStatus === 'error' ? (
             <ConnectionLostState onRetry={refetch} />
-          ) : transactions.length === 0 &&
-            currentView !== 'settings' &&
-            currentView !== 'categories' ? (
-            <Onboarding
-              onImport={() => setImportOpen(true)}
-              userName={getFriendlyName(session) || undefined}
-            />
           ) : (
             <>
-              {currentView === 'overview' && (
+              {currentView === 'overview' && transactions.length === 0 && (
+                <Onboarding
+                  onImport={() => setImportOpen(true)}
+                  userName={getFriendlyName(session) || undefined}
+                />
+              )}
+              {currentView === 'overview' && transactions.length > 0 && (
                 <Dashboard
                   transactions={transactions}
                   userName={getFriendlyName(session) || undefined}
                   onNavigateToImport={() => setImportOpen(true)}
                   onNavigateToTransactions={navigateToTransactions}
-                  onNavigateToAnalysis={() => setCurrentView('analysis')}
                   homeCurrency={preferredCurrency}
                   fxRate={fxRate}
                   onSetHomeCurrency={setPreferredCurrency}
                   onSetFxRate={setFxRate}
                 />
               )}
-              {currentView === 'transactions' && (
+              {currentView === 'transactions' && transactions.length === 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: 16, padding: '48px 24px', textAlign: 'center' }}>
+                  <Upload size={40} style={{ color: 'var(--text-faint)' }} />
+                  <div>
+                    <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>No hay transacciones</p>
+                    <p style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 280, margin: '0 auto' }}>Importá tu primer extracto CSV de Santander para empezar a ver tus movimientos.</p>
+                  </div>
+                  <Button onClick={() => setImportOpen(true)}>
+                    <Upload size={16} />
+                    Importar CSV
+                  </Button>
+                </div>
+              )}
+              {currentView === 'transactions' && transactions.length > 0 && (
                 <Transactions
                   transactions={transactions}
                   initialFilter={pendingTxFilter ?? undefined}
@@ -412,16 +420,6 @@ function App() {
                   onBulkCategorize={handleBulkCategorizeTransactions}
                   onBulkDelete={handleBulkDeleteTransactions}
                   onBulkTag={handleBulkTagTransactions}
-                />
-              )}
-              {currentView === 'analysis' && (
-                <Charts
-                  transactions={transactions}
-                  onNavigateToTransactions={navigateToTransactions}
-                  homeCurrency={preferredCurrency}
-                  fxRate={fxRate}
-                  onSetHomeCurrency={setPreferredCurrency}
-                  onSetFxRate={setFxRate}
                 />
               )}
               {currentView === 'categories' && (
@@ -466,7 +464,7 @@ function App() {
           style={{
             maxWidth: 680,
             padding: 0,
-            overflow: 'hidden',
+            overflowX: 'hidden',
             borderRadius: 'var(--radius-lg)',
           }}
         >

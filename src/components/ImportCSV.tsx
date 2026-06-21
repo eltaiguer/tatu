@@ -122,6 +122,7 @@ export function ImportCSV({
         onImportComplete();
       }
     } catch (error) {
+      console.error('import failed:', error)
       setImportState('error');
       setErrorMessage(
         error instanceof Error ? error.message : 'Error al procesar el archivo'

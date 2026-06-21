@@ -273,3 +273,53 @@ export function buildCurrencySplit(
     pctUYU: (uyu / total) * 100,
   }
 }
+
+export type AccountBucket = 'card' | 'usd' | 'uyu'
+
+export interface AccountSpend {
+  conv: number
+  USD: number
+  UYU: number
+  count: number
+  pct: number
+}
+
+export type SpendByAccount = Record<AccountBucket, AccountSpend>
+
+// Aggregates debit expenses (excl. transfers + ignored) by source account.
+// card = credit_card (any currency), usd/uyu = bank_account by tx currency.
+export function spendByAccount(
+  transactions: Transaction[],
+  homeCurrency: Currency,
+  fxRate: number
+): SpendByAccount {
+  const map: SpendByAccount = {
+    card: { conv: 0, USD: 0, UYU: 0, count: 0, pct: 0 },
+    usd: { conv: 0, USD: 0, UYU: 0, count: 0, pct: 0 },
+    uyu: { conv: 0, USD: 0, UYU: 0, count: 0, pct: 0 },
+  }
+
+  transactions
+    .filter((tx) => tx.type === 'debit' && !shouldExclude(tx))
+    .forEach((tx) => {
+      let bucket: AccountBucket
+      if (tx.source === 'credit_card') {
+        bucket = 'card'
+      } else if (tx.currency === 'USD') {
+        bucket = 'usd'
+      } else {
+        bucket = 'uyu'
+      }
+      const a = map[bucket]
+      a.conv += convert(tx.amount, tx.currency, homeCurrency, fxRate)
+      a[tx.currency] += tx.amount
+      a.count++
+    })
+
+  const total = map.card.conv + map.usd.conv + map.uyu.conv || 1
+  ;(Object.keys(map) as AccountBucket[]).forEach((b) => {
+    map[b].pct = (map[b].conv / total) * 100
+  })
+
+  return map
+}

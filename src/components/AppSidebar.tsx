@@ -1,7 +1,6 @@
 import {
   Home,
   ListFilter,
-  PieChart,
   Tag,
   Settings,
   Upload,
@@ -9,12 +8,7 @@ import {
 } from 'lucide-react'
 import type { SupabaseSession } from '../services/supabase/client'
 
-export type View =
-  | 'overview'
-  | 'transactions'
-  | 'analysis'
-  | 'categories'
-  | 'settings'
+export type View = 'overview' | 'transactions' | 'categories' | 'settings'
 
 interface NavGroup {
   label: string
@@ -97,7 +91,6 @@ export function SidebarInner({
           icon: ListFilter,
           count: txCount > 0 ? txCount : undefined,
         },
-        { id: 'analysis', label: 'Análisis', icon: PieChart },
       ],
     },
     {

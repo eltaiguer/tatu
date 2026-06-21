@@ -282,7 +282,7 @@ export function Categories({ transactions }: CategoriesProps) {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: 12, marginBottom: 16 }}>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_120px] gap-3 mb-4">
             <div>
               <label
                 htmlFor="cat-label"
@@ -383,7 +383,7 @@ export function Categories({ transactions }: CategoriesProps) {
           Tus categorías
         </h3>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
           {categoryDefinitions.map((cat) => {
             const count = getCategoryTransactionCount(transactions, cat.id)
             return (
@@ -423,7 +423,6 @@ export function Categories({ transactions }: CategoriesProps) {
                       fontSize: 13,
                       fontWeight: 600,
                       color: 'var(--text)',
-                      whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       display: 'flex',

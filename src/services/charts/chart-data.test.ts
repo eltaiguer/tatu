@@ -7,6 +7,7 @@ import {
   buildMonthlyTrendsConverted,
   buildCurrentMonthSummary,
   buildCurrencySplit,
+  spendByAccount,
 } from './chart-data'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
@@ -332,6 +333,93 @@ describe('chart-data multicurrency converting selectors', () => {
       expect(result.USD).toBe(50)
       expect(result.UYU).toBe(0)
       expect(result.pctUSD).toBeCloseTo(100)
+    })
+  })
+
+  describe('spendByAccount', () => {
+    const RATE = 40
+
+    function makeTx(
+      id: string,
+      overrides: Partial<Transaction> = {}
+    ): Transaction {
+      return {
+        id,
+        date: new Date('2025-03-01T00:00:00.000Z'),
+        description: `tx-${id}`,
+        amount: 10,
+        currency: 'USD',
+        type: 'debit',
+        source: 'bank_account',
+        rawData: {},
+        ...overrides,
+      }
+    }
+
+    it('buckets credit_card source as card regardless of currency', () => {
+      const txs = [
+        makeTx('cc-usd', { source: 'credit_card', currency: 'USD', amount: 100 }),
+        makeTx('cc-uyu', { source: 'credit_card', currency: 'UYU', amount: 400 }),
+      ]
+      const result = spendByAccount(txs, 'USD', RATE)
+      expect(result.card.count).toBe(2)
+      expect(result.card.USD).toBe(100)
+      expect(result.card.UYU).toBe(400)
+      expect(result.usd.count).toBe(0)
+      expect(result.uyu.count).toBe(0)
+    })
+
+    it('buckets bank_account by currency', () => {
+      const txs = [
+        makeTx('bank-usd', { source: 'bank_account', currency: 'USD', amount: 50 }),
+        makeTx('bank-uyu', { source: 'bank_account', currency: 'UYU', amount: 200 }),
+      ]
+      const result = spendByAccount(txs, 'USD', RATE)
+      expect(result.usd.count).toBe(1)
+      expect(result.usd.USD).toBe(50)
+      expect(result.uyu.count).toBe(1)
+      expect(result.uyu.UYU).toBe(200)
+      expect(result.card.count).toBe(0)
+    })
+
+    it('excludes credits and transfers', () => {
+      const txs = [
+        makeTx('income', { type: 'credit', category: Category.Income, amount: 500 }),
+        makeTx('transfer', { type: 'debit', category: Category.InternalTransfer, amount: 100 }),
+        makeTx('real', { source: 'credit_card', currency: 'USD', amount: 30 }),
+      ]
+      const result = spendByAccount(txs, 'USD', RATE)
+      expect(result.card.count).toBe(1)
+      expect(result.usd.count).toBe(0)
+      expect(result.uyu.count).toBe(0)
+    })
+
+    it('pct values sum to 100 across all buckets', () => {
+      const txs = [
+        makeTx('cc', { source: 'credit_card', currency: 'USD', amount: 50 }),
+        makeTx('ba-usd', { source: 'bank_account', currency: 'USD', amount: 30 }),
+        makeTx('ba-uyu', { source: 'bank_account', currency: 'UYU', amount: 20 }),
+      ]
+      const result = spendByAccount(txs, 'USD', RATE)
+      const total = result.card.pct + result.usd.pct + result.uyu.pct
+      expect(total).toBeCloseTo(100)
+    })
+
+    it('card shows both USD and UYU native totals when mixed', () => {
+      const txs = [
+        makeTx('cc1', { source: 'credit_card', currency: 'USD', amount: 80 }),
+        makeTx('cc2', { source: 'credit_card', currency: 'UYU', amount: 800 }),
+      ]
+      const result = spendByAccount(txs, 'USD', RATE)
+      expect(result.card.USD).toBeGreaterThan(0)
+      expect(result.card.UYU).toBeGreaterThan(0)
+    })
+
+    it('returns all-zero buckets for empty transactions', () => {
+      const result = spendByAccount([], 'USD', RATE)
+      expect(result.card.count).toBe(0)
+      expect(result.usd.count).toBe(0)
+      expect(result.uyu.count).toBe(0)
     })
   })
 })

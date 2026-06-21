@@ -287,8 +287,12 @@ describe('App', () => {
     ])
 
     render(<App />)
-    await waitFor(() => expect(screen.getByText('Alimentación')).toBeInTheDocument())
-    const topCategoryLink = screen.getByText('Alimentación')
+    await waitFor(() =>
+      expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0),
+    )
+    // Click the category row in the breakdown list (last occurrence, list is clickable)
+    const allAlimentacion = screen.getAllByText('Alimentación')
+    const topCategoryLink = allAlimentacion[allAlimentacion.length - 1]
     fireEvent.click(topCategoryLink)
 
     expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
@@ -320,7 +324,7 @@ describe('App', () => {
 
     expect(screen.getByRole('button', { name: 'Resumen' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Análisis' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Análisis' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Categorías' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Configuración' })).toBeInTheDocument()
   })

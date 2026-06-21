@@ -61,9 +61,8 @@ export function useUserPreferences(session: SupabaseSession | null) {
       aiEnabled,
       aiModel,
     }).catch((err) => {
-      toast.error(
-        `Error al guardar preferencias: ${err instanceof Error ? err.message : 'Error desconocido'}`
-      )
+      console.error('preferences save failed:', err)
+      toast.error('No se pudieron guardar las preferencias. Intentá de nuevo.')
     })
   }, [session, theme, preferredCurrency, fxRate, claudeApiKey, aiEnabled, aiModel])
 
