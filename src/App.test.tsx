@@ -160,7 +160,7 @@ describe('App', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
     )
-    expect(screen.getByText(/movimientos/)).toBeInTheDocument()
+    expect(screen.getByText(/movimiento.*·/)).toBeInTheDocument()
   })
 
   it('auto-categorizes selected transactions from the transactions view', async () => {

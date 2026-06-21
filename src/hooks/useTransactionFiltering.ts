@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { calculateTotals } from '../services/aggregator/aggregation'
 import { isCategoryIgnored } from '../services/categories/category-registry'
+import { isTransferCategory } from '../services/transfers/internal-transfers'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
 import type { Transaction, TransactionsFilter } from '../models'
@@ -9,6 +9,10 @@ export type SortField = 'date' | 'amount' | 'description' | 'category'
 export type SortDirection = 'asc' | 'desc'
 
 const ITEMS_PER_PAGE = 12
+
+export function isIgnoredOrTransfer(category: string | undefined): boolean {
+  return isTransferCategory(category) || isCategoryIgnored(category)
+}
 
 export function useTransactionFiltering({
   transactions,
@@ -20,22 +24,29 @@ export function useTransactionFiltering({
   const [searchTerm, setSearchTerm] = useState('')
   const [dateFromFilter, setDateFromFilter] = useState('')
   const [dateToFilter, setDateToFilter] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
-  const [accountFilter, setAccountFilter] = useState<
-    'all' | 'credit_card' | 'bank_account'
-  >('all')
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([])
+  const [accountFilters, setAccountFilters] = useState<string[]>([])
   const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'UYU'>(
     'all'
   )
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>(
     'all'
   )
-  const [showIgnored, setShowIgnored] = useState(true)
+  const [minAmount, setMinAmount] = useState('')
+  const [maxAmount, setMaxAmount] = useState('')
+  const [showIgnored, setShowIgnored] = useState(false)
+
+  const newestDate = useMemo(() => {
+    if (transactions.length === 0) return null
+    return new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
+  }, [transactions])
 
   useEffect(() => {
     if (initialFilter) {
-      setCategoryFilter(initialFilter.category ?? '')
-      setAccountFilter(initialFilter.accountType ?? 'all')
+      if (initialFilter.category) setCategoryFilters([initialFilter.category])
+      if (initialFilter.accountType && initialFilter.accountType !== 'all') {
+        setAccountFilters([initialFilter.accountType])
+      }
       setCurrencyFilter(initialFilter.currency ?? 'all')
     }
   }, [initialFilter])
@@ -44,9 +55,8 @@ export function useTransactionFiltering({
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [currentPage, setCurrentPage] = useState(1)
 
-  const filteredTransactions = useMemo(() => {
+  const allFilteredTransactions = useMemo(() => {
     const query = searchTerm.toLowerCase()
-    const categoryQuery = categoryFilter.trim()
     const invalidDateRange =
       dateFromFilter && dateToFilter && dateToFilter < dateFromFilter
     const dateFrom =
@@ -64,14 +74,23 @@ export function useTransactionFiltering({
       if (!searchable.includes(query)) return false
       if (dateFrom && transaction.date < dateFrom) return false
       if (dateTo && transaction.date > dateTo) return false
-      if (categoryQuery && (transaction.category ?? '') !== categoryQuery)
+      if (
+        categoryFilters.length > 0 &&
+        !categoryFilters.includes(transaction.category ?? '')
+      )
         return false
-      if (accountFilter !== 'all' && transaction.source !== accountFilter)
+      if (
+        accountFilters.length > 0 &&
+        !accountFilters.includes(transaction.source)
+      )
         return false
       if (currencyFilter !== 'all' && transaction.currency !== currencyFilter)
         return false
       if (typeFilter !== 'all' && transaction.type !== typeFilter) return false
-      if (!showIgnored && isCategoryIgnored(transaction.category)) return false
+      if (minAmount && Math.abs(transaction.amount) < parseFloat(minAmount))
+        return false
+      if (maxAmount && Math.abs(transaction.amount) > parseFloat(maxAmount))
+        return false
       return true
     })
 
@@ -89,7 +108,9 @@ export function useTransactionFiltering({
           ) * direction
         )
       }
-      return (a.category ?? '').localeCompare(b.category ?? '', 'es') * direction
+      return (
+        (a.category ?? '').localeCompare(b.category ?? '', 'es') * direction
+      )
     })
 
     return filtered
@@ -98,14 +119,29 @@ export function useTransactionFiltering({
     searchTerm,
     dateFromFilter,
     dateToFilter,
-    categoryFilter,
-    accountFilter,
+    categoryFilters,
+    accountFilters,
     currencyFilter,
     typeFilter,
+    minAmount,
+    maxAmount,
     sortField,
     sortDirection,
-    showIgnored,
   ])
+
+  const filteredTransactions = useMemo(() => {
+    if (showIgnored) return allFilteredTransactions
+    return allFilteredTransactions.filter(
+      (tx) => !isIgnoredOrTransfer(tx.category)
+    )
+  }, [allFilteredTransactions, showIgnored])
+
+  const ignoredCount = useMemo(
+    () =>
+      allFilteredTransactions.filter((tx) => isIgnoredOrTransfer(tx.category))
+        .length,
+    [allFilteredTransactions]
+  )
 
   const availableCategories = useMemo(
     () =>
@@ -126,15 +162,12 @@ export function useTransactionFiltering({
 
   const hasActiveFilters =
     Boolean(searchTerm.trim()) ||
-    Boolean(dateFromFilter) ||
-    Boolean(dateToFilter) ||
-    Boolean(categoryFilter) ||
-    accountFilter !== 'all' ||
+    categoryFilters.length > 0 ||
+    accountFilters.length > 0 ||
     currencyFilter !== 'all' ||
     typeFilter !== 'all' ||
-    !showIgnored
-
-  const totals = calculateTotals(filteredTransactions)
+    Boolean(minAmount) ||
+    Boolean(maxAmount)
 
   const activeCurrencies = useMemo(
     () =>
@@ -148,11 +181,13 @@ export function useTransactionFiltering({
     setSearchTerm('')
     setDateFromFilter('')
     setDateToFilter('')
-    setCategoryFilter('')
-    setAccountFilter('all')
+    setCategoryFilters([])
+    setAccountFilters([])
     setCurrencyFilter('all')
     setTypeFilter('all')
-    setShowIgnored(true)
+    setMinAmount('')
+    setMaxAmount('')
+    setShowIgnored(false)
   }
 
   function handleSort(field: SortField) {
@@ -186,23 +221,29 @@ export function useTransactionFiltering({
     setDateFromFilter,
     dateToFilter,
     setDateToFilter,
-    categoryFilter,
-    setCategoryFilter,
-    accountFilter,
-    setAccountFilter,
+    categoryFilters,
+    setCategoryFilters,
+    accountFilters,
+    setAccountFilters,
     currencyFilter,
     setCurrencyFilter,
     typeFilter,
     setTypeFilter,
+    minAmount,
+    setMinAmount,
+    maxAmount,
+    setMaxAmount,
     showIgnored,
     setShowIgnored,
     sortField,
     sortDirection,
     handleSort,
+    allFilteredTransactions,
     filteredTransactions,
+    ignoredCount,
     availableCategories,
     hasActiveFilters,
-    totals,
+    newestDate,
     activeCurrencies,
     currentPage,
     setCurrentPage,

@@ -414,6 +414,8 @@ function App() {
                 <Transactions
                   transactions={transactions}
                   initialFilter={pendingTxFilter ?? undefined}
+                  homeCurrency={preferredCurrency}
+                  fxRate={fxRate}
                   onUpdateTransaction={handleUpdateTransaction}
                   onDeleteTransaction={handleDeleteTransaction}
                   onAutoCategorizeTransactions={handleAutoCategorizeTransactions}

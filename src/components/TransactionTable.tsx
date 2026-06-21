@@ -1,4 +1,15 @@
-import { ArrowUpDown, CreditCard, Info, Pencil, Search, Trash2, Wallet } from 'lucide-react'
+import {
+  ArrowUpDown,
+  CreditCard,
+  Eye,
+  EyeOff,
+  Info,
+  Pencil,
+  Search,
+  Slash,
+  Trash2,
+  Wallet,
+} from 'lucide-react'
 import { Button } from './ui/button'
 import { EmptyState } from './EmptyState'
 import { Card } from './ui/card'
@@ -9,11 +20,13 @@ import { ConfidenceBadge } from './ConfidenceBadge'
 import { Category } from '../models'
 import type { Transaction } from '../models'
 import {
-  isCategoryIgnored,
   getCategoryDefinition,
 } from '../services/categories/category-registry'
+import { isIgnoredOrTransfer } from '../hooks/useTransactionFiltering'
 import { getDisplayDescription } from '../utils/transaction-display'
 import { formatCurrency, formatDate } from '../utils/formatting'
+import { convert } from '../services/currency/convert'
+import type { Currency } from '../models'
 import type { SortField, SortDirection } from '../hooks/useTransactionFiltering'
 
 function getAccountIcon(type: string) {
@@ -36,10 +49,17 @@ interface TransactionTableProps {
   sortField: SortField
   sortDirection: SortDirection
   hasActiveFilters: boolean
+  selectionCount: number
+  totalCount: number
+  showIgnored: boolean
+  ignoredCount: number
+  homeCurrency?: string
+  fxRate?: number
   onToggleSelect: (id: string, checked: boolean) => void
   onHeaderCheckboxChange: (checked: boolean) => void
   onSort: (field: SortField) => void
   onClearFilters: () => void
+  onShowIgnoredChange: (value: boolean) => void
   onEdit: (transaction: Transaction) => void
   onDelete: (transaction: Transaction) => void
 }
@@ -54,15 +74,78 @@ export function TransactionTable({
   sortField,
   sortDirection,
   hasActiveFilters,
+  selectionCount,
+  totalCount,
+  showIgnored,
+  ignoredCount,
+  homeCurrency,
+  fxRate,
   onToggleSelect,
   onHeaderCheckboxChange,
   onSort,
   onClearFilters,
+  onShowIgnoredChange,
   onEdit,
   onDelete,
 }: TransactionTableProps) {
   return (
     <Card className="overflow-hidden">
+      {/* Toolbar row: selection count + transfers toggle */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <span
+          style={{ fontSize: 13, color: 'var(--text-muted)' }}
+          role="status"
+          aria-live="polite"
+        >
+          {selectionCount > 0
+            ? `${selectionCount} de ${totalCount} seleccionada${selectionCount !== 1 ? 's' : ''}`
+            : `${totalCount} movimiento${totalCount !== 1 ? 's' : ''} en la vista`}
+        </span>
+        <button
+          onClick={() => onShowIgnoredChange(!showIgnored)}
+          disabled={ignoredCount === 0}
+          title="Las transferencias se ignoran de los totales"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            height: 32,
+            padding: '0 10px',
+            borderRadius: 8,
+            border: `1px solid ${showIgnored ? 'var(--brand)' : 'var(--border)'}`,
+            background: 'transparent',
+            color: showIgnored ? 'var(--brand-text, var(--brand))' : 'var(--text-muted)',
+            cursor: ignoredCount === 0 ? 'not-allowed' : 'pointer',
+            fontSize: 12.5,
+            fontWeight: 500,
+            opacity: ignoredCount === 0 ? 0.5 : 1,
+          }}
+        >
+          {showIgnored ? <Eye size={14} /> : <EyeOff size={14} />}
+          {showIgnored ? 'Ocultar' : 'Mostrar'} transferencias ignoradas
+          {ignoredCount > 0 && (
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--text-muted)',
+              }}
+            >
+              · {ignoredCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Desktop table */}
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
@@ -146,7 +229,7 @@ export function TransactionTable({
                   className="inline-flex items-center gap-1"
                   title="Confianza de la categorización automática. Más barras = más seguridad."
                 >
-                  Confianza
+                  Conf.
                   <Info size={12} className="text-muted-foreground/60" />
                 </span>
               </th>
@@ -197,11 +280,25 @@ export function TransactionTable({
                 const displayDescription = getDisplayDescription(transaction)
                 const hasFriendlyOverride =
                   displayDescription !== transaction.description
+                const isIgnored = isIgnoredOrTransfer(transaction.category)
+                const showConverted =
+                  homeCurrency &&
+                  fxRate &&
+                  transaction.currency !== homeCurrency
+                const convertedAmount = showConverted
+                  ? convert(
+                      transaction.amount,
+                      transaction.currency as Currency,
+                      homeCurrency as Currency,
+                      fxRate
+                    )
+                  : null
 
                 return (
                   <tr
                     key={transaction.id}
-                    className={`group border-b border-border hover:bg-muted/30 transition-colors${isCategoryIgnored(transaction.category) ? ' opacity-50' : ''}`}
+                    style={isIgnored ? { opacity: 0.62 } : undefined}
+                    className="group border-b border-border hover:bg-muted/30 transition-colors"
                   >
                     <td className="px-3.5 py-3 align-middle">
                       <Checkbox
@@ -222,7 +319,11 @@ export function TransactionTable({
                     </td>
                     <td className="px-3.5 py-3">
                       <div
-                        style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          gap: 10,
+                        }}
                       >
                         {(() => {
                           const catId = transaction.category ?? 'uncategorized'
@@ -250,10 +351,37 @@ export function TransactionTable({
                         })()}
                         <div style={{ minWidth: 0 }}>
                           <div
-                            className="font-medium truncate"
-                            style={{ maxWidth: 220 }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 7,
+                            }}
                           >
-                            {displayDescription}
+                            <div
+                              className="font-medium truncate"
+                              style={{ maxWidth: 220 }}
+                            >
+                              {displayDescription}
+                            </div>
+                            {isIgnored && (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  flexShrink: 0,
+                                  fontSize: 10.5,
+                                  fontWeight: 500,
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                  background: 'var(--muted)',
+                                  color: 'var(--text-muted)',
+                                }}
+                              >
+                                <Slash size={9} />
+                                Ignorada
+                              </span>
+                            )}
                           </div>
                           {hasFriendlyOverride && (
                             <div
@@ -299,7 +427,7 @@ export function TransactionTable({
                     </td>
                     <td className="px-3.5 py-3 text-right whitespace-nowrap">
                       <div
-                        className={`font-mono${isCategoryIgnored(transaction.category) ? ' line-through' : ''}`}
+                        className={`font-mono${isIgnored ? ' line-through' : ''}`}
                         style={{
                           color:
                             transaction.type === 'credit'
@@ -310,9 +438,25 @@ export function TransactionTable({
                         {transaction.type === 'credit' ? '+' : '-'}
                         {formatCurrency(
                           transaction.amount,
-                          transaction.currency
+                          transaction.currency as Currency
                         )}
                       </div>
+                      {convertedAmount !== null && (
+                        <div
+                          className="font-mono"
+                          style={{
+                            fontSize: 10.5,
+                            marginTop: 1,
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          ≈{' '}
+                          {formatCurrency(
+                            convertedAmount,
+                            homeCurrency as Currency
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3.5 py-3 text-center">
                       <div className="flex items-center justify-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity duration-[120ms]">
@@ -386,11 +530,13 @@ export function TransactionTable({
             const displayDescription = getDisplayDescription(transaction)
             const hasFriendlyOverride =
               displayDescription !== transaction.description
+            const isIgnored = isIgnoredOrTransfer(transaction.category)
 
             return (
               <div
                 key={transaction.id}
-                className={`p-4 space-y-3${isCategoryIgnored(transaction.category) ? ' opacity-50' : ''}`}
+                style={isIgnored ? { opacity: 0.62 } : undefined}
+                className="p-4 space-y-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <Checkbox
@@ -402,8 +548,29 @@ export function TransactionTable({
                     disabled={isBusy}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium mb-1 truncate">
-                      {displayDescription}
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="font-medium truncate">
+                        {displayDescription}
+                      </div>
+                      {isIgnored && (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            flexShrink: 0,
+                            fontSize: 10.5,
+                            fontWeight: 500,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: 'var(--muted)',
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          <Slash size={9} />
+                          Ignorada
+                        </span>
+                      )}
                     </div>
                     {hasFriendlyOverride && (
                       <div className="text-xs text-muted-foreground mb-1">
@@ -414,23 +581,53 @@ export function TransactionTable({
                       {formatDate(transaction.date)}
                     </div>
                   </div>
-                  <div
-                    className={`font-mono${isCategoryIgnored(transaction.category) ? ' line-through' : ''}`}
-                    style={{
-                      color:
-                        transaction.type === 'credit'
-                          ? 'var(--pos)'
-                          : 'var(--text)',
-                    }}
-                  >
-                    {transaction.type === 'credit' ? '+' : '-'}
-                    {formatCurrency(transaction.amount, transaction.currency)}
+                  <div className="text-right">
+                    <div
+                      className={`font-mono${isIgnored ? ' line-through' : ''}`}
+                      style={{
+                        color:
+                          transaction.type === 'credit'
+                            ? 'var(--pos)'
+                            : 'var(--text)',
+                      }}
+                    >
+                      {transaction.type === 'credit' ? '+' : '-'}
+                      {formatCurrency(
+                        transaction.amount,
+                        transaction.currency as Currency
+                      )}
+                    </div>
+                    {homeCurrency &&
+                      fxRate &&
+                      transaction.currency !== homeCurrency && (
+                        <div
+                          className="font-mono"
+                          style={{
+                            fontSize: 10.5,
+                            marginTop: 1,
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          ≈{' '}
+                          {formatCurrency(
+                            convert(
+                              transaction.amount,
+                              transaction.currency as Currency,
+                              homeCurrency as Currency,
+                              fxRate
+                            ),
+                            homeCurrency as Currency
+                          )}
+                        </div>
+                      )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <CategoryBadge
-                    categoryId={transaction.category || Category.Uncategorized}
+                    categoryId={
+                      transaction.category || Category.Uncategorized
+                    }
                     size="sm"
                   />
                   <ConfidenceBadge

@@ -1,36 +1,201 @@
-import { ChevronDown, Eye, EyeOff, Search, X } from 'lucide-react'
-import { DateRangePicker } from './DateRangePicker'
+import { useRef, useState } from 'react'
+import { Filter, Search, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
 import { Input } from './ui/input'
-import {
-  Popover,
-  PopoverClose,
-  PopoverContent,
-  PopoverTrigger,
-} from './ui/popover'
-import { CategoryBadge } from './CategoryBadge'
 import { SegmentedToggle } from './ui/segmented-toggle'
+import { getCategoryDisplay } from '../utils/category-display'
+import { useClickOutside } from '../hooks/useClickOutside'
+
+const ACCOUNT_OPTIONS = [
+  { value: 'credit_card', label: 'Tarjeta' },
+  { value: 'bank_account', label: 'Cuenta bancaria' },
+]
+
+interface MultiSelectPopoverProps {
+  label: string
+  options: { value: string; label: string; color?: string }[]
+  selected: string[]
+  onChange: (next: string[]) => void
+  ariaLabel?: string
+}
+
+function MultiSelectPopover({
+  label,
+  options,
+  selected,
+  onChange,
+  ariaLabel,
+}: MultiSelectPopoverProps) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useClickOutside(ref, () => setOpen(false))
+
+  function toggle(value: string) {
+    onChange(
+      selected.includes(value)
+        ? selected.filter((v) => v !== value)
+        : [...selected, value]
+    )
+  }
+
+  const isActive = selected.length > 0
+
+  return (
+    <div style={{ position: 'relative' }} ref={ref}>
+      <button
+        type="button"
+        aria-label={ariaLabel ?? label}
+        onClick={() => setOpen((o) => !o)}
+        className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
+        style={{
+          minWidth: 120,
+          borderColor: isActive ? 'var(--brand)' : undefined,
+          color: isActive ? 'var(--brand-text, var(--brand))' : undefined,
+        }}
+      >
+        <span>
+          {label}
+          {isActive && (
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                marginLeft: 4,
+              }}
+            >
+              · {selected.length}
+            </span>
+          )}
+        </span>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="text-muted-foreground ml-auto shrink-0"
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          className="card"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            left: 0,
+            zIndex: 30,
+            minWidth: 220,
+            padding: 6,
+            boxShadow: 'var(--shadow-lg)',
+            maxHeight: 320,
+            overflowY: 'auto',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+          }}
+        >
+          {options.map((o) => {
+            const isSel = selected.includes(o.value)
+            return (
+              <button
+                key={o.value}
+                onClick={() => toggle(o.value)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 9,
+                  width: '100%',
+                  padding: '7px 9px',
+                  border: 'none',
+                  background: 'transparent',
+                  borderRadius: 7,
+                  cursor: 'pointer',
+                  font: 'inherit',
+                  textAlign: 'left',
+                  color: 'var(--text)',
+                }}
+                onMouseEnter={(e) =>
+                  ((e.currentTarget as HTMLElement).style.background =
+                    'var(--muted)')
+                }
+                onMouseLeave={(e) =>
+                  ((e.currentTarget as HTMLElement).style.background =
+                    'transparent')
+                }
+              >
+                <span
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: 4,
+                    border: '2px solid',
+                    borderColor: isSel ? 'var(--brand)' : 'var(--border)',
+                    background: isSel ? 'var(--brand)' : 'transparent',
+                    display: 'grid',
+                    placeItems: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  {isSel && (
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="white"
+                      strokeWidth="3"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </span>
+                {o.color && (
+                  <span
+                    style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: 3,
+                      background: o.color,
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                <span style={{ fontSize: 13.5 }}>{o.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface TransactionFiltersProps {
   searchTerm: string
   dateFromFilter: string
   dateToFilter: string
-  categoryFilter: string
-  accountFilter: 'all' | 'credit_card' | 'bank_account'
+  categoryFilters: string[]
+  accountFilters: string[]
   currencyFilter: 'all' | 'USD' | 'UYU'
   typeFilter: 'all' | 'credit' | 'debit'
-  showIgnored: boolean
+  minAmount: string
+  maxAmount: string
   availableCategories: string[]
   hasActiveFilters: boolean
   onSearchChange: (value: string) => void
   onDateFromChange: (value: string) => void
   onDateToChange: (value: string) => void
-  onCategoryChange: (value: string) => void
-  onAccountChange: (value: 'all' | 'credit_card' | 'bank_account') => void
+  onCategoryFiltersChange: (value: string[]) => void
+  onAccountFiltersChange: (value: string[]) => void
   onCurrencyChange: (value: 'all' | 'USD' | 'UYU') => void
   onTypeChange: (value: 'all' | 'credit' | 'debit') => void
-  onShowIgnoredChange: (value: boolean) => void
+  onMinAmountChange: (value: string) => void
+  onMaxAmountChange: (value: string) => void
   onClearAll: () => void
 }
 
@@ -38,28 +203,84 @@ export function TransactionFilters({
   searchTerm,
   dateFromFilter,
   dateToFilter,
-  categoryFilter,
-  accountFilter,
+  categoryFilters,
+  accountFilters,
   currencyFilter,
   typeFilter,
-  showIgnored,
+  minAmount,
+  maxAmount,
   availableCategories,
   hasActiveFilters,
   onSearchChange,
   onDateFromChange,
   onDateToChange,
-  onCategoryChange,
-  onAccountChange,
+  onCategoryFiltersChange,
+  onAccountFiltersChange,
   onCurrencyChange,
   onTypeChange,
-  onShowIgnoredChange,
+  onMinAmountChange,
+  onMaxAmountChange,
   onClearAll,
 }: TransactionFiltersProps) {
+  const [amountPanelOpen, setAmountPanelOpen] = useState(false)
+
+  const categoryOptions = availableCategories.map((cat) => ({
+    value: cat,
+    label: getCategoryDisplay(cat).label,
+    color: getCategoryDisplay(cat).color,
+  }))
+
+  const amountActive = Boolean(minAmount) || Boolean(maxAmount)
+
+  // Build active chips (search has its own × in the input, date is MonthNav)
+  const chips: { label: string; onClear: () => void }[] = []
+  categoryFilters.forEach((c) => {
+    chips.push({
+      label: getCategoryDisplay(c).label,
+      onClear: () =>
+        onCategoryFiltersChange(categoryFilters.filter((x) => x !== c)),
+    })
+  })
+  accountFilters.forEach((a) => {
+    const opt = ACCOUNT_OPTIONS.find((o) => o.value === a)
+    chips.push({
+      label: opt?.label ?? a,
+      onClear: () =>
+        onAccountFiltersChange(accountFilters.filter((x) => x !== a)),
+    })
+  })
+  if (currencyFilter !== 'all') {
+    chips.push({
+      label: currencyFilter === 'USD' ? 'Dólares' : 'Pesos',
+      onClear: () => onCurrencyChange('all'),
+    })
+  }
+  if (typeFilter !== 'all') {
+    chips.push({
+      label: typeFilter === 'credit' ? 'Ingresos' : 'Gastos',
+      onClear: () => onTypeChange('all'),
+    })
+  }
+  if (minAmount || maxAmount) {
+    chips.push({
+      label: `Monto ${minAmount || '0'}–${maxAmount || '∞'}`,
+      onClear: () => {
+        onMinAmountChange('')
+        onMaxAmountChange('')
+      },
+    })
+  }
+
   return (
     <Card className="p-4 space-y-3">
-      {/* Row 1: Search + Category + Account */}
+      {/* Row 1: Search + Category + Account + Type + Currency + Monto */}
       <div
-        style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
+        style={{
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}
       >
         <div className="relative w-full sm:flex-1">
           <Search
@@ -75,99 +296,22 @@ export function TransactionFilters({
           />
         </div>
 
-        {/* Category picker */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              id="transactions-category-filter"
-              aria-label="Filtro categoría"
-              className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
-              style={{ minWidth: 130 }}
-            >
-              {categoryFilter ? (
-                <CategoryBadge categoryId={categoryFilter} size="sm" />
-              ) : (
-                <span className="text-muted-foreground">Categoría</span>
-              )}
-              <ChevronDown size={14} className="text-muted-foreground ml-auto shrink-0" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="p-1 w-[220px]" align="start">
-            <PopoverClose asChild>
-              <button
-                className="w-full rounded px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted/50"
-                onClick={() => onCategoryChange('')}
-              >
-                Todas las categorías
-              </button>
-            </PopoverClose>
-            {availableCategories.map((cat) => (
-              <PopoverClose key={cat} asChild>
-                <button
-                  className="w-full rounded px-3 py-1.5 text-left hover:bg-muted/50"
-                  onClick={() => onCategoryChange(cat)}
-                >
-                  <CategoryBadge categoryId={cat} size="sm" />
-                </button>
-              </PopoverClose>
-            ))}
-          </PopoverContent>
-        </Popover>
-
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              id="transactions-account-filter"
-              aria-label="Filtro cuenta"
-              className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
-              style={{ minWidth: 130 }}
-            >
-              <span className={accountFilter === 'all' ? 'text-muted-foreground' : ''}>
-                {accountFilter === 'all'
-                  ? 'Cuenta'
-                  : accountFilter === 'bank_account'
-                    ? 'Cuenta bancaria'
-                    : 'Tarjeta'}
-              </span>
-              <ChevronDown size={14} className="text-muted-foreground ml-auto shrink-0" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="p-1 w-[180px]" align="start">
-            {(
-              [
-                { value: 'all', label: 'Todas las cuentas' },
-                { value: 'bank_account', label: 'Cuenta bancaria' },
-                { value: 'credit_card', label: 'Tarjeta' },
-              ] as const
-            ).map(({ value, label }) => (
-              <PopoverClose key={value} asChild>
-                <button
-                  className="w-full rounded px-3 py-1.5 text-left text-sm hover:bg-muted/50"
-                  style={{ fontWeight: accountFilter === value ? 600 : 400 }}
-                  onClick={() => onAccountChange(value)}
-                >
-                  {label}
-                </button>
-              </PopoverClose>
-            ))}
-          </PopoverContent>
-        </Popover>
-        <DateRangePicker
-          dateFrom={dateFromFilter}
-          dateTo={dateToFilter}
-          onChange={(from, to) => {
-            onDateFromChange(from)
-            onDateToChange(to)
-          }}
+        <MultiSelectPopover
+          label="Categoría"
+          ariaLabel="Filtro categoría"
+          options={categoryOptions}
+          selected={categoryFilters}
+          onChange={onCategoryFiltersChange}
         />
-      </div>
 
-      {/* Row 2: Type segment + Currency segment + Ignored toggle + Clear */}
-      <div
-        style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
-      >
+        <MultiSelectPopover
+          label="Cuenta"
+          ariaLabel="Filtro cuenta"
+          options={ACCOUNT_OPTIONS}
+          selected={accountFilters}
+          onChange={onAccountFiltersChange}
+        />
+
         {/* Type filter */}
         <SegmentedToggle
           options={[
@@ -194,44 +338,126 @@ export function TransactionFilters({
           aria-label="Moneda"
         />
 
-        {/* Ignored categories toggle */}
-        <button
-          aria-label={showIgnored ? 'Ocultar categorías ignoradas' : 'Mostrar categorías ignoradas'}
-          title={showIgnored ? 'Ocultar categorías ignoradas' : 'Mostrar categorías ignoradas'}
-          onClick={() => onShowIgnoredChange(!showIgnored)}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 5,
-            height: 36,
-            padding: '0 10px',
-            borderRadius: 8,
-            border: '1px solid var(--border)',
-            background: showIgnored ? 'transparent' : 'var(--surface-2)',
-            color: showIgnored ? 'var(--text-faint)' : 'var(--text)',
-            cursor: 'pointer',
-            fontSize: 13,
-            fontWeight: 500,
-          }}
+        {/* Monto advanced panel toggle */}
+        <Button
+          variant={amountPanelOpen || amountActive ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setAmountPanelOpen((o) => !o)}
+          style={{ gap: 5 }}
         >
-          {showIgnored ? <Eye size={15} /> : <EyeOff size={15} />}
-          Ignoradas
-        </button>
-
-        {hasActiveFilters && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onClearAll}
-            style={{ gap: 5 }}
-          >
-            <X size={13} />
-            Limpiar
-          </Button>
-        )}
+          <Filter size={14} />
+          Monto
+        </Button>
       </div>
 
-      {/* Hidden date inputs kept in DOM for test accessibility */}
+      {/* Advanced amount panel */}
+      {amountPanelOpen && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: 14,
+            paddingTop: 14,
+            borderTop: '1px solid var(--border)',
+          }}
+        >
+          <div>
+            <label
+              className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5"
+            >
+              Monto mínimo
+            </label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={minAmount}
+              onChange={(e) => onMinAmountChange(e.target.value)}
+              style={{ fontSize: 13 }}
+            />
+          </div>
+          <div>
+            <label
+              className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5"
+            >
+              Monto máximo
+            </label>
+            <Input
+              type="number"
+              placeholder="∞"
+              value={maxAmount}
+              onChange={(e) => onMaxAmountChange(e.target.value)}
+              style={{ fontSize: 13 }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Active filter chips */}
+      {chips.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+            alignItems: 'center',
+          }}
+        >
+          {chips.map((chip, i) => (
+            <span
+              key={i}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                height: 26,
+                padding: '0 8px',
+                borderRadius: 999,
+                border: '1px solid var(--border)',
+                background: 'var(--muted)',
+                fontSize: 12.5,
+                fontWeight: 500,
+                color: 'var(--text)',
+              }}
+            >
+              {chip.label}
+              <button
+                onClick={chip.onClear}
+                aria-label={`Quitar filtro ${chip.label}`}
+                style={{
+                  display: 'grid',
+                  placeItems: 'center',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  color: 'var(--text-muted)',
+                  borderRadius: 999,
+                }}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+          {hasActiveFilters && chips.length > 0 && (
+            <button
+              onClick={onClearAll}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 12.5,
+                color: 'var(--brand)',
+                padding: '0 4px',
+                fontWeight: 500,
+              }}
+            >
+              Limpiar todo
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Hidden date inputs kept for test accessibility */}
       <input
         id="transactions-date-from-filter"
         aria-label="Filtro fecha desde"
