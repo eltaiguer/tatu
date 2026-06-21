@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { isCategoryIgnored } from '../services/categories/category-registry'
-import { isTransferCategory } from '../services/transfers/internal-transfers'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
 import type { Transaction, TransactionsFilter } from '../models'
@@ -10,9 +9,6 @@ export type SortDirection = 'asc' | 'desc'
 
 const ITEMS_PER_PAGE = 12
 
-export function isIgnoredOrTransfer(category: string | undefined): boolean {
-  return isTransferCategory(category) || isCategoryIgnored(category)
-}
 
 export function useTransactionFiltering({
   transactions,
@@ -132,13 +128,13 @@ export function useTransactionFiltering({
   const filteredTransactions = useMemo(() => {
     if (showIgnored) return allFilteredTransactions
     return allFilteredTransactions.filter(
-      (tx) => !isIgnoredOrTransfer(tx.category)
+      (tx) => !isCategoryIgnored(tx.category)
     )
   }, [allFilteredTransactions, showIgnored])
 
   const ignoredCount = useMemo(
     () =>
-      allFilteredTransactions.filter((tx) => isIgnoredOrTransfer(tx.category))
+      allFilteredTransactions.filter((tx) => isCategoryIgnored(tx.category))
         .length,
     [allFilteredTransactions]
   )

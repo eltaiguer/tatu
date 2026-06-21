@@ -129,7 +129,7 @@ describe('Aggregation - totals', () => {
     expect(totals.income.UYU).toBe(7)
   })
 
-  it('excludes transfer category from income and expense totals', () => {
+  it('excludes transfer category from all totals including count', () => {
     const transactions = [
       makeTransaction('tx-1', {
         amount: 20,
@@ -156,7 +156,7 @@ describe('Aggregation - totals', () => {
     expect(totals.expense.USD).toBe(5)
     expect(totals.income.USD).toBe(0)
     expect(totals.net.USD).toBe(-5)
-    expect(totals.count).toBe(3)
+    expect(totals.count).toBe(1)
   })
 })
 

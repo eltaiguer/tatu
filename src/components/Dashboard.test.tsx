@@ -196,6 +196,34 @@ describe('Dashboard', () => {
     expect(screen.getAllByText('GROCERY STORE').length).toBeGreaterThan(0)
   })
 
+  it('excludes ignored-category transactions from the Recientes list', () => {
+    replaceCustomCategories([
+      { id: 'salary', label: 'Salary', color: '#000', isIgnored: true },
+    ])
+    const transactions = [
+      makeTransaction({
+        id: 'ignored-tx',
+        description: 'IGNORED DEPOSIT',
+        category: 'salary' as Category,
+        amount: 5000,
+        type: 'credit',
+        date: new Date(2026, 0, 10),
+      }),
+      makeTransaction({
+        id: 'normal-tx',
+        description: 'SUPERMERCADO',
+        category: Category.Groceries,
+        amount: 200,
+        date: new Date(2026, 0, 9),
+      }),
+    ]
+
+    render(<Dashboard transactions={transactions} />)
+
+    expect(screen.queryByText('IGNORED DEPOSIT')).not.toBeInTheDocument()
+    expect(screen.getAllByText('SUPERMERCADO').length).toBeGreaterThan(0)
+  })
+
   it('renders all major section headings', () => {
     const transactions = [
       makeTransaction({ id: 'food-1', category: Category.Groceries, amount: 200 }),

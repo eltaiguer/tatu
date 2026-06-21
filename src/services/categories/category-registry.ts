@@ -45,7 +45,7 @@ export function getCategoryDefinitions(): CategoryDefinition[] {
       color: override?.color ?? CATEGORY_COLORS[category],
       icon: override?.icon ?? CATEGORY_ICONS[category],
       isCustom: false,
-      isIgnored: override?.isIgnored ?? false,
+      isIgnored: override?.isIgnored ?? isTransferCategoryId(category),
     }
   })
 
@@ -98,7 +98,7 @@ export function getCategoryDefinition(
       label: override?.label ?? CATEGORY_LABELS[category],
       color: override?.color ?? CATEGORY_COLORS[category],
       icon: override?.icon ?? CATEGORY_ICONS[category],
-      isIgnored: override?.isIgnored ?? false,
+      isIgnored: override?.isIgnored ?? isTransferCategoryId(category),
       isOverridden: !!override,
     }
   }
@@ -118,10 +118,14 @@ export function getCategoryDefinition(
   }
 }
 
+function isTransferCategoryId(id: string): boolean {
+  return id === Category.InternalTransfer || id === Category.ExternalTransfer
+}
+
 export function isCategoryIgnored(id: string | undefined): boolean {
   if (!id) return false
   const override = listCustomCategories().find((c) => c.id === id)
   if (override?.isIgnored !== undefined) return override.isIgnored
-  // backward-compat: existing DB rows with category='ignored' stay excluded from charts
-  return id === 'ignored'
+  // Transfer categories and the legacy 'ignored' id are excluded by default
+  return isTransferCategoryId(id) || id === 'ignored'
 }

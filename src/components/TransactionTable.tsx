@@ -21,8 +21,8 @@ import { Category } from '../models'
 import type { Transaction } from '../models'
 import {
   getCategoryDefinition,
+  isCategoryIgnored,
 } from '../services/categories/category-registry'
-import { isIgnoredOrTransfer } from '../hooks/useTransactionFiltering'
 import { getDisplayDescription } from '../utils/transaction-display'
 import { formatCurrency, formatDate } from '../utils/formatting'
 import { convert } from '../services/currency/convert'
@@ -280,7 +280,7 @@ export function TransactionTable({
                 const displayDescription = getDisplayDescription(transaction)
                 const hasFriendlyOverride =
                   displayDescription !== transaction.description
-                const isIgnored = isIgnoredOrTransfer(transaction.category)
+                const isIgnored = isCategoryIgnored(transaction.category)
                 const showConverted =
                   homeCurrency &&
                   fxRate &&
@@ -530,7 +530,7 @@ export function TransactionTable({
             const displayDescription = getDisplayDescription(transaction)
             const hasFriendlyOverride =
               displayDescription !== transaction.description
-            const isIgnored = isIgnoredOrTransfer(transaction.category)
+            const isIgnored = isCategoryIgnored(transaction.category)
 
             return (
               <div

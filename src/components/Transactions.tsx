@@ -20,7 +20,7 @@ import { Category } from '../models'
 import type { Transaction } from '../models'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
-import { useTransactionFiltering, isIgnoredOrTransfer } from '../hooks/useTransactionFiltering'
+import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { EditTransactionDialog } from './EditTransactionDialog'
 import { BulkEditDialog } from './BulkEditDialog'
@@ -37,6 +37,7 @@ import {
   syncCustomCategoryToCloud,
   DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
+import { isCategoryIgnored } from '../services/categories/category-registry'
 import type { TransactionsFilter } from '../models'
 
 /* ---- Period helpers ---- */
@@ -471,7 +472,7 @@ function TotalsStrip({
     let income = 0
     let expense = 0
     rows.forEach((tx) => {
-      if (isIgnoredOrTransfer(tx.category)) return
+      if (isCategoryIgnored(tx.category)) return
       const v = convert(
         tx.amount,
         tx.currency as Currency,

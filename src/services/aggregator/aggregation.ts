@@ -1,6 +1,5 @@
 import type { Currency, Transaction } from '../../models'
 import { Category } from '../../models'
-import { isTransferCategory } from '../transfers/internal-transfers'
 import { isCategoryIgnored } from '../categories/category-registry'
 import { toDateKey, toMonthKey } from '../../utils/date-utils'
 import { memoizeByReference } from '../../utils/memo'
@@ -32,11 +31,6 @@ function emptySummary(): SummaryTotals {
 
 function applyTransaction(summary: SummaryTotals, tx: Transaction): void {
   if (isCategoryIgnored(tx.category)) {
-    return
-  }
-
-  if (isTransferCategory(tx.category)) {
-    summary.count += 1
     return
   }
 
@@ -112,7 +106,9 @@ export function calculateRunningBalance(
   startingBalance = 0
 ): Array<{ id: string; balance: number }> {
   const sorted = [...transactions]
-    .filter((tx) => tx.currency === currency)
+    .filter(
+      (tx) => tx.currency === currency && !isCategoryIgnored(tx.category),
+    )
     .sort((a, b) => a.date.getTime() - b.date.getTime())
 
   let balance = startingBalance
