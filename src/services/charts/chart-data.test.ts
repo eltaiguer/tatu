@@ -97,7 +97,7 @@ describe('chart-data', () => {
     ])
   })
 
-  it('only counts Category.Income credits as income — other credits are neutral', () => {
+  it('counts all non-ignored credits as income regardless of category', () => {
     const transactions = [
       makeTransaction('salary', {
         amount: 200,
@@ -121,9 +121,9 @@ describe('chart-data', () => {
 
     const result = buildIncomeExpenseSummary(transactions, 'USD')
 
-    expect(result.income).toBe(200)
+    expect(result.income).toBe(280)
     expect(result.expense).toBe(0)
-    expect(result.net).toBe(200)
+    expect(result.net).toBe(280)
   })
 
   it('builds income vs expense summary per currency', () => {
@@ -267,14 +267,14 @@ describe('chart-data multicurrency converting selectors', () => {
       expect(result[0].net).toBeCloseTo(200)
     })
 
-    it('does not count uncategorized or non-income credits as income', () => {
+    it('counts all non-ignored credits as income', () => {
       const txs = [
         makeTx('income', { amount: 50, currency: 'USD', type: 'credit', category: Category.Income }),
         makeTx('refund', { amount: 10, currency: 'USD', type: 'credit', category: Category.Groceries }),
         makeTx('unknown', { amount: 5, currency: 'USD', type: 'credit' }),
       ]
       const result = buildMonthlyTrendsConverted(txs, 'USD', RATE)
-      expect(result[0].income).toBe(50)
+      expect(result[0].income).toBe(65)
       expect(result[0].expense).toBe(0)
     })
   })

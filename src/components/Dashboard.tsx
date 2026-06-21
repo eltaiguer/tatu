@@ -37,7 +37,6 @@ import {
   getCategoryDefinitions,
   isCategoryIgnored,
 } from '../services/categories/category-registry'
-import { isTransferCategory } from '../services/transfers/internal-transfers'
 import {
   buildCurrentMonthSummary,
   buildCategorySpendingConverted,
@@ -60,26 +59,6 @@ import { CategoryBreakdownList } from './CategoryBreakdownList'
 import type { CategoryBreakdownRow } from './CategoryBreakdownList'
 
 // ── Internal sub-components ──────────────────────────────────────────────────
-
-function MiniBars({ values, color }: { values: number[]; color: string }) {
-  const max = Math.max(...values, 1)
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 36 }}>
-      {values.map((v, i) => (
-        <div
-          key={i}
-          style={{
-            flex: 1,
-            height: `${Math.max((v / max) * 100, 6)}%`,
-            background: color,
-            borderRadius: 2,
-            opacity: 0.25 + 0.75 * (i / values.length),
-          }}
-        />
-      ))}
-    </div>
-  )
-}
 
 function SectionDivider({ label, sub }: { label: string; sub?: string }) {
   return (
@@ -303,6 +282,24 @@ export function Dashboard({
     )
   }, [transactions])
 
+  // Full date range across all transactions — used for section period labels
+  const periodRange = useMemo(() => {
+    if (!transactions.length) return null
+    let min = transactions[0].date
+    let max = transactions[0].date
+    for (const tx of transactions) {
+      if (tx.date < min) min = tx.date
+      if (tx.date > max) max = tx.date
+    }
+    const fmt = (d: Date) =>
+      d.toLocaleDateString('es-UY', {
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC',
+      })
+    return `${fmt(min)} – ${fmt(max)}`
+  }, [transactions])
+
   // Account spend by source
   const acctSpend = useMemo(
     () => spendByAccount(transactions, homeCurrency, fxRate),
@@ -378,12 +375,6 @@ export function Dashboard({
     [transactions, homeCurrency, fxRate],
   )
 
-  // Income sparkline bars for "Este mes" card — derived from monthlyTrend
-  const incomeBars = useMemo(
-    () => monthlyTrend.slice(-6).map((m) => m.ingresos),
-    [monthlyTrend],
-  )
-
   // Currency split
   const currencySplit = useMemo(
     () => buildCurrencySplit(transactions, homeCurrency, fxRate),
@@ -420,14 +411,12 @@ export function Dashboard({
     transactions
       .filter(
         (tx) =>
-          tx.type === 'debit' &&
-          !isTransferCategory(tx.category) &&
-          !isCategoryIgnored(tx.category),
+          tx.type === 'debit' && !isCategoryIgnored(tx.category),
       )
       .forEach((tx) => {
-        const key = tx.description
+        const key = getDisplayDescription(tx)
         const prev = map.get(key) ?? {
-          name: getDisplayDescription(tx),
+          name: key,
           total: 0,
           count: 0,
           catId: tx.category ?? 'uncategorized',
@@ -445,6 +434,7 @@ export function Dashboard({
   const recentTransactions = useMemo(
     () =>
       [...transactions]
+        .filter((tx) => !isCategoryIgnored(tx.category))
         .sort((a, b) => b.date.getTime() - a.date.getTime())
         .slice(0, 6),
     [transactions],
@@ -460,10 +450,13 @@ export function Dashboard({
   }: TooltipProps<ValueType, NameType>) => {
     if (active && payload && payload.length) {
       const value = Number(payload[0].value ?? 0)
+      const label =
+        (payload[0].payload as { label?: string } | undefined)?.label ??
+        String(payload[0].name ?? '')
       return (
         <div
           style={{
-            background: 'var(--bg)',
+            background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius)',
             padding: '10px 14px',
@@ -471,7 +464,7 @@ export function Dashboard({
           }}
         >
           <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
-            {payload[0].name}
+            {label}
           </p>
           <p className="font-mono" style={{ fontSize: 13, color: 'var(--text-faint)' }}>
             {formatCurrency(value, homeCurrency)}
@@ -480,6 +473,65 @@ export function Dashboard({
       )
     }
     return null
+  }
+
+  const savingsTooltip = ({
+    active,
+    payload,
+    label,
+  }: TooltipProps<ValueType, NameType>) => {
+    if (!active || !payload?.length) return null
+    const d = payload[0].payload as {
+      ingresos: number
+      gastos: number
+      neto: number
+    }
+    return (
+      <div
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          padding: '10px 14px',
+          boxShadow: 'var(--shadow-md)',
+        }}
+      >
+        <p
+          style={{
+            fontSize: 12,
+            color: 'var(--text-faint)',
+            margin: '0 0 6px',
+          }}
+        >
+          {label}
+        </p>
+        <p style={{ fontSize: 12, margin: '3px 0', color: 'var(--pos)' }}>
+          Ingresos:{' '}
+          <span className="font-mono">
+            {formatCurrency(d.ingresos, homeCurrency)}
+          </span>
+        </p>
+        <p style={{ fontSize: 12, margin: '3px 0', color: 'var(--neg)' }}>
+          Gastos:{' '}
+          <span className="font-mono">
+            {formatCurrency(d.gastos, homeCurrency)}
+          </span>
+        </p>
+        <p
+          style={{
+            fontSize: 12,
+            margin: '3px 0',
+            fontWeight: 600,
+            color: d.neto >= 0 ? 'var(--pos)' : 'var(--neg)',
+          }}
+        >
+          Balance:{' '}
+          <span className="font-mono">
+            {formatCurrency(d.neto, homeCurrency)}
+          </span>
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -558,6 +610,11 @@ export function Dashboard({
       {hasTransactions && (
         <>
           {/* Account source cards — 3-col grid */}
+          {periodRange && (
+            <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: 0 }}>
+              Período analizado: {periodRange}
+            </p>
+          )}
           <div
             className="grid grid-cols-1 sm:grid-cols-3 gap-4"
           >
@@ -622,11 +679,6 @@ export function Dashboard({
                 >
                   {formatCurrency(monthSummary.income, homeCurrency)}
                 </div>
-                {incomeBars.length > 1 && (
-                  <div style={{ marginTop: 12 }}>
-                    <MiniBars values={incomeBars} color="var(--pos)" />
-                  </div>
-                )}
               </div>
               <div>
                 <div
@@ -762,16 +814,30 @@ export function Dashboard({
               <div className="grid grid-cols-1 lg:grid-cols-[258px_1fr] gap-8 items-center">
                 {/* Verdict text */}
                 <div>
-                  <h2
+                  <div
                     style={{
-                      fontSize: 16,
-                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: 10,
                       marginBottom: 10,
-                      fontFamily: 'var(--font-sans)',
                     }}
                   >
-                    ¿Estás ahorrando?
-                  </h2>
+                    <h2
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 600,
+                        margin: 0,
+                        fontFamily: 'var(--font-sans)',
+                      }}
+                    >
+                      ¿Estás ahorrando?
+                    </h2>
+                    <span
+                      style={{ fontSize: 11, color: 'var(--text-faint)' }}
+                    >
+                      Últimos 12 meses
+                    </span>
+                  </div>
                   <div
                     className="text-muted-foreground"
                     style={{ fontSize: 12, fontWeight: 500 }}
@@ -840,17 +906,7 @@ export function Dashboard({
                       tickFormatter={(v) => formatCurrencyShort(v, homeCurrency)}
                       width={60}
                     />
-                    <Tooltip
-                      contentStyle={{
-                        background: 'var(--bg)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius)',
-                      }}
-                      formatter={(value: ValueType) => [
-                        formatCurrency(Number(value), homeCurrency),
-                        'Neto',
-                      ]}
-                    />
+                    <Tooltip content={savingsTooltip} />
                     <ReferenceLine
                       y={0}
                       stroke="var(--border)"
@@ -881,16 +937,29 @@ export function Dashboard({
                 marginBottom: 20,
               }}
             >
-              <h2
-                style={{
-                  fontSize: 16,
-                  fontWeight: 600,
-                  margin: 0,
-                  fontFamily: 'var(--font-sans)',
-                }}
-              >
-                Gasto por categoría
-              </h2>
+              <div>
+                <h2
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 600,
+                    margin: 0,
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  Gasto por categoría
+                </h2>
+                {periodRange && (
+                  <p
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--text-faint)',
+                      margin: '2px 0 0',
+                    }}
+                  >
+                    {periodRange}
+                  </p>
+                )}
+              </div>
               {onNavigateToTransactions && (
                 <button
                   onClick={() => onNavigateToTransactions({})}
@@ -1006,16 +1075,29 @@ export function Dashboard({
                   marginBottom: 14,
                 }}
               >
-                <h2
-                  style={{
-                    fontSize: 16,
-                    fontWeight: 600,
-                    margin: 0,
-                    fontFamily: 'var(--font-sans)',
-                  }}
-                >
-                  Gasto por moneda
-                </h2>
+                <div>
+                  <h2
+                    style={{
+                      fontSize: 16,
+                      fontWeight: 600,
+                      margin: 0,
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    Gasto por moneda
+                  </h2>
+                  {periodRange && (
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--text-faint)',
+                        margin: '2px 0 0',
+                      }}
+                    >
+                      {periodRange}
+                    </p>
+                  )}
+                </div>
                 <span
                   className="text-muted-foreground"
                   style={{ fontSize: 12.5 }}
@@ -1096,16 +1178,27 @@ export function Dashboard({
                 marginBottom: 20,
               }}
             >
-              <h2
-                style={{
-                  fontSize: 16,
-                  fontWeight: 600,
-                  margin: 0,
-                  fontFamily: 'var(--font-sans)',
-                }}
-              >
-                Ingresos vs Gastos
-              </h2>
+              <div>
+                <h2
+                  style={{
+                    fontSize: 16,
+                    fontWeight: 600,
+                    margin: 0,
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  Ingresos vs Gastos
+                </h2>
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-faint)',
+                    margin: '2px 0 0',
+                  }}
+                >
+                  Últimos 12 meses
+                </p>
+              </div>
               <div style={{ display: 'flex', gap: 18 }}>
                 {[
                   { label: 'Ingresos', color: 'var(--pos)' },
@@ -1323,16 +1416,29 @@ export function Dashboard({
             {/* Mayores comercios */}
             {topMerchants.length > 0 && (
               <Card className="p-6">
-                <h2
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 600,
-                    marginBottom: 14,
-                    fontFamily: 'var(--font-sans)',
-                  }}
-                >
-                  Mayores comercios
-                </h2>
+                <div style={{ marginBottom: 14 }}>
+                  <h2
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      margin: 0,
+                      fontFamily: 'var(--font-sans)',
+                    }}
+                  >
+                    Mayores comercios
+                  </h2>
+                  {periodRange && (
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--text-faint)',
+                        margin: '2px 0 0',
+                      }}
+                    >
+                      {periodRange}
+                    </p>
+                  )}
+                </div>
                 <div
                   style={{
                     display: 'flex',

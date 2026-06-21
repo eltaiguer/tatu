@@ -1,6 +1,5 @@
 import type { Currency, Transaction } from '../../models'
 import { Category } from '../../models'
-import { isTransferCategory } from '../transfers/internal-transfers'
 import { isCategoryIgnored } from '../categories/category-registry'
 import { convert } from '../currency/convert'
 import { toMonthKey } from '../../utils/date-utils'
@@ -33,7 +32,6 @@ export function buildCategorySpending(
     if (
       tx.currency !== currency ||
       tx.type !== 'debit' ||
-      isTransferCategory(tx.category) ||
       isCategoryIgnored(tx.category)
     ) {
       return
@@ -69,11 +67,11 @@ export function buildMonthlyTrends(
       return
     }
 
-    if (isTransferCategory(tx.category) || isCategoryIgnored(tx.category)) {
+    if (isCategoryIgnored(tx.category)) {
       return
     }
 
-    if (tx.type === 'credit' && tx.category === Category.Income) {
+    if (tx.type === 'credit') {
       entry.income += tx.amount
       entry.net += tx.amount
     } else if (tx.type === 'debit') {
@@ -97,11 +95,11 @@ export function buildIncomeExpenseSummary(
         return summary
       }
 
-      if (isTransferCategory(tx.category) || isCategoryIgnored(tx.category)) {
+      if (isCategoryIgnored(tx.category)) {
         return summary
       }
 
-      if (tx.type === 'credit' && tx.category === Category.Income) {
+      if (tx.type === 'credit') {
         summary.income += tx.amount
         summary.net += tx.amount
       } else if (tx.type === 'debit') {
@@ -137,7 +135,7 @@ export interface CurrencySplitData {
 }
 
 function shouldExclude(tx: Transaction): boolean {
-  return isTransferCategory(tx.category) || isCategoryIgnored(tx.category)
+  return isCategoryIgnored(tx.category)
 }
 
 export function buildCategorySpendingConverted(
@@ -174,7 +172,7 @@ export function buildMonthlyTrendsConverted(
     }
     const entry = grouped.get(month)!
     const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    if (tx.type === 'credit' && tx.category === Category.Income) {
+    if (tx.type === 'credit') {
       entry.income += converted
       entry.net += converted
     } else if (tx.type === 'debit') {
@@ -225,7 +223,7 @@ export function buildCurrentMonthSummary(
 
   monthTxs.forEach((tx) => {
     const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    if (tx.type === 'credit' && tx.category === Category.Income) {
+    if (tx.type === 'credit') {
       income += converted
     } else if (tx.type === 'debit') {
       expense += converted
