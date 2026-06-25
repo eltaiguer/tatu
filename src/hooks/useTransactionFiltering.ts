@@ -195,7 +195,36 @@ export function useTransactionFiltering({
     setSortDirection('desc')
   }
 
-  const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE)
+  const groupedTransactions = useMemo(() => {
+    const childrenByParent = new Map<string, Transaction[]>()
+    filteredTransactions.forEach((tx) => {
+      if (tx.splitParentId) {
+        const arr = childrenByParent.get(tx.splitParentId) ?? []
+        arr.push(tx)
+        childrenByParent.set(tx.splitParentId, arr)
+      }
+    })
+
+    const result: Transaction[] = []
+    const emitted = new Set<string>()
+
+    filteredTransactions.forEach((tx) => {
+      if (emitted.has(tx.id)) return
+      result.push(tx)
+      emitted.add(tx.id)
+      if (tx.isSplitParent) {
+        const children = childrenByParent.get(tx.id) ?? []
+        children.forEach((child) => {
+          result.push(child)
+          emitted.add(child.id)
+        })
+      }
+    })
+
+    return result
+  }, [filteredTransactions])
+
+  const totalPages = Math.ceil(groupedTransactions.length / ITEMS_PER_PAGE)
   const safeTotalPages = Math.max(1, totalPages)
 
   useEffect(() => {
@@ -203,12 +232,12 @@ export function useTransactionFiltering({
   }, [safeTotalPages])
 
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
-  const paginatedTransactions = filteredTransactions.slice(
+  const paginatedTransactions = groupedTransactions.slice(
     startIndex,
     startIndex + ITEMS_PER_PAGE
   )
   const paginatedTransactionIds = paginatedTransactions.map((tx) => tx.id)
-  const filteredTransactionIds = filteredTransactions.map((tx) => tx.id)
+  const filteredTransactionIds = groupedTransactions.map((tx) => tx.id)
 
   return {
     searchTerm,

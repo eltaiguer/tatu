@@ -14,6 +14,7 @@ interface TransactionStoreActions {
   }
   updateTransaction: (id: string, updates: Partial<Transaction>) => void
   removeTransaction: (id: string) => void
+  removeTransactions: (ids: string[]) => void
   clearTransactions: () => void
   setTransactions: (transactions: Transaction[]) => void
   findDuplicateIds: (transactions: Transaction[]) => string[]
@@ -79,6 +80,14 @@ function createTransactionStoreState(
       set((state) => ({
         transactions: state.transactions.filter((tx) => tx.id !== id),
       })),
+    removeTransactions: (ids) => {
+      const idSet = new Set(ids)
+      set((state) => ({
+        transactions: inferInternalTransfers(
+          state.transactions.filter((tx) => !idSet.has(tx.id))
+        ),
+      }))
+    },
     clearTransactions: () =>
       set(() => ({
         transactions: [],

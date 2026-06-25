@@ -19,6 +19,8 @@ interface TransactionRow {
   import_id?: string | null
   is_deleted?: boolean
   deleted_at?: string | null
+  is_split_parent?: boolean
+  split_parent_id?: string | null
 }
 
 function transactionToRow(userId: string, tx: Transaction): TransactionRow {
@@ -37,6 +39,8 @@ function transactionToRow(userId: string, tx: Transaction): TransactionRow {
     category_confidence: tx.categoryConfidence ?? null,
     balance: tx.balance ?? null,
     raw_data: (tx.rawData ?? {}) as Record<string, unknown>,
+    is_split_parent: tx.isSplitParent ?? false,
+    split_parent_id: tx.splitParentId ?? null,
   }
 }
 
@@ -55,6 +59,8 @@ function rowToTransaction(row: TransactionRow): Transaction {
     categoryConfidence: row.category_confidence ?? undefined,
     balance: row.balance ?? undefined,
     rawData: row.raw_data ?? {},
+    isSplitParent: row.is_split_parent ?? undefined,
+    splitParentId: row.split_parent_id ?? undefined,
   }
 }
 
@@ -180,6 +186,121 @@ export async function updateTransaction(
     .update(payload)
     .eq('user_id', session.user.id)
     .eq('transaction_id', transactionId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
+export interface SplitPart {
+  description: string
+  amount: number
+  category?: string
+}
+
+export async function splitTransaction(
+  session: SupabaseSession,
+  parent: Transaction,
+  parts: SplitPart[]
+): Promise<{ parent: Transaction; children: Transaction[] }> {
+  const client = getSupabaseClient()
+
+  const updatedParent: Transaction = { ...parent, isSplitParent: true }
+
+  const { error: parentError } = await client
+    .from('transactions')
+    .upsert(transactionToRow(session.user.id, updatedParent), {
+      onConflict: 'user_id,transaction_id',
+    })
+
+  if (parentError) {
+    throw new Error(parentError.message)
+  }
+
+  const children: Transaction[] = parts.map((part, i) => ({
+    ...parent,
+    id: `${parent.id}_split_${i}`,
+    description: part.description,
+    displayDescription: undefined,
+    amount: part.amount,
+    category: part.category,
+    categoryConfidence: part.category ? 1 : undefined,
+    isSplitParent: false,
+    splitParentId: parent.id,
+    balance: undefined,
+    rawData: {},
+    tags: [],
+  }))
+
+  const { error: childError } = await client
+    .from('transactions')
+    .upsert(
+      children.map((c) => transactionToRow(session.user.id, c)),
+      { onConflict: 'user_id,transaction_id' }
+    )
+
+  if (childError) {
+    await client
+      .from('transactions')
+      .upsert(transactionToRow(session.user.id, parent), {
+        onConflict: 'user_id,transaction_id',
+      })
+    throw new Error(childError.message)
+  }
+
+  return { parent: updatedParent, children }
+}
+
+export async function unsplitTransaction(
+  session: SupabaseSession,
+  parent: Transaction,
+  childIds: string[]
+): Promise<Transaction> {
+  const client = getSupabaseClient()
+
+  if (childIds.length > 0) {
+    const { error: deleteError } = await client
+      .from('transactions')
+      .delete()
+      .eq('user_id', session.user.id)
+      .in('transaction_id', childIds)
+
+    if (deleteError) {
+      throw new Error(deleteError.message)
+    }
+  }
+
+  const restored: Transaction = {
+    ...parent,
+    isSplitParent: false,
+    splitParentId: undefined,
+  }
+
+  const { error: parentError } = await client
+    .from('transactions')
+    .upsert(transactionToRow(session.user.id, restored), {
+      onConflict: 'user_id,transaction_id',
+    })
+
+  if (parentError) {
+    throw new Error(parentError.message)
+  }
+
+  return restored
+}
+
+export async function hardDeleteTransactions(
+  session: SupabaseSession,
+  transactionIds: string[]
+): Promise<void> {
+  if (transactionIds.length === 0) return
+
+  const client = getSupabaseClient()
+  const { error } = await client
+    .from('transactions')
+    .delete()
+    .eq('user_id', session.user.id)
+    .in('transaction_id', transactionIds)
 
   if (error) {
     throw new Error(error.message)

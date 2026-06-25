@@ -65,7 +65,9 @@ alter table public.transactions
   add column if not exists is_deleted boolean not null default false,
   add column if not exists deleted_at timestamptz,
   add column if not exists created_at timestamptz not null default timezone('utc', now()),
-  add column if not exists updated_at timestamptz not null default timezone('utc', now());
+  add column if not exists updated_at timestamptz not null default timezone('utc', now()),
+  add column if not exists is_split_parent boolean not null default false,
+  add column if not exists split_parent_id text;
 
 alter table public.transactions
   alter column amount type numeric(14,2),

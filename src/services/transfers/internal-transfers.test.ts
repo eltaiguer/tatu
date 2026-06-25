@@ -220,3 +220,31 @@ describe('internal transfer inference', () => {
     expect(credit.category).not.toBe(Category.InternalTransfer)
   })
 })
+
+describe('split transaction guards in transfer inference', () => {
+  it('does not auto-tag a split parent as a transfer', () => {
+    const result = inferInternalTransfers([
+      makeTransaction('parent', {
+        description: 'Transferencia supernet',
+        type: 'debit',
+        source: 'bank_account',
+        isSplitParent: true,
+      }),
+    ])
+    const parent = result.find((tx) => tx.id === 'parent')!
+    expect(parent.category).not.toBe(Category.InternalTransfer)
+  })
+
+  it('does not auto-tag a split child as a transfer', () => {
+    const result = inferInternalTransfers([
+      makeTransaction('child', {
+        description: 'Transferencia supernet',
+        type: 'debit',
+        source: 'bank_account',
+        splitParentId: 'some-parent',
+      }),
+    ])
+    const child = result.find((tx) => tx.id === 'child')!
+    expect(child.category).not.toBe(Category.InternalTransfer)
+  })
+})

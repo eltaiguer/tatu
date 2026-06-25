@@ -185,3 +185,67 @@ describe('Aggregation - running balance', () => {
     ])
   })
 })
+
+describe('Aggregation - split transaction guards', () => {
+  it('excludes split parent from calculateTotals', () => {
+    const parent = makeTransaction('parent', {
+      amount: 100,
+      type: 'debit',
+      isSplitParent: true,
+    })
+    const child1 = makeTransaction('child-0', {
+      amount: 60,
+      type: 'debit',
+      splitParentId: 'parent',
+    })
+    const child2 = makeTransaction('child-1', {
+      amount: 40,
+      type: 'debit',
+      splitParentId: 'parent',
+    })
+
+    const totals = calculateTotals([parent, child1, child2])
+    expect(totals.expense.USD).toBe(100)
+    expect(totals.count).toBe(2)
+  })
+
+  it('excludes split parent from calculateRunningBalance', () => {
+    const parent = makeTransaction('parent', {
+      amount: 100,
+      type: 'debit',
+      currency: 'USD',
+      isSplitParent: true,
+      date: new Date('2025-01-01'),
+    })
+    const child1 = makeTransaction('child-0', {
+      amount: 60,
+      type: 'debit',
+      currency: 'USD',
+      splitParentId: 'parent',
+      date: new Date('2025-01-01'),
+    })
+    const child2 = makeTransaction('child-1', {
+      amount: 40,
+      type: 'debit',
+      currency: 'USD',
+      splitParentId: 'parent',
+      date: new Date('2025-01-01'),
+    })
+
+    const balance = calculateRunningBalance([parent, child1, child2], 'USD', 200)
+    const ids = balance.map((b) => b.id)
+    expect(ids).not.toContain('parent')
+    const finalBalance = balance[balance.length - 1]?.balance
+    expect(finalBalance).toBe(100)
+  })
+
+  it('includes split children in calculateTotals', () => {
+    const child = makeTransaction('child', {
+      amount: 50,
+      type: 'debit',
+      splitParentId: 'some-parent',
+    })
+    const totals = calculateTotals([child])
+    expect(totals.expense.USD).toBe(50)
+  })
+})

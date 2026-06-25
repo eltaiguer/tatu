@@ -5,9 +5,11 @@ import {
   EyeOff,
   Info,
   Pencil,
+  Scissors,
   Search,
   Slash,
   Trash2,
+  Undo2,
   Wallet,
 } from 'lucide-react'
 import { Button } from './ui/button'
@@ -17,7 +19,7 @@ import { IconTile } from './ui/icon-tile'
 import { Checkbox } from './ui/checkbox'
 import { CategoryBadge } from './CategoryBadge'
 import { ConfidenceBadge } from './ConfidenceBadge'
-import { Category } from '../models'
+import { Category, isSplitParentTx, isSplitChildTx } from '../models'
 import type { Transaction } from '../models'
 import {
   getCategoryDefinition,
@@ -62,6 +64,8 @@ interface TransactionTableProps {
   onShowIgnoredChange: (value: boolean) => void
   onEdit: (transaction: Transaction) => void
   onDelete: (transaction: Transaction) => void
+  onSplit?: (transaction: Transaction) => void
+  onUnsplit?: (transaction: Transaction) => void
 }
 
 export function TransactionTable({
@@ -87,6 +91,8 @@ export function TransactionTable({
   onShowIgnoredChange,
   onEdit,
   onDelete,
+  onSplit,
+  onUnsplit,
 }: TransactionTableProps) {
   return (
     <Card className="overflow-hidden">
@@ -281,6 +287,8 @@ export function TransactionTable({
                 const hasFriendlyOverride =
                   displayDescription !== transaction.description
                 const isIgnored = isCategoryIgnored(transaction.category)
+                const isSplitParent = isSplitParentTx(transaction)
+                const isSplitChild = isSplitChildTx(transaction)
                 const showConverted =
                   homeCurrency &&
                   fxRate &&
@@ -297,7 +305,9 @@ export function TransactionTable({
                 return (
                   <tr
                     key={transaction.id}
-                    style={isIgnored ? { opacity: 0.62 } : undefined}
+                    style={
+                      isIgnored || isSplitParent ? { opacity: 0.62 } : undefined
+                    }
                     className="group border-b border-border hover:bg-muted/30 transition-colors"
                   >
                     <td className="px-3.5 py-3 align-middle">
@@ -317,7 +327,17 @@ export function TransactionTable({
                         {formatDate(transaction.date)}
                       </div>
                     </td>
-                    <td className="px-3.5 py-3">
+                    <td
+                      className="px-3.5 py-3"
+                      style={
+                        isSplitChild
+                          ? {
+                              borderLeft: '2px solid var(--border)',
+                              paddingLeft: 20,
+                            }
+                          : undefined
+                      }
+                    >
                       <div
                         style={{
                           display: 'flex',
@@ -380,6 +400,25 @@ export function TransactionTable({
                               >
                                 <Slash size={9} />
                                 Ignorada
+                              </span>
+                            )}
+                            {isSplitParent && (
+                              <span
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  flexShrink: 0,
+                                  fontSize: 10.5,
+                                  fontWeight: 500,
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                  background: 'var(--muted)',
+                                  color: 'var(--text-muted)',
+                                }}
+                              >
+                                <Scissors size={9} />
+                                Dividida
                               </span>
                             )}
                           </div>
@@ -460,6 +499,30 @@ export function TransactionTable({
                     </td>
                     <td className="px-3.5 py-3 text-center">
                       <div className="flex items-center justify-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity duration-[120ms]">
+                        {isSplitParent && onUnsplit && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Restaurar ${displayDescription}`}
+                            disabled={pendingTransactionId === transaction.id}
+                            onClick={() => onUnsplit(transaction)}
+                            title="Restaurar (quitar división)"
+                          >
+                            <Undo2 size={14} />
+                          </Button>
+                        )}
+                        {!isSplitParent && !isSplitChild && onSplit && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`Dividir ${displayDescription}`}
+                            disabled={pendingTransactionId === transaction.id}
+                            onClick={() => onSplit(transaction)}
+                            title="Dividir transacción"
+                          >
+                            <Scissors size={14} />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -531,11 +594,24 @@ export function TransactionTable({
             const hasFriendlyOverride =
               displayDescription !== transaction.description
             const isIgnored = isCategoryIgnored(transaction.category)
+            const isSplitParentM = isSplitParentTx(transaction)
+            const isSplitChildM = isSplitChildTx(transaction)
 
             return (
               <div
                 key={transaction.id}
-                style={isIgnored ? { opacity: 0.62 } : undefined}
+                style={
+                  isIgnored || isSplitParentM
+                    ? {
+                        opacity: 0.62,
+                        ...(isSplitChildM
+                          ? { borderLeft: '2px solid var(--border)', paddingLeft: 20 }
+                          : {}),
+                      }
+                    : isSplitChildM
+                      ? { borderLeft: '2px solid var(--border)', paddingLeft: 20 }
+                      : undefined
+                }
                 className="p-4 space-y-3"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -569,6 +645,25 @@ export function TransactionTable({
                         >
                           <Slash size={9} />
                           Ignorada
+                        </span>
+                      )}
+                      {isSplitParentM && (
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                            flexShrink: 0,
+                            fontSize: 10.5,
+                            fontWeight: 500,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            background: 'var(--muted)',
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          <Scissors size={9} />
+                          Dividida
                         </span>
                       )}
                     </div>
@@ -647,6 +742,28 @@ export function TransactionTable({
                   </span>
                 </div>
                 <div className="flex items-center gap-1 justify-end">
+                  {isSplitParentM && onUnsplit && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Restaurar ${displayDescription}`}
+                      disabled={pendingTransactionId === transaction.id}
+                      onClick={() => onUnsplit(transaction)}
+                    >
+                      <Undo2 size={16} />
+                    </Button>
+                  )}
+                  {!isSplitParentM && !isSplitChildM && onSplit && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Dividir ${displayDescription}`}
+                      disabled={pendingTransactionId === transaction.id}
+                      onClick={() => onSplit(transaction)}
+                    >
+                      <Scissors size={16} />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"

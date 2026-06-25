@@ -53,11 +53,25 @@ export interface Transaction {
   /** Account balance after this transaction (optional, from bank accounts) */
   balance?: number
 
+  /** True when this transaction has been split into parts; excluded from aggregation totals */
+  isSplitParent?: boolean
+
+  /** ID of the parent transaction this row was split from */
+  splitParentId?: string
+
   /** Reference to the original raw data */
   rawData:
     | CreditCardTransaction
     | BankAccountTransaction
     | Record<string, unknown>
+}
+
+export function isSplitParentTx(tx: Transaction): boolean {
+  return tx.isSplitParent === true
+}
+
+export function isSplitChildTx(tx: Transaction): boolean {
+  return Boolean(tx.splitParentId)
 }
 
 /**

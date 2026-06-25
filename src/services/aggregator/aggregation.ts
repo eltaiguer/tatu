@@ -1,5 +1,5 @@
 import type { Currency, Transaction } from '../../models'
-import { Category } from '../../models'
+import { Category, isSplitParentTx } from '../../models'
 import { isCategoryIgnored } from '../categories/category-registry'
 import { toDateKey, toMonthKey } from '../../utils/date-utils'
 import { memoizeByReference } from '../../utils/memo'
@@ -31,6 +31,9 @@ function emptySummary(): SummaryTotals {
 
 function applyTransaction(summary: SummaryTotals, tx: Transaction): void {
   if (isCategoryIgnored(tx.category)) {
+    return
+  }
+  if (isSplitParentTx(tx)) {
     return
   }
 
@@ -107,7 +110,10 @@ export function calculateRunningBalance(
 ): Array<{ id: string; balance: number }> {
   const sorted = [...transactions]
     .filter(
-      (tx) => tx.currency === currency && !isCategoryIgnored(tx.category),
+      (tx) =>
+        tx.currency === currency &&
+        !isCategoryIgnored(tx.category) &&
+        !isSplitParentTx(tx),
     )
     .sort((a, b) => a.date.getTime() - b.date.getTime())
 

@@ -1,5 +1,5 @@
 import type { Transaction } from '../../models'
-import { Category } from '../../models'
+import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 
 const TRANSFER_DESCRIPTION_KEYWORDS = [
   'transfer',
@@ -64,6 +64,10 @@ function canAutoAssignTransfer(transaction: Transaction): boolean {
 
   // Respect explicit user/override assignment when confidence is locked.
   if (transaction.category && transaction.categoryConfidence === 1) {
+    return false
+  }
+
+  if (isSplitParentTx(transaction) || isSplitChildTx(transaction)) {
     return false
   }
 

@@ -5,6 +5,10 @@ import {
   persistTransactions,
   softDeleteTransaction,
   updateTransaction as updateRemoteTransaction,
+  splitTransaction as remoteSplitTransaction,
+  unsplitTransaction as remoteUnsplitTransaction,
+  hardDeleteTransactions,
+  type SplitPart,
 } from '../services/supabase/transactions'
 import {
   listMerchantCategoryOverrides,
@@ -337,8 +341,20 @@ export function useTransactionHandlers({
 
   async function handleDeleteTransaction(transactionId: string) {
     const state = transactionStore.getState()
+    const tx = state.transactions.find((t) => t.id === transactionId)
 
     try {
+      if (tx?.isSplitParent) {
+        const childIds = state.transactions
+          .filter((t) => t.splitParentId === transactionId)
+          .map((t) => t.id)
+
+        if (session && childIds.length > 0) {
+          await hardDeleteTransactions(session, childIds)
+        }
+        state.removeTransactions(childIds)
+      }
+
       if (session) {
         await softDeleteTransaction(session, transactionId)
       }
@@ -350,6 +366,59 @@ export function useTransactionHandlers({
         error instanceof Error
           ? error.message
           : 'No se pudo eliminar la transacción'
+      )
+    }
+  }
+
+  async function handleSplitTransaction(
+    transactionId: string,
+    parts: SplitPart[]
+  ) {
+    const state = transactionStore.getState()
+    const parent = state.transactions.find((tx) => tx.id === transactionId)
+    if (!parent || !session) {
+      return
+    }
+
+    try {
+      const { parent: updatedParent, children } = await remoteSplitTransaction(
+        session,
+        parent,
+        parts
+      )
+      state.updateTransaction(updatedParent.id, updatedParent)
+      state.addTransactions(children)
+      setError('')
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo dividir la transacción'
+      )
+    }
+  }
+
+  async function handleUnsplitTransaction(transactionId: string) {
+    const state = transactionStore.getState()
+    const parent = state.transactions.find((tx) => tx.id === transactionId)
+    if (!parent || !session) {
+      return
+    }
+
+    const childIds = state.transactions
+      .filter((tx) => tx.splitParentId === transactionId)
+      .map((tx) => tx.id)
+
+    try {
+      const restored = await remoteUnsplitTransaction(session, parent, childIds)
+      state.updateTransaction(restored.id, restored)
+      state.removeTransactions(childIds)
+      setError('')
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo restaurar la transacción'
       )
     }
   }
@@ -403,17 +472,27 @@ export function useTransactionHandlers({
 
     const state = transactionStore.getState()
 
+    const selectedSet = new Set(transactionIds)
+    const childIdsToHardDelete = state.transactions
+      .filter(
+        (tx) => tx.splitParentId && selectedSet.has(tx.splitParentId)
+      )
+      .map((tx) => tx.id)
+
     try {
       if (session) {
+        if (childIdsToHardDelete.length > 0) {
+          await hardDeleteTransactions(session, childIdsToHardDelete)
+        }
         await Promise.all(
           transactionIds.map((id) => softDeleteTransaction(session, id))
         )
       }
 
-      const targetIds = new Set(transactionIds)
+      const allToRemove = new Set([...transactionIds, ...childIdsToHardDelete])
       state.setTransactions(
         state.transactions.filter(
-          (transaction) => !targetIds.has(transaction.id)
+          (transaction) => !allToRemove.has(transaction.id)
         )
       )
       setError('')
@@ -599,6 +678,8 @@ export function useTransactionHandlers({
     handleTransactionsImported,
     handleUpdateTransaction,
     handleDeleteTransaction,
+    handleSplitTransaction,
+    handleUnsplitTransaction,
     handleBulkCategorizeTransactions,
     handleBulkDeleteTransactions,
     handleBulkTagTransactions,

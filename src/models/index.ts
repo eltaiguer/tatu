@@ -12,6 +12,7 @@ export type {
   CreditCardTransaction,
   BankAccountTransaction,
 } from './transaction'
+export { isSplitParentTx, isSplitChildTx } from './transaction'
 
 // Parsed data and metadata models
 export type {

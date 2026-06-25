@@ -1,5 +1,5 @@
 import type { Currency, Transaction } from '../../models'
-import { Category } from '../../models'
+import { Category, isSplitParentTx } from '../../models'
 import { isCategoryIgnored } from '../categories/category-registry'
 import { convert } from '../currency/convert'
 import { toMonthKey } from '../../utils/date-utils'
@@ -32,7 +32,8 @@ export function buildCategorySpending(
     if (
       tx.currency !== currency ||
       tx.type !== 'debit' ||
-      isCategoryIgnored(tx.category)
+      isCategoryIgnored(tx.category) ||
+      isSplitParentTx(tx)
     ) {
       return
     }
@@ -67,7 +68,7 @@ export function buildMonthlyTrends(
       return
     }
 
-    if (isCategoryIgnored(tx.category)) {
+    if (isCategoryIgnored(tx.category) || isSplitParentTx(tx)) {
       return
     }
 
@@ -95,7 +96,7 @@ export function buildIncomeExpenseSummary(
         return summary
       }
 
-      if (isCategoryIgnored(tx.category)) {
+      if (isCategoryIgnored(tx.category) || isSplitParentTx(tx)) {
         return summary
       }
 
@@ -135,7 +136,7 @@ export interface CurrencySplitData {
 }
 
 function shouldExclude(tx: Transaction): boolean {
-  return isCategoryIgnored(tx.category)
+  return isCategoryIgnored(tx.category) || isSplitParentTx(tx)
 }
 
 export function buildCategorySpendingConverted(

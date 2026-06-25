@@ -16,7 +16,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { Button } from './ui/button'
-import { Category } from '../models'
+import { Category, isSplitParentTx } from '../models'
 import type { Transaction } from '../models'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
@@ -24,6 +24,7 @@ import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { EditTransactionDialog } from './EditTransactionDialog'
 import { BulkEditDialog } from './BulkEditDialog'
+import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
 import { formatCurrency } from '../utils/formatting'
@@ -472,7 +473,7 @@ function TotalsStrip({
     let income = 0
     let expense = 0
     rows.forEach((tx) => {
-      if (isCategoryIgnored(tx.category)) return
+      if (isCategoryIgnored(tx.category) || isSplitParentTx(tx)) return
       const v = convert(
         tx.amount,
         tx.currency as Currency,
@@ -856,6 +857,11 @@ interface TransactionsProps {
     transactionIds: string[],
     tag: string
   ) => Promise<void> | void
+  onSplitTransaction?: (
+    transactionId: string,
+    parts: Array<{ description: string; amount: number; category?: string }>
+  ) => Promise<void> | void
+  onUnsplitTransaction?: (transactionId: string) => Promise<void> | void
 }
 
 export function Transactions({
@@ -869,6 +875,8 @@ export function Transactions({
   onBulkCategorize,
   onBulkDelete,
   onBulkTag,
+  onSplitTransaction,
+  onUnsplitTransaction,
 }: TransactionsProps) {
   const {
     searchTerm,
@@ -969,6 +977,10 @@ export function Transactions({
   >('single')
   const [editError, setEditError] = useState('')
   const { confirm: confirmDeletion, dialog: confirmDialog } = useConfirm()
+
+  const [splittingTransaction, setSplittingTransaction] =
+    useState<Transaction | null>(null)
+  const [splitPending, setSplitPending] = useState(false)
 
   const categorySuggestions = useMemo(() => {
     return Array.from(
@@ -1111,6 +1123,36 @@ export function Transactions({
     setPendingTransactionId(transaction.id)
     try {
       await onDeleteTransaction(transaction.id)
+    } finally {
+      setPendingTransactionId(null)
+    }
+  }
+
+  async function handleConfirmSplit(
+    parts: Array<{ description: string; amount: number; category?: string }>
+  ) {
+    if (!splittingTransaction || !onSplitTransaction) return
+    setSplitPending(true)
+    try {
+      await onSplitTransaction(splittingTransaction.id, parts)
+      setSplittingTransaction(null)
+    } finally {
+      setSplitPending(false)
+    }
+  }
+
+  async function handleUnsplit(transaction: Transaction) {
+    if (!onUnsplitTransaction) return
+    const confirmed = await confirmDeletion({
+      title: '¿Restaurar transacción?',
+      description:
+        'Se eliminarán las partes divididas y la transacción original se restaurará.',
+      confirmLabel: 'Restaurar',
+    })
+    if (!confirmed) return
+    setPendingTransactionId(transaction.id)
+    try {
+      await onUnsplitTransaction(transaction.id)
     } finally {
       setPendingTransactionId(null)
     }
@@ -1423,6 +1465,18 @@ export function Transactions({
         onDelete={(transaction) => {
           void handleDeleteTransaction(transaction)
         }}
+        onSplit={
+          onSplitTransaction
+            ? (transaction) => setSplittingTransaction(transaction)
+            : undefined
+        }
+        onUnsplit={
+          onUnsplitTransaction
+            ? (transaction) => {
+                void handleUnsplit(transaction)
+              }
+            : undefined
+        }
       />
 
       <EditTransactionDialog
@@ -1552,6 +1606,14 @@ export function Transactions({
       </div>
 
       {confirmDialog}
+
+      <SplitTransactionDialog
+        open={splittingTransaction !== null}
+        transaction={splittingTransaction}
+        pending={splitPending}
+        onConfirm={handleConfirmSplit}
+        onCancel={() => setSplittingTransaction(null)}
+      />
     </div>
   )
 }

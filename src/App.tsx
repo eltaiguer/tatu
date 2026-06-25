@@ -178,6 +178,8 @@ function App() {
     handleTransactionsImported,
     handleUpdateTransaction,
     handleDeleteTransaction,
+    handleSplitTransaction,
+    handleUnsplitTransaction,
     handleBulkCategorizeTransactions,
     handleBulkDeleteTransactions,
     handleBulkTagTransactions,
@@ -422,6 +424,8 @@ function App() {
                   onBulkCategorize={handleBulkCategorizeTransactions}
                   onBulkDelete={handleBulkDeleteTransactions}
                   onBulkTag={handleBulkTagTransactions}
+                  onSplitTransaction={handleSplitTransaction}
+                  onUnsplitTransaction={handleUnsplitTransaction}
                 />
               )}
               {currentView === 'categories' && (
