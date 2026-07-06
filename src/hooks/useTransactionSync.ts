@@ -146,5 +146,10 @@ export function useTransactionSync({
     return () => {
       cancelled = true
     }
-  }, [authMode, session, syncKey]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Depend on the stable user id, not the whole session object. Supabase's
+    // autoRefreshToken hands us a new session object on every window refocus
+    // (TOKEN_REFRESHED); keying on session identity would refetch everything
+    // each time the tab regains focus. The user id only changes on real
+    // login/logout/user-switch, which are the only cases that need a re-sync.
+  }, [authMode, session?.user?.id, syncKey]) // eslint-disable-line react-hooks/exhaustive-deps
 }

@@ -64,7 +64,19 @@ export function useUserPreferences(session: SupabaseSession | null) {
       console.error('preferences save failed:', err)
       toast.error('No se pudieron guardar las preferencias. Intentá de nuevo.')
     })
-  }, [session, theme, preferredCurrency, fxRate, claudeApiKey, aiEnabled, aiModel])
+    // Key on the stable user id, not the session object — Supabase hands us a
+    // new session on every tab refocus (token refresh), which would otherwise
+    // fire a redundant preferences save each time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    session?.user?.id,
+    theme,
+    preferredCurrency,
+    fxRate,
+    claudeApiKey,
+    aiEnabled,
+    aiModel,
+  ])
 
   return {
     theme,
