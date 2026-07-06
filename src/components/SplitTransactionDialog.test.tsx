@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import type { Transaction } from '../models'
+import type { SplitPart } from '../services/supabase/transactions'
 
 function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -24,7 +25,11 @@ function renderDialog(props: {
   onConfirm?: ReturnType<typeof vi.fn>
   onCancel?: ReturnType<typeof vi.fn>
 }) {
-  const onConfirm = props.onConfirm ?? vi.fn().mockResolvedValue(undefined)
+  const onConfirm = (props.onConfirm ??
+    vi.fn(async () => {})) as unknown as ((
+    parts: SplitPart[]
+  ) => Promise<void>) &
+    ReturnType<typeof vi.fn>
   const onCancel = props.onCancel ?? vi.fn()
 
   render(
