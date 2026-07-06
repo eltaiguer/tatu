@@ -22,14 +22,10 @@ function renderDialog(props: {
   open?: boolean
   transaction?: Transaction | null
   pending?: boolean
-  onConfirm?: ReturnType<typeof vi.fn>
+  onConfirm?: (parts: SplitPart[]) => Promise<void>
   onCancel?: ReturnType<typeof vi.fn>
 }) {
-  const onConfirm = (props.onConfirm ??
-    vi.fn(async () => {})) as unknown as ((
-    parts: SplitPart[]
-  ) => Promise<void>) &
-    ReturnType<typeof vi.fn>
+  const onConfirm = props.onConfirm ?? vi.fn(async () => {})
   const onCancel = props.onCancel ?? vi.fn()
 
   render(
@@ -118,5 +114,4 @@ describe('SplitTransactionDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
     expect(onCancel).toHaveBeenCalled()
   })
-
 })
