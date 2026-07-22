@@ -125,6 +125,45 @@ describe('getCategoryDefinitions', () => {
     const groceries = defs.find((d) => d.id === Category.Groceries)
     expect(groceries?.icon).toBe('🛒')
   })
+
+  it('folds a legacy-id custom row (pre-rename "transfer") into the current built-in instead of duplicating it', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: 'transfer', label: 'Transferencias internas', color: '#0284c7' },
+    ])
+
+    const defs = getCategoryDefinitions()
+    const transferEntries = defs.filter(
+      (d) => d.label === 'Transferencias internas'
+    )
+    expect(transferEntries).toHaveLength(1)
+    expect(transferEntries[0].id).toBe(Category.InternalTransfer)
+    expect(transferEntries[0].isCustom).toBe(false)
+    expect(defs.find((d) => d.id === 'transfer')).toBeUndefined()
+  })
+
+  it('carries over label/color overrides from a legacy-id row onto the current built-in', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: 'transfer', label: 'Mis transferencias', color: '#123456' },
+    ])
+
+    const defs = getCategoryDefinitions()
+    const internalTransfer = defs.find(
+      (d) => d.id === Category.InternalTransfer
+    )
+    expect(internalTransfer?.label).toBe('Mis transferencias')
+    expect(internalTransfer?.color).toBe('#123456')
+  })
+
+  it('folds a legacy-id custom row ("transfers" -> external transfer) into the current built-in', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      { id: 'transfers', label: 'Transferencias externas', color: '#7c3aed' },
+    ])
+
+    const defs = getCategoryDefinitions()
+    const matches = defs.filter((d) => d.label === 'Transferencias externas')
+    expect(matches).toHaveLength(1)
+    expect(matches[0].id).toBe(Category.ExternalTransfer)
+  })
 })
 
 describe('getCategoryDefinition', () => {

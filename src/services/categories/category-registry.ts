@@ -30,11 +30,17 @@ export const ID_ALIASES: Partial<Record<string, Category>> = {
   transfers: Category.ExternalTransfer,
 }
 
+function resolveBuiltinAlias(id: string): string {
+  return ID_ALIASES[id.toLowerCase()] ?? id
+}
+
 export function getCategoryDefinitions(): CategoryDefinition[] {
   const customList = listCustomCategories()
   const builtinIds = new Set(Object.values(Category) as string[])
   const overrideMap = new Map(
-    customList.filter((c) => builtinIds.has(c.id)).map((c) => [c.id, c])
+    customList
+      .map((c) => [resolveBuiltinAlias(c.id), c] as const)
+      .filter(([resolvedId]) => builtinIds.has(resolvedId))
   )
 
   const builtin = Object.values(Category).map((category) => {
@@ -52,7 +58,7 @@ export function getCategoryDefinitions(): CategoryDefinition[] {
   const seenCustomIds = new Set<string>()
   const custom = customList
     .filter((c) => {
-      if (builtinIds.has(c.id)) return false
+      if (builtinIds.has(resolveBuiltinAlias(c.id))) return false
       if (seenCustomIds.has(c.id)) return false
       seenCustomIds.add(c.id)
       return true
