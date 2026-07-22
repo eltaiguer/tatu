@@ -10,6 +10,7 @@ import {
   Banknote,
 } from 'lucide-react'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
+import { isSplitParentTx } from '../models'
 import { useMemo } from 'react'
 import {
   PieChart,
@@ -411,7 +412,9 @@ export function Dashboard({
     transactions
       .filter(
         (tx) =>
-          tx.type === 'debit' && !isCategoryIgnored(tx.category),
+          tx.type === 'debit' &&
+          !isCategoryIgnored(tx.category) &&
+          !isSplitParentTx(tx),
       )
       .forEach((tx) => {
         const key = getDisplayDescription(tx)
@@ -434,7 +437,7 @@ export function Dashboard({
   const recentTransactions = useMemo(
     () =>
       [...transactions]
-        .filter((tx) => !isCategoryIgnored(tx.category))
+        .filter((tx) => !isCategoryIgnored(tx.category) && !isSplitParentTx(tx))
         .sort((a, b) => b.date.getTime() - a.date.getTime())
         .slice(0, 6),
     [transactions],

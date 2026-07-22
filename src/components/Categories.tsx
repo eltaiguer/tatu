@@ -5,7 +5,7 @@ import { Input } from './ui/input'
 import { Badge } from './ui/badge'
 import { Checkbox } from './ui/checkbox'
 import type { Transaction } from '../models'
-import { Category } from '../models'
+import { Category, isSplitParentTx } from '../models'
 import {
   getCategoryDefinition,
   getCategoryDefinitions,
@@ -35,6 +35,7 @@ function getCategoryTransactionCount(
   categoryId: string
 ): number {
   return transactions.filter((tx) => {
+    if (isSplitParentTx(tx)) return false
     const txCat = getCategoryDisplay(tx.category).id
     const defCat = getCategoryDisplay(categoryId).id
     return txCat === defCat

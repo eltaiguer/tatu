@@ -112,6 +112,80 @@ describe('Dashboard', () => {
     expect(screen.queryByText('US$ 150,00')).not.toBeInTheDocument()
   })
 
+  it('excludes the inert split-parent row from recent transactions', () => {
+    const transactions = [
+      makeTransaction({
+        id: 'p1',
+        description: 'SUPER PARENT',
+        amount: 100,
+        currency: 'USD',
+        category: Category.Groceries,
+        isSplitParent: true,
+      }),
+      makeTransaction({
+        id: 'p1_split_0',
+        description: 'Super - parte 1',
+        amount: 60,
+        currency: 'USD',
+        category: Category.Groceries,
+        splitParentId: 'p1',
+      }),
+      makeTransaction({
+        id: 'p1_split_1',
+        description: 'Super - parte 2',
+        amount: 40,
+        currency: 'USD',
+        category: Category.Restaurants,
+        splitParentId: 'p1',
+      }),
+    ]
+
+    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+
+    expect(screen.queryByText('SUPER PARENT')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Super - parte 1').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Super - parte 2').length).toBeGreaterThan(0)
+  })
+
+  it('does not double-count the split parent in top merchants totals', () => {
+    const transactions = [
+      makeTransaction({
+        id: 'p1',
+        description: 'SUPER',
+        amount: 100,
+        currency: 'USD',
+        type: 'debit',
+        category: Category.Groceries,
+        isSplitParent: true,
+      }),
+      makeTransaction({
+        id: 'p1_split_0',
+        description: 'SUPER',
+        amount: 60,
+        currency: 'USD',
+        type: 'debit',
+        category: Category.Groceries,
+        splitParentId: 'p1',
+      }),
+      makeTransaction({
+        id: 'p1_split_1',
+        description: 'SUPER',
+        amount: 40,
+        currency: 'USD',
+        type: 'debit',
+        category: Category.Restaurants,
+        splitParentId: 'p1',
+      }),
+    ]
+
+    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+
+    expect(screen.getAllByText('2 movimientos').length).toBeGreaterThan(0)
+    expect(screen.queryByText('3 movimientos')).not.toBeInTheDocument()
+    expect(screen.getAllByText('US$ 100,00').length).toBeGreaterThan(0)
+    expect(screen.queryByText('US$ 200,00')).not.toBeInTheDocument()
+  })
+
   it('does not show NaN/Infinity with credit-only transactions', () => {
     const transactions = [
       makeTransaction({
