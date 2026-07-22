@@ -10,10 +10,10 @@ import {
   DialogTitle,
 } from './ui/dialog'
 import { CategoryBadge } from './CategoryBadge'
-import { Category, CATEGORY_LABELS } from '../models'
 import type { Transaction } from '../models'
 import { formatCurrency } from '../utils/formatting'
 import type { SplitPart } from '../services/supabase/transactions'
+import { getCategoryDefinitions } from '../services/categories/category-registry'
 
 interface SplitPartDraft {
   description: string
@@ -28,10 +28,6 @@ interface SplitTransactionDialogProps {
   onConfirm: (parts: SplitPart[]) => Promise<void>
   onCancel: () => void
 }
-
-const CATEGORIES = Object.values(Category).filter(
-  (c) => c !== Category.InternalTransfer && c !== Category.ExternalTransfer
-)
 
 function emptyPart(tx: Transaction | null): SplitPartDraft {
   return {
@@ -64,6 +60,8 @@ export function SplitTransactionDialog({
   }, [transaction?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!transaction) return null
+
+  const categoryOptions = getCategoryDefinitions().filter((c) => !c.isIgnored)
 
   const parentAmount = transaction.amount
   const currency = transaction.currency
@@ -227,12 +225,12 @@ export function SplitTransactionDialog({
                       >
                         Sin categoría
                       </button>
-                      {CATEGORIES.map((cat) => (
+                      {categoryOptions.map((cat) => (
                         <button
-                          key={cat}
+                          key={cat.id}
                           type="button"
                           onClick={() => {
-                            updatePart(idx, { category: cat })
+                            updatePart(idx, { category: cat.id })
                             setCategoryPickerIdx(null)
                           }}
                           style={{
@@ -244,7 +242,7 @@ export function SplitTransactionDialog({
                             padding: '5px 10px',
                             fontSize: 12,
                             background:
-                              part.category === cat
+                              part.category === cat.id
                                 ? 'var(--surface-hover)'
                                 : 'none',
                             border: 'none',
@@ -252,8 +250,7 @@ export function SplitTransactionDialog({
                             color: 'var(--text)',
                           }}
                         >
-                          <CategoryBadge categoryId={cat} />
-                          {CATEGORY_LABELS[cat] ?? cat}
+                          <CategoryBadge categoryId={cat.id} />
                         </button>
                       ))}
                     </div>

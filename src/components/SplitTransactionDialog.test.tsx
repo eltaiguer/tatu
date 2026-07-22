@@ -1,8 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import type { Transaction } from '../models'
 import type { SplitPart } from '../services/supabase/transactions'
+import {
+  addCustomCategory,
+  replaceCustomCategories,
+  upsertBuiltinOverride,
+} from '../services/categories/category-store'
 
 function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -42,6 +47,30 @@ function renderDialog(props: {
 }
 
 describe('SplitTransactionDialog', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  it('offers a custom category in the split part category picker', async () => {
+    const custom = addCustomCategory({ label: 'Mascotas', color: '#00ff00' })
+    renderDialog({})
+
+    await waitFor(() => screen.getAllByPlaceholderText('0.00'))
+
+    fireEvent.click(screen.getAllByText('Categoría (opcional)')[0])
+    expect(screen.getByText(custom.label)).toBeInTheDocument()
+  })
+
+  it('shows the overridden label for a renamed built-in category', async () => {
+    upsertBuiltinOverride('groceries', { label: 'Super y almacén' })
+    renderDialog({})
+
+    await waitFor(() => screen.getAllByPlaceholderText('0.00'))
+
+    fireEvent.click(screen.getAllByText('Categoría (opcional)')[0])
+    expect(screen.getByText('Super y almacén')).toBeInTheDocument()
+  })
+
   it('renders title when open with a transaction', async () => {
     renderDialog({})
     await waitFor(() => {

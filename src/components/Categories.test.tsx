@@ -54,6 +54,17 @@ describe('Categories', () => {
     expect(screen.getByText('1 movimiento')).toBeInTheDocument()
   })
 
+  it('excludes the inert split-parent row from the transaction count', () => {
+    const txs = [
+      makeTx({ id: '1', category: 'groceries', isSplitParent: true }),
+      makeTx({ id: '1_split_0', category: 'groceries', splitParentId: '1' }),
+      makeTx({ id: '1_split_1', category: 'restaurants', splitParentId: '1' }),
+    ]
+    render(<Categories transactions={txs} />)
+
+    expect(screen.getAllByText('1 movimiento')).toHaveLength(2)
+  })
+
   it('opens new category form when clicking Nueva categoría', () => {
     render(<Categories transactions={[]} />)
     fireEvent.click(
