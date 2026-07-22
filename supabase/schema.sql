@@ -1,5 +1,12 @@
 -- Tatu schema (Core + Next, soft delete)
 -- Safe to run multiple times.
+--
+-- IMPORTANT: this file is NOT auto-applied to the live database. Whenever it
+-- changes (new column, table, constraint, etc.), paste the full file into the
+-- Supabase SQL Editor and run it, then run `notify pgrst, 'reload schema';` so
+-- PostgREST refreshes its cached schema. Skipping this is what produces
+-- "Could not find the '<column>' column ... in the schema cache" errors in the
+-- app. See supabase/README.md for the checklist.
 
 create extension if not exists pgcrypto;
 
