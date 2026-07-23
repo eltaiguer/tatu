@@ -4,6 +4,8 @@
 
 Tatu is a personal finance web app for managing Santander Uruguay bank statements and credit card transactions. It parses CSV exports, auto-categorizes transactions by Uruguayan merchant patterns, and provides dashboards, charts, filtering, and export features. Multi-currency (USD + UYU) with home-currency conversion.
 
+**Core purpose:** Tatu is a "forensic" spending analysis tool, not just a bookkeeping tracker. Every feature — categorization, dashboards, charts, trends — exists to help the user answer the two questions that matter: **Where has my money gone?** and **How can I spend less money?** When designing or evaluating a feature, favor choices that surface insight and actionable patterns over ones that just display data.
+
 The app is fully online — authentication and data persistence require Supabase. There is no offline/localStorage fallback. Deployed on Firebase Hosting.
 
 ## Tech stack
@@ -14,7 +16,7 @@ The app is fully online — authentication and data persistence require Supabase
 - **Charts**: Recharts
 - **Backend**: Supabase (auth + PostgreSQL, required — app won't function without it)
 - **Hosting**: Firebase Hosting
-- **Testing**: Vitest + React Testing Library (660 tests, 64 test files)
+- **Testing**: Vitest + React Testing Library (796 tests, 76 test files)
 
 ## Commands
 
@@ -38,9 +40,9 @@ src/
   components/              # React UI components
     ui/                    # Radix UI primitives (shadcn/ui style)
     AppSidebar.tsx         # Fixed 252px sidebar, navigation, user footer
-    Dashboard.tsx          # Resumen view — account cards, month summary, top categories
+    Dashboard.tsx          # Resumen view — account cards, month summary, top categories, KPI tiles, donut, area chart, merchants (charts live here, not a separate view)
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
-    Charts.tsx             # Análisis view — KPI tiles, donut, area chart, merchants
+    Insights.tsx           # Insights view — AI-generated spending insights (period selector, generate/regenerate, grouped cards)
     Categories.tsx         # Categorías view — category grid + auto-categorization rules
     Settings.tsx           # Configuración view — theme, currency, account, data management
     ImportCSV.tsx          # CSV import flow (wrapped in Radix Dialog, not a view)
@@ -72,7 +74,9 @@ src/
     currency/              # convert(amount, from, to, rate) + Currency type
     descriptions/          # Description override management
     transfers/             # Internal transfer detection
-    supabase/              # Auth, transactions, preferences, overrides, custom patterns
+    ai/                    # Client-side Claude integration (BYO API key): transaction categorization/enrichment
+    insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
+    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights
     firebase.ts            # Firebase config
   models/                  # TypeScript interfaces + Category enum
   stores/                  # Zustand store (transaction-store, in-memory only)
@@ -93,20 +97,21 @@ samples/                   # Example Santander CSV files for testing
 The app uses a fixed 252px sidebar (`AppSidebar.tsx`). The `View` type lives in `AppSidebar`:
 
 ```ts
-type View = 'overview' | 'transactions' | 'analysis' | 'categories' | 'settings'
+type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 ```
 
-- **General**: Resumen (`overview`), Transacciones (`transactions`), Análisis (`analysis`)
+- **General**: Resumen (`overview`), Transacciones (`transactions`), Insights (`insights`)
 - **Gestión**: Categorías (`categories`), Configuración (`settings`)
 - Import is a Radix `Dialog` overlay triggered from the sidebar and from Settings — not a view.
+- There is no separate "Análisis" view or `Charts.tsx` — chart/KPI rendering (donut, area chart, top merchants) lives directly inside `Dashboard.tsx` (Resumen).
 
 ## Multicurrency model
 
-Users earn in USD and spend in both USD and UYU. The app converts and combines both into a **home currency** for dashboard and analysis totals:
+Users earn in USD and spend in both USD and UYU. The app converts and combines both into a **home currency** for dashboard and insight totals:
 
 - `homeCurrency` (`'USD' | 'UYU'`) + `fxRate` (number, default `40.5`) — managed in `useUserPreferences`, persisted in Supabase `user_preferences`
 - `convert(amount, from, to, rate)` lives in `services/currency/convert.ts`
-- Resumen + Análisis: all totals convert + combine into `homeCurrency`
+- Resumen + Insights: all totals convert + combine into `homeCurrency` (Insights' `InsightInput` is built entirely from already-converted, pre-computed numbers — see ADR-0001)
 - Transaction rows: native amount is primary; faint `≈ converted` shown when tx currency ≠ home
 - **Currency is a filter** in Transacciones (show USD or UYU rows) — not a view splitter
 - `FxChip` lets users edit the rate inline on the dashboard; Settings exposes a numeric input
@@ -165,6 +170,8 @@ Requires `.env` with Supabase vars (see `.env.example`):
 
 ## Current status
 
-Redesign complete: sidebar navigation, 5 views, multicurrency with FxChip. Architectural refactor complete: hooks extracted from App.tsx, store simplified, large components split. Deployed to Firebase Hosting. 660 tests passing.
+Redesign complete: sidebar navigation, 5 views, multicurrency with FxChip. Architectural refactor complete: hooks extracted from App.tsx, store simplified, large components split. Deployed to Firebase Hosting. 796 tests passing.
 
-**Next initiative**: AI-powered categorization — improve transaction categorization accuracy and confidence scores using an LLM or smarter heuristics.
+AI Insights Phase 1 shipped (ADR-0001, `docs/decisions/0001-ai-spending-insights.md`): new Insights view generates Claude-powered spending insights per month, cached in Supabase (`ai_insights` table — requires a manual `schema.sql` apply, see `supabase/README.md`). Client-side, BYO API key, same pattern as `services/ai/`.
+
+**Next initiative**: AI Insights Phase 2 (trend/anomaly narratives across 3+ months, per ADR-0001), and AI-powered categorization — improve transaction categorization accuracy and confidence scores using an LLM or smarter heuristics.

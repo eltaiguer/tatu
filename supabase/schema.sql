@@ -183,6 +183,20 @@ create table if not exists public.custom_patterns (
   primary key (user_id, id)
 );
 
+-- Cached AI-generated spending insights (ADR-0001), one row per user+period.
+-- input_hash lets the UI detect that the underlying transactions changed
+-- since generation without a triggers/invalidation system.
+create table if not exists public.ai_insights (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  period_start date not null,
+  period_end date not null,
+  input_hash text not null,
+  model text not null,
+  insights jsonb not null,
+  generated_at timestamptz not null default timezone('utc', now()),
+  primary key (user_id, period_start, period_end)
+);
+
 create index if not exists idx_transactions_user_date_active
   on public.transactions (user_id, date desc)
   where is_deleted = false;
@@ -293,6 +307,7 @@ alter table public.description_overrides enable row level security;
 alter table public.custom_categories enable row level security;
 alter table public.user_preferences enable row level security;
 alter table public.custom_patterns enable row level security;
+alter table public.ai_insights enable row level security;
 
 grant select, insert, update, delete on table public.transactions to authenticated;
 grant select, insert, update, delete on table public.import_runs to authenticated;
@@ -301,6 +316,7 @@ grant select, insert, update, delete on table public.description_overrides to au
 grant select, insert, update, delete on table public.custom_categories to authenticated;
 grant select, insert, update, delete on table public.user_preferences to authenticated;
 grant select, insert, update, delete on table public.custom_patterns to authenticated;
+grant select, insert, update, delete on table public.ai_insights to authenticated;
 
 drop policy if exists "transactions_select_own" on public.transactions;
 create policy "transactions_select_own"
@@ -458,6 +474,14 @@ with check (auth.uid() = user_id);
 drop policy if exists "custom_patterns_all_own" on public.custom_patterns;
 create policy "custom_patterns_all_own"
 on public.custom_patterns
+for all
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "ai_insights_all_own" on public.ai_insights;
+create policy "ai_insights_all_own"
+on public.ai_insights
 for all
 to authenticated
 using (auth.uid() = user_id)
