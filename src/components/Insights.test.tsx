@@ -202,6 +202,33 @@ describe('Insights', () => {
     await waitFor(() => expect(screen.getByText(/desactualizados/)).toBeInTheDocument())
   })
 
+  it('does not loop-fetch when referenceDate is omitted (matches real App.tsx usage, which never passes it)', async () => {
+    // Regression guard: referenceDate previously defaulted via a JS default
+    // parameter (`referenceDate = new Date()`), which re-evaluates on every
+    // render. That made the period/input useMemo recompute every render,
+    // which re-ran the fetch effect, which set state, which re-rendered —
+    // an unbounded loop hammering Supabase. Deliberately omits the prop
+    // here (unlike every other test in this file) to exercise that path.
+    getCachedInsightsMock.mockResolvedValue(null)
+
+    render(
+      <Insights
+        transactions={transactions}
+        homeCurrency="USD"
+        fxRate={40.5}
+        session={session}
+        aiEnabled={true}
+        claudeApiKey="sk-test"
+        onNavigateToTransactions={vi.fn()}
+        onNavigateToSettings={vi.fn()}
+      />
+    )
+
+    await waitFor(() => expect(getCachedInsightsMock).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(getCachedInsightsMock.mock.calls.length).toBeLessThanOrEqual(1)
+  })
+
   it('generates and caches new insights when the generate button is clicked', async () => {
     getCachedInsightsMock.mockResolvedValue(null)
     generateInsightsMock.mockResolvedValue(sampleResult)

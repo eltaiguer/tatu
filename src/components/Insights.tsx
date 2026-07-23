@@ -97,8 +97,16 @@ export function Insights({
   claudeApiKey,
   onNavigateToTransactions,
   onNavigateToSettings,
-  referenceDate = new Date(),
+  referenceDate,
 }: InsightsProps) {
+  // A JS default parameter (`referenceDate = new Date()`) re-evaluates on
+  // every render, which would make `period`/`input` below recompute every
+  // render and re-trigger the data-fetching effect in a loop. useState's
+  // initializer runs once, so this fallback is stable across re-renders
+  // regardless of whether the caller passes referenceDate.
+  const [fallbackReferenceDate] = useState(() => new Date())
+  const effectiveReferenceDate = referenceDate ?? fallbackReferenceDate
+
   const [monthOffset, setMonthOffset] = useState(0)
   const [cached, setCached] = useState<CachedInsightsLookup | null>(null)
   const [loadingCache, setLoadingCache] = useState(true)
@@ -108,8 +116,8 @@ export function Insights({
   const isConfigured = aiEnabled && Boolean(claudeApiKey)
 
   const period = useMemo(
-    () => getUtcMonthPeriod(referenceDate, monthOffset),
-    [referenceDate, monthOffset]
+    () => getUtcMonthPeriod(effectiveReferenceDate, monthOffset),
+    [effectiveReferenceDate, monthOffset]
   )
 
   const input = useMemo(

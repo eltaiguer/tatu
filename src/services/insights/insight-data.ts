@@ -7,11 +7,30 @@ import {
   buildMonthlyTrendsConverted,
 } from '../charts/chart-data'
 import { toDateKey, toMonthKey } from '../../utils/date-utils'
-import { subMonths } from 'date-fns'
 
 export interface InsightPeriod {
   start: Date
   end: Date
+}
+
+/**
+ * UTC-safe equivalent of date-fns subMonths — used for lookback windows
+ * (recurring-charge detection, trend range) so they stay consistent with
+ * getUtcMonthPeriod's UTC anchoring instead of drifting by the browser's
+ * local UTC offset.
+ */
+function subUtcMonths(date: Date, months: number): Date {
+  return new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth() - months,
+      date.getUTCDate(),
+      date.getUTCHours(),
+      date.getUTCMinutes(),
+      date.getUTCSeconds(),
+      date.getUTCMilliseconds()
+    )
+  )
 }
 
 /**
@@ -186,7 +205,7 @@ function detectRecurringCharges(
   fxRate: number,
   asOf: Date
 ): RecurringCharge[] {
-  const windowStart = subMonths(asOf, RECURRING_LOOKBACK_MONTHS)
+  const windowStart = subUtcMonths(asOf, RECURRING_LOOKBACK_MONTHS)
   const relevant = allTransactions.filter(
     (tx) => isEligibleDebit(tx) && tx.date >= windowStart && tx.date <= asOf
   )
@@ -235,7 +254,7 @@ function buildMonthlyTrend(
   fxRate: number,
   asOf: Date
 ): MonthlyTrendPoint[] {
-  const windowStart = subMonths(asOf, TREND_MONTHS - 1)
+  const windowStart = subUtcMonths(asOf, TREND_MONTHS - 1)
   const relevant = allTransactions.filter(
     (tx) => tx.date >= windowStart && tx.date <= asOf
   )
