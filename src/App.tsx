@@ -12,6 +12,7 @@ import { AppSidebar, SidebarInner } from './components/AppSidebar'
 import type { View } from './components/AppSidebar'
 import { Dashboard } from './components/Dashboard'
 import { Transactions } from './components/Transactions'
+import { Insights } from './components/Insights'
 import { Categories } from './components/Categories'
 import { Settings } from './components/Settings'
 import { ImportCSV } from './components/ImportCSV'
@@ -426,6 +427,18 @@ function App() {
                   onBulkTag={handleBulkTagTransactions}
                   onSplitTransaction={handleSplitTransaction}
                   onUnsplitTransaction={handleUnsplitTransaction}
+                />
+              )}
+              {currentView === 'insights' && session && (
+                <Insights
+                  transactions={transactions}
+                  homeCurrency={preferredCurrency}
+                  fxRate={fxRate}
+                  session={session}
+                  aiEnabled={aiEnabled}
+                  claudeApiKey={claudeApiKey}
+                  onNavigateToTransactions={navigateToTransactions}
+                  onNavigateToSettings={() => setCurrentView('settings')}
                 />
               )}
               {currentView === 'categories' && (

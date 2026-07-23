@@ -1,6 +1,7 @@
 import {
   Home,
   ListFilter,
+  Sparkles,
   Tag,
   Settings,
   Upload,
@@ -9,7 +10,12 @@ import {
 import type { SupabaseSession } from '../services/supabase/client'
 import { getFriendlyName } from '../utils/user-display'
 
-export type View = 'overview' | 'transactions' | 'categories' | 'settings'
+export type View =
+  | 'overview'
+  | 'transactions'
+  | 'insights'
+  | 'categories'
+  | 'settings'
 
 interface NavGroup {
   label: string
@@ -92,6 +98,7 @@ export function SidebarInner({
           icon: ListFilter,
           count: txCount > 0 ? txCount : undefined,
         },
+        { id: 'insights', label: 'Insights', icon: Sparkles },
       ],
     },
     {
