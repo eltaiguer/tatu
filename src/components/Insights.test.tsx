@@ -49,15 +49,14 @@ function makeTransaction(id: string, overrides: Partial<Transaction> = {}): Tran
   }
 }
 
-const referenceDate = new Date('2026-06-20T00:00:00.000Z')
 const transactions = [makeTransaction('t1')]
 
 const sampleResult: InsightsResult = {
   insights: [
     {
       type: 'bleeding_money',
-      title: 'Restaurantes creció fuerte',
-      narrative: 'El gasto en restaurantes subió este mes.',
+      title: 'Restaurantes domina tu gasto',
+      narrative: 'El gasto en restaurantes es tu categoría más grande.',
       amount: 100,
       currency: 'USD',
       category: Category.Restaurants,
@@ -66,26 +65,38 @@ const sampleResult: InsightsResult = {
   ],
 }
 
+function renderInsights(overrides: Partial<Parameters<typeof Insights>[0]> = {}) {
+  return render(
+    <Insights
+      transactions={transactions}
+      homeCurrency="USD"
+      fxRate={40.5}
+      session={session}
+      aiEnabled={true}
+      claudeApiKey="sk-test"
+      onNavigateToTransactions={vi.fn()}
+      onNavigateToSettings={vi.fn()}
+      {...overrides}
+    />
+  )
+}
+
 describe('Insights', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
+  it('shows an empty state pointing to import when there are no transactions', () => {
+    const onNavigateToImport = vi.fn()
+    renderInsights({ transactions: [], onNavigateToImport })
+
+    expect(screen.getByText('Importá tus movimientos primero')).toBeInTheDocument()
+    expect(getCachedInsightsMock).not.toHaveBeenCalled()
+  })
+
   it('shows a disabled state pointing to Settings when AI is not configured', () => {
     const onNavigateToSettings = vi.fn()
-    render(
-      <Insights
-        transactions={transactions}
-        homeCurrency="USD"
-        fxRate={40.5}
-        session={session}
-        aiEnabled={false}
-        claudeApiKey=""
-        onNavigateToTransactions={vi.fn()}
-        onNavigateToSettings={onNavigateToSettings}
-        referenceDate={referenceDate}
-      />
-    )
+    renderInsights({ aiEnabled: false, claudeApiKey: '', onNavigateToSettings })
 
     expect(screen.getByText('Activá la IA para ver insights')).toBeInTheDocument()
     expect(getCachedInsightsMock).not.toHaveBeenCalled()
@@ -94,23 +105,21 @@ describe('Insights', () => {
   it('shows an empty state with a generate CTA when there is no cached result', async () => {
     getCachedInsightsMock.mockResolvedValue(null)
 
-    render(
-      <Insights
-        transactions={transactions}
-        homeCurrency="USD"
-        fxRate={40.5}
-        session={session}
-        aiEnabled={true}
-        claudeApiKey="sk-test"
-        onNavigateToTransactions={vi.fn()}
-        onNavigateToSettings={vi.fn()}
-        referenceDate={referenceDate}
-      />
-    )
+    renderInsights()
 
     await waitFor(() =>
       expect(screen.getByText('Generá tus primeros insights')).toBeInTheDocument()
     )
+  })
+
+  it('fetches cached insights exactly once on mount', async () => {
+    getCachedInsightsMock.mockResolvedValue(null)
+
+    renderInsights()
+
+    await waitFor(() => expect(getCachedInsightsMock).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(getCachedInsightsMock.mock.calls.length).toBeLessThanOrEqual(1)
   })
 
   it('renders cached insight cards grouped by type with the hard number from the input', async () => {
@@ -121,22 +130,10 @@ describe('Insights', () => {
       isStale: false,
     })
 
-    render(
-      <Insights
-        transactions={transactions}
-        homeCurrency="USD"
-        fxRate={40.5}
-        session={session}
-        aiEnabled={true}
-        claudeApiKey="sk-test"
-        onNavigateToTransactions={vi.fn()}
-        onNavigateToSettings={vi.fn()}
-        referenceDate={referenceDate}
-      />
-    )
+    renderInsights()
 
     await waitFor(() =>
-      expect(screen.getByText('Restaurantes creció fuerte')).toBeInTheDocument()
+      expect(screen.getByText('Restaurantes domina tu gasto')).toBeInTheDocument()
     )
     expect(screen.getByText('¿Dónde se fue tu dinero?')).toBeInTheDocument()
     expect(screen.getByText('US$ 100,00')).toBeInTheDocument()
@@ -153,19 +150,7 @@ describe('Insights', () => {
     const onNavigateToTransactions = vi.fn()
     const user = userEvent.setup()
 
-    render(
-      <Insights
-        transactions={transactions}
-        homeCurrency="USD"
-        fxRate={40.5}
-        session={session}
-        aiEnabled={true}
-        claudeApiKey="sk-test"
-        onNavigateToTransactions={onNavigateToTransactions}
-        onNavigateToSettings={vi.fn()}
-        referenceDate={referenceDate}
-      />
-    )
+    renderInsights({ onNavigateToTransactions })
 
     await waitFor(() =>
       expect(screen.getByText('Ver transacciones →')).toBeInTheDocument()
@@ -185,48 +170,9 @@ describe('Insights', () => {
       isStale: true,
     })
 
-    render(
-      <Insights
-        transactions={transactions}
-        homeCurrency="USD"
-        fxRate={40.5}
-        session={session}
-        aiEnabled={true}
-        claudeApiKey="sk-test"
-        onNavigateToTransactions={vi.fn()}
-        onNavigateToSettings={vi.fn()}
-        referenceDate={referenceDate}
-      />
-    )
+    renderInsights()
 
     await waitFor(() => expect(screen.getByText(/desactualizados/)).toBeInTheDocument())
-  })
-
-  it('does not loop-fetch when referenceDate is omitted (matches real App.tsx usage, which never passes it)', async () => {
-    // Regression guard: referenceDate previously defaulted via a JS default
-    // parameter (`referenceDate = new Date()`), which re-evaluates on every
-    // render. That made the period/input useMemo recompute every render,
-    // which re-ran the fetch effect, which set state, which re-rendered —
-    // an unbounded loop hammering Supabase. Deliberately omits the prop
-    // here (unlike every other test in this file) to exercise that path.
-    getCachedInsightsMock.mockResolvedValue(null)
-
-    render(
-      <Insights
-        transactions={transactions}
-        homeCurrency="USD"
-        fxRate={40.5}
-        session={session}
-        aiEnabled={true}
-        claudeApiKey="sk-test"
-        onNavigateToTransactions={vi.fn()}
-        onNavigateToSettings={vi.fn()}
-      />
-    )
-
-    await waitFor(() => expect(getCachedInsightsMock).toHaveBeenCalled())
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    expect(getCachedInsightsMock.mock.calls.length).toBeLessThanOrEqual(1)
   })
 
   it('generates and caches new insights when the generate button is clicked', async () => {
@@ -235,19 +181,7 @@ describe('Insights', () => {
     saveCachedInsightsMock.mockResolvedValue(undefined)
     const user = userEvent.setup()
 
-    render(
-      <Insights
-        transactions={transactions}
-        homeCurrency="USD"
-        fxRate={40.5}
-        session={session}
-        aiEnabled={true}
-        claudeApiKey="sk-test"
-        onNavigateToTransactions={vi.fn()}
-        onNavigateToSettings={vi.fn()}
-        referenceDate={referenceDate}
-      />
-    )
+    renderInsights()
 
     await waitFor(() =>
       expect(screen.getByText('Generar insights')).toBeInTheDocument()
@@ -255,16 +189,16 @@ describe('Insights', () => {
     await user.click(screen.getByText('Generar insights'))
 
     await waitFor(() =>
-      expect(screen.getByText('Restaurantes creció fuerte')).toBeInTheDocument()
+      expect(screen.getByText('Restaurantes domina tu gasto')).toBeInTheDocument()
     )
 
     expect(generateInsightsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ periodStart: '2026-06-01', periodEnd: '2026-06-30' }),
+      expect.objectContaining({ historyStart: '2026-06-10', historyEnd: '2026-06-10' }),
       'sk-test'
     )
     expect(saveCachedInsightsMock).toHaveBeenCalledWith(
       session,
-      expect.objectContaining({ periodStart: '2026-06-01' }),
+      expect.objectContaining({ historyStart: '2026-06-10' }),
       sampleResult,
       'claude-opus-4-8'
     )

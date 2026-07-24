@@ -8,57 +8,10 @@ import {
 } from '../charts/chart-data'
 import { toDateKey, toMonthKey } from '../../utils/date-utils'
 
-export interface InsightPeriod {
-  start: Date
-  end: Date
-}
-
-/**
- * UTC-safe equivalent of date-fns subMonths — used for lookback windows
- * (recurring-charge detection, trend range) so they stay consistent with
- * getUtcMonthPeriod's UTC anchoring instead of drifting by the browser's
- * local UTC offset.
- */
-function subUtcMonths(date: Date, months: number): Date {
-  return new Date(
-    Date.UTC(
-      date.getUTCFullYear(),
-      date.getUTCMonth() - months,
-      date.getUTCDate(),
-      date.getUTCHours(),
-      date.getUTCMinutes(),
-      date.getUTCSeconds(),
-      date.getUTCMilliseconds()
-    )
-  )
-}
-
-/**
- * Builds a calendar-month InsightPeriod anchored in UTC. Transaction dates
- * and toDateKey/toMonthKey are UTC-normalized throughout this codebase, but
- * date-fns helpers like date-utils.ts's getDateRangeForPeriod operate on the
- * browser's local timezone — reusing that here would shift period
- * boundaries by the local UTC offset and silently misattribute transactions
- * dated on the 1st/last day of the month to the wrong period. monthOffset
- * shifts by whole months (e.g. -1 for the previous month).
- */
-export function getUtcMonthPeriod(
-  referenceDate: Date,
-  monthOffset = 0
-): InsightPeriod {
-  const year = referenceDate.getUTCFullYear()
-  const month = referenceDate.getUTCMonth() + monthOffset
-  return {
-    start: new Date(Date.UTC(year, month, 1, 0, 0, 0, 0)),
-    end: new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999)),
-  }
-}
-
 export interface CategoryInsightTotal {
   category: string
   amount: number
   pctOfTotal: number
-  deltaVsPriorPeriod: number
 }
 
 export interface MerchantTotal {
@@ -74,6 +27,15 @@ export interface RecurringCharge {
   approxAmount: number
   cadence: RecurringCadence
   monthsSeen: number
+  /** Month key ('YYYY-MM') of this merchant's most recent transaction. */
+  lastSeenMonth: string
+  /**
+   * Whole months between lastSeenMonth and the month of historyEnd — lets
+   * the model (and the prompt) distinguish an active subscription from one
+   * that hasn't charged in a while, now that there's no lookback window to
+   * age old charges out (see ADR-0002).
+   */
+  monthsSinceLastSeen: number
 }
 
 export interface MonthlyTrendPoint {
@@ -83,8 +45,9 @@ export interface MonthlyTrendPoint {
 }
 
 export interface InsightInput {
-  periodStart: string
-  periodEnd: string
+  /** Earliest/latest transaction date (toDateKey format), '' if none. */
+  historyStart: string
+  historyEnd: string
   homeCurrency: Currency
   categoryTotals: CategoryInsightTotal[]
   topMerchants: MerchantTotal[]
@@ -93,10 +56,8 @@ export interface InsightInput {
 }
 
 const TOP_MERCHANTS_LIMIT = 8
-const RECURRING_LOOKBACK_MONTHS = 6
 const RECURRING_MIN_MONTHS_SEEN = 3
 const RECURRING_AMOUNT_VARIANCE = 0.15
-const TREND_MONTHS = 6
 
 function isEligibleDebit(tx: Transaction): boolean {
   return (
@@ -110,55 +71,39 @@ function merchantOf(tx: Transaction): string {
   return (tx.displayDescription ?? tx.description).trim()
 }
 
-function filterInRange(
-  transactions: Transaction[],
-  start: Date,
-  end: Date
-): Transaction[] {
-  return transactions.filter((tx) => tx.date >= start && tx.date <= end)
-}
-
-function priorPeriodOf(period: InsightPeriod): InsightPeriod {
-  const spanMs = period.end.getTime() - period.start.getTime()
-  const priorEnd = new Date(period.start.getTime() - 1)
-  const priorStart = new Date(priorEnd.getTime() - spanMs)
-  return { start: priorStart, end: priorEnd }
+function monthKeyDiff(fromMonthKey: string, toMonthKeyStr: string): number {
+  const [fromYear, fromMonth] = fromMonthKey.split('-').map(Number)
+  const [toYear, toMonth] = toMonthKeyStr.split('-').map(Number)
+  return (toYear * 12 + toMonth) - (fromYear * 12 + fromMonth)
 }
 
 function buildCategoryTotals(
-  periodTransactions: Transaction[],
-  priorTransactions: Transaction[],
+  transactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number
 ): CategoryInsightTotal[] {
-  const current = buildCategorySpendingConverted(
-    periodTransactions,
+  const totals = buildCategorySpendingConverted(
+    transactions,
     homeCurrency,
     fxRate
   )
-  const priorByCategory = new Map(
-    buildCategorySpendingConverted(priorTransactions, homeCurrency, fxRate).map(
-      (d) => [d.category, d.total]
-    )
-  )
-  const grandTotal = current.reduce((sum, d) => sum + d.total, 0) || 1
+  const grandTotal = totals.reduce((sum, d) => sum + d.total, 0) || 1
 
-  return current.map((d) => ({
+  return totals.map((d) => ({
     category: d.category,
     amount: d.total,
     pctOfTotal: (d.total / grandTotal) * 100,
-    deltaVsPriorPeriod: d.total - (priorByCategory.get(d.category) ?? 0),
   }))
 }
 
 function buildTopMerchants(
-  periodTransactions: Transaction[],
+  transactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number
 ): MerchantTotal[] {
   const byMerchant = new Map<string, MerchantTotal>()
 
-  periodTransactions.forEach((tx) => {
+  transactions.forEach((tx) => {
     if (!isEligibleDebit(tx)) return
     const merchant = merchantOf(tx)
     const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
@@ -203,12 +148,9 @@ function detectRecurringCharges(
   allTransactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number,
-  asOf: Date
+  historyEndMonthKey: string
 ): RecurringCharge[] {
-  const windowStart = subUtcMonths(asOf, RECURRING_LOOKBACK_MONTHS)
-  const relevant = allTransactions.filter(
-    (tx) => isEligibleDebit(tx) && tx.date >= windowStart && tx.date <= asOf
-  )
+  const relevant = allTransactions.filter(isEligibleDebit)
 
   const byMerchant = new Map<string, Transaction[]>()
   relevant.forEach((tx) => {
@@ -235,80 +177,72 @@ function detectRecurringCharges(
     )
     if (!withinVariance) return
 
-    const sortedDates = txs.map((tx) => tx.date).sort((a, b) => a.getTime() - b.getTime())
+    const sortedDates = txs
+      .map((tx) => tx.date)
+      .sort((a, b) => a.getTime() - b.getTime())
+    const lastSeenMonth = toMonthKey(sortedDates[sortedDates.length - 1])
 
     charges.push({
       merchant,
       approxAmount,
       cadence: cadenceFromGap(averageGapDays(sortedDates)),
       monthsSeen,
+      lastSeenMonth,
+      monthsSinceLastSeen: monthKeyDiff(lastSeenMonth, historyEndMonthKey),
     })
   })
 
   return charges.sort((a, b) => b.approxAmount - a.approxAmount)
 }
 
-function buildMonthlyTrend(
-  allTransactions: Transaction[],
-  homeCurrency: Currency,
-  fxRate: number,
-  asOf: Date
-): MonthlyTrendPoint[] {
-  const windowStart = subUtcMonths(asOf, TREND_MONTHS - 1)
-  const relevant = allTransactions.filter(
-    (tx) => tx.date >= windowStart && tx.date <= asOf
-  )
-  return buildMonthlyTrendsConverted(relevant, homeCurrency, fxRate).map(
-    (d) => ({ month: d.month, income: d.income, expense: d.expense })
-  )
-}
-
 /**
  * Builds the deterministic, pre-computed input handed to the AI insight
- * generator. Every number here is derived from existing aggregator/chart
- * selectors — the model only ranks and narrates these values, it never
- * computes them (see ADR-0001).
+ * generator, over the user's *entire* transaction history — there is no
+ * period/month scoping (see ADR-0002, which replaced the original
+ * per-month design from ADR-0001). Every number here is derived from
+ * existing aggregator/chart selectors — the model only ranks and narrates
+ * these values, it never computes them.
  */
 export function buildInsightInput(
   allTransactions: Transaction[],
-  period: InsightPeriod,
   homeCurrency: Currency,
   fxRate: number
 ): InsightInput {
-  const priorPeriod = priorPeriodOf(period)
-  const periodTransactions = filterInRange(
-    allTransactions,
-    period.start,
-    period.end
+  if (allTransactions.length === 0) {
+    return {
+      historyStart: '',
+      historyEnd: '',
+      homeCurrency,
+      categoryTotals: [],
+      topMerchants: [],
+      recurringCharges: [],
+      monthlyTrend: [],
+    }
+  }
+
+  const dates = allTransactions.map((tx) => tx.date)
+  const historyStartDate = new Date(
+    Math.min(...dates.map((d) => d.getTime()))
   )
-  const priorTransactions = filterInRange(
-    allTransactions,
-    priorPeriod.start,
-    priorPeriod.end
-  )
+  const historyEndDate = new Date(Math.max(...dates.map((d) => d.getTime())))
+  const historyEndMonthKey = toMonthKey(historyEndDate)
 
   return {
-    periodStart: toDateKey(period.start),
-    periodEnd: toDateKey(period.end),
+    historyStart: toDateKey(historyStartDate),
+    historyEnd: toDateKey(historyEndDate),
     homeCurrency,
-    categoryTotals: buildCategoryTotals(
-      periodTransactions,
-      priorTransactions,
-      homeCurrency,
-      fxRate
-    ),
-    topMerchants: buildTopMerchants(periodTransactions, homeCurrency, fxRate),
+    categoryTotals: buildCategoryTotals(allTransactions, homeCurrency, fxRate),
+    topMerchants: buildTopMerchants(allTransactions, homeCurrency, fxRate),
     recurringCharges: detectRecurringCharges(
       allTransactions,
       homeCurrency,
       fxRate,
-      period.end
+      historyEndMonthKey
     ),
-    monthlyTrend: buildMonthlyTrend(
+    monthlyTrend: buildMonthlyTrendsConverted(
       allTransactions,
       homeCurrency,
-      fxRate,
-      period.end
-    ),
+      fxRate
+    ).map((d) => ({ month: d.month, income: d.income, expense: d.expense })),
   }
 }

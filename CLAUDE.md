@@ -42,7 +42,7 @@ src/
     AppSidebar.tsx         # Fixed 252px sidebar, navigation, user footer
     Dashboard.tsx          # Resumen view — account cards, month summary, top categories, KPI tiles, donut, area chart, merchants (charts live here, not a separate view)
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
-    Insights.tsx           # Insights view — AI-generated spending insights (period selector, generate/regenerate, grouped cards)
+    Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
     Categories.tsx         # Categorías view — category grid + auto-categorization rules
     Settings.tsx           # Configuración view — theme, currency, account, data management
     ImportCSV.tsx          # CSV import flow (wrapped in Radix Dialog, not a view)
@@ -172,6 +172,6 @@ Requires `.env` with Supabase vars (see `.env.example`):
 
 Redesign complete: sidebar navigation, 5 views, multicurrency with FxChip. Architectural refactor complete: hooks extracted from App.tsx, store simplified, large components split. Deployed to Firebase Hosting. 796 tests passing.
 
-AI Insights Phase 1 shipped (ADR-0001, `docs/decisions/0001-ai-spending-insights.md`): new Insights view generates Claude-powered spending insights per month, cached in Supabase (`ai_insights` table — requires a manual `schema.sql` apply, see `supabase/README.md`). Client-side, BYO API key, same pattern as `services/ai/`.
+AI Insights shipped (ADR-0001 + ADR-0002, `docs/decisions/000{1,2}-*.md`): Insights view generates Claude-powered spending insights over the user's **entire transaction history** (no period navigation — see ADR-0002), cached in Supabase (`ai_insights` table, one row per user — requires a manual `schema.sql` apply, see `supabase/README.md`). Client-side, BYO API key, same pattern as `services/ai/`.
 
-**Next initiative**: AI Insights Phase 2 (trend/anomaly narratives across 3+ months, per ADR-0001), and AI-powered categorization — improve transaction categorization accuracy and confidence scores using an LLM or smarter heuristics.
+**Next initiative**: per-category cross-period comparisons (a `categoryTotals × month` breakdown, so `bleeding_money` insights can detect spend that's *growing*, not just spend that *dominates* — see ADR-0002's trade-offs section), and AI-powered categorization — improve transaction categorization accuracy and confidence scores using an LLM or smarter heuristics.

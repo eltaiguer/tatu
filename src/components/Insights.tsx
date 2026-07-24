@@ -6,9 +6,8 @@ import {
   Repeat,
   LineChart,
   AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
   RefreshCw,
+  Upload,
 } from 'lucide-react'
 import { Card } from './ui/card'
 import { Button } from './ui/button'
@@ -16,7 +15,7 @@ import { CategoryBadge } from './CategoryBadge'
 import { formatCurrency } from '../utils/formatting'
 import type { Currency, Transaction, TransactionsFilter } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
-import { buildInsightInput, getUtcMonthPeriod } from '../services/insights/insight-data'
+import { buildInsightInput } from '../services/insights/insight-data'
 import {
   generateInsights,
   type Insight,
@@ -38,7 +37,7 @@ interface InsightsProps {
   claudeApiKey: string
   onNavigateToTransactions: (filter: TransactionsFilter) => void
   onNavigateToSettings: () => void
-  referenceDate?: Date
+  onNavigateToImport?: () => void
 }
 
 const TYPE_ORDER: InsightType[] = [
@@ -80,14 +79,6 @@ function groupAndSortInsights(insights: Insight[]): Array<{ type: InsightType; i
   }))
 }
 
-function formatMonthLabel(date: Date): string {
-  return date.toLocaleDateString('es-UY', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  })
-}
-
 export function Insights({
   transactions,
   homeCurrency,
@@ -97,36 +88,23 @@ export function Insights({
   claudeApiKey,
   onNavigateToTransactions,
   onNavigateToSettings,
-  referenceDate,
+  onNavigateToImport,
 }: InsightsProps) {
-  // A JS default parameter (`referenceDate = new Date()`) re-evaluates on
-  // every render, which would make `period`/`input` below recompute every
-  // render and re-trigger the data-fetching effect in a loop. useState's
-  // initializer runs once, so this fallback is stable across re-renders
-  // regardless of whether the caller passes referenceDate.
-  const [fallbackReferenceDate] = useState(() => new Date())
-  const effectiveReferenceDate = referenceDate ?? fallbackReferenceDate
-
-  const [monthOffset, setMonthOffset] = useState(0)
   const [cached, setCached] = useState<CachedInsightsLookup | null>(null)
   const [loadingCache, setLoadingCache] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
 
   const isConfigured = aiEnabled && Boolean(claudeApiKey)
-
-  const period = useMemo(
-    () => getUtcMonthPeriod(effectiveReferenceDate, monthOffset),
-    [effectiveReferenceDate, monthOffset]
-  )
+  const hasTransactions = transactions.length > 0
 
   const input = useMemo(
-    () => buildInsightInput(transactions, period, homeCurrency, fxRate),
-    [transactions, period, homeCurrency, fxRate]
+    () => buildInsightInput(transactions, homeCurrency, fxRate),
+    [transactions, homeCurrency, fxRate]
   )
 
   useEffect(() => {
-    if (!isConfigured) {
+    if (!isConfigured || !hasTransactions) {
       setLoadingCache(false)
       setCached(null)
       return
@@ -154,7 +132,7 @@ export function Insights({
     return () => {
       cancelled = true
     }
-  }, [session, input, isConfigured])
+  }, [session, input, isConfigured, hasTransactions])
 
   async function handleGenerate() {
     setGenerating(true)
@@ -184,60 +162,24 @@ export function Insights({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 26,
-              fontWeight: 600,
-              margin: 0,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-            }}
-          >
-            <Sparkles size={22} style={{ color: 'var(--accent)' }} aria-hidden="true" />
-            Insights
-          </h1>
-          <p className="text-muted-foreground" style={{ fontSize: 14, marginTop: 4 }}>
-            ¿Dónde se fue tu dinero? ¿Cómo podés gastar menos?
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Mes anterior"
-            onClick={() => setMonthOffset((m) => m - 1)}
-          >
-            <ChevronLeft size={16} />
-          </Button>
-          <span
-            className="font-mono"
-            style={{ fontSize: 14, minWidth: 120, textAlign: 'center', textTransform: 'capitalize' }}
-          >
-            {formatMonthLabel(period.start)}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Mes siguiente"
-            disabled={monthOffset >= 0}
-            onClick={() => setMonthOffset((m) => Math.min(0, m + 1))}
-          >
-            <ChevronRight size={16} />
-          </Button>
-        </div>
+      <div>
+        <h1
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 26,
+            fontWeight: 600,
+            margin: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <Sparkles size={22} style={{ color: 'var(--accent)' }} aria-hidden="true" />
+          Insights
+        </h1>
+        <p className="text-muted-foreground" style={{ fontSize: 14, marginTop: 4 }}>
+          ¿Dónde se fue tu dinero? ¿Cómo podés gastar menos? — toda tu historia, de un vistazo.
+        </p>
       </div>
 
       {error && (
@@ -246,7 +188,28 @@ export function Insights({
         </p>
       )}
 
-      {!isConfigured && (
+      {!hasTransactions && (
+        <Card className="p-8 text-center space-y-4">
+          <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <Upload className="text-primary" size={28} />
+          </div>
+          <div>
+            <h2 className="mb-2">Importá tus movimientos primero</h2>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Los insights se generan a partir de tu historial de transacciones.
+              Importá un extracto para empezar.
+            </p>
+          </div>
+          {onNavigateToImport && (
+            <Button onClick={onNavigateToImport}>
+              <Upload size={16} />
+              Importar CSV
+            </Button>
+          )}
+        </Card>
+      )}
+
+      {hasTransactions && !isConfigured && (
         <Card className="p-8 text-center space-y-4">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <Sparkles className="text-primary" size={28} />
@@ -255,14 +218,14 @@ export function Insights({
             <h2 className="mb-2">Activá la IA para ver insights</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
               Los insights usan tu clave de Claude configurada en Configuración
-              para analizar tus gastos de este período.
+              para analizar todo tu historial de gastos.
             </p>
           </div>
           <Button onClick={onNavigateToSettings}>Ir a Configuración</Button>
         </Card>
       )}
 
-      {isConfigured && !loadingCache && !cached && (
+      {hasTransactions && isConfigured && !loadingCache && !cached && (
         <Card className="p-8 text-center space-y-4">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <Sparkles className="text-primary" size={28} />
@@ -270,9 +233,8 @@ export function Insights({
           <div>
             <h2 className="mb-2">Generá tus primeros insights</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Analizamos tus categorías, comercios y cargos recurrentes de{' '}
-              {formatMonthLabel(period.start)} para mostrarte dónde se fue tu
-              dinero.
+              Analizamos todas tus categorías, comercios y cargos recurrentes
+              para mostrarte dónde se fue tu dinero.
             </p>
           </div>
           <Button onClick={() => void handleGenerate()} disabled={generating}>
@@ -282,7 +244,7 @@ export function Insights({
         </Card>
       )}
 
-      {isConfigured && cached && (
+      {hasTransactions && isConfigured && cached && (
         <>
           <div
             style={{
@@ -317,9 +279,8 @@ export function Insights({
               style={{ borderColor: 'var(--accent)', background: 'var(--accent-soft)' }}
             >
               <p style={{ fontSize: 13, margin: 0 }}>
-                Tus transacciones de este período cambiaron desde la última
-                vez que generaste insights. Los que ves abajo pueden estar
-                desactualizados —{' '}
+                Tus transacciones cambiaron desde la última vez que generaste
+                insights. Los que ves abajo pueden estar desactualizados —{' '}
                 <button
                   onClick={() => void handleGenerate()}
                   disabled={generating}
@@ -343,7 +304,7 @@ export function Insights({
           {groups.length === 0 && (
             <Card className="p-6 text-center">
               <p className="text-muted-foreground" style={{ margin: 0 }}>
-                No encontramos patrones destacados en {formatMonthLabel(period.start)}.
+                No encontramos patrones destacados en tu historial.
               </p>
             </Card>
           )}
