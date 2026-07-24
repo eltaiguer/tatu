@@ -220,11 +220,18 @@ export function buildInsightInput(
     }
   }
 
-  const dates = allTransactions.map((tx) => tx.date)
-  const historyStartDate = new Date(
-    Math.min(...dates.map((d) => d.getTime()))
-  )
-  const historyEndDate = new Date(Math.max(...dates.map((d) => d.getTime())))
+  // Plain loop instead of Math.min/max(...spread) — spreading a getTime()
+  // per transaction into a function call has no upper bound on argument
+  // count and risks a call-stack error on a very large import history.
+  let historyStartMs = Infinity
+  let historyEndMs = -Infinity
+  for (const tx of allTransactions) {
+    const t = tx.date.getTime()
+    if (t < historyStartMs) historyStartMs = t
+    if (t > historyEndMs) historyEndMs = t
+  }
+  const historyStartDate = new Date(historyStartMs)
+  const historyEndDate = new Date(historyEndMs)
   const historyEndMonthKey = toMonthKey(historyEndDate)
 
   return {
