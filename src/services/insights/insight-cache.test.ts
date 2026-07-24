@@ -20,11 +20,11 @@ const session = {
 } as unknown as SupabaseSession
 
 const input: InsightInput = {
-  periodStart: '2026-06-01',
-  periodEnd: '2026-06-30',
+  historyStart: '2026-01-01',
+  historyEnd: '2026-06-30',
   homeCurrency: 'USD',
   categoryTotals: [
-    { category: 'groceries', amount: 100, pctOfTotal: 100, deltaVsPriorPeriod: 0 },
+    { category: 'groceries', amount: 100, pctOfTotal: 100 },
   ],
   topMerchants: [],
   recurringCharges: [],
@@ -42,7 +42,7 @@ describe('hashInsightInput', () => {
     const changed: InsightInput = {
       ...input,
       categoryTotals: [
-        { category: 'groceries', amount: 999, pctOfTotal: 100, deltaVsPriorPeriod: 0 },
+        { category: 'groceries', amount: 999, pctOfTotal: 100 },
       ],
     }
     expect(hashInsightInput(input)).not.toBe(hashInsightInput(changed))
@@ -58,12 +58,11 @@ describe('getCachedInsights', () => {
     loadCachedInsightsMock.mockResolvedValue(null)
     const cached = await getCachedInsights(session, input)
     expect(cached).toBeNull()
+    expect(loadCachedInsightsMock).toHaveBeenCalledWith(session)
   })
 
   it('marks the result fresh when the stored hash matches the current input', async () => {
     loadCachedInsightsMock.mockResolvedValue({
-      periodStart: input.periodStart,
-      periodEnd: input.periodEnd,
       inputHash: hashInsightInput(input),
       model: 'claude-opus-4-8',
       insights: result,
@@ -81,8 +80,6 @@ describe('getCachedInsights', () => {
 
   it('marks the result stale when the stored hash no longer matches the input', async () => {
     loadCachedInsightsMock.mockResolvedValue({
-      periodStart: input.periodStart,
-      periodEnd: input.periodEnd,
       inputHash: 'stale-hash',
       model: 'claude-opus-4-8',
       insights: result,
@@ -99,14 +96,12 @@ describe('saveCachedInsights', () => {
     vi.clearAllMocks()
   })
 
-  it('saves the result keyed by period with the computed input hash', async () => {
+  it('saves the result with the computed input hash', async () => {
     saveInsightsMock.mockResolvedValue(undefined)
 
     await saveCachedInsights(session, input, result, 'claude-opus-4-8')
 
     expect(saveInsightsMock).toHaveBeenCalledWith(session, {
-      periodStart: '2026-06-01',
-      periodEnd: '2026-06-30',
       inputHash: hashInsightInput(input),
       model: 'claude-opus-4-8',
       insights: result,

@@ -439,6 +439,7 @@ function App() {
                   claudeApiKey={claudeApiKey}
                   onNavigateToTransactions={navigateToTransactions}
                   onNavigateToSettings={() => setCurrentView('settings')}
+                  onNavigateToImport={() => setImportOpen(true)}
                 />
               )}
               {currentView === 'categories' && (

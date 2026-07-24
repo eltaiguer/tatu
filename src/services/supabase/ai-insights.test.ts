@@ -1,19 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseSession } from './client'
 
-const {
-  selectMock,
-  eqUserMock,
-  eqStartMock,
-  eqEndMock,
-  singleMock,
-  upsertMock,
-  fromMock,
-} = vi.hoisted(() => ({
+const { selectMock, eqUserMock, singleMock, upsertMock, fromMock } = vi.hoisted(() => ({
   selectMock: vi.fn(),
   eqUserMock: vi.fn(),
-  eqStartMock: vi.fn(),
-  eqEndMock: vi.fn(),
   singleMock: vi.fn(),
   upsertMock: vi.fn(),
   fromMock: vi.fn(),
@@ -45,9 +35,7 @@ describe('supabase ai-insights service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    eqEndMock.mockReturnValue({ single: singleMock })
-    eqStartMock.mockReturnValue({ eq: eqEndMock })
-    eqUserMock.mockReturnValue({ eq: eqStartMock })
+    eqUserMock.mockReturnValue({ single: singleMock })
     selectMock.mockReturnValue({ eq: eqUserMock })
 
     upsertMock.mockResolvedValue({ error: null })
@@ -63,12 +51,10 @@ describe('supabase ai-insights service', () => {
     })
   })
 
-  it('loads a cached insights row and maps snake_case to camelCase', async () => {
+  it('loads the cached insights row for the current user and maps snake_case to camelCase', async () => {
     singleMock.mockResolvedValue({
       data: {
         user_id: 'user-1',
-        period_start: '2026-06-01',
-        period_end: '2026-06-30',
         input_hash: 'abc123',
         model: 'claude-opus-4-8',
         insights: { insights: [] },
@@ -78,15 +64,11 @@ describe('supabase ai-insights service', () => {
     })
 
     const { loadCachedInsights } = await import('./ai-insights')
-    const row = await loadCachedInsights(session, '2026-06-01', '2026-06-30')
+    const row = await loadCachedInsights(session)
 
     expect(selectMock).toHaveBeenCalledWith('*')
     expect(eqUserMock).toHaveBeenCalledWith('user_id', 'user-1')
-    expect(eqStartMock).toHaveBeenCalledWith('period_start', '2026-06-01')
-    expect(eqEndMock).toHaveBeenCalledWith('period_end', '2026-06-30')
     expect(row).toEqual({
-      periodStart: '2026-06-01',
-      periodEnd: '2026-06-30',
       inputHash: 'abc123',
       model: 'claude-opus-4-8',
       insights: { insights: [] },
@@ -101,7 +83,7 @@ describe('supabase ai-insights service', () => {
     })
 
     const { loadCachedInsights } = await import('./ai-insights')
-    const row = await loadCachedInsights(session, '2026-06-01', '2026-06-30')
+    const row = await loadCachedInsights(session)
 
     expect(row).toBeNull()
   })
@@ -113,16 +95,12 @@ describe('supabase ai-insights service', () => {
     })
 
     const { loadCachedInsights } = await import('./ai-insights')
-    await expect(
-      loadCachedInsights(session, '2026-06-01', '2026-06-30')
-    ).rejects.toThrow('boom')
+    await expect(loadCachedInsights(session)).rejects.toThrow('boom')
   })
 
-  it('upserts insights with user ownership and the composite conflict key', async () => {
+  it('upserts insights with user ownership keyed on user_id alone', async () => {
     const { saveInsights } = await import('./ai-insights')
     await saveInsights(session, {
-      periodStart: '2026-06-01',
-      periodEnd: '2026-06-30',
       inputHash: 'abc123',
       model: 'claude-opus-4-8',
       insights: { insights: [] },
@@ -131,13 +109,11 @@ describe('supabase ai-insights service', () => {
     expect(upsertMock).toHaveBeenCalledWith(
       {
         user_id: 'user-1',
-        period_start: '2026-06-01',
-        period_end: '2026-06-30',
         input_hash: 'abc123',
         model: 'claude-opus-4-8',
         insights: { insights: [] },
       },
-      { onConflict: 'user_id,period_start,period_end' }
+      { onConflict: 'user_id' }
     )
   })
 })

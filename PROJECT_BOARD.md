@@ -11,11 +11,11 @@
 - **Redesign**: Sidebar navigation (overview / transactions / insights / categories / settings), warm token palette, Spectral + Hanken Grotesk + JetBrains Mono typography
 - **Refactor**: Hooks extracted from App.tsx (`useAuthSession`, `useUserPreferences`, `useTransactionHandlers`, `useTransactionSync`, `useTransactionFiltering`), Transactions.tsx split into sub-components
 - **Export**: CSV + PDF from filtered transaction view
-- **AI Insights (Phase 1)**: new Insights sidebar view — Claude-generated (Opus 4.8) spending insights per month, cached in Supabase (`ai_insights` table), deterministic math only (category totals, deltas, recurring-charge detection all computed client-side, model only ranks/narrates). See ADR-0001 (`docs/decisions/0001-ai-spending-insights.md`).
+- **AI Insights**: new Insights sidebar view — Claude-generated (Opus 4.8) spending insights over the user's **entire transaction history** (no period navigation), cached in Supabase (`ai_insights` table, one row per user), deterministic math only (category totals, recurring-charge detection all computed client-side, model only ranks/narrates). See ADR-0001 (`docs/decisions/0001-ai-spending-insights.md`) + ADR-0002 (`docs/decisions/0002-insights-integral-view.md`, which replaced the original per-month design).
 
 ## Next
 
-**AI Insights (Phase 2)** — trend narratives across 3+ months and anomaly/spike detection, per ADR-0001.
+**Per-category cross-period comparisons** — a `categoryTotals × month` breakdown so `bleeding_money` insights can detect *growing* spend, not just *dominant* spend, plus anomaly/spike detection. See ADR-0002's trade-offs section.
 
 **AI-powered categorization** — improve accuracy and confidence scores using an LLM or smarter heuristics.
 

@@ -1,7 +1,13 @@
 # ADR-0001: AI-Powered Spending Insights
 
 ## Status
-Proposed
+Accepted. **Partially superseded by [ADR-0002](0002-insights-integral-view.md)**:
+the per-period navigation/caching decisions below (month stepper, one
+cache row per `(user_id, period_start, period_end)`, `deltaVsPriorPeriod`)
+were replaced by an all-time integral view. The BYO-key client-side
+pattern, the `claude-opus-4-8` model choice for insight generation, and the
+deterministic-math discipline (the model narrates, never computes) are
+unaffected and still stand as originally decided here.
 
 ## Date
 2026-07-22

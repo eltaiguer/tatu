@@ -45,9 +45,7 @@ const VALID_SEVERITIES = new Set<InsightSeverity>(['low', 'medium', 'high'])
 
 function isKnownAmount(amount: number, input: InsightInput): boolean {
   return (
-    input.categoryTotals.some(
-      (c) => c.amount === amount || c.deltaVsPriorPeriod === amount
-    ) ||
+    input.categoryTotals.some((c) => c.amount === amount) ||
     input.topMerchants.some((m) => m.amount === amount) ||
     input.recurringCharges.some((r) => r.approxAmount === amount)
   )
