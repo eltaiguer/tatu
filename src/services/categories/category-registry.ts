@@ -4,7 +4,9 @@ import {
   CATEGORY_ICONS,
   CATEGORY_LABELS,
 } from '../../models'
+import type { CustomCategory } from './category-store'
 import { listCustomCategories } from './category-store'
+import { memoizeByReference } from '../../utils/memo'
 
 export interface CategoryDefinition {
   id: string
@@ -128,13 +130,28 @@ function isTransferCategoryId(id: string): boolean {
   return id === Category.InternalTransfer || id === Category.ExternalTransfer
 }
 
+// Override rows keyed by resolved id. A legacy row ('transfer') and a
+// current one ('internal_transfer') can coexist — upsertBuiltinOverride
+// matches on the exact id and appends otherwise — so the later row wins,
+// exactly as the Map build in getCategoryDefinitions resolves it.
+// Memoized on the store's array identity: every mutator replaces the array.
+const resolvedOverridesByCategory = memoizeByReference(
+  (categories: CustomCategory[]) => {
+    const map = new Map<string, CustomCategory>()
+    categories.forEach((c) =>
+      map.set(resolveBuiltinAlias(c.id.toLowerCase()), c)
+    )
+    return map
+  }
+)
+
 export function isCategoryIgnored(id: string | undefined): boolean {
   if (!id) return false
   // Resolve through ID_ALIASES first so pre-rename ids stored on transactions
   // ('transfer', 'transfers') and on override rows match their current built-in.
   const resolvedId = resolveBuiltinAlias(id.toLowerCase())
-  const override = listCustomCategories().find(
-    (c) => resolveBuiltinAlias(c.id.toLowerCase()) === resolvedId
+  const override = resolvedOverridesByCategory(listCustomCategories()).get(
+    resolvedId
   )
   if (override?.isIgnored !== undefined) return override.isIgnored
   // Transfer categories and the legacy 'ignored' id are excluded by default

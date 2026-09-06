@@ -280,14 +280,17 @@ export function Dashboard({
     [transactions],
   )
 
-  // Latest date used as reference month (avoids dependency on system clock)
+  // Latest date used as reference month (avoids dependency on system clock).
+  // Falls back to the raw rows when everything is ignored, so a transfers-only
+  // dataset still labels the statement month instead of today's.
   const latestDate = useMemo(() => {
-    if (countedTransactions.length === 0) return new Date()
-    return countedTransactions.reduce(
+    const source = countedTransactions.length ? countedTransactions : transactions
+    if (source.length === 0) return new Date()
+    return source.reduce(
       (latest, tx) => (tx.date > latest ? tx.date : latest),
-      countedTransactions[0].date,
+      source[0].date,
     )
-  }, [countedTransactions])
+  }, [countedTransactions, transactions])
 
   // Date range across counted transactions — used for section period labels
   const periodRange = useMemo(() => {

@@ -326,6 +326,29 @@ describe('Dashboard', () => {
     expect(screen.getByText('1 transacciones registradas')).toBeInTheDocument()
   })
 
+  it('labels the statement month, not today, when every row is ignored', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-20T12:00:00.000Z'))
+
+    const transactions = [
+      makeTransaction({
+        id: 'only-transfer',
+        description: 'TRASPASO',
+        category: Category.InternalTransfer,
+        amount: 5000,
+        currency: 'USD',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+      }),
+    ]
+
+    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+
+    expect(screen.getAllByText(/enero de 2026/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/agosto de 2026/i)).not.toBeInTheDocument()
+
+    vi.useRealTimers()
+  })
+
   it('anchors "este mes" to the latest counted month, not an ignored one', () => {
     const transactions = [
       makeTransaction({

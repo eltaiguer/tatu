@@ -300,6 +300,29 @@ describe('isCategoryIgnored', () => {
     expect(isCategoryIgnored('IGNORED')).toBe(true)
   })
 
+  it('prefers the current-id override over a stale legacy duplicate', () => {
+    // upsertBuiltinOverride matches on the exact id and appends otherwise, so
+    // un-ignoring Transferencias internas leaves the pre-rename row in place.
+    // getCategoryDefinitions resolves this last-wins; the predicate must agree.
+    listCustomCategoriesMock.mockReturnValue([
+      {
+        id: 'transfer',
+        label: 'Transferencias internas',
+        color: '#ff0000',
+        isIgnored: true,
+      },
+      {
+        id: Category.InternalTransfer,
+        label: 'Transferencias internas',
+        color: '#ff0000',
+        isIgnored: false,
+      },
+    ])
+
+    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(false)
+    expect(isCategoryIgnored('transfer')).toBe(false)
+  })
+
   it('honours a legacy-id override when un-ignoring a renamed built-in', () => {
     listCustomCategoriesMock.mockReturnValue([
       {
