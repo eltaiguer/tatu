@@ -31,17 +31,23 @@ const DEFAULT_CUSTOM_ICON = '🏷️'
 // already keyed by the current id overwrites it. Memoized on the store's
 // array identity, which every mutator replaces rather than mutating.
 const resolvedOverrides = memoizeByReference((categories: CustomCategory[]) => {
-  const map = new Map<string, CustomCategory>()
+  const aliased = new Map<string, CustomCategory>()
+  const exact = new Map<string, CustomCategory>()
+
   categories.forEach((c) => {
     const normalized = c.id.toLowerCase()
     const resolved = resolveBuiltinAlias(normalized)
-    if (resolved !== normalized) map.set(resolved, c)
+    const target = resolved === normalized ? exact : aliased
+    const held = target.get(resolved)
+    // Several rows can land on one category: two alias keys for the same
+    // built-in ('restaurant' and 'restaurants'), or ids differing only in
+    // case. Break the tie on the id so the winner never depends on the order
+    // Supabase happened to return the rows in.
+    if (!held || c.id < held.id) target.set(resolved, c)
   })
-  categories.forEach((c) => {
-    const normalized = c.id.toLowerCase()
-    if (resolveBuiltinAlias(normalized) === normalized) map.set(normalized, c)
-  })
-  return map
+
+  // A row already keyed by the current id always beats a stale alias row.
+  return new Map([...aliased, ...exact])
 })
 
 export function getCategoryDefinitions(): CategoryDefinition[] {

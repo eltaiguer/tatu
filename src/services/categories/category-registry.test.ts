@@ -377,6 +377,29 @@ describe('isCategoryIgnored', () => {
     }
   })
 
+  it('resolves two alias rows for one built-in the same way in any order', () => {
+    // 'restaurant' and 'restaurants' both resolve to Restaurantes, so array
+    // order must not decide which one supplies the ignore flag.
+    const singular = {
+      id: 'restaurant',
+      label: 'Restaurantes',
+      color: '#ff0000',
+      isIgnored: true,
+    }
+    const plural = {
+      id: 'restaurants',
+      label: 'Restaurantes',
+      color: '#00ff00',
+      isIgnored: false,
+    }
+
+    listCustomCategoriesMock.mockReturnValue([singular, plural])
+    const first = isCategoryIgnored(Category.Restaurants)
+
+    listCustomCategoriesMock.mockReturnValue([plural, singular])
+    expect(isCategoryIgnored(Category.Restaurants)).toBe(first)
+  })
+
   it('keeps the transfer default when a legacy row records no preference', () => {
     // custom_categories.is_ignored is nullable, and rows written between the
     // upsert landing and the transfer rename carry NULL. That maps to

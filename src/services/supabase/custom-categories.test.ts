@@ -135,6 +135,20 @@ describe('supabase custom categories service', () => {
     )
   })
 
+  it('writes NULL when no ignore preference is set', async () => {
+    const { upsertCustomCategory } = await import('./custom-categories')
+    await upsertCustomCategory(session, {
+      id: 'mates',
+      label: 'Mates',
+      color: '#00AA11',
+    })
+
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'mates', is_ignored: null }),
+      expect.anything()
+    )
+  })
+
   it('persists the is_ignored flag on upsert', async () => {
     const { upsertCustomCategory } = await import('./custom-categories')
     await upsertCustomCategory(session, {
