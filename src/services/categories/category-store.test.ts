@@ -58,6 +58,11 @@ describe('Custom category store', () => {
     expect(new Set([food.id, groceries.id]).size).toBe(2)
   })
 
+  it('does not treat inherited Object properties as reserved ids', () => {
+    const c = addCustomCategory({ label: 'Constructor', color: '#ff0000' })
+    expect(c.id).toBe('constructor')
+  })
+
   it('updates a custom category', () => {
     const category = addCustomCategory({
       label: 'Coffee',

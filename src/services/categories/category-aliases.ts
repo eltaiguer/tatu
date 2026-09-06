@@ -15,8 +15,19 @@ export const ID_ALIASES: Partial<Record<string, Category>> = {
   transfers: Category.ExternalTransfer,
 }
 
+// hasOwnProperty rather than `in`: ID_ALIASES is a plain object literal, so
+// `'constructor' in ID_ALIASES` is true and the lookup yields a function.
+function aliasFor(id: string): string | undefined {
+  const normalized = id.toLowerCase()
+  if (!Object.prototype.hasOwnProperty.call(ID_ALIASES, normalized)) {
+    return undefined
+  }
+  const alias = ID_ALIASES[normalized]
+  return typeof alias === 'string' ? alias : undefined
+}
+
 export function resolveBuiltinAlias(id: string): string {
-  return ID_ALIASES[id.toLowerCase()] ?? id
+  return aliasFor(id) ?? id
 }
 
 // True when the id is spoken for by a built-in category or one of its
@@ -24,7 +35,7 @@ export function resolveBuiltinAlias(id: string): string {
 export function isReservedCategoryId(id: string): boolean {
   const normalized = id.toLowerCase()
   return (
-    normalized in ID_ALIASES ||
+    aliasFor(normalized) !== undefined ||
     (Object.values(Category) as string[]).includes(normalized)
   )
 }

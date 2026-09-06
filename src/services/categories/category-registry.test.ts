@@ -256,6 +256,30 @@ describe('getCategoryDefinition', () => {
   })
 })
 
+describe('accessor agreement', () => {
+  beforeEach(() => {
+    listCustomCategoriesMock.mockReturnValue([])
+  })
+
+  it('resolves legacy override rows the same way in all three accessors', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      {
+        id: 'transfer',
+        label: 'Transferencias internas',
+        color: '#ff0000',
+        isIgnored: false,
+      },
+    ])
+
+    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(false)
+    expect(
+      getCategoryDefinitions().find((c) => c.id === Category.InternalTransfer)
+        ?.isIgnored
+    ).toBe(false)
+    expect(getCategoryDefinition(Category.InternalTransfer).isIgnored).toBe(false)
+  })
+})
+
 describe('isCategoryIgnored', () => {
   beforeEach(() => {
     listCustomCategoriesMock.mockReturnValue([])
@@ -351,6 +375,28 @@ describe('isCategoryIgnored', () => {
           ?.isIgnored
       ).toBe(false)
     }
+  })
+
+  it('lets the Categorías toggle override a legacy alias row', () => {
+    // A pre-existing row keyed by an alias ('food' -> groceries) controls the
+    // built-in's ignore flag. Unticking "ignorar" in Categorías calls
+    // upsertBuiltinOverride, which appends a row keyed by the current id —
+    // that row must win, so the state is always correctable from the UI.
+    listCustomCategoriesMock.mockReturnValue([
+      { id: 'food', label: 'Food', color: '#ff0000', isIgnored: true },
+    ])
+    expect(isCategoryIgnored(Category.Groceries)).toBe(true)
+
+    listCustomCategoriesMock.mockReturnValue([
+      { id: 'food', label: 'Food', color: '#ff0000', isIgnored: true },
+      {
+        id: Category.Groceries,
+        label: 'Alimentación',
+        color: '#ff0000',
+        isIgnored: false,
+      },
+    ])
+    expect(isCategoryIgnored(Category.Groceries)).toBe(false)
   })
 
   it('honours a legacy-id override when un-ignoring a renamed built-in', () => {

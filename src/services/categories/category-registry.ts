@@ -101,11 +101,12 @@ export function getCategoryDefinition(
   }
 
   const normalizedId = id.toLowerCase()
-  const resolvedId = ID_ALIASES[normalizedId] ?? normalizedId
+  const resolvedId = resolveBuiltinAlias(normalizedId)
+  const overrides = resolvedOverrides(listCustomCategories())
 
   if (Object.values(Category).includes(resolvedId as Category)) {
     const category = resolvedId as Category
-    const override = listCustomCategories().find((c) => c.id === resolvedId)
+    const override = overrides.get(resolvedId)
     return {
       id: category,
       label: override?.label ?? CATEGORY_LABELS[category],
@@ -116,7 +117,7 @@ export function getCategoryDefinition(
     }
   }
 
-  const custom = listCustomCategories().find((category) => category.id === resolvedId)
+  const custom = overrides.get(resolvedId)
   if (!custom) {
     return fallback
   }
