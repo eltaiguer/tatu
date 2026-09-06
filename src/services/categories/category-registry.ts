@@ -44,7 +44,6 @@ const resolvedOverrides = memoizeByReference((categories: CustomCategory[]) => {
   return map
 })
 
-
 export function getCategoryDefinitions(): CategoryDefinition[] {
   const customList = listCustomCategories()
   const builtinIds = new Set(Object.values(Category) as string[])
@@ -65,7 +64,7 @@ export function getCategoryDefinitions(): CategoryDefinition[] {
   const seenCustomIds = new Set<string>()
   const custom = customList
     .filter((c) => {
-      if (builtinIds.has(resolveBuiltinAlias(c.id))) return false
+      if (builtinIds.has(resolveBuiltinAlias(c.id.toLowerCase()))) return false
       if (seenCustomIds.has(c.id)) return false
       seenCustomIds.add(c.id)
       return true
@@ -135,7 +134,6 @@ export function getCategoryDefinition(
 function isTransferCategoryId(id: string): boolean {
   return id === Category.InternalTransfer || id === Category.ExternalTransfer
 }
-
 
 export function isCategoryIgnored(id: string | undefined): boolean {
   if (!id) return false

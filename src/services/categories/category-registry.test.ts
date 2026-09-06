@@ -377,6 +377,24 @@ describe('isCategoryIgnored', () => {
     }
   })
 
+  it('keeps the transfer default when a legacy row records no preference', () => {
+    // custom_categories.is_ignored is nullable, and rows written between the
+    // upsert landing and the transfer rename carry NULL. That maps to
+    // undefined, which must fall through to the built-in default rather than
+    // read as an explicit "not ignored" and let transfers back into totals.
+    listCustomCategoriesMock.mockReturnValue([
+      {
+        id: 'transfer',
+        label: 'Transferencias',
+        color: '#ff0000',
+        isIgnored: undefined,
+      },
+    ])
+
+    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(true)
+    expect(isCategoryIgnored('transfer')).toBe(true)
+  })
+
   it('lets the Categorías toggle override a legacy alias row', () => {
     // A pre-existing row keyed by an alias ('food' -> groceries) controls the
     // built-in's ignore flag. Unticking "ignorar" in Categorías calls

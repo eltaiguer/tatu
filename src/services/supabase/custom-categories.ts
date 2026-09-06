@@ -17,7 +17,13 @@ export interface CustomCategoryRecord {
   label: string
   color: string
   icon?: string
-  isIgnored: boolean
+  /**
+   * undefined when the column is NULL — the row records no preference, which
+   * must stay distinct from an explicit false. A pre-rename override row
+   * ('transfer') carrying a spurious false would otherwise un-ignore the
+   * built-in it resolves to.
+   */
+  isIgnored?: boolean
   isArchived: boolean
   createdAt: string
   updatedAt: string
@@ -29,7 +35,7 @@ function rowToRecord(row: CustomCategoryRow): CustomCategoryRecord {
     label: row.label,
     color: row.color,
     icon: row.icon ?? undefined,
-    isIgnored: row.is_ignored ?? false,
+    isIgnored: row.is_ignored ?? undefined,
     isArchived: row.is_archived,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
