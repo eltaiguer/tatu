@@ -289,4 +289,28 @@ describe('isCategoryIgnored', () => {
 
     expect(isCategoryIgnored(Category.Shopping)).toBe(false)
   })
+
+  it('returns true for pre-rename transfer ids stored on transactions', () => {
+    expect(isCategoryIgnored('transfer')).toBe(true)
+    expect(isCategoryIgnored('transfers')).toBe(true)
+  })
+
+  it('ignores casing on stored ids', () => {
+    expect(isCategoryIgnored('Internal_Transfer')).toBe(true)
+    expect(isCategoryIgnored('IGNORED')).toBe(true)
+  })
+
+  it('honours a legacy-id override when un-ignoring a renamed built-in', () => {
+    listCustomCategoriesMock.mockReturnValue([
+      {
+        id: 'transfer',
+        label: 'Transferencias internas',
+        color: '#ff0000',
+        isIgnored: false,
+      },
+    ])
+
+    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(false)
+    expect(isCategoryIgnored('transfer')).toBe(false)
+  })
 })

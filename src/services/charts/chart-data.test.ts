@@ -421,5 +421,113 @@ describe('chart-data multicurrency converting selectors', () => {
       expect(result.usd.count).toBe(0)
       expect(result.uyu.count).toBe(0)
     })
+
+    it('excludes legacy pre-rename transfer ids from account spend', () => {
+      const txs = [
+        makeTx('real', { source: 'bank_account', currency: 'USD', amount: 40 }),
+        makeTx('legacy', {
+          source: 'bank_account',
+          currency: 'USD',
+          amount: 1000,
+          category: 'transfer',
+        }),
+      ]
+      const result = spendByAccount(txs, 'USD', RATE)
+      expect(result.usd.conv).toBe(40)
+      expect(result.usd.count).toBe(1)
+    })
+  })
+
+  describe('ignored categories are never counted', () => {
+    it('keeps legacy transfer ids out of category spending', () => {
+      const transactions = [
+        makeTransaction('tx-1', {
+          amount: 30,
+          category: Category.Groceries,
+        }),
+        makeTransaction('tx-2', { amount: 900, category: 'transfer' }),
+        makeTransaction('tx-3', { amount: 700, category: 'transfers' }),
+      ]
+
+      const result = buildCategorySpendingConverted(transactions, 'USD', 40)
+
+      expect(result).toEqual([{ category: Category.Groceries, total: 30 }])
+    })
+
+    it('keeps legacy transfer ids out of monthly trends', () => {
+      const transactions = [
+        makeTransaction('tx-1', {
+          date: new Date('2025-03-10T00:00:00.000Z'),
+          amount: 30,
+          category: Category.Groceries,
+        }),
+        makeTransaction('tx-2', {
+          date: new Date('2025-03-12T00:00:00.000Z'),
+          amount: 900,
+          category: 'transfer',
+        }),
+      ]
+
+      const result = buildMonthlyTrendsConverted(transactions, 'USD', 40)
+
+      expect(result).toEqual([
+        { month: '2025-03', income: 0, expense: 30, net: -30 },
+      ])
+    })
+
+    it('keeps legacy transfer ids out of the currency split', () => {
+      const transactions = [
+        makeTransaction('tx-1', { amount: 25, currency: 'USD' }),
+        makeTransaction('tx-2', {
+          amount: 4000,
+          currency: 'UYU',
+          category: 'transfer',
+        }),
+      ]
+
+      const result = buildCurrencySplit(transactions, 'USD', 40)
+
+      expect(result.total).toBe(25)
+      expect(result.UYU).toBe(0)
+      expect(result.pctUSD).toBe(100)
+    })
+
+    it('picks the reference month from counted transactions only', () => {
+      const transactions = [
+        makeTransaction('tx-1', {
+          date: new Date('2025-03-10T00:00:00.000Z'),
+          amount: 30,
+          category: Category.Groceries,
+        }),
+        // A later month containing nothing but an ignored transfer must not
+        // become the "este mes" reference month.
+        makeTransaction('tx-2', {
+          date: new Date('2025-04-02T00:00:00.000Z'),
+          amount: 5000,
+          category: Category.InternalTransfer,
+        }),
+      ]
+
+      const result = buildCurrentMonthSummary(transactions, 'USD', 40)
+
+      expect(result.expense).toBe(30)
+      expect(result.count).toBe(1)
+      expect(result.monthLabel).toContain('marzo')
+    })
+
+    it('returns an empty summary when every transaction is ignored', () => {
+      const transactions = [
+        makeTransaction('tx-1', {
+          amount: 5000,
+          category: Category.InternalTransfer,
+        }),
+      ]
+
+      const result = buildCurrentMonthSummary(transactions, 'USD', 40)
+
+      expect(result.count).toBe(0)
+      expect(result.expense).toBe(0)
+      expect(result.monthLabel).toBe('')
+    })
   })
 })

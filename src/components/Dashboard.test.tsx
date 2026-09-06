@@ -298,6 +298,60 @@ describe('Dashboard', () => {
     expect(screen.getAllByText('SUPERMERCADO').length).toBeGreaterThan(0)
   })
 
+  it('excludes pre-rename transfer ids from Resumen totals', () => {
+    const transactions = [
+      makeTransaction({
+        id: 'legacy-transfer',
+        description: 'TRASPASO ENTRE CUENTAS',
+        category: 'transfer',
+        amount: 8000,
+        currency: 'USD',
+        date: new Date('2026-01-09T00:00:00.000Z'),
+      }),
+      makeTransaction({
+        id: 'normal-tx',
+        description: 'SUPERMERCADO',
+        category: Category.Groceries,
+        amount: 200,
+        currency: 'USD',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+      }),
+    ]
+
+    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+
+    // The legacy transfer is neither listed nor folded into "este mes"
+    expect(screen.queryByText('TRASPASO ENTRE CUENTAS')).not.toBeInTheDocument()
+    expect(screen.queryByText(/8\.000,00/)).not.toBeInTheDocument()
+    expect(screen.getByText('1 transacciones registradas')).toBeInTheDocument()
+  })
+
+  it('anchors "este mes" to the latest counted month, not an ignored one', () => {
+    const transactions = [
+      makeTransaction({
+        id: 'grocery',
+        description: 'SUPERMERCADO',
+        category: Category.Groceries,
+        amount: 200,
+        currency: 'USD',
+        date: new Date('2026-01-10T00:00:00.000Z'),
+      }),
+      makeTransaction({
+        id: 'later-transfer',
+        description: 'TRASPASO',
+        category: Category.InternalTransfer,
+        amount: 5000,
+        currency: 'USD',
+        date: new Date('2026-02-05T00:00:00.000Z'),
+      }),
+    ]
+
+    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+
+    expect(screen.getByText('1 transacciones registradas')).toBeInTheDocument()
+    expect(screen.getAllByText(/enero de 2026/i).length).toBeGreaterThan(0)
+  })
+
   it('renders all major section headings', () => {
     const transactions = [
       makeTransaction({ id: 'food-1', category: Category.Groceries, amount: 200 }),

@@ -10,7 +10,6 @@ import {
   Banknote,
 } from 'lucide-react'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
-import { isSplitParentTx } from '../models'
 import { useMemo } from 'react'
 import {
   PieChart,
@@ -36,7 +35,6 @@ import { getCategoryDisplay } from '../utils/category-display'
 import {
   getCategoryDefinition,
   getCategoryDefinitions,
-  isCategoryIgnored,
 } from '../services/categories/category-registry'
 import {
   buildCurrentMonthSummary,
@@ -44,6 +42,7 @@ import {
   buildMonthlyTrendsConverted,
   buildCurrencySplit,
   spendByAccount,
+  isExcludedFromTotals,
 } from '../services/charts/chart-data'
 import type { AccountSpend } from '../services/charts/chart-data'
 import { convert } from '../services/currency/convert'
@@ -274,21 +273,28 @@ export function Dashboard({
 }: DashboardProps) {
   const hasTransactions = transactions.length > 0
 
+  // Every figure on Resumen is computed from countable transactions only —
+  // ignored categories (transfers, user-flagged) and split parents are out.
+  const countedTransactions = useMemo(
+    () => transactions.filter((tx) => !isExcludedFromTotals(tx)),
+    [transactions],
+  )
+
   // Latest date used as reference month (avoids dependency on system clock)
   const latestDate = useMemo(() => {
-    if (transactions.length === 0) return new Date()
-    return transactions.reduce(
+    if (countedTransactions.length === 0) return new Date()
+    return countedTransactions.reduce(
       (latest, tx) => (tx.date > latest ? tx.date : latest),
-      transactions[0].date,
+      countedTransactions[0].date,
     )
-  }, [transactions])
+  }, [countedTransactions])
 
-  // Full date range across all transactions — used for section period labels
+  // Date range across counted transactions — used for section period labels
   const periodRange = useMemo(() => {
-    if (!transactions.length) return null
-    let min = transactions[0].date
-    let max = transactions[0].date
-    for (const tx of transactions) {
+    if (!countedTransactions.length) return null
+    let min = countedTransactions[0].date
+    let max = countedTransactions[0].date
+    for (const tx of countedTransactions) {
       if (tx.date < min) min = tx.date
       if (tx.date > max) max = tx.date
     }
@@ -299,7 +305,7 @@ export function Dashboard({
         timeZone: 'UTC',
       })
     return `${fmt(min)} – ${fmt(max)}`
-  }, [transactions])
+  }, [countedTransactions])
 
   // Account spend by source
   const acctSpend = useMemo(
@@ -409,13 +415,8 @@ export function Dashboard({
       string,
       { name: string; total: number; count: number; catId: string }
     >()
-    transactions
-      .filter(
-        (tx) =>
-          tx.type === 'debit' &&
-          !isCategoryIgnored(tx.category) &&
-          !isSplitParentTx(tx),
-      )
+    countedTransactions
+      .filter((tx) => tx.type === 'debit')
       .forEach((tx) => {
         const key = getDisplayDescription(tx)
         const prev = map.get(key) ?? {
@@ -431,16 +432,15 @@ export function Dashboard({
     return Array.from(map.values())
       .sort((a, b) => b.total - a.total)
       .slice(0, 6)
-  }, [transactions, homeCurrency, fxRate])
+  }, [countedTransactions, homeCurrency, fxRate])
 
   // Recent transactions
   const recentTransactions = useMemo(
     () =>
-      [...transactions]
-        .filter((tx) => !isCategoryIgnored(tx.category) && !isSplitParentTx(tx))
+      [...countedTransactions]
         .sort((a, b) => b.date.getTime() - a.date.getTime())
         .slice(0, 6),
-    [transactions],
+    [countedTransactions],
   )
 
   const greeting = userName ? `Hola, ${userName} 👋` : 'Hola 👋'

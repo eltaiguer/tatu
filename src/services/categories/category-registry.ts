@@ -130,8 +130,13 @@ function isTransferCategoryId(id: string): boolean {
 
 export function isCategoryIgnored(id: string | undefined): boolean {
   if (!id) return false
-  const override = listCustomCategories().find((c) => c.id === id)
+  // Resolve through ID_ALIASES first so pre-rename ids stored on transactions
+  // ('transfer', 'transfers') and on override rows match their current built-in.
+  const resolvedId = resolveBuiltinAlias(id.toLowerCase())
+  const override = listCustomCategories().find(
+    (c) => resolveBuiltinAlias(c.id.toLowerCase()) === resolvedId
+  )
   if (override?.isIgnored !== undefined) return override.isIgnored
   // Transfer categories and the legacy 'ignored' id are excluded by default
-  return isTransferCategoryId(id) || id === 'ignored'
+  return isTransferCategoryId(resolvedId) || resolvedId === 'ignored'
 }
