@@ -401,10 +401,10 @@ describe('isCategoryIgnored', () => {
   })
 
   it('keeps the transfer default when a legacy row records no preference', () => {
-    // custom_categories.is_ignored is nullable, and rows written between the
-    // upsert landing and the transfer rename carry NULL. That maps to
-    // undefined, which must fall through to the built-in default rather than
-    // read as an explicit "not ignored" and let transfers back into totals.
+    // A row with no recorded preference must fall through to the built-in
+    // default rather than read as an explicit "not ignored" and let transfers
+    // back into totals. Defensive: schema.sql has is_ignored NOT NULL DEFAULT
+    // false, so today only the in-memory store can produce undefined.
     listCustomCategoriesMock.mockReturnValue([
       {
         id: 'transfer',

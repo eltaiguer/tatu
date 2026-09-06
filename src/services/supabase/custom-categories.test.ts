@@ -135,7 +135,9 @@ describe('supabase custom categories service', () => {
     )
   })
 
-  it('writes NULL when no ignore preference is set', async () => {
+  it('writes false, never null, when no ignore preference is set', async () => {
+    // custom_categories.is_ignored is NOT NULL DEFAULT false in schema.sql —
+    // a null here is rejected by Postgres at runtime.
     const { upsertCustomCategory } = await import('./custom-categories')
     await upsertCustomCategory(session, {
       id: 'mates',
@@ -144,7 +146,7 @@ describe('supabase custom categories service', () => {
     })
 
     expect(upsertMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'mates', is_ignored: null }),
+      expect.objectContaining({ id: 'mates', is_ignored: false }),
       expect.anything()
     )
   })

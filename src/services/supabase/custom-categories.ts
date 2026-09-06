@@ -18,10 +18,9 @@ export interface CustomCategoryRecord {
   color: string
   icon?: string
   /**
-   * undefined when the column is NULL — the row records no preference, which
-   * must stay distinct from an explicit false. A pre-rename override row
-   * ('transfer') carrying a spurious false would otherwise un-ignore the
-   * built-in it resolves to.
+   * undefined when the column is NULL. The schema has it NOT NULL DEFAULT
+   * false, so this is defensive rather than reachable today — but a null must
+   * not read as an explicit false, which would override a built-in's default.
    */
   isIgnored?: boolean
   isArchived: boolean
@@ -66,7 +65,6 @@ export async function upsertCustomCategory(
     label: string
     color: string
     icon?: string
-    /** undefined leaves the column NULL — no preference recorded. */
     isIgnored?: boolean
     isArchived?: boolean
   }
@@ -79,7 +77,9 @@ export async function upsertCustomCategory(
       label: category.label,
       color: category.color,
       icon: category.icon ?? null,
-      is_ignored: category.isIgnored ?? null,
+      // custom_categories.is_ignored is NOT NULL DEFAULT false — writing null
+      // is rejected by Postgres, so an unset flag persists as false.
+      is_ignored: category.isIgnored ?? false,
       is_archived: category.isArchived ?? false,
     },
     { onConflict: 'user_id,id' }
