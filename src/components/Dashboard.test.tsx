@@ -326,6 +326,35 @@ describe('Dashboard', () => {
     expect(screen.getByText('1 transacciones registradas')).toBeInTheDocument()
   })
 
+  it('explains the zeros when every transaction is ignored', () => {
+    const onNavigateToCategories = vi.fn()
+    const transactions = [
+      makeTransaction({
+        id: 'only-transfer',
+        description: 'TRASPASO',
+        category: Category.InternalTransfer,
+        amount: 5000,
+        currency: 'USD',
+      }),
+    ]
+
+    render(
+      <Dashboard
+        transactions={transactions}
+        onNavigateToCategories={onNavigateToCategories}
+      />,
+    )
+
+    expect(
+      screen.getByText('Todas tus transacciones están ignoradas'),
+    ).toBeInTheDocument()
+    // Neither the zeroed dashboard nor the "you have no data" import CTA
+    expect(screen.queryByText('Mayores comercios')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Empezá importando tu extracto'),
+    ).not.toBeInTheDocument()
+  })
+
   it('labels the statement month, not today, when every row is ignored', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-20T12:00:00.000Z'))

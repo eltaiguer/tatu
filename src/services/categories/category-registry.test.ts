@@ -323,6 +323,36 @@ describe('isCategoryIgnored', () => {
     expect(isCategoryIgnored('transfer')).toBe(false)
   })
 
+  it('prefers the current-id override whatever order the rows arrive in', () => {
+    // Supabase returns custom_categories without an ORDER BY, so the stale
+    // legacy row can come back either side of the canonical one.
+    const legacy = {
+      id: 'transfer',
+      label: 'Transferencias internas',
+      color: '#ff0000',
+      isIgnored: true,
+    }
+    const current = {
+      id: Category.InternalTransfer,
+      label: 'Transferencias internas',
+      color: '#ff0000',
+      isIgnored: false,
+    }
+
+    for (const rows of [
+      [legacy, current],
+      [current, legacy],
+    ]) {
+      listCustomCategoriesMock.mockReturnValue(rows)
+      expect(isCategoryIgnored(Category.InternalTransfer)).toBe(false)
+      expect(isCategoryIgnored('transfer')).toBe(false)
+      expect(
+        getCategoryDefinitions().find((c) => c.id === Category.InternalTransfer)
+          ?.isIgnored
+      ).toBe(false)
+    }
+  })
+
   it('honours a legacy-id override when un-ignoring a renamed built-in', () => {
     listCustomCategoriesMock.mockReturnValue([
       {

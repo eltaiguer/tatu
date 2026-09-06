@@ -1,3 +1,5 @@
+import { isReservedCategoryId } from './category-aliases'
+
 export const DEFAULT_CATEGORY_COLOR = '#0ea5e9'
 
 export interface CustomCategory {
@@ -19,12 +21,17 @@ function slugifyLabel(label: string): string {
 }
 
 function ensureUniqueId(base: string, existingIds: Set<string>): string {
-  if (!existingIds.has(base)) {
+  // A slug that collides with a built-in id or one of its pre-rename aliases
+  // would silently override that built-in everywhere — a custom "Food" would
+  // take over Alimentación's ignore flag in every total.
+  const taken = (id: string) => existingIds.has(id) || isReservedCategoryId(id)
+
+  if (!taken(base)) {
     return base
   }
 
   let suffix = 2
-  while (existingIds.has(`${base}-${suffix}`)) {
+  while (taken(`${base}-${suffix}`)) {
     suffix += 1
   }
   return `${base}-${suffix}`

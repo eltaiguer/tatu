@@ -7,6 +7,9 @@ import {
 import type { CustomCategory } from './category-store'
 import { listCustomCategories } from './category-store'
 import { memoizeByReference } from '../../utils/memo'
+import { ID_ALIASES, resolveBuiltinAlias } from './category-aliases'
+
+export { ID_ALIASES }
 
 export interface CategoryDefinition {
   id: string
@@ -20,30 +23,32 @@ export interface CategoryDefinition {
 
 const DEFAULT_CUSTOM_ICON = '🏷️'
 
-export const ID_ALIASES: Partial<Record<string, Category>> = {
-  food: Category.Groceries,
-  restaurant: Category.Restaurants,
-  restaurants: Category.Restaurants,
-  health: Category.Healthcare,
-  salary: Category.Income,
-  other: Category.Uncategorized,
-  // backward-compat: old string values before rename
-  transfer: Category.InternalTransfer,
-  transfers: Category.ExternalTransfer,
-}
+// Override rows keyed by the category they actually apply to. A legacy row
+// ('transfer') and a current one ('internal_transfer') can coexist —
+// upsertBuiltinOverride matches on the exact id and appends otherwise — and
+// Supabase returns custom_categories unordered, so resolution must not depend
+// on array order: aliased rows claim their built-in first, then any row
+// already keyed by the current id overwrites it. Memoized on the store's
+// array identity, which every mutator replaces rather than mutating.
+const resolvedOverrides = memoizeByReference((categories: CustomCategory[]) => {
+  const map = new Map<string, CustomCategory>()
+  categories.forEach((c) => {
+    const normalized = c.id.toLowerCase()
+    const resolved = resolveBuiltinAlias(normalized)
+    if (resolved !== normalized) map.set(resolved, c)
+  })
+  categories.forEach((c) => {
+    const normalized = c.id.toLowerCase()
+    if (resolveBuiltinAlias(normalized) === normalized) map.set(normalized, c)
+  })
+  return map
+})
 
-function resolveBuiltinAlias(id: string): string {
-  return ID_ALIASES[id.toLowerCase()] ?? id
-}
 
 export function getCategoryDefinitions(): CategoryDefinition[] {
   const customList = listCustomCategories()
   const builtinIds = new Set(Object.values(Category) as string[])
-  const overrideMap = new Map(
-    customList
-      .map((c) => [resolveBuiltinAlias(c.id), c] as const)
-      .filter(([resolvedId]) => builtinIds.has(resolvedId))
-  )
+  const overrideMap = resolvedOverrides(customList)
 
   const builtin = Object.values(Category).map((category) => {
     const override = overrideMap.get(category)
@@ -130,29 +135,13 @@ function isTransferCategoryId(id: string): boolean {
   return id === Category.InternalTransfer || id === Category.ExternalTransfer
 }
 
-// Override rows keyed by resolved id. A legacy row ('transfer') and a
-// current one ('internal_transfer') can coexist — upsertBuiltinOverride
-// matches on the exact id and appends otherwise — so the later row wins,
-// exactly as the Map build in getCategoryDefinitions resolves it.
-// Memoized on the store's array identity: every mutator replaces the array.
-const resolvedOverridesByCategory = memoizeByReference(
-  (categories: CustomCategory[]) => {
-    const map = new Map<string, CustomCategory>()
-    categories.forEach((c) =>
-      map.set(resolveBuiltinAlias(c.id.toLowerCase()), c)
-    )
-    return map
-  }
-)
 
 export function isCategoryIgnored(id: string | undefined): boolean {
   if (!id) return false
   // Resolve through ID_ALIASES first so pre-rename ids stored on transactions
   // ('transfer', 'transfers') and on override rows match their current built-in.
   const resolvedId = resolveBuiltinAlias(id.toLowerCase())
-  const override = resolvedOverridesByCategory(listCustomCategories()).get(
-    resolvedId
-  )
+  const override = resolvedOverrides(listCustomCategories()).get(resolvedId)
   if (override?.isIgnored !== undefined) return override.isIgnored
   // Transfer categories and the legacy 'ignored' id are excluded by default
   return isTransferCategoryId(resolvedId) || resolvedId === 'ignored'

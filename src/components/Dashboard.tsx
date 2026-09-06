@@ -4,6 +4,7 @@ import { Card } from './ui/card'
 import { Button } from './ui/button'
 import {
   Upload,
+  EyeOff,
   ArrowRight,
   CreditCard,
   DollarSign,
@@ -254,6 +255,7 @@ interface DashboardProps {
   transactions: Transaction[]
   userName?: string
   onNavigateToImport?: () => void
+  onNavigateToCategories?: () => void
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
   homeCurrency?: Currency
   fxRate?: number
@@ -265,6 +267,7 @@ export function Dashboard({
   transactions,
   userName,
   onNavigateToImport,
+  onNavigateToCategories,
   onNavigateToTransactions,
   homeCurrency = 'USD',
   fxRate = 40.5,
@@ -279,6 +282,10 @@ export function Dashboard({
     () => transactions.filter((tx) => !isExcludedFromTotals(tx)),
     [transactions],
   )
+
+  // Data exists but every row is ignored — a zeroed dashboard would look like
+  // a bug, so say why instead of rendering empty cards.
+  const allIgnored = hasTransactions && countedTransactions.length === 0
 
   // Latest date used as reference month (avoids dependency on system clock).
   // Falls back to the raw rows when everything is ignored, so a transfers-only
@@ -573,7 +580,7 @@ export function Dashboard({
               })}
           </p>
         </div>
-        {hasTransactions && (
+        {hasTransactions && !allIgnored && (
           <div
             style={{
               display: 'flex',
@@ -613,7 +620,31 @@ export function Dashboard({
         </Card>
       )}
 
-      {hasTransactions && (
+      {/* Data exists, but nothing in it counts */}
+      {allIgnored && (
+        <Card className="p-8 text-center space-y-4">
+          <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <EyeOff className="text-primary" size={28} />
+          </div>
+          <div>
+            <h2 className="mb-2">Todas tus transacciones están ignoradas</h2>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Importaste {transactions.length}{' '}
+              {transactions.length === 1 ? 'transacción' : 'transacciones'}, pero
+              todas caen en categorías ignoradas (transferencias u otras que
+              marcaste), así que no suman a ningún total. Cambiales la categoría
+              o desmarcá “ignorar” para verlas acá.
+            </p>
+          </div>
+          {onNavigateToCategories && (
+            <Button size="lg" variant="outline" onClick={onNavigateToCategories}>
+              Revisar categorías
+            </Button>
+          )}
+        </Card>
+      )}
+
+      {hasTransactions && !allIgnored && (
         <>
           {/* Account source cards — 3-col grid */}
           {periodRange && (
