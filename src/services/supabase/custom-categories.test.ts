@@ -92,7 +92,7 @@ describe('supabase custom categories service', () => {
     expect(categories[0].isIgnored).toBe(true)
   })
 
-  it('defaults is_ignored to false when the column is null', async () => {
+  it('leaves is_ignored undefined when the column is null', async () => {
     isMock.mockResolvedValueOnce({
       data: [
         {
@@ -113,7 +113,9 @@ describe('supabase custom categories service', () => {
     const { listCustomCategories } = await import('./custom-categories')
     const categories = await listCustomCategories(session)
 
-    expect(categories[0].isIgnored).toBe(false)
+    // NULL means "no preference recorded" and must stay distinct from an
+    // explicit false, which would override a built-in's own default.
+    expect(categories[0].isIgnored).toBeUndefined()
   })
 
   it('upserts custom category', async () => {
@@ -130,6 +132,22 @@ describe('supabase custom categories service', () => {
     expect(upsertMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'mates' }),
       { onConflict: 'user_id,id' }
+    )
+  })
+
+  it('writes false, never null, when no ignore preference is set', async () => {
+    // custom_categories.is_ignored is NOT NULL DEFAULT false in schema.sql —
+    // a null here is rejected by Postgres at runtime.
+    const { upsertCustomCategory } = await import('./custom-categories')
+    await upsertCustomCategory(session, {
+      id: 'mates',
+      label: 'Mates',
+      color: '#00AA11',
+    })
+
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'mates', is_ignored: false }),
+      expect.anything()
     )
   })
 

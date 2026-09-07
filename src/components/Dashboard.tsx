@@ -4,13 +4,13 @@ import { Card } from './ui/card'
 import { Button } from './ui/button'
 import {
   Upload,
+  EyeOff,
   ArrowRight,
   CreditCard,
   DollarSign,
   Banknote,
 } from 'lucide-react'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
-import { isSplitParentTx } from '../models'
 import { useMemo } from 'react'
 import {
   PieChart,
@@ -36,7 +36,6 @@ import { getCategoryDisplay } from '../utils/category-display'
 import {
   getCategoryDefinition,
   getCategoryDefinitions,
-  isCategoryIgnored,
 } from '../services/categories/category-registry'
 import {
   buildCurrentMonthSummary,
@@ -44,6 +43,7 @@ import {
   buildMonthlyTrendsConverted,
   buildCurrencySplit,
   spendByAccount,
+  isExcludedFromTotals,
 } from '../services/charts/chart-data'
 import type { AccountSpend } from '../services/charts/chart-data'
 import { convert } from '../services/currency/convert'
@@ -255,6 +255,7 @@ interface DashboardProps {
   transactions: Transaction[]
   userName?: string
   onNavigateToImport?: () => void
+  onNavigateToCategories?: () => void
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
   homeCurrency?: Currency
   fxRate?: number
@@ -266,6 +267,7 @@ export function Dashboard({
   transactions,
   userName,
   onNavigateToImport,
+  onNavigateToCategories,
   onNavigateToTransactions,
   homeCurrency = 'USD',
   fxRate = 40.5,
@@ -274,21 +276,35 @@ export function Dashboard({
 }: DashboardProps) {
   const hasTransactions = transactions.length > 0
 
-  // Latest date used as reference month (avoids dependency on system clock)
-  const latestDate = useMemo(() => {
-    if (transactions.length === 0) return new Date()
-    return transactions.reduce(
-      (latest, tx) => (tx.date > latest ? tx.date : latest),
-      transactions[0].date,
-    )
-  }, [transactions])
+  // Every figure on Resumen is computed from countable transactions only —
+  // ignored categories (transfers, user-flagged) and split parents are out.
+  const countedTransactions = useMemo(
+    () => transactions.filter((tx) => !isExcludedFromTotals(tx)),
+    [transactions],
+  )
 
-  // Full date range across all transactions — used for section period labels
+  // Data exists but every row is ignored — a zeroed dashboard would look like
+  // a bug, so say why instead of rendering empty cards.
+  const allIgnored = hasTransactions && countedTransactions.length === 0
+
+  // Latest date used as reference month (avoids dependency on system clock).
+  // Falls back to the raw rows when everything is ignored, so a transfers-only
+  // dataset still labels the statement month instead of today's.
+  const latestDate = useMemo(() => {
+    const source = countedTransactions.length ? countedTransactions : transactions
+    if (source.length === 0) return new Date()
+    return source.reduce(
+      (latest, tx) => (tx.date > latest ? tx.date : latest),
+      source[0].date,
+    )
+  }, [countedTransactions, transactions])
+
+  // Date range across counted transactions — used for section period labels
   const periodRange = useMemo(() => {
-    if (!transactions.length) return null
-    let min = transactions[0].date
-    let max = transactions[0].date
-    for (const tx of transactions) {
+    if (!countedTransactions.length) return null
+    let min = countedTransactions[0].date
+    let max = countedTransactions[0].date
+    for (const tx of countedTransactions) {
       if (tx.date < min) min = tx.date
       if (tx.date > max) max = tx.date
     }
@@ -299,7 +315,7 @@ export function Dashboard({
         timeZone: 'UTC',
       })
     return `${fmt(min)} – ${fmt(max)}`
-  }, [transactions])
+  }, [countedTransactions])
 
   // Account spend by source
   const acctSpend = useMemo(
@@ -409,13 +425,8 @@ export function Dashboard({
       string,
       { name: string; total: number; count: number; catId: string }
     >()
-    transactions
-      .filter(
-        (tx) =>
-          tx.type === 'debit' &&
-          !isCategoryIgnored(tx.category) &&
-          !isSplitParentTx(tx),
-      )
+    countedTransactions
+      .filter((tx) => tx.type === 'debit')
       .forEach((tx) => {
         const key = getDisplayDescription(tx)
         const prev = map.get(key) ?? {
@@ -431,16 +442,15 @@ export function Dashboard({
     return Array.from(map.values())
       .sort((a, b) => b.total - a.total)
       .slice(0, 6)
-  }, [transactions, homeCurrency, fxRate])
+  }, [countedTransactions, homeCurrency, fxRate])
 
   // Recent transactions
   const recentTransactions = useMemo(
     () =>
-      [...transactions]
-        .filter((tx) => !isCategoryIgnored(tx.category) && !isSplitParentTx(tx))
+      [...countedTransactions]
         .sort((a, b) => b.date.getTime() - a.date.getTime())
         .slice(0, 6),
-    [transactions],
+    [countedTransactions],
   )
 
   const greeting = userName ? `Hola, ${userName} 👋` : 'Hola 👋'
@@ -570,7 +580,7 @@ export function Dashboard({
               })}
           </p>
         </div>
-        {hasTransactions && (
+        {hasTransactions && !allIgnored && (
           <div
             style={{
               display: 'flex',
@@ -610,7 +620,31 @@ export function Dashboard({
         </Card>
       )}
 
-      {hasTransactions && (
+      {/* Data exists, but nothing in it counts */}
+      {allIgnored && (
+        <Card className="p-8 text-center space-y-4">
+          <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <EyeOff className="text-primary" size={28} />
+          </div>
+          <div>
+            <h2 className="mb-2">Todas tus transacciones están ignoradas</h2>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              Importaste {transactions.length}{' '}
+              {transactions.length === 1 ? 'transacción' : 'transacciones'}, pero
+              todas caen en categorías ignoradas (transferencias u otras que
+              marcaste), así que no suman a ningún total. Cambiales la categoría
+              o desmarcá “ignorar” para verlas acá.
+            </p>
+          </div>
+          {onNavigateToCategories && (
+            <Button size="lg" variant="outline" onClick={onNavigateToCategories}>
+              Revisar categorías
+            </Button>
+          )}
+        </Card>
+      )}
+
+      {hasTransactions && !allIgnored && (
         <>
           {/* Account source cards — 3-col grid */}
           {periodRange && (
