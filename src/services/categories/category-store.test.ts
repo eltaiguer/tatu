@@ -58,6 +58,13 @@ describe('Custom category store', () => {
     expect(new Set([food.id, groceries.id]).size).toBe(2)
   })
 
+  it('never hands a custom category the legacy ignored id', () => {
+    // isCategoryIgnored treats 'ignored' as ignore-by-default, so a category
+    // slugged that way would silently drop its transactions from every total.
+    const c = addCustomCategory({ label: 'Ignored', color: '#ff0000' })
+    expect(c.id).not.toBe('ignored')
+  })
+
   it('does not treat inherited Object properties as reserved ids', () => {
     const c = addCustomCategory({ label: 'Constructor', color: '#ff0000' })
     expect(c.id).toBe('constructor')

@@ -30,11 +30,18 @@ export function resolveBuiltinAlias(id: string): string {
   return aliasFor(id) ?? id
 }
 
-// True when the id is spoken for by a built-in category or one of its
-// pre-rename aliases — such an id must never be handed to a custom category.
+// The legacy pseudo-category that "Ignorar" assigns. Not a Category value, but
+// isCategoryIgnored treats it as ignore-by-default, so a custom category
+// slugged 'ignored' would silently drop its transactions from every total.
+export const LEGACY_IGNORED_ID = 'ignored'
+
+// True when the id is spoken for by a built-in category, one of its pre-rename
+// aliases, or the legacy ignored marker — such an id must never be handed to a
+// custom category.
 export function isReservedCategoryId(id: string): boolean {
   const normalized = id.toLowerCase()
   return (
+    normalized === LEGACY_IGNORED_ID ||
     aliasFor(normalized) !== undefined ||
     (Object.values(Category) as string[]).includes(normalized)
   )

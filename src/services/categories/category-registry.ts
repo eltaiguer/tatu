@@ -7,7 +7,11 @@ import {
 import type { CustomCategory } from './category-store'
 import { listCustomCategories } from './category-store'
 import { memoizeByReference } from '../../utils/memo'
-import { ID_ALIASES, resolveBuiltinAlias } from './category-aliases'
+import {
+  ID_ALIASES,
+  LEGACY_IGNORED_ID,
+  resolveBuiltinAlias,
+} from './category-aliases'
 
 export { ID_ALIASES }
 
@@ -149,5 +153,5 @@ export function isCategoryIgnored(id: string | undefined): boolean {
   const override = resolvedOverrides(listCustomCategories()).get(resolvedId)
   if (override?.isIgnored !== undefined) return override.isIgnored
   // Transfer categories and the legacy 'ignored' id are excluded by default
-  return isTransferCategoryId(resolvedId) || resolvedId === 'ignored'
+  return isTransferCategoryId(resolvedId) || resolvedId === LEGACY_IGNORED_ID
 }

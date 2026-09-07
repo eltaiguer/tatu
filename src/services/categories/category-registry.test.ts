@@ -378,26 +378,27 @@ describe('isCategoryIgnored', () => {
   })
 
   it('resolves two alias rows for one built-in the same way in any order', () => {
-    // 'restaurant' and 'restaurants' both resolve to Restaurantes, so array
-    // order must not decide which one supplies the ignore flag.
-    const singular = {
-      id: 'restaurant',
-      label: 'Restaurantes',
+    // Ids differing only in case both alias onto internal_transfer, so both
+    // land in the aliased bucket and the tie must break on the id rather than
+    // on the order select('*') happened to return them in.
+    const lower = {
+      id: 'transfer',
+      label: 'Transferencias',
       color: '#ff0000',
       isIgnored: true,
     }
-    const plural = {
-      id: 'restaurants',
-      label: 'Restaurantes',
+    const upper = {
+      id: 'Transfer',
+      label: 'Transferencias',
       color: '#00ff00',
       isIgnored: false,
     }
 
-    listCustomCategoriesMock.mockReturnValue([singular, plural])
-    const first = isCategoryIgnored(Category.Restaurants)
+    listCustomCategoriesMock.mockReturnValue([lower, upper])
+    const first = isCategoryIgnored(Category.InternalTransfer)
 
-    listCustomCategoriesMock.mockReturnValue([plural, singular])
-    expect(isCategoryIgnored(Category.Restaurants)).toBe(first)
+    listCustomCategoriesMock.mockReturnValue([upper, lower])
+    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(first)
   })
 
   it('keeps the transfer default when a legacy row records no preference', () => {
