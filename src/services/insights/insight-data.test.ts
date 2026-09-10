@@ -171,3 +171,147 @@ describe('buildInsightInput', () => {
     expect(result.homeCurrency).toBe('UYU')
   })
 })
+
+describe('buildInsightInput — prior period is the previous calendar month', () => {
+  const MARCH = {
+    start: new Date('2026-03-01T00:00:00.000Z'),
+    end: new Date('2026-03-31T23:59:59.999Z'),
+  }
+
+  it('compares March against February, not against a rolling 31-day window', () => {
+    // A 31-day rolling window ending Feb 28 starts on Jan 28, so the Jan 31
+    // charge would leak into March's baseline and understate the delta.
+    const transactions = [
+      makeTransaction('mar', {
+        date: new Date('2026-03-10T00:00:00.000Z'),
+        amount: 100,
+        category: Category.Groceries,
+      }),
+      makeTransaction('feb', {
+        date: new Date('2026-02-15T00:00:00.000Z'),
+        amount: 40,
+        category: Category.Groceries,
+      }),
+      makeTransaction('jan', {
+        date: new Date('2026-01-31T00:00:00.000Z'),
+        amount: 1000,
+        category: Category.Groceries,
+      }),
+    ]
+
+    const input = buildInsightInput(transactions, MARCH, 'USD', 40)
+    const groceries = input.categoryTotals.find(
+      (c) => c.category === Category.Groceries
+    )
+
+    // 100 (March) - 40 (February only) = 60
+    expect(groceries?.deltaVsPriorPeriod).toBe(60)
+  })
+
+  it('uses December of the previous year as January prior period', () => {
+    const january = {
+      start: new Date('2026-01-01T00:00:00.000Z'),
+      end: new Date('2026-01-31T23:59:59.999Z'),
+    }
+    const transactions = [
+      makeTransaction('jan', {
+        date: new Date('2026-01-10T00:00:00.000Z'),
+        amount: 50,
+        category: Category.Groceries,
+      }),
+      makeTransaction('dec', {
+        date: new Date('2025-12-20T00:00:00.000Z'),
+        amount: 30,
+        category: Category.Groceries,
+      }),
+    ]
+
+    const input = buildInsightInput(transactions, january, 'USD', 40)
+    const groceries = input.categoryTotals.find(
+      (c) => c.category === Category.Groceries
+    )
+
+    expect(groceries?.deltaVsPriorPeriod).toBe(20)
+  })
+})
+
+describe('buildInsightInput — amounts are rounded for the model', () => {
+  // The model is asked to echo amounts back EXACTLY, and the generator
+  // validates them with ===. Float residue from convert() makes that a
+  // lottery, so every monetary field is rounded at source.
+  function isRounded(value: number): boolean {
+    return Number.isFinite(value) && Math.abs(value * 100 - Math.round(value * 100)) < 1e-9
+  }
+
+  it('rounds converted category totals, deltas and percentages to 2 decimals', () => {
+    // 50000 UYU / 40.5 = 1234.5679012345679 in USD
+    const transactions = [
+      makeTransaction('a', {
+        date: new Date('2026-06-10T00:00:00.000Z'),
+        amount: 50000,
+        currency: 'UYU',
+        category: Category.Restaurants,
+      }),
+      makeTransaction('b', {
+        date: new Date('2026-06-11T00:00:00.000Z'),
+        amount: 33333,
+        currency: 'UYU',
+        category: Category.Groceries,
+      }),
+    ]
+
+    const input = buildInsightInput(transactions, JUNE, 'USD', 40.5)
+
+    expect(input.categoryTotals.length).toBeGreaterThan(0)
+    for (const c of input.categoryTotals) {
+      expect(isRounded(c.amount)).toBe(true)
+      expect(isRounded(c.pctOfTotal)).toBe(true)
+      expect(isRounded(c.deltaVsPriorPeriod)).toBe(true)
+    }
+  })
+
+  it('rounds merchant totals to 2 decimals', () => {
+    const transactions = [
+      makeTransaction('a', {
+        date: new Date('2026-06-10T00:00:00.000Z'),
+        amount: 50000,
+        currency: 'UYU',
+        description: 'RESTAURANTE X',
+        category: Category.Restaurants,
+      }),
+    ]
+
+    const input = buildInsightInput(transactions, JUNE, 'USD', 40.5)
+
+    expect(input.topMerchants.length).toBeGreaterThan(0)
+    for (const m of input.topMerchants) {
+      expect(isRounded(m.amount)).toBe(true)
+    }
+  })
+
+  it('rounds monthly trend income and expense to 2 decimals', () => {
+    const transactions = [
+      makeTransaction('a', {
+        date: new Date('2026-06-10T00:00:00.000Z'),
+        amount: 50000,
+        currency: 'UYU',
+        category: Category.Restaurants,
+      }),
+      makeTransaction('b', {
+        date: new Date('2026-06-12T00:00:00.000Z'),
+        amount: 77777,
+        currency: 'UYU',
+        type: 'credit',
+        category: Category.Income,
+      }),
+    ]
+
+    const input = buildInsightInput(transactions, JUNE, 'USD', 40.5)
+
+    expect(input.monthlyTrend.length).toBeGreaterThan(0)
+    for (const m of input.monthlyTrend) {
+      expect(isRounded(m.income)).toBe(true)
+      expect(isRounded(m.expense)).toBe(true)
+    }
+  })
+})

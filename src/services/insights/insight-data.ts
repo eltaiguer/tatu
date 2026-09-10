@@ -118,11 +118,26 @@ function filterInRange(
   return transactions.filter((tx) => tx.date >= start && tx.date <= end)
 }
 
+/**
+ * The previous calendar month, not a rolling window of the same length.
+ * Subtracting the period's span in milliseconds looks equivalent but is not:
+ * for a 31-day March it yields Jan 28 - Feb 28, so a charge on Jan 31 lands
+ * in March's baseline and the delta comes out with the wrong sign. ADR-0001
+ * specifies month-over-month, and every caller builds periods with
+ * getUtcMonthPeriod, so the prior period is that month minus one.
+ */
 function priorPeriodOf(period: InsightPeriod): InsightPeriod {
-  const spanMs = period.end.getTime() - period.start.getTime()
-  const priorEnd = new Date(period.start.getTime() - 1)
-  const priorStart = new Date(priorEnd.getTime() - spanMs)
-  return { start: priorStart, end: priorEnd }
+  return getUtcMonthPeriod(period.start, -1)
+}
+
+/**
+ * Rounds to cents. Every number handed to the model goes through this: the
+ * prompt asks it to echo amounts back exactly and the generator validates
+ * them with ===, so unrounded FX residue (50000 / 40.5 = 1234.5679012345679)
+ * would make a legitimate echo of 1234.57 fail validation and get dropped.
+ */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100
 }
 
 function buildCategoryTotals(
@@ -145,9 +160,9 @@ function buildCategoryTotals(
 
   return current.map((d) => ({
     category: d.category,
-    amount: d.total,
-    pctOfTotal: (d.total / grandTotal) * 100,
-    deltaVsPriorPeriod: d.total - (priorByCategory.get(d.category) ?? 0),
+    amount: round2(d.total),
+    pctOfTotal: round2((d.total / grandTotal) * 100),
+    deltaVsPriorPeriod: round2(d.total - (priorByCategory.get(d.category) ?? 0)),
   }))
 }
 
@@ -171,6 +186,7 @@ function buildTopMerchants(
   return Array.from(byMerchant.values())
     .sort((a, b) => b.amount - a.amount)
     .slice(0, TOP_MERCHANTS_LIMIT)
+    .map((m) => ({ ...m, amount: round2(m.amount) }))
 }
 
 function median(values: number[]): number {
@@ -239,7 +255,7 @@ function detectRecurringCharges(
 
     charges.push({
       merchant,
-      approxAmount,
+      approxAmount: round2(approxAmount),
       cadence: cadenceFromGap(averageGapDays(sortedDates)),
       monthsSeen,
     })
@@ -259,7 +275,11 @@ function buildMonthlyTrend(
     (tx) => tx.date >= windowStart && tx.date <= asOf
   )
   return buildMonthlyTrendsConverted(relevant, homeCurrency, fxRate).map(
-    (d) => ({ month: d.month, income: d.income, expense: d.expense })
+    (d) => ({
+      month: d.month,
+      income: round2(d.income),
+      expense: round2(d.expense),
+    })
   )
 }
 
