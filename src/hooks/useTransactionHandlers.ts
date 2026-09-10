@@ -109,7 +109,7 @@ export function useTransactionHandlers({
       if (toEnrich.length > 0) {
         try {
           const correctionContext = buildCorrectionContext()
-          const results = await enrichTransactionsWithAi(
+          const { results, partialFailure } = await enrichTransactionsWithAi(
             toEnrich.map((tx) => ({
               id: tx.id,
               description: tx.description,
@@ -122,6 +122,9 @@ export function useTransactionHandlers({
             correctionContext
           )
           toStore = applyAiEnrichment(added, results)
+          // Some batches succeeded and some did not — keep what we got, but
+          // still tell the user the enrichment was incomplete.
+          aiError = partialFailure
         } catch (error) {
           // Fall through with the rule-based results already on the
           // transactions, but keep the reason so it can be surfaced.
