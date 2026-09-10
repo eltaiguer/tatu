@@ -93,9 +93,10 @@ function markExternalTransfer(
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
 function dayDistance(left: Date, right: Date): number {
-  const dayMs = 24 * 60 * 60 * 1000
-  return Math.abs(left.getTime() - right.getTime()) / dayMs
+  return Math.abs(left.getTime() - right.getTime()) / DAY_MS
 }
 
 export function isTransferCategory(category: string | undefined): boolean {
@@ -137,6 +138,38 @@ export function inferInternalTransfers(transactions: Transaction[]): Transaction
           isTransferDescription(transaction.description)))
   )
 
+  // Per-candidate values that the pairing loop would otherwise recompute on
+  // every comparison — extractReferenceToken and isTransferDescription each
+  // normalise a string and scan a keyword list, and the original code called
+  // extractReferenceToken(left) twice per pair. Hoisting them turns the inner
+  // loop into numeric comparisons.
+  const meta = new Map<
+    string,
+    { refToken: string | null; isTransfer: boolean; day: number }
+  >()
+  for (const candidate of candidates) {
+    meta.set(candidate.id, {
+      refToken: extractReferenceToken(candidate),
+      isTransfer: isTransferDescription(candidate.description),
+      day: Math.floor(candidate.date.getTime() / DAY_MS),
+    })
+  }
+
+  // Credits bucketed by day, so a debit only looks at the ±2 day window
+  // instead of scanning every candidate. Buckets keep insertion order, and
+  // the merged window is re-sorted by original index below, so the loop
+  // still evaluates candidates in exactly the order it did before — which
+  // matters, because ties are resolved by `score > bestScore` (strict), i.e.
+  // first-best-wins.
+  const creditIndexByDay = new Map<number, number[]>()
+  candidates.forEach((candidate, index) => {
+    if (candidate.type !== 'credit') return
+    const { day } = meta.get(candidate.id)!
+    const bucket = creditIndexByDay.get(day)
+    if (bucket) bucket.push(index)
+    else creditIndexByDay.set(day, [index])
+  })
+
   for (const left of candidates) {
     if (left.type !== 'debit' || pairedIds.has(left.id)) {
       continue
@@ -145,23 +178,34 @@ export function inferInternalTransfers(transactions: Transaction[]): Transaction
     let bestMatch: Transaction | null = null
     let bestScore = -1
 
-    for (const right of candidates) {
-      if (left.id === right.id || pairedIds.has(right.id) || right.type !== 'credit') {
+    const leftMeta = meta.get(left.id)!
+    const windowIndexes: number[] = []
+    for (let offset = -2; offset <= 2; offset++) {
+      const bucket = creditIndexByDay.get(leftMeta.day + offset)
+      if (bucket) windowIndexes.push(...bucket)
+    }
+    windowIndexes.sort((a, b) => a - b)
+
+    for (const rightIndex of windowIndexes) {
+      const right = candidates[rightIndex]
+      if (left.id === right.id || pairedIds.has(right.id)) {
         continue
       }
 
+      // Day bucketing is a coarse filter (whole-day boundaries); the exact
+      // distance check below is still authoritative.
       const distance = dayDistance(left.date, right.date)
       if (distance > 2) {
         continue
       }
 
+      const rightMeta = meta.get(right.id)!
       const sameCurrency = left.currency === right.currency
       const sameAmount = Math.abs(left.amount - right.amount) <= 0.01
-      const leftIsTransfer = isTransferDescription(left.description)
-      const rightIsTransfer = isTransferDescription(right.description)
+      const leftIsTransfer = leftMeta.isTransfer
+      const rightIsTransfer = rightMeta.isTransfer
       const sameReference =
-        extractReferenceToken(left) !== null &&
-        extractReferenceToken(left) === extractReferenceToken(right)
+        leftMeta.refToken !== null && leftMeta.refToken === rightMeta.refToken
 
       let score = 0
       if (sameCurrency && sameAmount) {
