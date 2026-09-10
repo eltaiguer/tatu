@@ -24,6 +24,11 @@ interface ImportCSVProps {
   ) => Promise<{
     added: Transaction[];
     duplicates: Transaction[];
+    /**
+     * Set when the import succeeded but AI enrichment did not, so the user can
+     * tell a dead API key apart from the model categorizing badly.
+     */
+    aiError?: string;
   }>;
 }
 
@@ -99,13 +104,17 @@ export function ImportCSV({
         setFileType('uyu_account');
       }
 
-      const { added, duplicates } = onTransactionsImported
+      const { added, duplicates, aiError } = onTransactionsImported
         ? await onTransactionsImported(result.transactions, {
             parsedData: result,
             csvContent,
             fileName: file.name,
           })
-        : transactionStore.getState().addTransactions(result.transactions);
+        : {
+            ...transactionStore.getState().addTransactions(result.transactions),
+            // Local-only path never runs AI enrichment.
+            aiError: undefined as string | undefined,
+          };
 
       setImportSummary({
         total: result.transactions.length,
@@ -117,6 +126,14 @@ export function ImportCSV({
       toast.success(
         `${added.length} nueva${added.length === 1 ? '' : 's'} · ${duplicates.length} duplicada${duplicates.length === 1 ? '' : 's'} omitida${duplicates.length === 1 ? '' : 's'}`
       );
+
+      // The import succeeded, but the AI step did not — say so, otherwise a
+      // dead API key looks identical to poor categorization.
+      if (aiError) {
+        toast.warning(
+          `Categorización con IA no disponible: ${aiError}. Se usaron las reglas de categorización.`
+        );
+      }
 
       if (onImportComplete) {
         onImportComplete();
