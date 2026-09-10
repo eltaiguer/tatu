@@ -136,6 +136,21 @@ function parseTransactions(
       continue
     }
 
+    // idIndex must stay exactly `i - startIndex`: it feeds
+    // generateTransactionId, and changing it would give every row a new id,
+    // breaking dedup against transactions already stored (see #57).
+    transactions.push(parseRow(row, i, i - startIndex))
+  }
+
+  return transactions
+}
+
+function parseRow(
+  row: string[],
+  rowIndex: number,
+  idIndex: number
+): Transaction {
+  try {
     const rawTransaction: CreditCardTransaction = {
       fecha: row[0],
       numeroTarjeta: row[1] || '',
@@ -179,7 +194,7 @@ function parseTransactions(
         rawTransaction.fecha,
         rawTransaction.descripcion,
         rawTransaction.pesos + rawTransaction.dolares,
-        i - startIndex
+        idIndex
       ),
       date: parseSantanderDate(rawTransaction.fecha),
       description: rawTransaction.descripcion,
@@ -193,8 +208,11 @@ function parseTransactions(
       rawData: rawTransaction,
     }
 
-    transactions.push(transaction)
+    return transaction
+  } catch (error) {
+    // Row number is 1-based to match what the user sees in a spreadsheet.
+    throw new Error(
+      `Fila ${rowIndex + 1}: ${error instanceof Error ? error.message : String(error)}`
+    )
   }
-
-  return transactions
 }

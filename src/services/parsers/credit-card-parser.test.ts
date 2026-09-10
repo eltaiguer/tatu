@@ -195,3 +195,28 @@ Algo,Totalmente,Distinto,`
     expect(() => parseCreditCardCSV(csv, 'test.csv')).toThrow(/movimientos/i)
   })
 })
+
+describe('parseCreditCardCSV — malformed amounts', () => {
+  it('reports the row when an amount cannot be parsed', () => {
+    // Matches the row context the bank-account parser already gives, so the
+    // user can find the offending line regardless of which statement failed.
+    const csv = `Cliente,Gazzano      A Jose,
+
+Movimientos,
+Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,Pesos,Dólares,
+27/11/2025,1234,P432629721,NETFLIX.COM,"0,00",n/d,"0,00",`
+
+    expect(() => parseCreditCardCSV(csv, 'test.csv')).toThrow(/n\/d/)
+  })
+
+  it('names the row number so the line can be found', () => {
+    const csv = `Cliente,Gazzano      A Jose,
+
+Movimientos,
+Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,Pesos,Dólares,
+27/11/2025,1234,P1,BUENO,"0,00","100,00","0,00",
+28/11/2025,1234,P2,MALO,"0,00",n/d,"0,00",`
+
+    expect(() => parseCreditCardCSV(csv, 'test.csv')).toThrow(/Fila 6/)
+  })
+})
