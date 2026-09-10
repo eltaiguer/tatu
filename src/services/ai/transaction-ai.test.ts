@@ -43,6 +43,34 @@ const customCategories: CustomCategory[] = [
 ]
 
 const baseConfig = { apiKey: 'sk-test', enabled: true, model: 'claude-haiku-4-5' }
+
+// The system prompt is sent as a cacheable block array, so tests read through
+// this rather than assuming a bare string.
+function systemTextOf(request: {
+  system: string | Array<{ type: string; text: string }>
+}): string {
+  return typeof request.system === 'string'
+    ? request.system
+    : request.system.map((b) => b.text).join('\n')
+}
+
+function textResponse(items: unknown[], stopReason = 'end_turn') {
+  return {
+    stop_reason: stopReason,
+    content: [{ type: 'text', text: JSON.stringify(items) }],
+  }
+}
+
+function makeInputs(count: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `tx${i}`,
+    description: `MERCHANT ${i}`,
+    type: 'debit' as const,
+    amount: 100,
+    currency: 'UYU' as const,
+    source: 'bank_account' as const,
+  }))
+}
 const emptyContext = { descriptionExamples: [], categoryExamples: [], customCategories: noCustomCategories, customPatterns: [] }
 
 describe('validateCategory', () => {
@@ -114,7 +142,7 @@ describe('enrichTransactionsWithAi', () => {
         { id: 'tx1', displayDescription: 'Devoto', category: 'groceries', confidence: 0.9 },
       ])}],
     })
-    const results = await enrichTransactionsWithAi(
+    const { results } = await enrichTransactionsWithAi(
       [{ id: 'tx1', description: 'SUPERMERCADO DEVOTO', type: 'debit', amount: 500, currency: 'UYU', source: 'bank_account' }],
       baseConfig,
       emptyContext
@@ -130,7 +158,7 @@ describe('enrichTransactionsWithAi', () => {
         { id: 'tx1', displayDescription: 'Unknown', category: 'uncategorized' },
       ])}],
     })
-    const results = await enrichTransactionsWithAi(
+    const { results } = await enrichTransactionsWithAi(
       [{ id: 'tx1', description: 'XXXX', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' }],
       baseConfig,
       emptyContext
@@ -145,7 +173,7 @@ describe('enrichTransactionsWithAi', () => {
         { id: 'tx2', displayDescription: 'Unknown', category: 'uncategorized', confidence: -0.2 },
       ])}],
     })
-    const results = await enrichTransactionsWithAi(
+    const { results } = await enrichTransactionsWithAi(
       [
         { id: 'tx1', description: 'NETFLIX', type: 'debit', amount: 9.99, currency: 'USD', source: 'credit_card' },
         { id: 'tx2', description: 'XXXX', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' },
@@ -163,13 +191,13 @@ describe('enrichTransactionsWithAi', () => {
         { id: 'tx1', displayDescription: 'Starbucks', category: 'coffee' },
       ])}],
     })
-    const results = await enrichTransactionsWithAi(
+    const { results } = await enrichTransactionsWithAi(
       [{ id: 'tx1', description: 'STARBUCKS', type: 'debit', amount: 200, currency: 'UYU', source: 'bank_account' }],
       baseConfig,
       { ...emptyContext, customCategories }
     )
     expect(results.get('tx1')?.category).toBe('coffee')
-    const systemPrompt = messagesCreateMock.mock.calls[0][0].system as string
+    const systemPrompt = systemTextOf(messagesCreateMock.mock.calls[0][0])
     expect(systemPrompt).toContain('coffee — Coffee')
   })
 
@@ -179,7 +207,7 @@ describe('enrichTransactionsWithAi', () => {
         { id: 'tx1', displayDescription: 'Somewhere', category: 'food_and_drink' },
       ])}],
     })
-    const results = await enrichTransactionsWithAi(
+    const { results } = await enrichTransactionsWithAi(
       [{ id: 'tx1', description: 'SOMEWHERE', type: 'debit', amount: 100, currency: 'USD', source: 'credit_card' }],
       baseConfig,
       emptyContext
@@ -194,7 +222,7 @@ describe('enrichTransactionsWithAi', () => {
         { id: 'tx2', displayDescription: 'Netflix', category: 'entertainment' },
       ])}],
     })
-    const results = await enrichTransactionsWithAi(
+    const { results } = await enrichTransactionsWithAi(
       [
         { id: 'tx1', description: 'DEVOTO', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' },
         { id: 'tx2', description: 'NETFLIX', type: 'debit', amount: 9.99, currency: 'USD', source: 'credit_card' },
@@ -294,5 +322,115 @@ describe('enrichTransactionsWithAi', () => {
         emptyContext
       )
     ).rejects.toThrow('API error')
+  })
+})
+
+describe('enrichTransactionsWithAi — response truncation', () => {
+  beforeEach(() => {
+    messagesCreateMock.mockReset()
+  })
+
+  it('reports a truncated response as such instead of failing on parse', async () => {
+    // A response cut off at max_tokens leaves invalid JSON behind. Without a
+    // stop_reason check the user only ever sees a confusing parse error.
+    messagesCreateMock.mockResolvedValue({
+      stop_reason: 'max_tokens',
+      content: [{ type: 'text', text: '[{"id":"tx0","displayDescri' }],
+    })
+
+    await expect(
+      enrichTransactionsWithAi(makeInputs(1), baseConfig, emptyContext)
+    ).rejects.toThrow(/truncad/i)
+  })
+
+  it('splits large inputs into batches that fit the output token budget', async () => {
+    messagesCreateMock.mockResolvedValue(textResponse([]))
+
+    await enrichTransactionsWithAi(makeInputs(120), baseConfig, emptyContext)
+
+    // 120 inputs must not go out as a single request against max_tokens 8192.
+    expect(messagesCreateMock.mock.calls.length).toBeGreaterThan(1)
+    const batchSizes = messagesCreateMock.mock.calls.map((call) => {
+      const userMessage = call[0].messages[0].content as string
+      return (userMessage.match(/"id":"tx\d+"/g) ?? []).length
+    })
+    expect(Math.max(...batchSizes)).toBeLessThanOrEqual(50)
+    expect(batchSizes.reduce((a, b) => a + b, 0)).toBe(120)
+  })
+})
+
+describe('enrichTransactionsWithAi — partial batch failures', () => {
+  beforeEach(() => {
+    messagesCreateMock.mockReset()
+  })
+
+  it('keeps results from batches that succeeded when a later batch fails', async () => {
+    messagesCreateMock
+      .mockResolvedValueOnce(
+        textResponse([
+          { id: 'tx0', displayDescription: 'Devoto', category: 'groceries' },
+        ])
+      )
+      .mockRejectedValueOnce(new Error('529 overloaded'))
+      .mockResolvedValueOnce(textResponse([]))
+
+    const { results, partialFailure } = await enrichTransactionsWithAi(
+      makeInputs(120),
+      baseConfig,
+      emptyContext
+    )
+
+    expect(results.get('tx0')?.category).toBe('groceries')
+    expect(partialFailure).toContain('529 overloaded')
+  })
+
+  it('reports no partial failure when every batch succeeds', async () => {
+    messagesCreateMock.mockResolvedValue(textResponse([]))
+
+    const { partialFailure } = await enrichTransactionsWithAi(
+      makeInputs(120),
+      baseConfig,
+      emptyContext
+    )
+
+    expect(partialFailure).toBeUndefined()
+  })
+
+  it('throws when no batch succeeds at all', async () => {
+    messagesCreateMock.mockRejectedValue(new Error('401 invalid x-api-key'))
+
+    await expect(
+      enrichTransactionsWithAi(makeInputs(120), baseConfig, emptyContext)
+    ).rejects.toThrow('401 invalid x-api-key')
+  })
+})
+
+describe('enrichTransactionsWithAi — prompt caching', () => {
+  beforeEach(() => {
+    messagesCreateMock.mockReset()
+  })
+
+  it('marks the system prompt as cacheable so it is not re-billed per batch', async () => {
+    messagesCreateMock.mockResolvedValue(textResponse([]))
+
+    await enrichTransactionsWithAi(makeInputs(120), baseConfig, emptyContext)
+
+    for (const call of messagesCreateMock.mock.calls) {
+      expect(call[0].system).toEqual([
+        expect.objectContaining({
+          type: 'text',
+          cache_control: { type: 'ephemeral' },
+        }),
+      ])
+    }
+  })
+
+  it('sends a byte-identical system prompt across batches so the prefix hits', async () => {
+    messagesCreateMock.mockResolvedValue(textResponse([]))
+
+    await enrichTransactionsWithAi(makeInputs(120), baseConfig, emptyContext)
+
+    const prompts = messagesCreateMock.mock.calls.map((c) => systemTextOf(c[0]))
+    expect(new Set(prompts).size).toBe(1)
   })
 })

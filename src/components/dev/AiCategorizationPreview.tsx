@@ -135,7 +135,8 @@ export function AiCategorizationPreview({
       }))
 
       const aiResults = toEnrich.length > 0
-        ? await enrichTransactionsWithAi(inputs, config, buildCorrectionContext())
+        ? (await enrichTransactionsWithAi(inputs, config, buildCorrectionContext()))
+            .results
         : new Map()
 
       // Step 4: build rows

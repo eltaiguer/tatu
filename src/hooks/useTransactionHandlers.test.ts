@@ -17,7 +17,12 @@ const mocks = vi.hoisted(() => ({
     enabled: true,
     model: 'claude-haiku-4-5',
   })),
-  enrichTransactionsWithAi: vi.fn(async () => new Map()),
+  enrichTransactionsWithAi: vi.fn(
+    async (): Promise<{
+      results: Map<string, unknown>
+      partialFailure?: string
+    }> => ({ results: new Map() })
+  ),
 }))
 
 vi.mock('../services/supabase/transactions', () => ({
@@ -110,7 +115,7 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
       enabled: true,
       model: 'claude-haiku-4-5',
     })
-    mocks.enrichTransactionsWithAi.mockResolvedValue(new Map())
+    mocks.enrichTransactionsWithAi.mockResolvedValue({ results: new Map() })
   })
 
   it('imports transactions and reports no AI failure on the happy path', async () => {
@@ -185,5 +190,23 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
 
     expect(mocks.failImportRun).toHaveBeenCalledTimes(1)
     expect(mocks.completeImportRun).not.toHaveBeenCalled()
+  })
+
+  it('reports a partial batch failure to the caller', async () => {
+    // Some batches succeeded, so enrichment did not throw — but the user must
+    // still learn that part of the import was not enriched.
+    mocks.enrichTransactionsWithAi.mockResolvedValue({
+      results: new Map(),
+      partialFailure: '1 de 3 lotes fallaron: 529 overloaded',
+    })
+    const { handlers } = setup()
+
+    const outcome = await handlers.handleTransactionsImported(
+      [makeTransaction('tx-1')],
+      makeImportContext()
+    )
+
+    expect(outcome.added).toHaveLength(1)
+    expect(outcome.aiError).toContain('529 overloaded')
   })
 })
