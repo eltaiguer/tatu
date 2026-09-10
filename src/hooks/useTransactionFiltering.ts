@@ -37,15 +37,23 @@ export function useTransactionFiltering({
     return new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
   }, [transactions])
 
+  // Keyed on the filter's primitive fields, not the object identity. A caller
+  // passing an inline object literal gives a new identity on every render,
+  // which would re-run this effect every render and re-set state with fresh
+  // array literals — an unbounded render loop, and a silent undo of any
+  // filter the user changed in the meantime.
+  const initialCategory = initialFilter?.category
+  const initialAccountType = initialFilter?.accountType
+  const initialCurrency = initialFilter?.currency
+
   useEffect(() => {
-    if (initialFilter) {
-      if (initialFilter.category) setCategoryFilters([initialFilter.category])
-      if (initialFilter.accountType && initialFilter.accountType !== 'all') {
-        setAccountFilters([initialFilter.accountType])
-      }
-      setCurrencyFilter(initialFilter.currency ?? 'all')
+    if (!initialCategory && !initialAccountType && !initialCurrency) return
+    if (initialCategory) setCategoryFilters([initialCategory])
+    if (initialAccountType && initialAccountType !== 'all') {
+      setAccountFilters([initialAccountType])
     }
-  }, [initialFilter])
+    setCurrencyFilter(initialCurrency ?? 'all')
+  }, [initialCategory, initialAccountType, initialCurrency])
 
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
@@ -64,10 +72,12 @@ export function useTransactionFiltering({
         ? new Date(`${dateToFilter}T23:59:59.999`)
         : null
 
+    // Cheap field comparisons run before the search-string build, and the
+    // build is skipped entirely when there is no query. Previously every
+    // transaction paid for a template literal + toLowerCase on every
+    // keystroke — and on every render with an empty search box, where the
+    // resulting `includes('')` was always true anyway.
     const filtered = transactions.filter((transaction) => {
-      const searchable =
-        `${getDisplayDescription(transaction)} ${transaction.description} ${(transaction.tags ?? []).join(' ')}`.toLowerCase()
-      if (!searchable.includes(query)) return false
       if (dateFrom && transaction.date < dateFrom) return false
       if (dateTo && transaction.date > dateTo) return false
       if (
@@ -87,7 +97,12 @@ export function useTransactionFiltering({
         return false
       if (maxAmount && Math.abs(transaction.amount) > parseFloat(maxAmount))
         return false
-      return true
+
+      if (!query) return true
+
+      const searchable =
+        `${getDisplayDescription(transaction)} ${transaction.description} ${(transaction.tags ?? []).join(' ')}`.toLowerCase()
+      return searchable.includes(query)
     })
 
     filtered.sort((a, b) => {
@@ -232,12 +247,23 @@ export function useTransactionFiltering({
   }, [safeTotalPages])
 
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
-  const paginatedTransactions = groupedTransactions.slice(
-    startIndex,
-    startIndex + ITEMS_PER_PAGE
+
+  // These three are handed to memoized children, so a fresh array identity on
+  // every render defeats that memoization entirely — identity is behavior
+  // here, not a micro-optimization. filteredTransactionIds in particular
+  // re-mapped the whole filtered set, not just the visible page.
+  const paginatedTransactions = useMemo(
+    () => groupedTransactions.slice(startIndex, startIndex + ITEMS_PER_PAGE),
+    [groupedTransactions, startIndex]
   )
-  const paginatedTransactionIds = paginatedTransactions.map((tx) => tx.id)
-  const filteredTransactionIds = groupedTransactions.map((tx) => tx.id)
+  const paginatedTransactionIds = useMemo(
+    () => paginatedTransactions.map((tx) => tx.id),
+    [paginatedTransactions]
+  )
+  const filteredTransactionIds = useMemo(
+    () => groupedTransactions.map((tx) => tx.id),
+    [groupedTransactions]
+  )
 
   return {
     searchTerm,
