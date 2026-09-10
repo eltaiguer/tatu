@@ -51,6 +51,13 @@ export function useTransactionHandlers({
   setError: (msg: string) => void
   setNotice: (msg: string) => void
 }) {
+  /**
+   * Imports a parsed statement. AI enrichment is best-effort: if it fails the
+   * import still completes with the rule-based categories, but the reason is
+   * returned as `aiError` so the caller can tell the user the AI step did not
+   * run. Swallowing it silently makes an expired API key indistinguishable
+   * from the model simply categorizing badly.
+   */
   async function handleTransactionsImported(
     transactionsToImport: Transaction[],
     context?: {
@@ -60,7 +67,11 @@ export function useTransactionHandlers({
       csvContent: string
       fileName: string
     }
-  ) {
+  ): Promise<{
+    added: Transaction[]
+    duplicates: Transaction[]
+    aiError?: string
+  }> {
     if (!session) {
       return transactionStore.getState().addTransactions(transactionsToImport)
     }
@@ -84,6 +95,7 @@ export function useTransactionHandlers({
 
     const aiConfig = getAiConfig()
     let toStore = added
+    let aiError: string | undefined
 
     if (aiConfig?.enabled && aiConfig.apiKey && added.length > 0) {
       const toEnrich = added.filter((tx) => {
@@ -110,8 +122,12 @@ export function useTransactionHandlers({
             correctionContext
           )
           toStore = applyAiEnrichment(added, results)
-        } catch {
-          // AI failed — fall through with rule-based results already on transactions
+        } catch (error) {
+          // Fall through with the rule-based results already on the
+          // transactions, but keep the reason so it can be surfaced.
+          aiError =
+            error instanceof Error ? error.message : 'Error desconocido de IA'
+          console.error('AI enrichment failed during import:', error)
         }
       }
     }
@@ -140,7 +156,7 @@ export function useTransactionHandlers({
       throw error
     }
 
-    return { added, duplicates }
+    return { added, duplicates, aiError }
   }
 
   async function handleUpdateTransaction(

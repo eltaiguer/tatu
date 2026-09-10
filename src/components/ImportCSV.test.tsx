@@ -3,10 +3,13 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ImportCSV } from './ImportCSV'
 import type { ParsedData, Transaction } from '../models'
 
-const { parseCSVMock, addTransactionsMock } = vi.hoisted(() => ({
+const { parseCSVMock, addTransactionsMock, toastMock } = vi.hoisted(() => ({
   parseCSVMock: vi.fn(),
   addTransactionsMock: vi.fn(),
+  toastMock: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }))
+
+vi.mock('sonner', () => ({ toast: toastMock }))
 
 vi.mock('../services/parsers/csv-parser', () => ({
   parseCSV: parseCSVMock,
@@ -241,5 +244,51 @@ describe('ImportCSV', () => {
       })
     )
     expect(addTransactionsMock).not.toHaveBeenCalled()
+  })
+
+  it('warns that AI categorization failed while still reporting a successful import', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-1'), makeTx('tx-2')],
+      duplicates: [makeTx('tx-3')],
+      aiError: '401 invalid x-api-key',
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    // The import still succeeded ...
+    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    expect(
+      screen.getByText('2 de 3 transacciones guardadas (1 duplicadas omitidas)')
+    ).toBeInTheDocument()
+
+    // ... but the user is told the AI step did not run, and why.
+    await waitFor(() => expect(toastMock.warning).toHaveBeenCalledTimes(1))
+    expect(toastMock.warning.mock.calls[0][0]).toContain('401 invalid x-api-key')
+  })
+
+  it('does not warn about AI when the import reports no AI failure', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-1')],
+      duplicates: [],
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    expect(toastMock.warning).not.toHaveBeenCalled()
   })
 })
