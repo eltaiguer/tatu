@@ -112,7 +112,17 @@ function parseTransactions(
   rows: string[][],
   startIndex: number
 ): Transaction[] {
-  if (startIndex === -1 || startIndex >= rows.length) {
+  // -1 means the "Movimientos" marker was never found: the file was not
+  // understood. That is different from a statement whose marker is present
+  // but which lists no movements, which legitimately yields an empty list.
+  if (startIndex === -1) {
+    throw new Error(
+      'No se encontró la sección de movimientos en el archivo. ' +
+        '¿Es un resumen de tarjeta de crédito de Santander?'
+    )
+  }
+
+  if (startIndex >= rows.length) {
     return []
   }
 
@@ -126,6 +136,21 @@ function parseTransactions(
       continue
     }
 
+    // idIndex must stay exactly `i - startIndex`: it feeds
+    // generateTransactionId, and changing it would give every row a new id,
+    // breaking dedup against transactions already stored (see #57).
+    transactions.push(parseRow(row, i, i - startIndex))
+  }
+
+  return transactions
+}
+
+function parseRow(
+  row: string[],
+  rowIndex: number,
+  idIndex: number
+): Transaction {
+  try {
     const rawTransaction: CreditCardTransaction = {
       fecha: row[0],
       numeroTarjeta: row[1] || '',
@@ -169,7 +194,7 @@ function parseTransactions(
         rawTransaction.fecha,
         rawTransaction.descripcion,
         rawTransaction.pesos + rawTransaction.dolares,
-        i - startIndex
+        idIndex
       ),
       date: parseSantanderDate(rawTransaction.fecha),
       description: rawTransaction.descripcion,
@@ -183,8 +208,11 @@ function parseTransactions(
       rawData: rawTransaction,
     }
 
-    transactions.push(transaction)
+    return transaction
+  } catch (error) {
+    // Row number is 1-based to match what the user sees in a spreadsheet.
+    throw new Error(
+      `Fila ${rowIndex + 1}: ${error instanceof Error ? error.message : String(error)}`
+    )
   }
-
-  return transactions
 }

@@ -148,3 +148,23 @@ describe('Parser Utilities', () => {
     })
   })
 })
+
+describe('parseSantanderNumber — malformed input', () => {
+  it('throws on a non-numeric value instead of returning NaN', () => {
+    // NaN propagates silently into amount, then into every dashboard total,
+    // the donut, the trend chart and every insight amount. Failing at the
+    // boundary is the only place the value is still identifiable.
+    expect(() => parseSantanderNumber('n/d')).toThrow(/n\/d/)
+  })
+
+  it('names the offending value so the row can be found', () => {
+    expect(() => parseSantanderNumber('1.2.3,4,5')).toThrow(/1\.2\.3,4,5/)
+  })
+
+  it('still treats empty and whitespace-only values as zero', () => {
+    // Load-bearing: the debito/credito columns are legitimately empty on
+    // every row, depending on the direction of the movement.
+    expect(parseSantanderNumber('')).toBe(0)
+    expect(parseSantanderNumber('   ')).toBe(0)
+  })
+})
