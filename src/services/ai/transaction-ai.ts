@@ -28,13 +28,14 @@ export interface AiCorrectionContext {
   customPatterns: CustomPattern[]
 }
 
-const MAX_OUTPUT_TOKENS = 8192
-
-// Each result object costs roughly 45-60 output tokens, so 150 per batch
-// (the previous value) could need ~8,250 — over MAX_OUTPUT_TOKENS before any
-// preamble, which truncated the JSON and lost the whole batch. 50 leaves
-// roughly 3x headroom.
-const BATCH_SIZE = 50
+// Each result object costs roughly 45-60 output tokens, so a 150-row batch
+// needs ~8,250 — which overflowed the previous 8192 cap and truncated the
+// JSON. The fix is the cap, not the batch size: shrinking batches instead
+// would have tripled the request count, and since the system prompt is
+// below the cache minimum on the default model (see below) that would have
+// tripled its cost too.
+const MAX_OUTPUT_TOKENS = 16000
+const BATCH_SIZE = 150
 
 function buildSystemPrompt(customCategories: CustomCategory[]): string {
   const builtinLines = Object.values(Category)
@@ -259,6 +260,12 @@ function parseBatchResponse(
   return results
 }
 
+/** 401/403 mean the credential is wrong; retrying cannot help. */
+function isNonRetryable(error: unknown): boolean {
+  const status = (error as { status?: number })?.status
+  return status === 401 || status === 403
+}
+
 export interface AiEnrichmentOutcome {
   results: Map<string, AiEnrichmentResult>
   /**
@@ -282,6 +289,13 @@ export async function enrichTransactionsWithAi(
   // Identical across every batch (it depends only on customCategories), which
   // makes it a stable cache prefix. Volatile per-batch data lives in the user
   // message, after this breakpoint.
+  //
+  // Caveat: at ~1,200 tokens this prompt is below the minimum cacheable
+  // prefix for claude-haiku-4-5 (4,096), the default model — there the
+  // breakpoint is silently inert, with no error and cache_read_input_tokens
+  // of 0. It does engage on claude-sonnet-4-6 (minimum 1,024), the other
+  // option in Settings. Kept because it is free and correct; verify with
+  // usage.cache_read_input_tokens before claiming a saving on Haiku.
   const systemPrompt = [
     {
       type: 'text' as const,
@@ -313,6 +327,15 @@ export async function enrichTransactionsWithAi(
       }
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error))
+
+      // Batch isolation is for transient faults. A bad key or revoked
+      // permission fails identically for every remaining batch, so carrying
+      // on would fire one doomed request per batch — 20 of them on a
+      // 3,000-row import — before the user sees the same message. The SDK
+      // does not retry these either.
+      if (isNonRetryable(error)) {
+        break
+      }
     }
   }
 

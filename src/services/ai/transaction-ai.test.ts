@@ -61,6 +61,10 @@ function textResponse(items: unknown[], stopReason = 'end_turn') {
   }
 }
 
+function call0MaxTokens(): number {
+  return messagesCreateMock.mock.calls[0][0].max_tokens as number
+}
+
 function makeInputs(count: number) {
   return Array.from({ length: count }, (_, i) => ({
     id: `tx${i}`,
@@ -343,19 +347,27 @@ describe('enrichTransactionsWithAi — response truncation', () => {
     ).rejects.toThrow(/truncad/i)
   })
 
-  it('splits large inputs into batches that fit the output token budget', async () => {
+  it('keeps every batch inside the output token budget, and sends them all', async () => {
     messagesCreateMock.mockResolvedValue(textResponse([]))
 
-    await enrichTransactionsWithAi(makeInputs(120), baseConfig, emptyContext)
+    await enrichTransactionsWithAi(makeInputs(400), baseConfig, emptyContext)
 
-    // 120 inputs must not go out as a single request against max_tokens 8192.
-    expect(messagesCreateMock.mock.calls.length).toBeGreaterThan(1)
     const batchSizes = messagesCreateMock.mock.calls.map((call) => {
       const userMessage = call[0].messages[0].content as string
       return (userMessage.match(/"id":"tx\d+"/g) ?? []).length
     })
-    expect(Math.max(...batchSizes)).toBeLessThanOrEqual(50)
-    expect(batchSizes.reduce((a, b) => a + b, 0)).toBe(120)
+
+    // The property that matters is the one that broke: a batch's worst-case
+    // output must fit under max_tokens. Each result object costs ~60 output
+    // tokens, and max_tokens is 16000.
+    const WORST_CASE_TOKENS_PER_RESULT = 60
+    const maxTokens = call0MaxTokens()
+    expect(Math.max(...batchSizes) * WORST_CASE_TOKENS_PER_RESULT).toBeLessThan(
+      maxTokens
+    )
+
+    // ...and nothing may be dropped while batching.
+    expect(batchSizes.reduce((a, b) => a + b, 0)).toBe(400)
   })
 })
 
@@ -375,7 +387,7 @@ describe('enrichTransactionsWithAi — partial batch failures', () => {
       .mockResolvedValueOnce(textResponse([]))
 
     const { results, partialFailure } = await enrichTransactionsWithAi(
-      makeInputs(120),
+      makeInputs(450),
       baseConfig,
       emptyContext
     )
@@ -388,7 +400,7 @@ describe('enrichTransactionsWithAi — partial batch failures', () => {
     messagesCreateMock.mockResolvedValue(textResponse([]))
 
     const { partialFailure } = await enrichTransactionsWithAi(
-      makeInputs(120),
+      makeInputs(450),
       baseConfig,
       emptyContext
     )
@@ -400,7 +412,7 @@ describe('enrichTransactionsWithAi — partial batch failures', () => {
     messagesCreateMock.mockRejectedValue(new Error('401 invalid x-api-key'))
 
     await expect(
-      enrichTransactionsWithAi(makeInputs(120), baseConfig, emptyContext)
+      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
     ).rejects.toThrow('401 invalid x-api-key')
   })
 })
@@ -413,7 +425,7 @@ describe('enrichTransactionsWithAi — prompt caching', () => {
   it('marks the system prompt as cacheable so it is not re-billed per batch', async () => {
     messagesCreateMock.mockResolvedValue(textResponse([]))
 
-    await enrichTransactionsWithAi(makeInputs(120), baseConfig, emptyContext)
+    await enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
 
     for (const call of messagesCreateMock.mock.calls) {
       expect(call[0].system).toEqual([
@@ -428,9 +440,53 @@ describe('enrichTransactionsWithAi — prompt caching', () => {
   it('sends a byte-identical system prompt across batches so the prefix hits', async () => {
     messagesCreateMock.mockResolvedValue(textResponse([]))
 
-    await enrichTransactionsWithAi(makeInputs(120), baseConfig, emptyContext)
+    await enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
 
     const prompts = messagesCreateMock.mock.calls.map((c) => systemTextOf(c[0]))
     expect(new Set(prompts).size).toBe(1)
+  })
+})
+
+describe('enrichTransactionsWithAi — non-retryable failures', () => {
+  beforeEach(() => {
+    messagesCreateMock.mockReset()
+  })
+
+  it('stops immediately on an auth error instead of retrying every batch', async () => {
+    // A bad key fails identically for every batch. Carrying on would fire
+    // one doomed request per batch before the user sees the same message.
+    const authError = Object.assign(new Error('invalid x-api-key'), {
+      status: 401,
+    })
+    messagesCreateMock.mockRejectedValue(authError)
+
+    await expect(
+      enrichTransactionsWithAi(makeInputs(600), baseConfig, emptyContext)
+    ).rejects.toThrow('invalid x-api-key')
+
+    expect(messagesCreateMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps trying later batches after a transient error', async () => {
+    const overloaded = Object.assign(new Error('529 overloaded'), {
+      status: 529,
+    })
+    messagesCreateMock
+      .mockRejectedValueOnce(overloaded)
+      .mockResolvedValue(
+        textResponse([
+          { id: 'tx199', displayDescription: 'Devoto', category: 'groceries' },
+        ])
+      )
+
+    const { results, partialFailure } = await enrichTransactionsWithAi(
+      makeInputs(450),
+      baseConfig,
+      emptyContext
+    )
+
+    expect(messagesCreateMock.mock.calls.length).toBeGreaterThan(1)
+    expect(results.get('tx199')?.category).toBe('groceries')
+    expect(partialFailure).toContain('529 overloaded')
   })
 })
