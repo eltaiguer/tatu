@@ -17,6 +17,11 @@ const mocks = vi.hoisted(() => ({
     enabled: true,
     model: 'claude-haiku-4-5',
   })),
+  splitTransaction: vi.fn(),
+  unsplitTransaction: vi.fn<[unknown, unknown, string[]], Promise<unknown>>(),
+  hardDeleteTransactions: vi.fn<[unknown, string[]], Promise<void>>(
+    async () => undefined
+  ),
   updateRemoteTransaction: vi.fn<
     [unknown, string, { displayDescription?: string | null }],
     Promise<void>
@@ -37,9 +42,9 @@ vi.mock('../services/supabase/transactions', () => ({
   persistTransactions: mocks.persistTransactions,
   softDeleteTransaction: vi.fn(async () => undefined),
   updateTransaction: mocks.updateRemoteTransaction,
-  splitTransaction: vi.fn(async () => undefined),
-  unsplitTransaction: vi.fn(async () => undefined),
-  hardDeleteTransactions: vi.fn(async () => undefined),
+  splitTransaction: mocks.splitTransaction,
+  unsplitTransaction: mocks.unsplitTransaction,
+  hardDeleteTransactions: mocks.hardDeleteTransactions,
 }))
 
 vi.mock('../services/supabase/import-runs', () => ({
@@ -402,5 +407,126 @@ describe('useTransactionHandlers — bulk operations', () => {
     expect(stored('a')).toBeUndefined()
     expect(stored('b')).toBeUndefined()
     expect(stored('c')).toBeDefined()
+  })
+})
+
+describe('useTransactionHandlers — split and unsplit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    transactionStore.getState().clearTransactions()
+    transactionStore
+      .getState()
+      .setTransactions([makeTransaction('parent', { amount: 1000 })])
+  })
+
+  function stored(id: string) {
+    return transactionStore.getState().transactions.find((t) => t.id === id)
+  }
+
+  function splitResult() {
+    const parent = { ...makeTransaction('parent', { amount: 1000 }), isSplitParent: true }
+    const children = [
+      makeTransaction('parent_split_0', {
+        amount: 600,
+        splitParentId: 'parent',
+        category: 'groceries',
+      }),
+      makeTransaction('parent_split_1', {
+        amount: 400,
+        splitParentId: 'parent',
+        category: 'restaurants',
+      }),
+    ]
+    return { parent, children }
+  }
+
+  it('marks the parent and adds the children to the store', async () => {
+    mocks.splitTransaction.mockResolvedValue(splitResult())
+    const { handlers } = setup()
+
+    await handlers.handleSplitTransaction('parent', [
+      { description: 'Comida', amount: 600, category: 'groceries' },
+      { description: 'Bebida', amount: 400, category: 'restaurants' },
+    ])
+
+    expect(stored('parent')?.isSplitParent).toBe(true)
+    expect(stored('parent_split_0')?.amount).toBe(600)
+    expect(stored('parent_split_1')?.amount).toBe(400)
+    expect(transactionStore.getState().transactions).toHaveLength(3)
+  })
+
+  it('reports a split failure without changing the store', async () => {
+    mocks.splitTransaction.mockRejectedValue(new Error('no se pudo'))
+    const { handlers, setError } = setup()
+
+    await handlers.handleSplitTransaction('parent', [
+      { description: 'Comida', amount: 600 },
+    ])
+
+    expect(setError).toHaveBeenCalledWith('no se pudo')
+    expect(stored('parent')?.isSplitParent).toBeFalsy()
+    expect(transactionStore.getState().transactions).toHaveLength(1)
+  })
+
+  it('removes the children and restores the parent on unsplit', async () => {
+    mocks.splitTransaction.mockResolvedValue(splitResult())
+    const { handlers } = setup()
+    await handlers.handleSplitTransaction('parent', [
+      { description: 'Comida', amount: 600 },
+      { description: 'Bebida', amount: 400 },
+    ])
+    expect(transactionStore.getState().transactions).toHaveLength(3)
+
+    mocks.unsplitTransaction.mockResolvedValue({
+      ...makeTransaction('parent', { amount: 1000 }),
+      isSplitParent: false,
+      splitParentId: undefined,
+    })
+
+    await handlers.handleUnsplitTransaction('parent')
+
+    expect(stored('parent_split_0')).toBeUndefined()
+    expect(stored('parent_split_1')).toBeUndefined()
+    expect(stored('parent')?.isSplitParent).toBe(false)
+    expect(transactionStore.getState().transactions).toHaveLength(1)
+  })
+
+  it('passes every child id to the remote unsplit so none are orphaned', async () => {
+    mocks.splitTransaction.mockResolvedValue(splitResult())
+    const { handlers } = setup()
+    await handlers.handleSplitTransaction('parent', [
+      { description: 'Comida', amount: 600 },
+      { description: 'Bebida', amount: 400 },
+    ])
+
+    mocks.unsplitTransaction.mockResolvedValue(
+      makeTransaction('parent', { amount: 1000 })
+    )
+    await handlers.handleUnsplitTransaction('parent')
+
+    const childIds = mocks.unsplitTransaction.mock.calls[0][2]
+    expect(childIds).toEqual(
+      expect.arrayContaining(['parent_split_0', 'parent_split_1'])
+    )
+  })
+
+  it('hard-deletes split children when the parent is deleted', async () => {
+    mocks.splitTransaction.mockResolvedValue(splitResult())
+    const { handlers } = setup()
+    await handlers.handleSplitTransaction('parent', [
+      { description: 'Comida', amount: 600 },
+      { description: 'Bebida', amount: 400 },
+    ])
+
+    await handlers.handleDeleteTransaction('parent')
+
+    // Children are hard-deleted rather than soft-deleted: they only exist as
+    // a subdivision of the parent, so leaving them behind would orphan rows
+    // that no longer sum to anything.
+    expect(mocks.hardDeleteTransactions).toHaveBeenCalledTimes(1)
+    expect(mocks.hardDeleteTransactions.mock.calls[0][1]).toEqual(
+      expect.arrayContaining(['parent_split_0', 'parent_split_1'])
+    )
+    expect(transactionStore.getState().transactions).toHaveLength(0)
   })
 })
