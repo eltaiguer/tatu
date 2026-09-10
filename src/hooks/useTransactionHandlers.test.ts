@@ -220,7 +220,10 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     )
 
     expect(outcome.added).toHaveLength(1)
-    expect(outcome.aiError).toContain('529 overloaded')
+    // Partial failure is distinct from total failure: the caller must be able
+    // to tell the user that most rows *were* enriched.
+    expect(outcome.aiPartial).toContain('529 overloaded')
+    expect(outcome.aiError).toBeUndefined()
   })
 })
 
@@ -312,7 +315,7 @@ describe('useTransactionHandlers — apply scope', () => {
       )
     })
 
-    it('asks the remote layer to clear displayDescription, matching the local store', async () => {
+    it('clears displayDescription on both sides when the user renames', async () => {
       // The local store sets displayDescription to undefined on every matching
       // row. Passing `undefined` to the remote layer means the column is
       // omitted from the payload entirely and the old value survives, so the
@@ -320,6 +323,7 @@ describe('useTransactionHandlers — apply scope', () => {
       const { handlers } = setup()
 
       await handlers.handleUpdateTransaction('same-1', {
+        displayDescription: 'Disco',
         category: 'restaurants',
         applyScope: 'matching_past_and_future',
       })
@@ -332,6 +336,34 @@ describe('useTransactionHandlers — apply scope', () => {
       for (const update of displayUpdates) {
         expect(update.displayDescription).toBeNull()
       }
+    })
+
+    it('does not touch displayDescription when only the category changed', async () => {
+      // Regression guard. Clearing unconditionally destroys per-row friendly
+      // names (an AI-enriched "Tienda Inglesa", say) on every sibling row
+      // when the user only meant to fix a category — and, because the remote
+      // write makes it permanent, the next sync cannot bring them back.
+      transactionStore.getState().setTransactions([
+        makeTransaction('enriched', {
+          description: MERCHANT,
+          displayDescription: 'Tienda Inglesa',
+        }),
+        makeTransaction('plain', { description: MERCHANT }),
+      ])
+      const { handlers } = setup()
+
+      await handlers.handleUpdateTransaction('plain', {
+        category: 'restaurants',
+        applyScope: 'matching_past_and_future',
+      })
+
+      const touched = mocks.updateRemoteTransaction.mock.calls
+        .map((call) => call[2])
+        .filter((u) => u && 'displayDescription' in u)
+      expect(touched).toHaveLength(0)
+
+      expect(stored('enriched')?.displayDescription).toBe('Tienda Inglesa')
+      expect(stored('enriched')?.category).toBe('restaurants')
     })
   })
 
@@ -528,5 +560,61 @@ describe('useTransactionHandlers — split and unsplit', () => {
       expect.arrayContaining(['parent_split_0', 'parent_split_1'])
     )
     expect(transactionStore.getState().transactions).toHaveLength(0)
+  })
+})
+
+describe('useTransactionHandlers — resetting a friendly name', () => {
+  const MERCHANT = 'SUPERMERCADO DISCO'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    transactionStore.getState().clearTransactions()
+    transactionStore.getState().setTransactions([
+      makeTransaction('tx', {
+        description: MERCHANT,
+        displayDescription: 'Disco',
+      }),
+    ])
+  })
+
+  function remoteDisplayUpdate() {
+    return mocks.updateRemoteTransaction.mock.calls
+      .map((call) => call[2])
+      .find((u) => u && 'displayDescription' in u)
+  }
+
+  it("scope 'single': clearing the name reaches the server, not just the store", async () => {
+    // Passing undefined omits the column, so the server keeps the old name
+    // and it reappears on the next sync while the store shows it cleared.
+    const { handlers } = setup()
+
+    await handlers.handleUpdateTransaction('tx', {
+      displayDescription: MERCHANT,
+      applyScope: 'single',
+    })
+
+    expect(remoteDisplayUpdate()?.displayDescription).toBeNull()
+  })
+
+  it("scope 'future_matching_only': clearing the name reaches the server too", async () => {
+    const { handlers } = setup()
+
+    await handlers.handleUpdateTransaction('tx', {
+      displayDescription: MERCHANT,
+      applyScope: 'future_matching_only',
+    })
+
+    expect(remoteDisplayUpdate()?.displayDescription).toBeNull()
+  })
+
+  it("scope 'single': a real rename is still persisted as the new name", async () => {
+    const { handlers } = setup()
+
+    await handlers.handleUpdateTransaction('tx', {
+      displayDescription: 'Tienda Inglesa',
+      applyScope: 'single',
+    })
+
+    expect(remoteDisplayUpdate()?.displayDescription).toBe('Tienda Inglesa')
   })
 })

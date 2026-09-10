@@ -291,4 +291,28 @@ describe('ImportCSV', () => {
     expect(await screen.findByText('Importación completada')).toBeInTheDocument()
     expect(toastMock.warning).not.toHaveBeenCalled()
   })
+
+  it('says the AI run was incomplete, not unavailable, on a partial failure', async () => {
+    // "no disponible" would be plainly wrong when 10 of 12 batches enriched.
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-1')],
+      duplicates: [],
+      aiPartial: '2 de 12 lotes fallaron: 529 overloaded',
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    await waitFor(() => expect(toastMock.warning).toHaveBeenCalledTimes(1))
+    const message = toastMock.warning.mock.calls[0][0] as string
+    expect(message).toContain('incompleta')
+    expect(message).not.toContain('no disponible')
+  })
 })
