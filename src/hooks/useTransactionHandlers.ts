@@ -221,7 +221,12 @@ export function useTransactionHandlers({
               updateRemoteTransaction(session, tx.id, {
                 category: nextCategory,
                 ...(nextCategory !== undefined && { categoryConfidence: 1 }),
-                displayDescription: undefined,
+                // null, not undefined: the local store clears this field on
+                // every matching row, and the merchant-keyed description
+                // override written above is what supplies the friendly name
+                // from here on. `undefined` would omit the column and leave
+                // the stale per-row value to reappear on the next sync.
+                displayDescription: null,
               })
             )
           )

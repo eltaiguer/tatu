@@ -17,6 +17,14 @@ const mocks = vi.hoisted(() => ({
     enabled: true,
     model: 'claude-haiku-4-5',
   })),
+  updateRemoteTransaction: vi.fn<
+    [unknown, string, { displayDescription?: string | null }],
+    Promise<void>
+  >(async () => undefined),
+  setDescriptionOverrideWithSync: vi.fn(async () => undefined),
+  clearDescriptionOverrideWithSync: vi.fn(async () => undefined),
+  setMerchantCategoryOverrideWithSync: vi.fn(async () => undefined),
+  clearMerchantCategoryOverrideWithSync: vi.fn(async () => undefined),
   enrichTransactionsWithAi: vi.fn(
     async (): Promise<{
       results: Map<string, unknown>
@@ -28,7 +36,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../services/supabase/transactions', () => ({
   persistTransactions: mocks.persistTransactions,
   softDeleteTransaction: vi.fn(async () => undefined),
-  updateTransaction: vi.fn(async () => undefined),
+  updateTransaction: mocks.updateRemoteTransaction,
   splitTransaction: vi.fn(async () => undefined),
   unsplitTransaction: vi.fn(async () => undefined),
   hardDeleteTransactions: vi.fn(async () => undefined),
@@ -44,13 +52,13 @@ vi.mock('../services/supabase/import-runs', () => ({
 // Override stores are empty, so nothing is filtered out of AI enrichment.
 vi.mock('../services/categorizer/category-overrides', () => ({
   listMerchantCategoryOverrides: () => ({}),
-  clearMerchantCategoryOverrideWithSync: vi.fn(async () => undefined),
-  setMerchantCategoryOverrideWithSync: vi.fn(async () => undefined),
+  clearMerchantCategoryOverrideWithSync: mocks.clearMerchantCategoryOverrideWithSync,
+  setMerchantCategoryOverrideWithSync: mocks.setMerchantCategoryOverrideWithSync,
   getMerchantCategoryOverride: () => undefined,
 }))
 vi.mock('../services/descriptions/description-overrides', () => ({
-  clearDescriptionOverrideWithSync: vi.fn(async () => undefined),
-  setDescriptionOverrideWithSync: vi.fn(async () => undefined),
+  clearDescriptionOverrideWithSync: mocks.clearDescriptionOverrideWithSync,
+  setDescriptionOverrideWithSync: mocks.setDescriptionOverrideWithSync,
   getDescriptionOverride: () => undefined,
 }))
 
@@ -208,5 +216,191 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
 
     expect(outcome.added).toHaveLength(1)
     expect(outcome.aiError).toContain('529 overloaded')
+  })
+})
+
+describe('useTransactionHandlers — apply scope', () => {
+  const MERCHANT = 'SUPERMERCADO DISCO'
+
+  function seedStore() {
+    transactionStore.getState().setTransactions([
+      makeTransaction('same-1', { description: MERCHANT }),
+      makeTransaction('same-2', { description: MERCHANT }),
+      makeTransaction('other', {
+        description: 'FARMACIA SAN ROQUE',
+        category: 'healthcare',
+      }),
+    ])
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    transactionStore.getState().clearTransactions()
+    seedStore()
+  })
+
+  function stored(id: string) {
+    return transactionStore.getState().transactions.find((t) => t.id === id)
+  }
+
+  describe("scope 'single'", () => {
+    it('changes only the target transaction', async () => {
+      const { handlers } = setup()
+
+      await handlers.handleUpdateTransaction('same-1', {
+        category: 'restaurants',
+        applyScope: 'single',
+      })
+
+      expect(stored('same-1')?.category).toBe('restaurants')
+      expect(stored('same-2')?.category).toBe('groceries')
+      expect(stored('other')?.category).toBe('healthcare')
+    })
+
+    it('does not write a merchant override', async () => {
+      const { handlers } = setup()
+
+      await handlers.handleUpdateTransaction('same-1', {
+        category: 'restaurants',
+        applyScope: 'single',
+      })
+
+      expect(mocks.setMerchantCategoryOverrideWithSync).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("scope 'matching_past_and_future'", () => {
+    it('changes every transaction sharing the description', async () => {
+      const { handlers } = setup()
+
+      await handlers.handleUpdateTransaction('same-1', {
+        category: 'restaurants',
+        applyScope: 'matching_past_and_future',
+      })
+
+      expect(stored('same-1')?.category).toBe('restaurants')
+      expect(stored('same-2')?.category).toBe('restaurants')
+    })
+
+    it('leaves non-matching transactions alone', async () => {
+      const { handlers } = setup()
+
+      await handlers.handleUpdateTransaction('same-1', {
+        category: 'restaurants',
+        applyScope: 'matching_past_and_future',
+      })
+
+      expect(stored('other')?.category).toBe('healthcare')
+    })
+
+    it('records a merchant override so future imports match too', async () => {
+      const { handlers } = setup()
+
+      await handlers.handleUpdateTransaction('same-1', {
+        category: 'restaurants',
+        applyScope: 'matching_past_and_future',
+      })
+
+      expect(mocks.setMerchantCategoryOverrideWithSync).toHaveBeenCalledWith(
+        MERCHANT,
+        'restaurants'
+      )
+    })
+
+    it('asks the remote layer to clear displayDescription, matching the local store', async () => {
+      // The local store sets displayDescription to undefined on every matching
+      // row. Passing `undefined` to the remote layer means the column is
+      // omitted from the payload entirely and the old value survives, so the
+      // cleared name reappears on the next sync.
+      const { handlers } = setup()
+
+      await handlers.handleUpdateTransaction('same-1', {
+        category: 'restaurants',
+        applyScope: 'matching_past_and_future',
+      })
+
+      const displayUpdates = mocks.updateRemoteTransaction.mock.calls
+        .map((call) => call[2])
+        .filter((u) => u && 'displayDescription' in u)
+
+      expect(displayUpdates.length).toBeGreaterThan(0)
+      for (const update of displayUpdates) {
+        expect(update.displayDescription).toBeNull()
+      }
+    })
+  })
+
+  describe("scope 'future_matching_only'", () => {
+    it('records the override but leaves other existing rows untouched', async () => {
+      const { handlers } = setup()
+
+      await handlers.handleUpdateTransaction('same-1', {
+        category: 'restaurants',
+        applyScope: 'future_matching_only',
+      })
+
+      expect(mocks.setMerchantCategoryOverrideWithSync).toHaveBeenCalledWith(
+        MERCHANT,
+        'restaurants'
+      )
+      expect(stored('same-1')?.category).toBe('restaurants')
+      expect(stored('same-2')?.category).toBe('groceries')
+    })
+  })
+})
+
+describe('useTransactionHandlers — bulk operations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    transactionStore.getState().clearTransactions()
+    transactionStore
+      .getState()
+      .setTransactions([
+        makeTransaction('a'),
+        makeTransaction('b'),
+        makeTransaction('c'),
+      ])
+  })
+
+  function stored(id: string) {
+    return transactionStore.getState().transactions.find((t) => t.id === id)
+  }
+
+  it('categorizes only the selected transactions', async () => {
+    const { handlers, setNotice } = setup()
+
+    await handlers.handleBulkCategorizeTransactions(['a', 'b'], 'restaurants')
+
+    expect(stored('a')?.category).toBe('restaurants')
+    expect(stored('b')?.category).toBe('restaurants')
+    expect(stored('c')?.category).toBe('groceries')
+    expect(setNotice).toHaveBeenCalled()
+  })
+
+  it('does nothing when the selection is empty', async () => {
+    const { handlers } = setup()
+
+    await handlers.handleBulkCategorizeTransactions([], 'restaurants')
+
+    expect(mocks.updateRemoteTransaction).not.toHaveBeenCalled()
+  })
+
+  it('adds a tag without duplicating one already present', async () => {
+    const { handlers } = setup()
+
+    await handlers.handleBulkTagTransactions(['a'], 'viaje')
+    await handlers.handleBulkTagTransactions(['a'], 'viaje')
+
+    expect(stored('a')?.tags).toEqual(['viaje'])
+  })
+
+  it('removes the selected transactions on bulk delete', async () => {
+    const { handlers } = setup()
+
+    await handlers.handleBulkDeleteTransactions(['a', 'b'])
+
+    expect(stored('a')).toBeUndefined()
+    expect(stored('b')).toBeUndefined()
+    expect(stored('c')).toBeDefined()
   })
 })
