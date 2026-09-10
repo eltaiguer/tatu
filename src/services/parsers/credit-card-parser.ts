@@ -112,7 +112,17 @@ function parseTransactions(
   rows: string[][],
   startIndex: number
 ): Transaction[] {
-  if (startIndex === -1 || startIndex >= rows.length) {
+  // -1 means the "Movimientos" marker was never found: the file was not
+  // understood. That is different from a statement whose marker is present
+  // but which lists no movements, which legitimately yields an empty list.
+  if (startIndex === -1) {
+    throw new Error(
+      'No se encontró la sección de movimientos en el archivo. ' +
+        '¿Es un resumen de tarjeta de crédito de Santander?'
+    )
+  }
+
+  if (startIndex >= rows.length) {
     return []
   }
 

@@ -186,3 +186,12 @@ Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,
     })
   })
 })
+
+describe('parseCreditCardCSV — unrecognised file', () => {
+  it('reports an unrecognised file instead of returning zero transactions', () => {
+    const csv = `Cliente,Gazzano      A Jose,
+Algo,Totalmente,Distinto,`
+
+    expect(() => parseCreditCardCSV(csv, 'test.csv')).toThrow(/movimientos/i)
+  })
+})
