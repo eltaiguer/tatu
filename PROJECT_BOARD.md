@@ -9,7 +9,7 @@
 - **Transactions**: Unified filter bar (search, category, account, type, currency, date range, amount range), paginated table, bulk actions, edit modal with apply-scope
 - **Multicurrency**: `homeCurrency` + editable `fxRate`, combined totals in Resumen (charts live in `Dashboard.tsx`, not a separate Análisis view) + Insights, native amounts in transaction rows
 - **Redesign**: Sidebar navigation (overview / transactions / insights / categories / settings), warm token palette, Spectral + Hanken Grotesk + JetBrains Mono typography
-- **Refactor**: Hooks extracted from App.tsx (`useAuthSession`, `useUserPreferences`, `useTransactionHandlers`, `useTransactionSync`, `useTransactionFiltering`), Transactions.tsx split into sub-components
+- **Refactor**: Hooks extracted from App.tsx (`useAuthSession`, `useUserPreferences`, `useTransactionHandlers`, `useTransactionSync`, `useTransactionFiltering`). Note `Transactions.tsx` and `Dashboard.tsx` are still ~1.6k / ~1.5k lines — the refactor extracted hooks, not view components
 - **Export**: CSV + PDF from filtered transaction view
 - **AI Insights (Phase 1)**: new Insights sidebar view — Claude-generated (Opus 4.8) spending insights per month, cached in Supabase (`ai_insights` table), deterministic math only (category totals, deltas, recurring-charge detection all computed client-side, model only ranks/narrates). See ADR-0001 (`docs/decisions/0001-ai-spending-insights.md`).
 

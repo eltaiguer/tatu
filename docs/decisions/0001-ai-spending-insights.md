@@ -1,7 +1,22 @@
 # ADR-0001: AI-Powered Spending Insights
 
 ## Status
-Proposed
+Accepted — Phase 1 shipped in #42.
+
+Corrections applied after implementation (the decision stands; these are
+places where this document described code that does not exist):
+
+- Insights builds on `src/services/charts/chart-data.ts` only.
+  `src/services/aggregator/aggregation.ts`, named below, was never wired up
+  and has been deleted — extending it would have been wasted work.
+- The Insights UI does **not** reuse `DateRangePicker`; that component had no
+  importer at all and has been deleted. The view uses its own month
+  navigation.
+- The `ai_insights` DDL below does not match `supabase/schema.sql`, which is
+  the source of truth. See the Data Model note.
+- Prompt-caching and batch-truncation handling were added to
+  `transaction-ai.ts` after this ADR (#49, #52); the "no `output_config.format`,
+  parse defensively" decision is unchanged.
 
 ## Date
 2026-07-22
@@ -40,6 +55,16 @@ Tatu already has a working, shipped AI integration
 Because each user supplies their own key, there is no shared secret at risk
 of leaking — the exposure is a user to their own credential, in their own
 session. This is a deliberate, already-shipped decision, not an oversight.
+
+**Accepted risk — the key is stored in plaintext at rest.**
+`user_preferences.claude_api_key` is a plain `text` column. RLS scopes it so
+no other user can read it, but it is readable by anyone with database or
+Supabase dashboard access, and it appears in backups. There is no
+server-side component in this architecture to hold a decryption secret, so
+encrypting it would only move the problem: the key material would have to
+live in the client bundle. This is recorded as an accepted risk rather than
+an oversight. Revisit it if Tatu ever gains a backend, or moves off
+bring-your-own-key — either would need its own ADR.
 
 There is no serverless layer in this repo (no `supabase/functions`) — all
 backend logic is client + Supabase Postgres/RLS.
@@ -132,6 +157,13 @@ shippable slice stays small.
 
 New table `ai_insights`, RLS-scoped per user like every other table in
 `schema.sql`:
+
+> **As built, `supabase/schema.sql` is the source of truth.** The shipped
+> table uses a composite `primary key (user_id, period_start, period_end)`
+> and has no `id` column — equivalent uniqueness, one less index. The DDL
+> sketched below is the original proposal, kept for context. Do not
+> provision a database from it; `schema.sql` is applied manually (see
+> `supabase/README.md`).
 
 ```sql
 create table ai_insights (

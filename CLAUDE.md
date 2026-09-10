@@ -16,7 +16,7 @@ The app is fully online — authentication and data persistence require Supabase
 - **Charts**: Recharts
 - **Backend**: Supabase (auth + PostgreSQL, required — app won't function without it)
 - **Hosting**: Firebase Hosting
-- **Testing**: Vitest + React Testing Library (796 tests, 76 test files)
+- **Testing**: Vitest + React Testing Library (tests colocated with source)
 
 ## Commands
 
@@ -46,29 +46,37 @@ src/
     Categories.tsx         # Categorías view — category grid + auto-categorization rules
     Settings.tsx           # Configuración view — theme, currency, account, data management
     ImportCSV.tsx          # CSV import flow (wrapped in Radix Dialog, not a view)
-    AccountCard.tsx        # Account summary card with balance + footer
     CategoryBreakdownList.tsx  # Ranked category list with progress bars
     FxChip.tsx             # Editable FX rate chip (click to edit inline)
+    CurrencyToggle.tsx     # Home-currency switch
     TransactionFilters.tsx # Unified filter bar (search, category, account, type, currency, date, amount)
     TransactionTable.tsx   # Transaction rows, selection, confidence meter, row actions
     EditTransactionDialog.tsx  # Edit modal: description, category, apply-scope
     BulkEditDialog.tsx     # Bulk categorization modal
+    SplitTransactionDialog.tsx # Split one transaction into parts (see is_split_parent / split_parent_id)
+    ConfirmDialog.tsx      # Shared confirmation modal
     CategoryBadge.tsx      # Category badge with color dot
     ConfidenceBadge.tsx    # 3-bar confidence meter
-    DateRangePicker.tsx    # Date range input pair
+    Onboarding.tsx         # First-run empty state (no transactions yet)
+    EmptyState.tsx         # Generic empty state
+    StateSkeletons.tsx     # Loading skeletons for dashboard + transaction table
+    ConnectionLostState.tsx    # Supabase unreachable — retry affordance
     AuthCard.tsx           # Login / signup / password-reset form
     TatuLogo.tsx           # Armadillo-shell SVG brand mark
+    dev/                   # Developer tooling rendered inside Settings:
+                           #   CoverageAnalysis, AiCategorizationPreview, AiPatternAnalysis
   hooks/                   # Custom React hooks (extracted from App.tsx)
     useAuthSession.ts      # Supabase auth session management
     useUserPreferences.ts  # Theme, homeCurrency, fxRate — synced to Supabase
     useTransactionHandlers.ts  # All transaction mutation handlers
     useTransactionSync.ts  # Loads transactions from Supabase on login
     useTransactionFiltering.ts # Filter + sort + paginate transactions
+    useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
     categorizer/           # Merchant pattern matching + auto-categorization
-    aggregator/            # Data grouping + summaries
-    filters/               # Transaction filtering + search
+    categories/            # Category registry + user custom categories (source of isCategoryIgnored)
+    filters/               # Transaction filtering used by export (the views filter via useTransactionFiltering)
     export/                # CSV/PDF export
     charts/                # Chart data transformations
     currency/              # convert(amount, from, to, rate) + Currency type
@@ -170,7 +178,11 @@ Requires `.env` with Supabase vars (see `.env.example`):
 
 ## Current status
 
-Redesign complete: sidebar navigation, 5 views, multicurrency with FxChip. Architectural refactor complete: hooks extracted from App.tsx, store simplified, large components split. Deployed to Firebase Hosting. 796 tests passing.
+Redesign complete: sidebar navigation, 5 views, multicurrency with FxChip. Hooks extracted from App.tsx and the store simplified. Deployed to Firebase Hosting.
+
+**Known shape of the code, so nobody is surprised:** `Transactions.tsx` (~1.6k lines) and `Dashboard.tsx` (~1.5k lines) are still large — the earlier refactor extracted hooks, not view components. Both define their sub-components inline at the top of the file.
+
+Test counts are deliberately not recorded here; they go stale within a PR. Run `npm run test:run` for the current number.
 
 AI Insights Phase 1 shipped (ADR-0001, `docs/decisions/0001-ai-spending-insights.md`): new Insights view generates Claude-powered spending insights per month, cached in Supabase (`ai_insights` table — requires a manual `schema.sql` apply, see `supabase/README.md`). Client-side, BYO API key, same pattern as `services/ai/`.
 
