@@ -70,7 +70,10 @@ export function useTransactionHandlers({
   ): Promise<{
     added: Transaction[]
     duplicates: Transaction[]
+    /** Enrichment did not run at all. */
     aiError?: string
+    /** Enrichment ran but some batches failed; the rest were applied. */
+    aiPartial?: string
   }> {
     if (!session) {
       return transactionStore.getState().addTransactions(transactionsToImport)
@@ -96,6 +99,7 @@ export function useTransactionHandlers({
     const aiConfig = getAiConfig()
     let toStore = added
     let aiError: string | undefined
+    let aiPartial: string | undefined
 
     if (aiConfig?.enabled && aiConfig.apiKey && added.length > 0) {
       const toEnrich = added.filter((tx) => {
@@ -124,7 +128,7 @@ export function useTransactionHandlers({
           toStore = applyAiEnrichment(added, results)
           // Some batches succeeded and some did not — keep what we got, but
           // still tell the user the enrichment was incomplete.
-          aiError = partialFailure
+          aiPartial = partialFailure
         } catch (error) {
           // Fall through with the rule-based results already on the
           // transactions, but keep the reason so it can be surfaced.
@@ -159,7 +163,7 @@ export function useTransactionHandlers({
       throw error
     }
 
-    return { added, duplicates, aiError }
+    return { added, duplicates, aiError, aiPartial }
   }
 
   async function handleUpdateTransaction(
@@ -184,6 +188,15 @@ export function useTransactionHandlers({
     const nextTags = updates.tags
 
     if (applyToMatching) {
+      // Whether the user actually renamed anything. When they did, a
+      // merchant-keyed description override is written below and becomes the
+      // single source of the friendly name — so the per-row values must be
+      // cleared, or rows keep disagreeing with each other. When they did not,
+      // there is no replacement name, and clearing would destroy per-row
+      // values (e.g. AI-enriched ones) that nothing else supplies.
+      const renames =
+        !!trimmedDisplayDescription &&
+        trimmedDisplayDescription !== current.description
       const targetKey = buildDescriptionOverrideKey(current.description)
       const matchingTransactions = state.transactions.filter(
         (tx) => {
@@ -221,7 +234,10 @@ export function useTransactionHandlers({
               updateRemoteTransaction(session, tx.id, {
                 category: nextCategory,
                 ...(nextCategory !== undefined && { categoryConfidence: 1 }),
-                displayDescription: undefined,
+                // null clears the column; omitting the key leaves it alone.
+                // Only clear when an override was actually written to
+                // replace it — see `renames` above.
+                ...(renames && { displayDescription: null }),
               })
             )
           )
@@ -253,7 +269,9 @@ export function useTransactionHandlers({
               ...tx,
               ...categoryUpdates,
               ...tagsUpdates,
-              displayDescription: undefined,
+              // Mirrors the remote write above: only cleared when an
+              // override now supplies the name.
+              ...(renames && { displayDescription: undefined }),
             }
           })
         )
@@ -294,11 +312,14 @@ export function useTransactionHandlers({
 
         if (session) {
           await updateRemoteTransaction(session, transactionId, {
+            // null, not undefined, when the name is being reset: undefined
+            // omits the column and the old value survives on the server
+            // while the local store clears it (see UpdateTransactionInput).
             displayDescription:
               trimmedDisplayDescription &&
               trimmedDisplayDescription !== current.description
                 ? trimmedDisplayDescription
-                : undefined,
+                : null,
             category: nextCategory,
             ...(nextCategory !== undefined && { categoryConfidence: 1 }),
             tags: nextTags,
@@ -335,7 +356,8 @@ export function useTransactionHandlers({
 
       if (session) {
         await updateRemoteTransaction(session, transactionId, {
-          displayDescription: singleDisplayDescription,
+          // null, not undefined — see the note on UpdateTransactionInput.
+          displayDescription: singleDisplayDescription ?? null,
           category: nextCategory,
           ...(nextCategory !== undefined && { categoryConfidence: 1 }),
           tags: nextTags,
