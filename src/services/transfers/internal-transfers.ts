@@ -180,6 +180,11 @@ export function inferInternalTransfers(transactions: Transaction[]): Transaction
 
     const leftMeta = meta.get(left.id)!
     const windowIndexes: number[] = []
+    // ±2 is provably sufficient, not merely generous: if |a-b| <= 2*DAY_MS
+    // then |floor(a/DAY_MS) - floor(b/DAY_MS)| <= 2. (A difference of 3 would
+    // need floor(b/D) >= floor(a/D)+3, which forces b-a > 2*DAY_MS.) So no
+    // pair the exact dayDistance check would accept can fall outside this
+    // window. Narrowing it would start dropping real pairs.
     for (let offset = -2; offset <= 2; offset++) {
       const bucket = creditIndexByDay.get(leftMeta.day + offset)
       if (bucket) windowIndexes.push(...bucket)
