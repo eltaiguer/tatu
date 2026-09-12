@@ -9,7 +9,7 @@ import type { InsightsResult } from './insight-generator'
 /**
  * Deterministic, non-cryptographic hash of an InsightInput — used only to
  * detect whether the underlying transactions changed since insights were
- * last generated for a period. Not a security boundary.
+ * last generated. Not a security boundary.
  */
 export function hashInsightInput(input: InsightInput): string {
   const json = JSON.stringify(input)
@@ -29,21 +29,17 @@ export interface CachedInsightsLookup {
 }
 
 /**
- * Looks up a cached insights row for the input's period. `isStale` is true
- * when the current InsightInput no longer matches the hash of the input
- * that produced the cached result (new imports, edits, re-categorization) —
- * the UI shows a "data changed, regenerate?" banner instead of silently
- * regenerating (see ADR-0001).
+ * Looks up the cached insights row for this user (one row per user — see
+ * ADR-0002). `isStale` is true when the current InsightInput no longer
+ * matches the hash of the input that produced the cached result (new
+ * imports, edits, re-categorization) — the UI shows a "data changed,
+ * regenerate?" banner instead of silently regenerating.
  */
 export async function getCachedInsights(
   session: SupabaseSession,
   input: InsightInput
 ): Promise<CachedInsightsLookup | null> {
-  const row = await loadCachedInsightsRow(
-    session,
-    input.periodStart,
-    input.periodEnd
-  )
+  const row = await loadCachedInsightsRow(session)
   if (!row) return null
 
   return {
@@ -61,8 +57,6 @@ export async function saveCachedInsights(
   model: string
 ): Promise<void> {
   await saveInsightsRow(session, {
-    periodStart: input.periodStart,
-    periodEnd: input.periodEnd,
     inputHash: hashInsightInput(input),
     model,
     insights: result,

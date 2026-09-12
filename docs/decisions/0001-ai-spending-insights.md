@@ -3,17 +3,27 @@
 ## Status
 Accepted — Phase 1 shipped in #42.
 
-Corrections applied after implementation (the decision stands; these are
-places where this document described code that does not exist):
+**Partially superseded by [ADR-0002](0002-insights-integral-view.md)**: the
+per-period navigation/caching decisions below (month stepper, one cache row
+per `(user_id, period_start, period_end)`, `deltaVsPriorPeriod`) were
+replaced by an all-time integral view. The BYO-key client-side pattern, the
+`claude-opus-4-8` model choice for insight generation, and the
+deterministic-math discipline (the model narrates, never computes) are
+unaffected and still stand as originally decided here.
+
+Corrections applied after implementation — places where this document
+described code that does not exist, independent of the ADR-0002
+supersession:
 
 - Insights builds on `src/services/charts/chart-data.ts` only.
   `src/services/aggregator/aggregation.ts`, named below, was never wired up
   and has been deleted — extending it would have been wasted work.
 - The Insights UI does **not** reuse `DateRangePicker`; that component had no
-  importer at all and has been deleted. The view uses its own month
-  navigation.
-- The `ai_insights` DDL below does not match `supabase/schema.sql`, which is
-  the source of truth. See the Data Model note.
+  importer at all and has been deleted. (Under ADR-0002 there is no date
+  selection in the view at all.)
+- The `ai_insights` DDL below matches neither the shipped ADR-0001 schema nor
+  the current one. `supabase/schema.sql` is the source of truth — see the
+  Data Model note.
 - Prompt-caching and batch-truncation handling were added to
   `transaction-ai.ts` after this ADR (#49, #52); the "no `output_config.format`,
   parse defensively" decision is unchanged.
@@ -158,12 +168,15 @@ shippable slice stays small.
 New table `ai_insights`, RLS-scoped per user like every other table in
 `schema.sql`:
 
-> **As built, `supabase/schema.sql` is the source of truth.** The shipped
-> table uses a composite `primary key (user_id, period_start, period_end)`
-> and has no `id` column — equivalent uniqueness, one less index. The DDL
-> sketched below is the original proposal, kept for context. Do not
-> provision a database from it; `schema.sql` is applied manually (see
-> `supabase/README.md`).
+> **`supabase/schema.sql` is the source of truth — this DDL is neither the
+> shipped nor the current shape.** ADR-0001 shipped as a composite
+> `primary key (user_id, period_start, period_end)` with no `id` column;
+> ADR-0002 then replaced that with `user_id` alone (one cached row per user,
+> no period scoping). The DDL below is the original proposal, kept only for
+> context. Do not provision a database from it, and note that moving from
+> the ADR-0001 shape to the current one needs a one-time
+> `drop table if exists public.ai_insights;` — `schema.sql` is applied
+> manually (see `supabase/README.md`).
 
 ```sql
 create table ai_insights (

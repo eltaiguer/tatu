@@ -183,18 +183,23 @@ create table if not exists public.custom_patterns (
   primary key (user_id, id)
 );
 
--- Cached AI-generated spending insights (ADR-0001), one row per user+period.
--- input_hash lets the UI detect that the underlying transactions changed
--- since generation without a triggers/invalidation system.
+-- Cached AI-generated spending insights (ADR-0002), one row per user, over
+-- their entire transaction history (no period scoping — see ADR-0002,
+-- which replaced ADR-0001's original per-month design). input_hash lets
+-- the UI detect that the underlying transactions changed since generation
+-- without a triggers/invalidation system.
+--
+-- NOTE: if you already applied the old per-period shape of this table
+-- (primary key (user_id, period_start, period_end)), this table holds only
+-- regenerable AI-cache content — run
+--   drop table if exists public.ai_insights;
+-- once in the Supabase SQL Editor before re-applying this file.
 create table if not exists public.ai_insights (
-  user_id uuid not null references auth.users(id) on delete cascade,
-  period_start date not null,
-  period_end date not null,
+  user_id uuid primary key references auth.users(id) on delete cascade,
   input_hash text not null,
   model text not null,
   insights jsonb not null,
-  generated_at timestamptz not null default timezone('utc', now()),
-  primary key (user_id, period_start, period_end)
+  generated_at timestamptz not null default timezone('utc', now())
 );
 
 create index if not exists idx_transactions_user_date_active

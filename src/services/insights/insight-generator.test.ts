@@ -16,16 +16,23 @@ vi.mock('@anthropic-ai/sdk', () => {
 import { parseInsightsResponse, generateInsights } from './insight-generator'
 
 const baseInput: InsightInput = {
-  periodStart: '2026-06-01',
-  periodEnd: '2026-06-30',
+  historyStart: '2026-01-01',
+  historyEnd: '2026-06-30',
   homeCurrency: 'USD',
   categoryTotals: [
-    { category: 'restaurants', amount: 120, pctOfTotal: 40, deltaVsPriorPeriod: 34 },
-    { category: 'groceries', amount: 80, pctOfTotal: 26.7, deltaVsPriorPeriod: -10 },
+    { category: 'restaurants', amount: 120, pctOfTotal: 40 },
+    { category: 'groceries', amount: 80, pctOfTotal: 26.7 },
   ],
   topMerchants: [{ merchant: 'Netflix', amount: 15, count: 1 }],
   recurringCharges: [
-    { merchant: 'Spotify', approxAmount: 12, cadence: 'monthly', monthsSeen: 4 },
+    {
+      merchant: 'Spotify',
+      approxAmount: 12,
+      cadence: 'monthly',
+      monthsSeen: 4,
+      lastSeenMonth: '2026-06',
+      monthsSinceLastSeen: 0,
+    },
   ],
   monthlyTrend: [{ month: '2026-06', income: 1000, expense: 300 }],
 }
@@ -36,9 +43,9 @@ describe('parseInsightsResponse', () => {
       insights: [
         {
           type: 'bleeding_money',
-          title: 'Restaurantes creció fuerte',
-          narrative: 'El gasto en restaurantes subió $34 este mes.',
-          amount: 34,
+          title: 'Restaurantes domina tu gasto',
+          narrative: 'El gasto en restaurantes es tu categoría más grande.',
+          amount: 120,
           currency: 'USD',
           category: 'restaurants',
           severity: 'high',
@@ -51,9 +58,9 @@ describe('parseInsightsResponse', () => {
     expect(result.insights).toHaveLength(1)
     expect(result.insights[0]).toEqual({
       type: 'bleeding_money',
-      title: 'Restaurantes creció fuerte',
-      narrative: 'El gasto en restaurantes subió $34 este mes.',
-      amount: 34,
+      title: 'Restaurantes domina tu gasto',
+      narrative: 'El gasto en restaurantes es tu categoría más grande.',
+      amount: 120,
       currency: 'USD',
       category: 'restaurants',
       severity: 'high',
@@ -105,21 +112,23 @@ describe('parseInsightsResponse', () => {
     expect(result.insights[0].merchant).toBeUndefined()
   })
 
-  it('accepts an amount that matches a deltaVsPriorPeriod value', () => {
+  it('accepts an amount that matches a recurringCharges approxAmount value', () => {
     const text = JSON.stringify({
       insights: [
         {
-          type: 'bleeding_money',
-          title: 'Creció fuerte',
-          narrative: 'Subió respecto al mes anterior.',
-          amount: -10,
+          type: 'recurring',
+          title: 'Suscripción activa',
+          narrative: 'Spotify se cobra todos los meses.',
+          amount: 12,
+          merchant: 'Spotify',
           severity: 'medium',
         },
       ],
     })
 
     const result = parseInsightsResponse(text, baseInput)
-    expect(result.insights[0].amount).toBe(-10)
+    expect(result.insights[0].amount).toBe(12)
+    expect(result.insights[0].merchant).toBe('Spotify')
   })
 
   it('drops insights missing a title, narrative, or valid type', () => {
@@ -160,7 +169,7 @@ describe('generateInsights', () => {
     expect(messagesCreateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'claude-opus-4-8',
-        messages: [{ role: 'user', content: expect.stringContaining('"periodStart"') }],
+        messages: [{ role: 'user', content: expect.stringContaining('"historyStart"') }],
       })
     )
   })
