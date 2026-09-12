@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { InsightInput } from './insight-data'
+import { buildInsightInput } from './insight-data'
+import type { Transaction } from '../../models'
+import { Category } from '../../models'
 
 const { messagesCreateMock } = vi.hoisted(() => ({
   messagesCreateMock: vi.fn(),
@@ -182,5 +185,75 @@ describe('generateInsights', () => {
     await expect(generateInsights(baseInput, 'sk-test-key')).rejects.toThrow(
       /Respuesta inesperada/
     )
+  })
+})
+
+describe('insight amounts survive the round trip from a real InsightInput', () => {
+  it('keeps an amount the model echoed back from FX-converted spend', () => {
+    // The real failure path: UYU spend converted to USD yields
+    // 1234.5679012345679 unrounded. The prompt tells the model to copy the
+    // number exactly, but reproducing float residue verbatim is not
+    // something to rely on — so the input is rounded at source and both
+    // sides agree on one value.
+    const transactions: Transaction[] = [
+      {
+        id: 'tx-1',
+        date: new Date('2026-06-10T00:00:00.000Z'),
+        description: 'RESTAURANTE X',
+        amount: 50000,
+        currency: 'UYU',
+        type: 'debit',
+        source: 'bank_account',
+        category: Category.Restaurants,
+        rawData: {},
+      },
+    ]
+
+    const input = buildInsightInput(transactions, 'USD', 40.5)
+    const amount = input.categoryTotals[0].amount
+    expect(amount).toBe(1234.57)
+
+    const result = parseInsightsResponse(
+      JSON.stringify({
+        insights: [
+          {
+            type: 'bleeding_money',
+            title: 'Restaurantes domina tu gasto',
+            narrative: 'Es tu categoría más grande.',
+            amount,
+            currency: 'USD',
+            category: Category.Restaurants,
+            severity: 'high',
+          },
+        ],
+      }),
+      input
+    )
+
+    expect(result.insights).toHaveLength(1)
+    expect(result.insights[0].amount).toBe(1234.57)
+  })
+
+  it('still drops an amount that is not present in the input', () => {
+    // ADR-0001's anti-hallucination guarantee must not regress: rounding at
+    // source rather than loosening the validator is what keeps === exact.
+    const result = parseInsightsResponse(
+      JSON.stringify({
+        insights: [
+          {
+            type: 'bleeding_money',
+            title: 'Inventado',
+            narrative: 'Número que el modelo se inventó.',
+            amount: 99999.99,
+            currency: 'USD',
+            severity: 'high',
+          },
+        ],
+      }),
+      baseInput
+    )
+
+    expect(result.insights).toHaveLength(1)
+    expect(result.insights[0].amount).toBeUndefined()
   })
 })
