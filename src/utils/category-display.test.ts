@@ -83,7 +83,11 @@ describe('getCategoryDisplay', () => {
 
   it('returns correct label and color for a custom (non-built-in) category', () => {
     listCustomCategoriesMock.mockReturnValue([
-      { id: 'transferencias-internas', label: 'Transferencias internas', color: '#0284c7' },
+      {
+        id: 'transferencias-internas',
+        label: 'Transferencias internas',
+        color: '#0284c7',
+      },
     ])
 
     const result = getCategoryDisplay('transferencias-internas')

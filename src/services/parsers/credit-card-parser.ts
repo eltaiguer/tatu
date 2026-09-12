@@ -184,7 +184,11 @@ function parseRow(
       (currency === 'UYU' && pesosAmount < 0)
 
     // Auto-categorize based on transaction details
-    const { category, confidence, description: patternDescription } = categorizeTransaction(
+    const {
+      category,
+      confidence,
+      description: patternDescription,
+    } = categorizeTransaction(
       rawTransaction.descripcion,
       isCredit ? 'credit' : 'debit'
     )

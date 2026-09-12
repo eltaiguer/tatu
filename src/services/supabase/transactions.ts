@@ -238,12 +238,10 @@ export async function splitTransaction(
     tags: [],
   }))
 
-  const { error: childError } = await client
-    .from('transactions')
-    .upsert(
-      children.map((c) => transactionToRow(session.user.id, c)),
-      { onConflict: 'user_id,transaction_id' }
-    )
+  const { error: childError } = await client.from('transactions').upsert(
+    children.map((c) => transactionToRow(session.user.id, c)),
+    { onConflict: 'user_id,transaction_id' }
+  )
 
   if (childError) {
     await client

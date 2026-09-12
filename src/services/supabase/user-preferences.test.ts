@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseSession } from './client'
 
-const { fromMock, selectMock, eqMock, singleMock, upsertMock } = vi.hoisted(() => ({
-  fromMock: vi.fn(),
-  selectMock: vi.fn(),
-  eqMock: vi.fn(),
-  singleMock: vi.fn(),
-  upsertMock: vi.fn(),
-}))
+const { fromMock, selectMock, eqMock, singleMock, upsertMock } = vi.hoisted(
+  () => ({
+    fromMock: vi.fn(),
+    selectMock: vi.fn(),
+    eqMock: vi.fn(),
+    singleMock: vi.fn(),
+    upsertMock: vi.fn(),
+  })
+)
 
 vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
@@ -52,7 +54,8 @@ describe('user-preferences service', () => {
     upsertMock.mockResolvedValue({ error: null })
 
     fromMock.mockImplementation((table: string) => {
-      if (table !== 'user_preferences') throw new Error(`unexpected table: ${table}`)
+      if (table !== 'user_preferences')
+        throw new Error(`unexpected table: ${table}`)
       return { select: selectMock, upsert: upsertMock }
     })
   })

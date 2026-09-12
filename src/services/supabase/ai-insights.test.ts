@@ -1,13 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseSession } from './client'
 
-const { selectMock, eqUserMock, singleMock, upsertMock, fromMock } = vi.hoisted(() => ({
-  selectMock: vi.fn(),
-  eqUserMock: vi.fn(),
-  singleMock: vi.fn(),
-  upsertMock: vi.fn(),
-  fromMock: vi.fn(),
-}))
+const { selectMock, eqUserMock, singleMock, upsertMock, fromMock } = vi.hoisted(
+  () => ({
+    selectMock: vi.fn(),
+    eqUserMock: vi.fn(),
+    singleMock: vi.fn(),
+    upsertMock: vi.fn(),
+    fromMock: vi.fn(),
+  })
+)
 
 vi.mock('./client', () => ({
   getSupabaseClient: () => ({

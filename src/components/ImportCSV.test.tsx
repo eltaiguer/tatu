@@ -92,7 +92,8 @@ describe('ImportCSV', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     DeferredFileReaderMock.instances = []
-    globalThis.FileReader = SuccessfulFileReaderMock as unknown as typeof FileReader
+    globalThis.FileReader =
+      SuccessfulFileReaderMock as unknown as typeof FileReader
   })
 
   afterEach(() => {
@@ -110,7 +111,9 @@ describe('ImportCSV', () => {
     })
 
     expect(screen.getByText('Error al validar archivo')).toBeInTheDocument()
-    expect(screen.getByText('El archivo debe estar en formato CSV')).toBeInTheDocument()
+    expect(
+      screen.getByText('El archivo debe estar en formato CSV')
+    ).toBeInTheDocument()
     expect(parseCSVMock).not.toHaveBeenCalled()
     expect(addTransactionsMock).not.toHaveBeenCalled()
   })
@@ -129,14 +132,17 @@ describe('ImportCSV', () => {
       },
     })
 
-    expect(await screen.findByText('Error al validar archivo')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Error al validar archivo')
+    ).toBeInTheDocument()
     expect(screen.getByText('CSV malformado')).toBeInTheDocument()
     expect(addTransactionsMock).not.toHaveBeenCalled()
     expect(onImportComplete).not.toHaveBeenCalled()
   })
 
   it('shows file read errors and does not persist', async () => {
-    globalThis.FileReader = FailingFileReaderMock as unknown as typeof FileReader
+    globalThis.FileReader =
+      FailingFileReaderMock as unknown as typeof FileReader
     render(<ImportCSV />)
 
     const input = screen.getByLabelText('Seleccionar archivo')
@@ -146,7 +152,9 @@ describe('ImportCSV', () => {
       },
     })
 
-    expect(await screen.findByText('Error al validar archivo')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Error al validar archivo')
+    ).toBeInTheDocument()
     expect(screen.getByText('Error al leer el archivo')).toBeInTheDocument()
     expect(parseCSVMock).not.toHaveBeenCalled()
     expect(addTransactionsMock).not.toHaveBeenCalled()
@@ -158,7 +166,8 @@ describe('ImportCSV', () => {
       added: [makeTx('tx-1'), makeTx('tx-2'), makeTx('tx-3')],
       duplicates: [],
     })
-    globalThis.FileReader = DeferredFileReaderMock as unknown as typeof FileReader
+    globalThis.FileReader =
+      DeferredFileReaderMock as unknown as typeof FileReader
 
     render(<ImportCSV />)
 
@@ -178,7 +187,9 @@ describe('ImportCSV', () => {
       } as unknown as ProgressEvent<FileReader>)
     })
 
-    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
   })
 
   it('persists immediately, reports duplicates, and triggers navigation callback', async () => {
@@ -198,7 +209,9 @@ describe('ImportCSV', () => {
       },
     })
 
-    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
     expect(
       screen.getByText('1 de 3 transacciones guardadas (2 duplicadas omitidas)')
     ).toBeInTheDocument()
@@ -228,7 +241,9 @@ describe('ImportCSV', () => {
       },
     })
 
-    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
     expect(
       screen.getByText('2 de 3 transacciones guardadas (1 duplicadas omitidas)')
     ).toBeInTheDocument()
@@ -263,14 +278,18 @@ describe('ImportCSV', () => {
     })
 
     // The import still succeeded ...
-    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
     expect(
       screen.getByText('2 de 3 transacciones guardadas (1 duplicadas omitidas)')
     ).toBeInTheDocument()
 
     // ... but the user is told the AI step did not run, and why.
     await waitFor(() => expect(toastMock.warning).toHaveBeenCalledTimes(1))
-    expect(toastMock.warning.mock.calls[0][0]).toContain('401 invalid x-api-key')
+    expect(toastMock.warning.mock.calls[0][0]).toContain(
+      '401 invalid x-api-key'
+    )
   })
 
   it('does not warn about AI when the import reports no AI failure', async () => {
@@ -288,7 +307,9 @@ describe('ImportCSV', () => {
       },
     })
 
-    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
     expect(toastMock.warning).not.toHaveBeenCalled()
   })
 
@@ -309,7 +330,9 @@ describe('ImportCSV', () => {
       },
     })
 
-    expect(await screen.findByText('Importación completada')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
     await waitFor(() => expect(toastMock.warning).toHaveBeenCalledTimes(1))
     const message = toastMock.warning.mock.calls[0][0] as string
     expect(message).toContain('incompleta')

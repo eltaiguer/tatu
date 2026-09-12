@@ -7,8 +7,8 @@ import { setAiConfig } from '../services/ai/ai-config'
 export function useUserPreferences(session: SupabaseSession | null) {
   const prefsLoadedRef = useRef(false)
   const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('auto')
-  const [systemDark, setSystemDark] = useState(() =>
-    window.matchMedia('(prefers-color-scheme: dark)').matches
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia('(prefers-color-scheme: dark)').matches
   )
   const isDark = theme === 'dark' || (theme === 'auto' && systemDark)
   const [preferredCurrency, setPreferredCurrency] = useState<'UYU' | 'USD'>(

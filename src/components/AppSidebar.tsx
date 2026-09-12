@@ -111,7 +111,9 @@ export function SidebarInner({
   ]
 
   const userEmail = session?.user?.email ?? ''
-  const userName = getFriendlyName(session) || (userEmail ? userEmail.split('@')[0] : 'Usuario')
+  const userName =
+    getFriendlyName(session) ||
+    (userEmail ? userEmail.split('@')[0] : 'Usuario')
   const avatarInitial = userName.charAt(0).toUpperCase()
 
   return (
@@ -257,7 +259,7 @@ export function SidebarInner({
                 }}
                 onMouseOver={(e) => {
                   if (!isActive) {
-                    (e.currentTarget as HTMLButtonElement).style.background =
+                    ;(e.currentTarget as HTMLButtonElement).style.background =
                       'var(--surface-2)'
                     ;(e.currentTarget as HTMLButtonElement).style.color =
                       'var(--text)'
@@ -265,7 +267,7 @@ export function SidebarInner({
                 }}
                 onMouseOut={(e) => {
                   if (!isActive) {
-                    (e.currentTarget as HTMLButtonElement).style.background =
+                    ;(e.currentTarget as HTMLButtonElement).style.background =
                       'transparent'
                     ;(e.currentTarget as HTMLButtonElement).style.color =
                       'var(--text-muted)'
@@ -297,7 +299,9 @@ export function SidebarInner({
                     style={{
                       fontSize: 11,
                       fontFamily: 'var(--font-mono)',
-                      color: isActive ? 'var(--brand-text)' : 'var(--text-faint)',
+                      color: isActive
+                        ? 'var(--brand-text)'
+                        : 'var(--text-faint)',
                       background: isActive
                         ? 'oklch(1 0 0 / 0.35)'
                         : 'var(--surface-2)',
@@ -343,9 +347,7 @@ export function SidebarInner({
           >
             {avatarInitial}
           </span>
-          <div
-            style={{ minWidth: 0, flex: 1 }}
-          >
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div
               style={{
                 fontSize: 13,

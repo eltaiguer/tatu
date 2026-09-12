@@ -43,12 +43,32 @@ import type { TransactionsFilter } from '../models'
 
 /* ---- Period helpers ---- */
 const MONTHS_ES = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+  'Enero',
+  'Febrero',
+  'Marzo',
+  'Abril',
+  'Mayo',
+  'Junio',
+  'Julio',
+  'Agosto',
+  'Septiembre',
+  'Octubre',
+  'Noviembre',
+  'Diciembre',
 ]
 const MONTHS_ES_SHORT = [
-  'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-  'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+  'Ene',
+  'Feb',
+  'Mar',
+  'Abr',
+  'May',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dic',
 ]
 
 type Period =
@@ -72,11 +92,7 @@ function periodRange(period: Period): { from: string; to: string } {
   }
   if (period.mode === 'recent') {
     const to = period.anchor
-    const from = new Date(
-      to.getFullYear(),
-      to.getMonth() - (period.n - 1),
-      1
-    )
+    const from = new Date(to.getFullYear(), to.getMonth() - (period.n - 1), 1)
     return {
       from: isoDay(from),
       to: isoDay(new Date(to.getFullYear(), to.getMonth() + 1, 0)),
@@ -96,9 +112,7 @@ function getPeriodLabel(period: Period): string {
     const f = period.from
       ? period.from.slice(8) + '/' + period.from.slice(5, 7)
       : '…'
-    const t = period.to
-      ? period.to.slice(8) + '/' + period.to.slice(5, 7)
-      : '…'
+    const t = period.to ? period.to.slice(8) + '/' + period.to.slice(5, 7) : '…'
     return `${f} → ${t}`
   }
   return 'Período'
@@ -118,17 +132,13 @@ function MonthNav({
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
-  const anchorY =
-    period.mode === 'month' ? period.y : newest.getFullYear()
-  const anchorM =
-    period.mode === 'month' ? period.m : newest.getMonth()
+  const anchorY = period.mode === 'month' ? period.y : newest.getFullYear()
+  const anchorM = period.mode === 'month' ? period.m : newest.getMonth()
   const [gridYear, setGridYear] = useState(anchorY)
 
   useEffect(() => {
     if (open) {
-      setGridYear(
-        period.mode === 'month' ? period.y : newest.getFullYear()
-      )
+      setGridYear(period.mode === 'month' ? period.y : newest.getFullYear())
     }
   }, [open, period, newest])
 
@@ -174,12 +184,10 @@ function MonthNav({
             placeItems: 'center',
           }}
           onMouseEnter={(e) =>
-            ((e.currentTarget as HTMLElement).style.background =
-              'var(--muted)')
+            ((e.currentTarget as HTMLElement).style.background = 'var(--muted)')
           }
           onMouseLeave={(e) =>
-            ((e.currentTarget as HTMLElement).style.background =
-              'transparent')
+            ((e.currentTarget as HTMLElement).style.background = 'transparent')
           }
         >
           <ChevronLeft size={17} />
@@ -235,12 +243,10 @@ function MonthNav({
           }}
           onMouseEnter={(e) => {
             if (!nextDisabled)
-              (e.currentTarget as HTMLElement).style.background =
-                'var(--muted)'
+              (e.currentTarget as HTMLElement).style.background = 'var(--muted)'
           }}
           onMouseLeave={(e) =>
-            ((e.currentTarget as HTMLElement).style.background =
-              'transparent')
+            ((e.currentTarget as HTMLElement).style.background = 'transparent')
           }
         >
           <ChevronRight size={17} />
@@ -307,7 +313,13 @@ function MonthNav({
               </Button>
             ))}
           </div>
-          <hr style={{ margin: '0 -14px 12px', border: 'none', borderTop: '1px solid var(--border)' }} />
+          <hr
+            style={{
+              margin: '0 -14px 12px',
+              border: 'none',
+              borderTop: '1px solid var(--border)',
+            }}
+          />
           {/* Year nav */}
           <div
             style={{
@@ -421,7 +433,9 @@ function TotalTile({
           minWidth: 0,
         }}
       >
-        <span style={{ color: 'var(--text-muted)', display: 'grid', flexShrink: 0 }}>
+        <span
+          style={{ color: 'var(--text-muted)', display: 'grid', flexShrink: 0 }}
+        >
           {icon}
         </span>
         <span
@@ -520,7 +534,9 @@ function TotalsStrip({
         label="Transferencias"
         icon={<Slash size={14} />}
         value={String(ignoredCount)}
-        sub={ignoredCount ? 'Ignoradas · no se cuentan' : 'Ninguna en el período'}
+        sub={
+          ignoredCount ? 'Ignoradas · no se cuentan' : 'Ninguna en el período'
+        }
       />
     </div>
   )
@@ -607,9 +623,7 @@ function BulkBar({
           </button>
         )}
 
-        <span
-          style={{ width: 1, height: 22, background: 'var(--border)' }}
-        />
+        <span style={{ width: 1, height: 22, background: 'var(--border)' }} />
 
         <div
           style={{ display: 'flex', gap: 4, position: 'relative' }}
@@ -794,9 +808,7 @@ function BulkBar({
           </button>
         </div>
 
-        <span
-          style={{ width: 1, height: 22, background: 'var(--border)' }}
-        />
+        <span style={{ width: 1, height: 22, background: 'var(--border)' }} />
 
         <button
           onClick={onClear}
@@ -853,10 +865,7 @@ interface TransactionsProps {
     category: string
   ) => Promise<void> | void
   onBulkDelete?: (transactionIds: string[]) => Promise<void> | void
-  onBulkTag?: (
-    transactionIds: string[],
-    tag: string
-  ) => Promise<void> | void
+  onBulkTag?: (transactionIds: string[], tag: string) => Promise<void> | void
   onSplitTransaction?: (
     transactionId: string,
     parts: Array<{ description: string; amount: number; category?: string }>
@@ -1003,9 +1012,7 @@ export function Transactions({
 
   const filteredCategorySuggestions = useMemo(() => {
     const query = newCategoryInput.trim().toLowerCase()
-    const base = categorySuggestions.filter(
-      (c) => c !== Category.Uncategorized
-    )
+    const base = categorySuggestions.filter((c) => c !== Category.Uncategorized)
     if (!query) return base
     return base.filter((category) => {
       const label = getCategoryDisplay(category).label.toLowerCase()
@@ -1224,7 +1231,11 @@ export function Transactions({
   }
 
   async function handleBulkIgnore() {
-    if (!onBulkCategorize || selectedTransactionIds.length === 0 || isBulkOperating)
+    if (
+      !onBulkCategorize ||
+      selectedTransactionIds.length === 0 ||
+      isBulkOperating
+    )
       return
     const count = selectedTransactionIds.length
     setIsBulkOperating(true)
@@ -1305,9 +1316,7 @@ export function Transactions({
 
   const allPageSelected =
     paginatedTransactionIds.length > 0 &&
-    paginatedTransactionIds.every((id) =>
-      selectedTransactionIds.includes(id)
-    )
+    paginatedTransactionIds.every((id) => selectedTransactionIds.includes(id))
   const somePageSelected =
     !allPageSelected &&
     paginatedTransactionIds.some((id) => selectedTransactionIds.includes(id))
@@ -1341,8 +1350,8 @@ export function Transactions({
             Transacciones
           </h1>
           <p className="text-muted-foreground" style={{ fontSize: 14 }}>
-            {filteredTransactions.length}{' '}
-            movimiento{filteredTransactions.length !== 1 ? 's' : ''}
+            {filteredTransactions.length} movimiento
+            {filteredTransactions.length !== 1 ? 's' : ''}
             {hasActiveFilters ? ' · filtrado' : ''} · {periodLabelText}
           </p>
         </div>

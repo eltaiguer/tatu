@@ -1,16 +1,20 @@
-import { getCategoryDefinition } from '../services/categories/category-registry';
+import { getCategoryDefinition } from '../services/categories/category-registry'
 
 interface CategoryBadgeProps {
-  categoryId: string;
-  showIcon?: boolean;
-  size?: 'sm' | 'md';
+  categoryId: string
+  showIcon?: boolean
+  size?: 'sm' | 'md'
 }
 
-export function CategoryBadge({ categoryId, showIcon = true, size = 'md' }: CategoryBadgeProps) {
-  const definition = getCategoryDefinition(categoryId);
+export function CategoryBadge({
+  categoryId,
+  showIcon = true,
+  size = 'md',
+}: CategoryBadgeProps) {
+  const definition = getCategoryDefinition(categoryId)
 
-  const padding = size === 'sm' ? 'px-2 py-0.5' : 'px-2.5 py-1';
-  const textSize = size === 'sm' ? 'text-xs' : 'text-sm';
+  const padding = size === 'sm' ? 'px-2 py-0.5' : 'px-2.5 py-1'
+  const textSize = size === 'sm' ? 'text-xs' : 'text-sm'
 
   return (
     <span
@@ -27,5 +31,5 @@ export function CategoryBadge({ categoryId, showIcon = true, size = 'md' }: Cate
       )}
       <span>{definition.label}</span>
     </span>
-  );
+  )
 }

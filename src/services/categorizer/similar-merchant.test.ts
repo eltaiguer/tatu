@@ -24,10 +24,7 @@ describe('Similar Merchant', () => {
   })
 
   it('should return null for completely unknown merchants', () => {
-    const result = findSimilarMerchant(
-      'Xyzzy Plugh Nothing',
-      KNOWN_MERCHANTS
-    )
+    const result = findSimilarMerchant('Xyzzy Plugh Nothing', KNOWN_MERCHANTS)
     expect(result).toBeNull()
   })
 

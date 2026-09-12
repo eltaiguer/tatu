@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { Settings } from './Settings'
 import type { Transaction } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
@@ -51,7 +57,8 @@ describe('Settings', () => {
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
-        transactions={[]} {...defaultAiProps}
+        transactions={[]}
+        {...defaultAiProps}
       />
     )
 
@@ -75,7 +82,8 @@ describe('Settings', () => {
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
-        transactions={[]} {...defaultAiProps}
+        transactions={[]}
+        {...defaultAiProps}
       />
     )
 
@@ -97,7 +105,8 @@ describe('Settings', () => {
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
-        transactions={[]} {...defaultAiProps}
+        transactions={[]}
+        {...defaultAiProps}
       />
     )
 
@@ -115,7 +124,8 @@ describe('Settings', () => {
         session={mockSession}
         supabaseEnabled={true}
         onSignOut={() => {}}
-        transactions={[]} {...defaultAiProps}
+        transactions={[]}
+        {...defaultAiProps}
       />
     )
 
@@ -134,7 +144,8 @@ describe('Settings', () => {
         session={mockSession}
         supabaseEnabled={true}
         onSignOut={onSignOut}
-        transactions={[]} {...defaultAiProps}
+        transactions={[]}
+        {...defaultAiProps}
       />
     )
 
@@ -152,7 +163,8 @@ describe('Settings', () => {
         session={null}
         supabaseEnabled={false}
         onSignOut={() => {}}
-        transactions={[]} {...defaultAiProps}
+        transactions={[]}
+        {...defaultAiProps}
       />
     )
 

@@ -193,7 +193,9 @@ describe('supabase custom-patterns service', () => {
     })
 
     it('throws when Supabase returns an error', async () => {
-      eqDeleteUserMock.mockResolvedValue({ error: { message: 'bulk delete failed' } })
+      eqDeleteUserMock.mockResolvedValue({
+        error: { message: 'bulk delete failed' },
+      })
 
       const { deleteAllCustomPatterns } = await import('./custom-patterns')
       await expect(deleteAllCustomPatterns(session)).rejects.toThrow(

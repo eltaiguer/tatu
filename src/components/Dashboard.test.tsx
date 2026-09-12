@@ -32,7 +32,9 @@ describe('Dashboard', () => {
     render(<Dashboard transactions={[]} />)
 
     expect(screen.queryByText(/NaN|Infinity/)).not.toBeInTheDocument()
-    expect(screen.getByText('Empezá importando tu extracto')).toBeInTheDocument()
+    expect(
+      screen.getByText('Empezá importando tu extracto')
+    ).toBeInTheDocument()
     expect(screen.queryByText('Panel General')).not.toBeInTheDocument()
 
     vi.useRealTimers()
@@ -40,14 +42,32 @@ describe('Dashboard', () => {
 
   it('shows converted+combined totals in home currency', () => {
     const transactions = [
-      makeTransaction({ id: 'uyu-debit', currency: 'UYU', type: 'debit', amount: 1000 }),
-      makeTransaction({ id: 'usd-debit', currency: 'USD', type: 'debit', amount: 50 }),
-      makeTransaction({ id: 'usd-credit', currency: 'USD', type: 'credit', amount: 200, category: Category.Income }),
+      makeTransaction({
+        id: 'uyu-debit',
+        currency: 'UYU',
+        type: 'debit',
+        amount: 1000,
+      }),
+      makeTransaction({
+        id: 'usd-debit',
+        currency: 'USD',
+        type: 'debit',
+        amount: 50,
+      }),
+      makeTransaction({
+        id: 'usd-credit',
+        currency: 'USD',
+        type: 'credit',
+        amount: 200,
+        category: Category.Income,
+      }),
     ]
 
     // homeCurrency defaults to 'USD', fxRate defaults to 40.5
     // income = 200 USD (only Category.Income credits count), expenses = 50 USD + 1000/40 ≈ 25 USD
-    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+    render(
+      <Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />
+    )
 
     // income = 200 USD appears in "Este mes" panel
     expect(screen.getByText('US$ 200,00')).toBeInTheDocument()
@@ -64,7 +84,7 @@ describe('Dashboard', () => {
       (desc) =>
         desc === 'SUPERMERCADO DEVOTO SA 0032'
           ? { friendlyDescription: 'Devoto', updatedAt: '2026-01-01' }
-          : null,
+          : null
     )
 
     const tx = makeTransaction({
@@ -79,7 +99,9 @@ describe('Dashboard', () => {
     render(<Dashboard transactions={[tx]} />)
 
     expect(screen.getAllByText('Devoto').length).toBeGreaterThan(0)
-    expect(screen.queryByText('SUPERMERCADO DEVOTO SA 0032')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('SUPERMERCADO DEVOTO SA 0032')
+    ).not.toBeInTheDocument()
 
     vi.restoreAllMocks()
     vi.useRealTimers()
@@ -104,7 +126,9 @@ describe('Dashboard', () => {
     ]
 
     // homeCurrency=USD, so expense total = 50 (transfer excluded)
-    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+    render(
+      <Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />
+    )
 
     // 50 appears (native + converted total)
     expect(screen.getAllByText('US$ 50,00').length).toBeGreaterThan(0)
@@ -140,7 +164,9 @@ describe('Dashboard', () => {
       }),
     ]
 
-    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+    render(
+      <Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />
+    )
 
     expect(screen.queryByText('SUPER PARENT')).not.toBeInTheDocument()
     expect(screen.getAllByText('Super - parte 1').length).toBeGreaterThan(0)
@@ -178,7 +204,9 @@ describe('Dashboard', () => {
       }),
     ]
 
-    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+    render(
+      <Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />
+    )
 
     expect(screen.getAllByText('2 movimientos').length).toBeGreaterThan(0)
     expect(screen.queryByText('3 movimientos')).not.toBeInTheDocument()
@@ -203,9 +231,21 @@ describe('Dashboard', () => {
 
   it('renders category breakdown from expense data', () => {
     const transactions = [
-      makeTransaction({ id: 'food-1', category: Category.Groceries, amount: 100 }),
-      makeTransaction({ id: 'food-2', category: Category.Groceries, amount: 50 }),
-      makeTransaction({ id: 'transport-1', category: Category.Transport, amount: 30 }),
+      makeTransaction({
+        id: 'food-1',
+        category: Category.Groceries,
+        amount: 100,
+      }),
+      makeTransaction({
+        id: 'food-2',
+        category: Category.Groceries,
+        amount: 50,
+      }),
+      makeTransaction({
+        id: 'transport-1',
+        category: Category.Transport,
+        amount: 30,
+      }),
     ]
 
     render(<Dashboard transactions={transactions} />)
@@ -250,7 +290,7 @@ describe('Dashboard', () => {
         category: Category.Transport,
         amount: 50,
         date: new Date(2026, 0, 20 + i),
-      }),
+      })
     )
     const transactions = [
       makeTransaction({
@@ -318,7 +358,9 @@ describe('Dashboard', () => {
       }),
     ]
 
-    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+    render(
+      <Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />
+    )
 
     // The legacy transfer is neither listed nor folded into "este mes"
     expect(screen.queryByText('TRASPASO ENTRE CUENTAS')).not.toBeInTheDocument()
@@ -342,16 +384,16 @@ describe('Dashboard', () => {
       <Dashboard
         transactions={transactions}
         onNavigateToCategories={onNavigateToCategories}
-      />,
+      />
     )
 
     expect(
-      screen.getByText('Todas tus transacciones están ignoradas'),
+      screen.getByText('Todas tus transacciones están ignoradas')
     ).toBeInTheDocument()
     // Neither the zeroed dashboard nor the "you have no data" import CTA
     expect(screen.queryByText('Mayores comercios')).not.toBeInTheDocument()
     expect(
-      screen.queryByText('Empezá importando tu extracto'),
+      screen.queryByText('Empezá importando tu extracto')
     ).not.toBeInTheDocument()
   })
 
@@ -370,7 +412,9 @@ describe('Dashboard', () => {
       }),
     ]
 
-    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+    render(
+      <Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />
+    )
 
     expect(screen.getAllByText(/enero de 2026/i).length).toBeGreaterThan(0)
     expect(screen.queryByText(/agosto de 2026/i)).not.toBeInTheDocument()
@@ -398,7 +442,9 @@ describe('Dashboard', () => {
       }),
     ]
 
-    render(<Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />)
+    render(
+      <Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />
+    )
 
     expect(screen.getByText('1 transacciones registradas')).toBeInTheDocument()
     expect(screen.getAllByText(/enero de 2026/i).length).toBeGreaterThan(0)
@@ -406,8 +452,16 @@ describe('Dashboard', () => {
 
   it('renders all major section headings', () => {
     const transactions = [
-      makeTransaction({ id: 'food-1', category: Category.Groceries, amount: 200 }),
-      makeTransaction({ id: 'transport-1', category: Category.Transport, amount: 80 }),
+      makeTransaction({
+        id: 'food-1',
+        category: Category.Groceries,
+        amount: 200,
+      }),
+      makeTransaction({
+        id: 'transport-1',
+        category: Category.Transport,
+        amount: 80,
+      }),
       makeTransaction({
         id: 'income-1',
         type: 'credit',

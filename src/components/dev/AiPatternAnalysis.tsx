@@ -12,7 +12,11 @@ interface Props {
 
 type RunState = 'idle' | 'running' | 'done' | 'error'
 
-export function AiPatternAnalysis({ transactions, claudeApiKey, aiModel }: Props) {
+export function AiPatternAnalysis({
+  transactions,
+  claudeApiKey,
+  aiModel,
+}: Props) {
   const [runState, setRunState] = useState<RunState>('idle')
   const [output, setOutput] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -26,7 +30,11 @@ export function AiPatternAnalysis({ transactions, claudeApiKey, aiModel }: Props
     setOutput('')
 
     try {
-      const config: AiConfig = { apiKey: claudeApiKey, enabled: true, model: aiModel }
+      const config: AiConfig = {
+        apiKey: claudeApiKey,
+        enabled: true,
+        model: aiModel,
+      }
       const result = await analyzeTransactionPatterns(transactions, config)
       setOutput(result)
       setRunState('done')
@@ -67,7 +75,8 @@ export function AiPatternAnalysis({ transactions, claudeApiKey, aiModel }: Props
             color: 'var(--destructive)',
             margin: 0,
             padding: '8px 12px',
-            background: 'color-mix(in srgb, var(--destructive) 10%, transparent)',
+            background:
+              'color-mix(in srgb, var(--destructive) 10%, transparent)',
             borderRadius: 6,
           }}
         >

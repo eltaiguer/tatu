@@ -13,21 +13,21 @@ import {
   getQuarter,
   subMonths,
   format,
-} from 'date-fns';
-import { es } from 'date-fns/locale';
+} from 'date-fns'
+import { es } from 'date-fns/locale'
 
-export type Period = 'week' | 'month' | 'quarter' | 'year' | 'all';
+export type Period = 'week' | 'month' | 'quarter' | 'year' | 'all'
 
 export interface PeriodOption {
-  id: string;
-  label: string;
-  period: Period;
-  referenceDate?: Date;
+  id: string
+  label: string
+  period: Period
+  referenceDate?: Date
 }
 
 export interface DateRange {
-  start: Date;
-  end: Date;
+  start: Date
+  end: Date
 }
 
 /**
@@ -45,29 +45,29 @@ export function getDateRangeForPeriod(
       return {
         start: startOfWeek(referenceDate, { weekStartsOn: 1 }), // Monday
         end: endOfWeek(referenceDate, { weekStartsOn: 1 }),
-      };
+      }
     case 'month':
       return {
         start: startOfMonth(referenceDate),
         end: endOfMonth(referenceDate),
-      };
+      }
     case 'quarter':
       return {
         start: startOfQuarter(referenceDate),
         end: endOfQuarter(referenceDate),
-      };
+      }
     case 'year':
       return {
         start: startOfYear(referenceDate),
         end: endOfYear(referenceDate),
-      };
+      }
     case 'all':
       return {
         start: new Date(0),
         end: new Date(8640000000000000), // Max date
-      };
+      }
     default:
-      throw new Error(`Invalid period: ${period}`);
+      throw new Error(`Invalid period: ${period}`)
   }
 }
 
@@ -83,8 +83,8 @@ export function isDateInPeriod(
   period: Period,
   referenceDate: Date = new Date()
 ): boolean {
-  const range = getDateRangeForPeriod(period, referenceDate);
-  return isWithinInterval(date, { start: range.start, end: range.end });
+  const range = getDateRangeForPeriod(period, referenceDate)
+  return isWithinInterval(date, { start: range.start, end: range.end })
 }
 
 /**
@@ -102,18 +102,18 @@ export function filterByPeriod<T>(
   referenceDate: Date = new Date()
 ): T[] {
   if (period === 'all') {
-    return items;
+    return items
   }
 
-  const range = getDateRangeForPeriod(period, referenceDate);
+  const range = getDateRangeForPeriod(period, referenceDate)
 
   return items.filter((item) => {
-    const itemDate = item[dateKey];
+    const itemDate = item[dateKey]
     if (!(itemDate instanceof Date)) {
-      return false;
+      return false
     }
-    return isWithinInterval(itemDate, { start: range.start, end: range.end });
-  });
+    return isWithinInterval(itemDate, { start: range.start, end: range.end })
+  })
 }
 
 /**
@@ -126,14 +126,14 @@ export function generatePeriodOptions(
   transactionDates: Date[],
   today: Date = new Date()
 ): PeriodOption[] {
-  const options: PeriodOption[] = [];
+  const options: PeriodOption[] = []
 
   // Always show "All" option
   options.push({
     id: 'all',
     label: 'Todo',
     period: 'all',
-  });
+  })
 
   // Current week
   options.push({
@@ -141,48 +141,48 @@ export function generatePeriodOptions(
     label: 'Esta semana',
     period: 'week',
     referenceDate: today,
-  });
+  })
 
   // Current month
-  const currentMonthLabel = format(today, 'MMM yyyy', { locale: es });
+  const currentMonthLabel = format(today, 'MMM yyyy', { locale: es })
   options.push({
     id: 'this-month',
     label: `Este mes (${currentMonthLabel})`,
     period: 'month',
     referenceDate: today,
-  });
+  })
 
   // Previous month
-  const prevMonth = subMonths(today, 1);
-  const prevMonthLabel = format(prevMonth, 'MMM yyyy', { locale: es });
+  const prevMonth = subMonths(today, 1)
+  const prevMonthLabel = format(prevMonth, 'MMM yyyy', { locale: es })
   options.push({
     id: 'prev-month',
     label: `Mes anterior (${prevMonthLabel})`,
     period: 'month',
     referenceDate: prevMonth,
-  });
+  })
 
   // Current quarter
-  const currentQuarter = getQuarter(today);
-  const currentYear = today.getFullYear();
+  const currentQuarter = getQuarter(today)
+  const currentYear = today.getFullYear()
   options.push({
     id: `q${currentQuarter}-${currentYear}`,
     label: `Q${currentQuarter} ${currentYear}`,
     period: 'quarter',
     referenceDate: today,
-  });
+  })
 
   // Previous quarter (if different from current)
-  const prevQuarterDate = subMonths(today, 3);
-  const prevQuarter = getQuarter(prevQuarterDate);
-  const prevQuarterYear = prevQuarterDate.getFullYear();
+  const prevQuarterDate = subMonths(today, 3)
+  const prevQuarter = getQuarter(prevQuarterDate)
+  const prevQuarterYear = prevQuarterDate.getFullYear()
   if (prevQuarter !== currentQuarter || prevQuarterYear !== currentYear) {
     options.push({
       id: `q${prevQuarter}-${prevQuarterYear}`,
       label: `Q${prevQuarter} ${prevQuarterYear}`,
       period: 'quarter',
       referenceDate: prevQuarterDate,
-    });
+    })
   }
 
   // Current year
@@ -191,23 +191,23 @@ export function generatePeriodOptions(
     label: `${currentYear}`,
     period: 'year',
     referenceDate: today,
-  });
+  })
 
   // Previous year (if transactions exist from that year)
-  const prevYear = currentYear - 1;
+  const prevYear = currentYear - 1
   const hasTransactionsFromPrevYear = transactionDates.some(
     (d) => d.getFullYear() === prevYear
-  );
+  )
   if (hasTransactionsFromPrevYear) {
     options.push({
       id: `year-${prevYear}`,
       label: `${prevYear}`,
       period: 'year',
       referenceDate: new Date(prevYear, 6, 1), // Mid-year as reference
-    });
+    })
   }
 
-  return options;
+  return options
 }
 
 export function toDateKey(date: Date): string {

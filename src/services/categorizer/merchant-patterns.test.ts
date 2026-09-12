@@ -292,7 +292,9 @@ describe('Merchant Pattern Matcher', () => {
     })
 
     it('should strip Tst prefix (Toast POS)', () => {
-      expect(normalizeMerchantName('Tst Local Restaurant')).toBe('local restaurant')
+      expect(normalizeMerchantName('Tst Local Restaurant')).toBe(
+        'local restaurant'
+      )
     })
 
     it('should not strip sq that is part of a word', () => {

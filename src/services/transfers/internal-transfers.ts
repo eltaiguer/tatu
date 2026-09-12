@@ -74,11 +74,17 @@ function canAutoAssignTransfer(transaction: Transaction): boolean {
   return true
 }
 
-function markTransfer(transaction: Transaction, confidence: number): Transaction {
+function markTransfer(
+  transaction: Transaction,
+  confidence: number
+): Transaction {
   return {
     ...transaction,
     category: Category.InternalTransfer,
-    categoryConfidence: Math.max(transaction.categoryConfidence ?? 0, confidence),
+    categoryConfidence: Math.max(
+      transaction.categoryConfidence ?? 0,
+      confidence
+    ),
   }
 }
 
@@ -89,7 +95,10 @@ function markExternalTransfer(
   return {
     ...transaction,
     category: Category.ExternalTransfer,
-    categoryConfidence: Math.max(transaction.categoryConfidence ?? 0, confidence),
+    categoryConfidence: Math.max(
+      transaction.categoryConfidence ?? 0,
+      confidence
+    ),
   }
 }
 
@@ -108,7 +117,9 @@ export function isTransferCategory(category: string | undefined): boolean {
  * Heuristically tags internal bank movements as transfers.
  * The pass is idempotent and only updates auto-categorizable rows.
  */
-export function inferInternalTransfers(transactions: Transaction[]): Transaction[] {
+export function inferInternalTransfers(
+  transactions: Transaction[]
+): Transaction[] {
   const next = transactions.map((transaction) => ({ ...transaction }))
   const byId = new Map(next.map((transaction) => [transaction.id, transaction]))
   const pairedIds = new Set<string>()
@@ -267,5 +278,7 @@ export function inferInternalTransfers(transactions: Transaction[]): Transaction
     pairedIds.add(bestMatch.id)
   }
 
-  return transactions.map((transaction) => byId.get(transaction.id) ?? transaction)
+  return transactions.map(
+    (transaction) => byId.get(transaction.id) ?? transaction
+  )
 }

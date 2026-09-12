@@ -56,7 +56,9 @@ const INCOME_KEYWORDS = [
 function matchesWord(normalized: string, keyword: string): boolean {
   if (keyword.includes(' ')) return normalized.includes(keyword)
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`(?<![a-záéíóúüñ])${escaped}(?![a-záéíóúüñ])`).test(normalized)
+  return new RegExp(`(?<![a-záéíóúüñ])${escaped}(?![a-záéíóúüñ])`).test(
+    normalized
+  )
 }
 
 function matchesAny(normalized: string, keywords: string[]): boolean {
@@ -211,10 +213,7 @@ export function categorizeTransaction(
   }
 
   // 11. Amount heuristics (requires context)
-  if (
-    context?.amount !== undefined &&
-    context?.currency
-  ) {
+  if (context?.amount !== undefined && context?.currency) {
     const amountMatch = categorizeByAmount(
       context.amount,
       context.currency,

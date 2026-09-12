@@ -144,10 +144,7 @@ describe('Temporal Patterns', () => {
     })
 
     it('should return null for empty patterns map', () => {
-      const result = getTemporalSuggestion(
-        'Something',
-        new Map()
-      )
+      const result = getTemporalSuggestion('Something', new Map())
       expect(result).toBeNull()
     })
   })

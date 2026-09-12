@@ -12,12 +12,15 @@ import {
   testPattern,
 } from './custom-patterns'
 
-const { getActiveSupabaseSessionMock, upsertCustomPatternMock, deleteCustomPatternMock } =
-  vi.hoisted(() => ({
-    getActiveSupabaseSessionMock: vi.fn(),
-    upsertCustomPatternMock: vi.fn(),
-    deleteCustomPatternMock: vi.fn(),
-  }))
+const {
+  getActiveSupabaseSessionMock,
+  upsertCustomPatternMock,
+  deleteCustomPatternMock,
+} = vi.hoisted(() => ({
+  getActiveSupabaseSessionMock: vi.fn(),
+  upsertCustomPatternMock: vi.fn(),
+  deleteCustomPatternMock: vi.fn(),
+}))
 
 vi.mock('../supabase/runtime', () => ({
   getActiveSupabaseSession: getActiveSupabaseSessionMock,

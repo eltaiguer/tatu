@@ -57,8 +57,10 @@ vi.mock('../services/supabase/import-runs', () => ({
 // Override stores are empty, so nothing is filtered out of AI enrichment.
 vi.mock('../services/categorizer/category-overrides', () => ({
   listMerchantCategoryOverrides: () => ({}),
-  clearMerchantCategoryOverrideWithSync: mocks.clearMerchantCategoryOverrideWithSync,
-  setMerchantCategoryOverrideWithSync: mocks.setMerchantCategoryOverrideWithSync,
+  clearMerchantCategoryOverrideWithSync:
+    mocks.clearMerchantCategoryOverrideWithSync,
+  setMerchantCategoryOverrideWithSync:
+    mocks.setMerchantCategoryOverrideWithSync,
   getMerchantCategoryOverride: () => undefined,
 }))
 vi.mock('../services/descriptions/description-overrides', () => ({
@@ -145,7 +147,9 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
   })
 
   it('still stores rule-based results when AI enrichment fails', async () => {
-    mocks.enrichTransactionsWithAi.mockRejectedValue(new Error('401 invalid x-api-key'))
+    mocks.enrichTransactionsWithAi.mockRejectedValue(
+      new Error('401 invalid x-api-key')
+    )
     const { handlers } = setup()
 
     const outcome = await handlers.handleTransactionsImported(
@@ -156,13 +160,17 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     // The import itself must still succeed with the rule-based categories.
     expect(outcome.added).toHaveLength(1)
     expect(transactionStore.getState().transactions).toHaveLength(1)
-    expect(transactionStore.getState().transactions[0].category).toBe('groceries')
+    expect(transactionStore.getState().transactions[0].category).toBe(
+      'groceries'
+    )
     expect(mocks.persistTransactions).toHaveBeenCalledTimes(1)
     expect(mocks.completeImportRun).toHaveBeenCalledTimes(1)
   })
 
   it('reports the AI failure reason to the caller instead of swallowing it', async () => {
-    mocks.enrichTransactionsWithAi.mockRejectedValue(new Error('401 invalid x-api-key'))
+    mocks.enrichTransactionsWithAi.mockRejectedValue(
+      new Error('401 invalid x-api-key')
+    )
     const { handlers } = setup()
 
     const outcome = await handlers.handleTransactionsImported(
@@ -456,7 +464,10 @@ describe('useTransactionHandlers — split and unsplit', () => {
   }
 
   function splitResult() {
-    const parent = { ...makeTransaction('parent', { amount: 1000 }), isSplitParent: true }
+    const parent = {
+      ...makeTransaction('parent', { amount: 1000 }),
+      isSplitParent: true,
+    }
     const children = [
       makeTransaction('parent_split_0', {
         amount: 600,

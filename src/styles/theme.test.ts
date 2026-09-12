@@ -73,49 +73,63 @@ describe('Theme System', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
       expect(rootStyle.getPropertyValue('--card').trim()).toBe('#ffffff')
-      expect(rootStyle.getPropertyValue('--card-foreground').trim()).toBe('#0f172a')
+      expect(rootStyle.getPropertyValue('--card-foreground').trim()).toBe(
+        '#0f172a'
+      )
     })
 
     it('should define popover tokens', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
       expect(rootStyle.getPropertyValue('--popover').trim()).toBe('#ffffff')
-      expect(rootStyle.getPropertyValue('--popover-foreground').trim()).toBe('#0f172a')
+      expect(rootStyle.getPropertyValue('--popover-foreground').trim()).toBe(
+        '#0f172a'
+      )
     })
 
     it('should define primary semantic tokens', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
       expect(rootStyle.getPropertyValue('--primary').trim()).toBe('#0066ce')
-      expect(rootStyle.getPropertyValue('--primary-foreground').trim()).toBe('#ffffff')
+      expect(rootStyle.getPropertyValue('--primary-foreground').trim()).toBe(
+        '#ffffff'
+      )
     })
 
     it('should define secondary semantic tokens', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
       expect(rootStyle.getPropertyValue('--secondary').trim()).toBe('#f1f5f9')
-      expect(rootStyle.getPropertyValue('--secondary-foreground').trim()).toBe('#0f172a')
+      expect(rootStyle.getPropertyValue('--secondary-foreground').trim()).toBe(
+        '#0f172a'
+      )
     })
 
     it('should define muted tokens', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
       expect(rootStyle.getPropertyValue('--muted').trim()).toBe('#f1f5f9')
-      expect(rootStyle.getPropertyValue('--muted-foreground').trim()).toBe('#64748b')
+      expect(rootStyle.getPropertyValue('--muted-foreground').trim()).toBe(
+        '#64748b'
+      )
     })
 
     it('should define accent semantic tokens', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
       expect(rootStyle.getPropertyValue('--accent').trim()).toBe('#eb6f47')
-      expect(rootStyle.getPropertyValue('--accent-foreground').trim()).toBe('#ffffff')
+      expect(rootStyle.getPropertyValue('--accent-foreground').trim()).toBe(
+        '#ffffff'
+      )
     })
 
     it('should define destructive tokens', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
       expect(rootStyle.getPropertyValue('--destructive').trim()).toBe('#dc2626')
-      expect(rootStyle.getPropertyValue('--destructive-foreground').trim()).toBe('#ffffff')
+      expect(
+        rootStyle.getPropertyValue('--destructive-foreground').trim()
+      ).toBe('#ffffff')
     })
 
     it('should define input and border tokens', () => {
@@ -123,7 +137,9 @@ describe('Theme System', () => {
 
       expect(rootStyle.getPropertyValue('--border').trim()).toBe('#e2e8f0')
       expect(rootStyle.getPropertyValue('--input').trim()).toBe('#e2e8f0')
-      expect(rootStyle.getPropertyValue('--input-background').trim()).toBe('#ffffff')
+      expect(rootStyle.getPropertyValue('--input-background').trim()).toBe(
+        '#ffffff'
+      )
     })
 
     it('should define ring token for focus states', () => {
@@ -157,49 +173,63 @@ describe('Theme System', () => {
       const darkStyle = getComputedStyle(darkElement)
 
       expect(darkStyle.getPropertyValue('--card').trim()).toBe('#1e293b')
-      expect(darkStyle.getPropertyValue('--card-foreground').trim()).toBe('#f8fafc')
+      expect(darkStyle.getPropertyValue('--card-foreground').trim()).toBe(
+        '#f8fafc'
+      )
     })
 
     it('should define dark mode popover tokens', () => {
       const darkStyle = getComputedStyle(darkElement)
 
       expect(darkStyle.getPropertyValue('--popover').trim()).toBe('#1e293b')
-      expect(darkStyle.getPropertyValue('--popover-foreground').trim()).toBe('#f8fafc')
+      expect(darkStyle.getPropertyValue('--popover-foreground').trim()).toBe(
+        '#f8fafc'
+      )
     })
 
     it('should define dark mode primary semantic tokens', () => {
       const darkStyle = getComputedStyle(darkElement)
 
       expect(darkStyle.getPropertyValue('--primary').trim()).toBe('#30a3ff')
-      expect(darkStyle.getPropertyValue('--primary-foreground').trim()).toBe('#0f172a')
+      expect(darkStyle.getPropertyValue('--primary-foreground').trim()).toBe(
+        '#0f172a'
+      )
     })
 
     it('should define dark mode secondary semantic tokens', () => {
       const darkStyle = getComputedStyle(darkElement)
 
       expect(darkStyle.getPropertyValue('--secondary').trim()).toBe('#1e293b')
-      expect(darkStyle.getPropertyValue('--secondary-foreground').trim()).toBe('#f8fafc')
+      expect(darkStyle.getPropertyValue('--secondary-foreground').trim()).toBe(
+        '#f8fafc'
+      )
     })
 
     it('should define dark mode muted tokens', () => {
       const darkStyle = getComputedStyle(darkElement)
 
       expect(darkStyle.getPropertyValue('--muted').trim()).toBe('#1e293b')
-      expect(darkStyle.getPropertyValue('--muted-foreground').trim()).toBe('#94a3b8')
+      expect(darkStyle.getPropertyValue('--muted-foreground').trim()).toBe(
+        '#94a3b8'
+      )
     })
 
     it('should define dark mode accent semantic tokens', () => {
       const darkStyle = getComputedStyle(darkElement)
 
       expect(darkStyle.getPropertyValue('--accent').trim()).toBe('#f2916d')
-      expect(darkStyle.getPropertyValue('--accent-foreground').trim()).toBe('#0f172a')
+      expect(darkStyle.getPropertyValue('--accent-foreground').trim()).toBe(
+        '#0f172a'
+      )
     })
 
     it('should define dark mode destructive tokens', () => {
       const darkStyle = getComputedStyle(darkElement)
 
       expect(darkStyle.getPropertyValue('--destructive').trim()).toBe('#ef4444')
-      expect(darkStyle.getPropertyValue('--destructive-foreground').trim()).toBe('#ffffff')
+      expect(
+        darkStyle.getPropertyValue('--destructive-foreground').trim()
+      ).toBe('#ffffff')
     })
 
     it('should define dark mode input and border tokens', () => {
@@ -207,7 +237,9 @@ describe('Theme System', () => {
 
       expect(darkStyle.getPropertyValue('--border').trim()).toBe('#334155')
       expect(darkStyle.getPropertyValue('--input').trim()).toBe('#334155')
-      expect(darkStyle.getPropertyValue('--input-background').trim()).toBe('#1e293b')
+      expect(darkStyle.getPropertyValue('--input-background').trim()).toBe(
+        '#1e293b'
+      )
     })
 
     it('should define dark mode ring token', () => {

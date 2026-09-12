@@ -1,110 +1,110 @@
 // CSV Import - Drag and drop file upload with validation
 
-import { Card } from './ui/card';
-import { Button } from './ui/button';
-import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { parseCSV } from '../services/parsers/csv-parser';
-import { transactionStore } from '../stores/transaction-store';
-import type { ParsedData, Transaction } from '../models';
+import { Card } from './ui/card'
+import { Button } from './ui/button'
+import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { parseCSV } from '../services/parsers/csv-parser'
+import { transactionStore } from '../stores/transaction-store'
+import type { ParsedData, Transaction } from '../models'
 
-type ImportState = 'idle' | 'validating' | 'success' | 'error';
-type UiFileType = 'credit_card' | 'usd_account' | 'uyu_account';
+type ImportState = 'idle' | 'validating' | 'success' | 'error'
+type UiFileType = 'credit_card' | 'usd_account' | 'uyu_account'
 
 interface ImportCSVProps {
-  onImportComplete?: () => void;
+  onImportComplete?: () => void
   onTransactionsImported?: (
     transactions: Transaction[],
     context?: {
-      parsedData: ParsedData;
-      csvContent: string;
-      fileName: string;
+      parsedData: ParsedData
+      csvContent: string
+      fileName: string
     }
   ) => Promise<{
-    added: Transaction[];
-    duplicates: Transaction[];
+    added: Transaction[]
+    duplicates: Transaction[]
     /**
      * Set when the import succeeded but AI enrichment did not, so the user can
      * tell a dead API key apart from the model categorizing badly.
      */
     /** Enrichment did not run at all. */
-    aiError?: string;
+    aiError?: string
     /** Enrichment ran but some batches failed; the rest were applied. */
-    aiPartial?: string;
-  }>;
+    aiPartial?: string
+  }>
 }
 
 async function readFileAsText(file: File): Promise<string> {
   if (typeof file.text === 'function') {
-    return file.text();
+    return file.text()
   }
 
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.onerror = () => reject(new Error('Error al leer el archivo'));
-    reader.readAsText(file);
-  });
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(new Error('Error al leer el archivo'))
+    reader.readAsText(file)
+  })
 }
 
 export function ImportCSV({
   onImportComplete,
   onTransactionsImported,
 }: ImportCSVProps) {
-  const [importState, setImportState] = useState<ImportState>('idle');
-  const [dragActive, setDragActive] = useState(false);
-  const [fileName, setFileName] = useState<string>('');
-  const [fileType, setFileType] = useState<UiFileType | null>(null);
+  const [importState, setImportState] = useState<ImportState>('idle')
+  const [dragActive, setDragActive] = useState(false)
+  const [fileName, setFileName] = useState<string>('')
+  const [fileType, setFileType] = useState<UiFileType | null>(null)
   const [importSummary, setImportSummary] = useState<{
-    total: number;
-    imported: number;
-    duplicates: number;
-  } | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>('');
+    total: number
+    imported: number
+    duplicates: number
+  } | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string>('')
 
   const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault()
+    e.stopPropagation()
     if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
+      setDragActive(true)
     } else if (e.type === 'dragleave') {
-      setDragActive(false);
+      setDragActive(false)
     }
-  };
+  }
 
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      void handleFile(e.dataTransfer.files[0]);
+      void handleFile(e.dataTransfer.files[0])
     }
-  };
+  }
 
   const handleFile = async (file: File) => {
     if (!file.name.endsWith('.csv')) {
-      setImportState('error');
-      setFileName(file.name);
-      setErrorMessage('El archivo debe estar en formato CSV');
-      return;
+      setImportState('error')
+      setFileName(file.name)
+      setErrorMessage('El archivo debe estar en formato CSV')
+      return
     }
 
-    setFileName(file.name);
-    setImportState('validating');
-    setErrorMessage('');
+    setFileName(file.name)
+    setImportState('validating')
+    setErrorMessage('')
 
     try {
-      const csvContent = await readFileAsText(file);
-      const result = parseCSV(csvContent, file.name);
+      const csvContent = await readFileAsText(file)
+      const result = parseCSV(csvContent, file.name)
 
       if (result.fileType === 'credit_card') {
-        setFileType('credit_card');
+        setFileType('credit_card')
       } else if (result.fileType === 'bank_account_usd') {
-        setFileType('usd_account');
+        setFileType('usd_account')
       } else {
-        setFileType('uyu_account');
+        setFileType('uyu_account')
       }
 
       const { added, duplicates, aiError, aiPartial } = onTransactionsImported
@@ -118,18 +118,18 @@ export function ImportCSV({
             // Local-only path never runs AI enrichment.
             aiError: undefined as string | undefined,
             aiPartial: undefined as string | undefined,
-          };
+          }
 
       setImportSummary({
         total: result.transactions.length,
         imported: added.length,
         duplicates: duplicates.length,
-      });
+      })
 
-      setImportState('success');
+      setImportState('success')
       toast.success(
         `${added.length} nueva${added.length === 1 ? '' : 's'} · ${duplicates.length} duplicada${duplicates.length === 1 ? '' : 's'} omitida${duplicates.length === 1 ? '' : 's'}`
-      );
+      )
 
       // The import succeeded, but the AI step did not — say so, otherwise a
       // dead API key looks identical to poor categorization. Total failure
@@ -138,51 +138,51 @@ export function ImportCSV({
       if (aiError) {
         toast.warning(
           `Categorización con IA no disponible: ${aiError}. Se usaron las reglas de categorización.`
-        );
+        )
       } else if (aiPartial) {
         toast.warning(
           `Categorización con IA incompleta: ${aiPartial}. El resto se categorizó con reglas.`
-        );
+        )
       }
 
       if (onImportComplete) {
-        onImportComplete();
+        onImportComplete()
       }
     } catch (error) {
       console.error('import failed:', error)
-      setImportState('error');
+      setImportState('error')
       setErrorMessage(
         error instanceof Error ? error.message : 'Error al procesar el archivo'
-      );
+      )
     }
-  };
+  }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      void handleFile(e.target.files[0]);
+      void handleFile(e.target.files[0])
     }
-  };
+  }
 
   const resetImport = () => {
-    setImportState('idle');
-    setFileName('');
-    setFileType(null);
-    setImportSummary(null);
-    setErrorMessage('');
-  };
+    setImportState('idle')
+    setFileName('')
+    setFileType(null)
+    setImportSummary(null)
+    setErrorMessage('')
+  }
 
   const getAccountTypeLabel = (type: UiFileType) => {
     switch (type) {
       case 'credit_card':
-        return 'Tarjeta de Crédito';
+        return 'Tarjeta de Crédito'
       case 'usd_account':
-        return 'Cuenta USD';
+        return 'Cuenta USD'
       case 'uyu_account':
-        return 'Cuenta UYU';
+        return 'Cuenta UYU'
       default:
-        return '';
+        return ''
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
@@ -376,10 +376,10 @@ export function ImportCSV({
       <Card className="p-4 bg-primary-50 dark:bg-primary-900/10 border-primary/20">
         <p className="text-sm">
           <strong>Tus datos son tuyos:</strong> Los movimientos se guardan en tu
-          cuenta de Supabase bajo tu propio usuario. Nadie más tiene acceso a
-          tu información financiera.
+          cuenta de Supabase bajo tu propio usuario. Nadie más tiene acceso a tu
+          información financiera.
         </p>
       </Card>
     </div>
-  );
+  )
 }

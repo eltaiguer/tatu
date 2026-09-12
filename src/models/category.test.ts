@@ -90,7 +90,9 @@ describe('Category System', () => {
     })
 
     it('should have user-friendly label for Software', () => {
-      expect(CATEGORY_LABELS[Category.Software]).toBe('Software y suscripciones')
+      expect(CATEGORY_LABELS[Category.Software]).toBe(
+        'Software y suscripciones'
+      )
     })
 
     it('should have user-friendly label for Uncategorized', () => {

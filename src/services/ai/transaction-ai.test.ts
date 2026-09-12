@@ -23,7 +23,11 @@ import {
 import type { AiEnrichmentResult } from './transaction-ai'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 
-function makeTx(id: string, description: string, overrides: Partial<Transaction> = {}): Transaction {
+function makeTx(
+  id: string,
+  description: string,
+  overrides: Partial<Transaction> = {}
+): Transaction {
   return {
     id,
     date: new Date('2025-01-10'),
@@ -42,7 +46,11 @@ const customCategories: CustomCategory[] = [
   { id: 'coffee', label: 'Coffee', color: '#8B4513' },
 ]
 
-const baseConfig = { apiKey: 'sk-test', enabled: true, model: 'claude-haiku-4-5' }
+const baseConfig = {
+  apiKey: 'sk-test',
+  enabled: true,
+  model: 'claude-haiku-4-5',
+}
 
 // The system prompt is sent as a cacheable block array, so tests read through
 // this rather than assuming a bare string.
@@ -75,13 +83,22 @@ function makeInputs(count: number) {
     source: 'bank_account' as const,
   }))
 }
-const emptyContext = { descriptionExamples: [], categoryExamples: [], customCategories: noCustomCategories, customPatterns: [] }
+const emptyContext = {
+  descriptionExamples: [],
+  categoryExamples: [],
+  customCategories: noCustomCategories,
+  customPatterns: [],
+}
 
 describe('validateCategory', () => {
   it('accepts valid built-in categories', () => {
     expect(validateCategory('groceries', noCustomCategories)).toBe('groceries')
-    expect(validateCategory('internal_transfer', noCustomCategories)).toBe('internal_transfer')
-    expect(validateCategory('uncategorized', noCustomCategories)).toBe('uncategorized')
+    expect(validateCategory('internal_transfer', noCustomCategories)).toBe(
+      'internal_transfer'
+    )
+    expect(validateCategory('uncategorized', noCustomCategories)).toBe(
+      'uncategorized'
+    )
   })
 
   it('accepts valid custom category ids', () => {
@@ -89,13 +106,21 @@ describe('validateCategory', () => {
   })
 
   it('coerces unknown values to uncategorized', () => {
-    expect(validateCategory('food_and_drink', noCustomCategories)).toBe(Category.Uncategorized)
-    expect(validateCategory('', noCustomCategories)).toBe(Category.Uncategorized)
-    expect(validateCategory('coffee', noCustomCategories)).toBe(Category.Uncategorized)
+    expect(validateCategory('food_and_drink', noCustomCategories)).toBe(
+      Category.Uncategorized
+    )
+    expect(validateCategory('', noCustomCategories)).toBe(
+      Category.Uncategorized
+    )
+    expect(validateCategory('coffee', noCustomCategories)).toBe(
+      Category.Uncategorized
+    )
   })
 
   it('trims and lowercases input', () => {
-    expect(validateCategory('  Groceries  ', noCustomCategories)).toBe('groceries')
+    expect(validateCategory('  Groceries  ', noCustomCategories)).toBe(
+      'groceries'
+    )
   })
 })
 
@@ -103,8 +128,24 @@ describe('applyAiEnrichment', () => {
   it('merges AI results onto matching transactions', () => {
     const txs = [makeTx('tx1', 'COMPRA DEVOTO'), makeTx('tx2', 'NETFLIX')]
     const results = new Map<string, AiEnrichmentResult>([
-      ['tx1', { id: 'tx1', category: 'groceries', displayDescription: 'Devoto', confidence: 0.85 }],
-      ['tx2', { id: 'tx2', category: 'entertainment', displayDescription: 'Netflix', confidence: 0.85 }],
+      [
+        'tx1',
+        {
+          id: 'tx1',
+          category: 'groceries',
+          displayDescription: 'Devoto',
+          confidence: 0.85,
+        },
+      ],
+      [
+        'tx2',
+        {
+          id: 'tx2',
+          category: 'entertainment',
+          displayDescription: 'Netflix',
+          confidence: 0.85,
+        },
+      ],
     ])
     const enriched = applyAiEnrichment(txs, results)
     expect(enriched[0].category).toBe('groceries')
@@ -117,7 +158,15 @@ describe('applyAiEnrichment', () => {
   it('leaves non-matched transactions unchanged', () => {
     const txs = [makeTx('tx1', 'DEVOTO'), makeTx('tx2', 'NETFLIX')]
     const results = new Map<string, AiEnrichmentResult>([
-      ['tx1', { id: 'tx1', category: 'groceries', displayDescription: 'Devoto', confidence: 0.85 }],
+      [
+        'tx1',
+        {
+          id: 'tx1',
+          category: 'groceries',
+          displayDescription: 'Devoto',
+          confidence: 0.85,
+        },
+      ],
     ])
     const enriched = applyAiEnrichment(txs, results)
     expect(enriched[1].category).toBe(txs[1].category)
@@ -128,7 +177,15 @@ describe('applyAiEnrichment', () => {
     const txs = [makeTx('tx1', 'DEVOTO')]
     const originalCategory = txs[0].category
     const results = new Map<string, AiEnrichmentResult>([
-      ['tx1', { id: 'tx1', category: 'groceries', displayDescription: 'Devoto', confidence: 0.85 }],
+      [
+        'tx1',
+        {
+          id: 'tx1',
+          category: 'groceries',
+          displayDescription: 'Devoto',
+          confidence: 0.85,
+        },
+      ],
     ])
     applyAiEnrichment(txs, results)
     expect(txs[0].category).toBe(originalCategory)
@@ -142,12 +199,31 @@ describe('enrichTransactionsWithAi', () => {
 
   it('parses valid response and returns map keyed by id', async () => {
     messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify([
-        { id: 'tx1', displayDescription: 'Devoto', category: 'groceries', confidence: 0.9 },
-      ])}],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([
+            {
+              id: 'tx1',
+              displayDescription: 'Devoto',
+              category: 'groceries',
+              confidence: 0.9,
+            },
+          ]),
+        },
+      ],
     })
     const { results } = await enrichTransactionsWithAi(
-      [{ id: 'tx1', description: 'SUPERMERCADO DEVOTO', type: 'debit', amount: 500, currency: 'UYU', source: 'bank_account' }],
+      [
+        {
+          id: 'tx1',
+          description: 'SUPERMERCADO DEVOTO',
+          type: 'debit',
+          amount: 500,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
+      ],
       baseConfig,
       emptyContext
     )
@@ -158,12 +234,30 @@ describe('enrichTransactionsWithAi', () => {
 
   it('falls back to 0.7 confidence when AI omits the field', async () => {
     messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify([
-        { id: 'tx1', displayDescription: 'Unknown', category: 'uncategorized' },
-      ])}],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([
+            {
+              id: 'tx1',
+              displayDescription: 'Unknown',
+              category: 'uncategorized',
+            },
+          ]),
+        },
+      ],
     })
     const { results } = await enrichTransactionsWithAi(
-      [{ id: 'tx1', description: 'XXXX', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' }],
+      [
+        {
+          id: 'tx1',
+          description: 'XXXX',
+          type: 'debit',
+          amount: 100,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
+      ],
       baseConfig,
       emptyContext
     )
@@ -172,15 +266,44 @@ describe('enrichTransactionsWithAi', () => {
 
   it('clamps out-of-range confidence values to [0, 1]', async () => {
     messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify([
-        { id: 'tx1', displayDescription: 'Netflix', category: 'entertainment', confidence: 1.5 },
-        { id: 'tx2', displayDescription: 'Unknown', category: 'uncategorized', confidence: -0.2 },
-      ])}],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([
+            {
+              id: 'tx1',
+              displayDescription: 'Netflix',
+              category: 'entertainment',
+              confidence: 1.5,
+            },
+            {
+              id: 'tx2',
+              displayDescription: 'Unknown',
+              category: 'uncategorized',
+              confidence: -0.2,
+            },
+          ]),
+        },
+      ],
     })
     const { results } = await enrichTransactionsWithAi(
       [
-        { id: 'tx1', description: 'NETFLIX', type: 'debit', amount: 9.99, currency: 'USD', source: 'credit_card' },
-        { id: 'tx2', description: 'XXXX', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' },
+        {
+          id: 'tx1',
+          description: 'NETFLIX',
+          type: 'debit',
+          amount: 9.99,
+          currency: 'USD',
+          source: 'credit_card',
+        },
+        {
+          id: 'tx2',
+          description: 'XXXX',
+          type: 'debit',
+          amount: 100,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
       ],
       baseConfig,
       emptyContext
@@ -191,12 +314,26 @@ describe('enrichTransactionsWithAi', () => {
 
   it('includes custom categories in the system prompt', async () => {
     messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify([
-        { id: 'tx1', displayDescription: 'Starbucks', category: 'coffee' },
-      ])}],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([
+            { id: 'tx1', displayDescription: 'Starbucks', category: 'coffee' },
+          ]),
+        },
+      ],
     })
     const { results } = await enrichTransactionsWithAi(
-      [{ id: 'tx1', description: 'STARBUCKS', type: 'debit', amount: 200, currency: 'UYU', source: 'bank_account' }],
+      [
+        {
+          id: 'tx1',
+          description: 'STARBUCKS',
+          type: 'debit',
+          amount: 200,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
+      ],
       baseConfig,
       { ...emptyContext, customCategories }
     )
@@ -207,12 +344,30 @@ describe('enrichTransactionsWithAi', () => {
 
   it('coerces invalid category to uncategorized', async () => {
     messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify([
-        { id: 'tx1', displayDescription: 'Somewhere', category: 'food_and_drink' },
-      ])}],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([
+            {
+              id: 'tx1',
+              displayDescription: 'Somewhere',
+              category: 'food_and_drink',
+            },
+          ]),
+        },
+      ],
     })
     const { results } = await enrichTransactionsWithAi(
-      [{ id: 'tx1', description: 'SOMEWHERE', type: 'debit', amount: 100, currency: 'USD', source: 'credit_card' }],
+      [
+        {
+          id: 'tx1',
+          description: 'SOMEWHERE',
+          type: 'debit',
+          amount: 100,
+          currency: 'USD',
+          source: 'credit_card',
+        },
+      ],
       baseConfig,
       emptyContext
     )
@@ -221,15 +376,38 @@ describe('enrichTransactionsWithAi', () => {
 
   it('silently drops items with missing id', async () => {
     messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: JSON.stringify([
-        { displayDescription: 'No ID', category: 'groceries' },
-        { id: 'tx2', displayDescription: 'Netflix', category: 'entertainment' },
-      ])}],
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([
+            { displayDescription: 'No ID', category: 'groceries' },
+            {
+              id: 'tx2',
+              displayDescription: 'Netflix',
+              category: 'entertainment',
+            },
+          ]),
+        },
+      ],
     })
     const { results } = await enrichTransactionsWithAi(
       [
-        { id: 'tx1', description: 'DEVOTO', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' },
-        { id: 'tx2', description: 'NETFLIX', type: 'debit', amount: 9.99, currency: 'USD', source: 'credit_card' },
+        {
+          id: 'tx1',
+          description: 'DEVOTO',
+          type: 'debit',
+          amount: 100,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
+        {
+          id: 'tx2',
+          description: 'NETFLIX',
+          type: 'debit',
+          amount: 9.99,
+          currency: 'USD',
+          source: 'credit_card',
+        },
       ],
       baseConfig,
       emptyContext
@@ -244,7 +422,16 @@ describe('enrichTransactionsWithAi', () => {
     })
     await expect(
       enrichTransactionsWithAi(
-        [{ id: 'tx1', description: 'DEVOTO', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' }],
+        [
+          {
+            id: 'tx1',
+            description: 'DEVOTO',
+            type: 'debit',
+            amount: 100,
+            currency: 'UYU',
+            source: 'bank_account',
+          },
+        ],
         baseConfig,
         emptyContext
       )
@@ -256,11 +443,21 @@ describe('enrichTransactionsWithAi', () => {
       content: [{ type: 'text', text: '[]' }],
     })
     await enrichTransactionsWithAi(
-      [{ id: 'tx1', description: 'PAGO RECIBIDO', type: 'credit', amount: 1200, currency: 'UYU', source: 'credit_card' }],
+      [
+        {
+          id: 'tx1',
+          description: 'PAGO RECIBIDO',
+          type: 'credit',
+          amount: 1200,
+          currency: 'UYU',
+          source: 'credit_card',
+        },
+      ],
       baseConfig,
       emptyContext
     )
-    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0].content as string
+    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0]
+      .content as string
     expect(userMessage).toContain('"source":"credit_card"')
   })
 
@@ -269,16 +466,28 @@ describe('enrichTransactionsWithAi', () => {
       content: [{ type: 'text', text: '[]' }],
     })
     await enrichTransactionsWithAi(
-      [{ id: 'tx1', description: 'DEVOTO', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' }],
+      [
+        {
+          id: 'tx1',
+          description: 'DEVOTO',
+          type: 'debit',
+          amount: 100,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
+      ],
       baseConfig,
       {
-        descriptionExamples: [{ raw: 'SUPERM DEVOTO', friendly: 'Devoto', category: 'groceries' }],
+        descriptionExamples: [
+          { raw: 'SUPERM DEVOTO', friendly: 'Devoto', category: 'groceries' },
+        ],
         categoryExamples: [{ merchant: 'tintoreria', category: 'personal' }],
         customCategories: noCustomCategories,
         customPatterns: [],
       }
     )
-    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0].content as string
+    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0]
+      .content as string
     expect(userMessage).toContain('SUPERM DEVOTO')
     expect(userMessage).toContain('tintoreria')
   })
@@ -288,16 +497,44 @@ describe('enrichTransactionsWithAi', () => {
       content: [{ type: 'text', text: '[]' }],
     })
     const customPatterns: CustomPattern[] = [
-      { id: 'cp1', pattern: 'farmacia', matchType: 'contains', category: 'healthcare', createdAt: '' },
-      { id: 'cp2', pattern: 'ute ', matchType: 'starts_with', category: 'utilities', createdAt: '' },
-      { id: 'cp3', pattern: 'salario empresa srl', matchType: 'exact', category: 'income', createdAt: '' },
+      {
+        id: 'cp1',
+        pattern: 'farmacia',
+        matchType: 'contains',
+        category: 'healthcare',
+        createdAt: '',
+      },
+      {
+        id: 'cp2',
+        pattern: 'ute ',
+        matchType: 'starts_with',
+        category: 'utilities',
+        createdAt: '',
+      },
+      {
+        id: 'cp3',
+        pattern: 'salario empresa srl',
+        matchType: 'exact',
+        category: 'income',
+        createdAt: '',
+      },
     ]
     await enrichTransactionsWithAi(
-      [{ id: 'tx1', description: 'FARMACIA DEVOTO', type: 'debit', amount: 200, currency: 'UYU', source: 'bank_account' }],
+      [
+        {
+          id: 'tx1',
+          description: 'FARMACIA DEVOTO',
+          type: 'debit',
+          amount: 200,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
+      ],
       baseConfig,
       { ...emptyContext, customPatterns }
     )
-    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0].content as string
+    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0]
+      .content as string
     expect(userMessage).toContain('USER RULES (always apply these')
     expect(userMessage).toContain('contains "farmacia" → healthcare')
     expect(userMessage).toContain('starts with "ute " → utilities')
@@ -309,11 +546,21 @@ describe('enrichTransactionsWithAi', () => {
       content: [{ type: 'text', text: '[]' }],
     })
     await enrichTransactionsWithAi(
-      [{ id: 'tx1', description: 'NETFLIX', type: 'debit', amount: 9.99, currency: 'USD', source: 'credit_card' }],
+      [
+        {
+          id: 'tx1',
+          description: 'NETFLIX',
+          type: 'debit',
+          amount: 9.99,
+          currency: 'USD',
+          source: 'credit_card',
+        },
+      ],
       baseConfig,
       emptyContext
     )
-    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0].content as string
+    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0]
+      .content as string
     expect(userMessage).not.toContain('USER RULES')
   })
 
@@ -321,7 +568,16 @@ describe('enrichTransactionsWithAi', () => {
     messagesCreateMock.mockRejectedValue(new Error('API error'))
     await expect(
       enrichTransactionsWithAi(
-        [{ id: 'tx1', description: 'DEVOTO', type: 'debit', amount: 100, currency: 'UYU', source: 'bank_account' }],
+        [
+          {
+            id: 'tx1',
+            description: 'DEVOTO',
+            type: 'debit',
+            amount: 100,
+            currency: 'UYU',
+            source: 'bank_account',
+          },
+        ],
         baseConfig,
         emptyContext
       )

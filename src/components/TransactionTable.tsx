@@ -129,7 +129,9 @@ export function TransactionTable({
             borderRadius: 8,
             border: `1px solid ${showIgnored ? 'var(--brand)' : 'var(--border)'}`,
             background: 'transparent',
-            color: showIgnored ? 'var(--brand-text, var(--brand))' : 'var(--text-muted)',
+            color: showIgnored
+              ? 'var(--brand-text, var(--brand))'
+              : 'var(--text-muted)',
             cursor: ignoredCount === 0 ? 'not-allowed' : 'pointer',
             fontSize: 12.5,
             fontWeight: 500,
@@ -605,11 +607,17 @@ export function TransactionTable({
                     ? {
                         opacity: 0.62,
                         ...(isSplitChildM
-                          ? { borderLeft: '2px solid var(--border)', paddingLeft: 20 }
+                          ? {
+                              borderLeft: '2px solid var(--border)',
+                              paddingLeft: 20,
+                            }
                           : {}),
                       }
                     : isSplitChildM
-                      ? { borderLeft: '2px solid var(--border)', paddingLeft: 20 }
+                      ? {
+                          borderLeft: '2px solid var(--border)',
+                          paddingLeft: 20,
+                        }
                       : undefined
                 }
                 className="p-4 space-y-3"
@@ -720,9 +728,7 @@ export function TransactionTable({
 
                 <div className="flex items-center gap-2 flex-wrap">
                   <CategoryBadge
-                    categoryId={
-                      transaction.category || Category.Uncategorized
-                    }
+                    categoryId={transaction.category || Category.Uncategorized}
                     size="sm"
                   />
                   <ConfidenceBadge

@@ -22,7 +22,11 @@ export interface AiEnrichmentResult {
 }
 
 export interface AiCorrectionContext {
-  descriptionExamples: Array<{ raw: string; friendly: string; category?: string }>
+  descriptionExamples: Array<{
+    raw: string
+    friendly: string
+    category?: string
+  }>
   categoryExamples: Array<{ merchant: string; category: string }>
   customCategories: CustomCategory[]
   customPatterns: CustomPattern[]
@@ -138,7 +142,9 @@ function buildUserMessage(
   const parts: string[] = []
 
   if (context.customPatterns.length > 0) {
-    parts.push('USER RULES (always apply these, they override all other patterns):')
+    parts.push(
+      'USER RULES (always apply these, they override all other patterns):'
+    )
     for (const p of context.customPatterns) {
       const matchLabel = MATCH_TYPE_LABEL[p.matchType] ?? p.matchType
       parts.push(`${matchLabel} "${p.pattern}" → ${p.category}`)
@@ -317,9 +323,7 @@ export async function enrichTransactionsWithAi(
         model: config.model,
         max_tokens: MAX_OUTPUT_TOKENS,
         system: systemPrompt,
-        messages: [
-          { role: 'user', content: buildUserMessage(batch, context) },
-        ],
+        messages: [{ role: 'user', content: buildUserMessage(batch, context) }],
       })) as AiEnrichmentBatchResponse
 
       for (const result of parseBatchResponse(response, inputs, context)) {

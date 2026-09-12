@@ -43,7 +43,8 @@ async function syncCustomPatternToCloud(pattern: CustomPattern): Promise<void> {
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { upsertCustomPattern } = await import('../supabase/custom-patterns')
+      const { upsertCustomPattern } =
+        await import('../supabase/custom-patterns')
       await upsertCustomPattern(session, pattern)
     }
   } catch (err) {
@@ -68,7 +69,8 @@ async function deleteCustomPatternFromCloud(id: string): Promise<void> {
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { deleteCustomPattern } = await import('../supabase/custom-patterns')
+      const { deleteCustomPattern } =
+        await import('../supabase/custom-patterns')
       await deleteCustomPattern(session, id)
     }
   } catch (err) {
@@ -105,9 +107,7 @@ export function testPattern(
   }
 }
 
-export function matchCustomPattern(
-  description: string
-): PatternMatch | null {
+export function matchCustomPattern(description: string): PatternMatch | null {
   const normalized = normalizeMerchantName(description)
   if (!normalized) return null
 

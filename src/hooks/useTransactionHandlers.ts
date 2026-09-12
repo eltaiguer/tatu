@@ -198,12 +198,10 @@ export function useTransactionHandlers({
         !!trimmedDisplayDescription &&
         trimmedDisplayDescription !== current.description
       const targetKey = buildDescriptionOverrideKey(current.description)
-      const matchingTransactions = state.transactions.filter(
-        (tx) => {
-          const key = buildDescriptionOverrideKey(tx.description)
-          return key !== null && key === targetKey
-        }
-      )
+      const matchingTransactions = state.transactions.filter((tx) => {
+        const key = buildDescriptionOverrideKey(tx.description)
+        return key !== null && key === targetKey
+      })
 
       try {
         if (
@@ -251,9 +249,7 @@ export function useTransactionHandlers({
 
         state.setTransactions(
           state.transactions.map((tx) => {
-            if (
-              buildDescriptionOverrideKey(tx.description) !== targetKey
-            ) {
+            if (buildDescriptionOverrideKey(tx.description) !== targetKey) {
               return tx
             }
 
@@ -479,7 +475,10 @@ export function useTransactionHandlers({
       if (session) {
         await Promise.all(
           transactionIds.map((id) =>
-            updateRemoteTransaction(session, id, { category, categoryConfidence: 1 })
+            updateRemoteTransaction(session, id, {
+              category,
+              categoryConfidence: 1,
+            })
           )
         )
       }
@@ -515,9 +514,7 @@ export function useTransactionHandlers({
 
     const selectedSet = new Set(transactionIds)
     const childIdsToHardDelete = state.transactions
-      .filter(
-        (tx) => tx.splitParentId && selectedSet.has(tx.splitParentId)
-      )
+      .filter((tx) => tx.splitParentId && selectedSet.has(tx.splitParentId))
       .map((tx) => tx.id)
 
     try {
@@ -596,9 +593,7 @@ export function useTransactionHandlers({
       )
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo agregar el tag'
+        error instanceof Error ? error.message : 'No se pudo agregar el tag'
       )
       setNotice('')
     }
@@ -620,10 +615,7 @@ export function useTransactionHandlers({
         category: o.category,
       })),
       ...state.transactions
-        .filter(
-          (t) =>
-            t.category && t.category !== 'uncategorized'
-        )
+        .filter((t) => t.category && t.category !== 'uncategorized')
         .map((t) => ({ name: t.description, category: t.category! })),
     ]
 

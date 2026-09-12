@@ -53,9 +53,8 @@ export async function setMerchantCategoryOverrideWithSync(
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { upsertCategoryOverride } = await import(
-        '../supabase/category-overrides'
-      )
+      const { upsertCategoryOverride } =
+        await import('../supabase/category-overrides')
       await upsertCategoryOverride(session, {
         merchantNormalized: normalized,
         merchantOriginal: merchantName,
@@ -92,9 +91,8 @@ export async function clearMerchantCategoryOverrideWithSync(
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { deleteCategoryOverride } = await import(
-        '../supabase/category-overrides'
-      )
+      const { deleteCategoryOverride } =
+        await import('../supabase/category-overrides')
       await deleteCategoryOverride(session, normalized)
     }
   } catch {

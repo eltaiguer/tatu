@@ -21,11 +21,7 @@ describe('SegmentedToggle', () => {
 
   it('marks the active option as selected', () => {
     render(
-      <SegmentedToggle
-        options={OPTIONS}
-        value="auto"
-        onChange={vi.fn()}
-      />
+      <SegmentedToggle options={OPTIONS} value="auto" onChange={vi.fn()} />
     )
     const autoBtn = screen.getByText('Auto')
     expect(autoBtn).toHaveAttribute('aria-pressed', 'true')
@@ -70,7 +66,9 @@ describe('SegmentedToggle', () => {
         aria-label="Elegir tema"
       />
     )
-    expect(screen.getByRole('tablist', { name: 'Elegir tema' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('tablist', { name: 'Elegir tema' })
+    ).toBeInTheDocument()
   })
 
   it('applies sm size', () => {

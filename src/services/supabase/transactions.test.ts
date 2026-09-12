@@ -33,7 +33,14 @@ const session: SupabaseSession = {
   token_type: 'bearer',
   expires_in: 3600,
   expires_at: 9999999999,
-  user: { id: 'user-1', email: 'test@example.com', app_metadata: {}, user_metadata: {}, aud: 'authenticated', created_at: '' },
+  user: {
+    id: 'user-1',
+    email: 'test@example.com',
+    app_metadata: {},
+    user_metadata: {},
+    aud: 'authenticated',
+    created_at: '',
+  },
 }
 
 describe('supabase transactions service', () => {
@@ -151,7 +158,10 @@ describe('supabase transactions service', () => {
     const { restoreTransaction } = await import('./transactions')
     await restoreTransaction(session, 'tx-99')
 
-    expect(updateMock).toHaveBeenCalledWith({ is_deleted: false, deleted_at: null })
+    expect(updateMock).toHaveBeenCalledWith({
+      is_deleted: false,
+      deleted_at: null,
+    })
     expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
     expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
   })

@@ -16,7 +16,8 @@ describe('supabase client service', () => {
   })
 
   it('stores, loads, and clears session from localStorage', async () => {
-    const { storeSession, loadStoredSession, clearStoredSession } = await import('./client')
+    const { storeSession, loadStoredSession, clearStoredSession } =
+      await import('./client')
 
     const session = {
       access_token: 'token',

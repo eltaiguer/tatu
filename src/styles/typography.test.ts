@@ -77,9 +77,13 @@ describe('Typography System', () => {
     it('should define font family variables', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
-      expect(rootStyle.getPropertyValue('--font-sans')).toContain('Hanken Grotesk')
+      expect(rootStyle.getPropertyValue('--font-sans')).toContain(
+        'Hanken Grotesk'
+      )
       expect(rootStyle.getPropertyValue('--font-display')).toContain('Spectral')
-      expect(rootStyle.getPropertyValue('--font-mono')).toContain('JetBrains Mono')
+      expect(rootStyle.getPropertyValue('--font-mono')).toContain(
+        'JetBrains Mono'
+      )
     })
 
     it('should define font size scale from xs to 5xl', () => {
@@ -99,10 +103,18 @@ describe('Typography System', () => {
     it('should define font weight variables', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
-      expect(rootStyle.getPropertyValue('--font-weight-normal').trim()).toBe('400')
-      expect(rootStyle.getPropertyValue('--font-weight-medium').trim()).toBe('500')
-      expect(rootStyle.getPropertyValue('--font-weight-semibold').trim()).toBe('600')
-      expect(rootStyle.getPropertyValue('--font-weight-bold').trim()).toBe('700')
+      expect(rootStyle.getPropertyValue('--font-weight-normal').trim()).toBe(
+        '400'
+      )
+      expect(rootStyle.getPropertyValue('--font-weight-medium').trim()).toBe(
+        '500'
+      )
+      expect(rootStyle.getPropertyValue('--font-weight-semibold').trim()).toBe(
+        '600'
+      )
+      expect(rootStyle.getPropertyValue('--font-weight-bold').trim()).toBe(
+        '700'
+      )
     })
   })
 

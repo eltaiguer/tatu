@@ -34,9 +34,7 @@ import { Button } from './components/ui/button'
 import { useStore } from 'zustand'
 import { transactionStore } from './stores/transaction-store'
 import { signOut } from './services/supabase/auth'
-import {
-  clearAllCategoryOverrides,
-} from './services/categorizer/category-overrides'
+import { clearAllCategoryOverrides } from './services/categorizer/category-overrides'
 import { clearAllDescriptionOverrides } from './services/descriptions/description-overrides'
 import { replaceCustomCategories } from './services/categories/category-store'
 import { replaceCustomPatterns } from './services/categorizer/custom-patterns'
@@ -52,8 +50,12 @@ function App() {
   const [currentView, setCurrentView] = useState<View>('overview')
   const [importOpen, setImportOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [pendingTxFilter, setPendingTxFilter] = useState<import('./models').TransactionsFilter | null>(null)
-  const [syncStatus, setSyncStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [pendingTxFilter, setPendingTxFilter] = useState<
+    import('./models').TransactionsFilter | null
+  >(null)
+  const [syncStatus, setSyncStatus] = useState<'loading' | 'ready' | 'error'>(
+    'loading'
+  )
   const [syncKey, setSyncKey] = useState(0)
 
   function refetch() {
@@ -170,7 +172,9 @@ function App() {
     setAuthNotice('Datos eliminados correctamente')
   }
 
-  function navigateToTransactions(filter: import('./models').TransactionsFilter) {
+  function navigateToTransactions(
+    filter: import('./models').TransactionsFilter
+  ) {
     setPendingTxFilter(filter)
     setCurrentView('transactions')
   }
@@ -185,7 +189,11 @@ function App() {
     handleBulkDeleteTransactions,
     handleBulkTagTransactions,
     handleAutoCategorizeTransactions,
-  } = useTransactionHandlers({ session, setError: setAuthError, setNotice: setAuthNotice })
+  } = useTransactionHandlers({
+    session,
+    setError: setAuthError,
+    setNotice: setAuthNotice,
+  })
 
   if (!session || authMode === 'reset') {
     return (
@@ -402,11 +410,36 @@ function App() {
                 />
               )}
               {currentView === 'transactions' && transactions.length === 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 320, gap: 16, padding: '48px 24px', textAlign: 'center' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: 320,
+                    gap: 16,
+                    padding: '48px 24px',
+                    textAlign: 'center',
+                  }}
+                >
                   <Upload size={40} style={{ color: 'var(--text-faint)' }} />
                   <div>
-                    <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>No hay transacciones</p>
-                    <p style={{ fontSize: 14, color: 'var(--text-muted)', maxWidth: 280, margin: '0 auto' }}>Importá tu primer extracto CSV de Santander para empezar a ver tus movimientos.</p>
+                    <p
+                      style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}
+                    >
+                      No hay transacciones
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 14,
+                        color: 'var(--text-muted)',
+                        maxWidth: 280,
+                        margin: '0 auto',
+                      }}
+                    >
+                      Importá tu primer extracto CSV de Santander para empezar a
+                      ver tus movimientos.
+                    </p>
                   </div>
                   <Button onClick={() => setImportOpen(true)}>
                     <Upload size={16} />
@@ -422,7 +455,9 @@ function App() {
                   fxRate={fxRate}
                   onUpdateTransaction={handleUpdateTransaction}
                   onDeleteTransaction={handleDeleteTransaction}
-                  onAutoCategorizeTransactions={handleAutoCategorizeTransactions}
+                  onAutoCategorizeTransactions={
+                    handleAutoCategorizeTransactions
+                  }
                   onBulkCategorize={handleBulkCategorizeTransactions}
                   onBulkDelete={handleBulkDeleteTransactions}
                   onBulkTag={handleBulkTagTransactions}
@@ -532,12 +567,12 @@ function App() {
           transition: 'background 0.13s, color 0.13s',
         }}
         onMouseOver={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background =
+          ;(e.currentTarget as HTMLButtonElement).style.background =
             'var(--surface-2)'
           ;(e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'
         }}
         onMouseOut={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background =
+          ;(e.currentTarget as HTMLButtonElement).style.background =
             'var(--surface)'
           ;(e.currentTarget as HTMLButtonElement).style.color =
             'var(--text-muted)'

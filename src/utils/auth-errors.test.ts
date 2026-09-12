@@ -33,9 +33,9 @@ describe('mapAuthError', () => {
   })
 
   it('maps password too short', () => {
-    expect(mapAuthError(new Error('Password should be at least 6 characters'))).toBe(
-      'La contraseña debe tener al menos 6 caracteres.'
-    )
+    expect(
+      mapAuthError(new Error('Password should be at least 6 characters'))
+    ).toBe('La contraseña debe tener al menos 6 caracteres.')
   })
 
   it('maps too many requests', () => {

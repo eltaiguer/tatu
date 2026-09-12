@@ -13,7 +13,11 @@ vi.mock('../supabase/ai-insights', () => ({
   saveInsights: saveInsightsMock,
 }))
 
-import { hashInsightInput, getCachedInsights, saveCachedInsights } from './insight-cache'
+import {
+  hashInsightInput,
+  getCachedInsights,
+  saveCachedInsights,
+} from './insight-cache'
 
 const session = {
   user: { id: 'user-1' },
@@ -23,9 +27,7 @@ const input: InsightInput = {
   historyStart: '2026-01-01',
   historyEnd: '2026-06-30',
   homeCurrency: 'USD',
-  categoryTotals: [
-    { category: 'groceries', amount: 100, pctOfTotal: 100 },
-  ],
+  categoryTotals: [{ category: 'groceries', amount: 100, pctOfTotal: 100 }],
   topMerchants: [],
   recurringCharges: [],
   monthlyTrend: [],
@@ -41,9 +43,7 @@ describe('hashInsightInput', () => {
   it('changes when the input changes', () => {
     const changed: InsightInput = {
       ...input,
-      categoryTotals: [
-        { category: 'groceries', amount: 999, pctOfTotal: 100 },
-      ],
+      categoryTotals: [{ category: 'groceries', amount: 999, pctOfTotal: 100 }],
     }
     expect(hashInsightInput(input)).not.toBe(hashInsightInput(changed))
   })

@@ -77,7 +77,12 @@ describe('getCategoryDefinitions', () => {
 
   it('uses default icon for custom categories with no icon', () => {
     listCustomCategoriesMock.mockReturnValue([
-      { id: 'my-custom', label: 'Mi categoría', color: '#ff0000', icon: undefined },
+      {
+        id: 'my-custom',
+        label: 'Mi categoría',
+        color: '#ff0000',
+        icon: undefined,
+      },
     ])
 
     const defs = getCategoryDefinitions()
@@ -98,7 +103,12 @@ describe('getCategoryDefinitions', () => {
 
   it('marks built-in category as ignored via custom override', () => {
     listCustomCategoriesMock.mockReturnValue([
-      { id: Category.Shopping, label: 'Compras', color: '#ff0000', isIgnored: true },
+      {
+        id: Category.Shopping,
+        label: 'Compras',
+        color: '#ff0000',
+        isIgnored: true,
+      },
     ])
 
     const defs = getCategoryDefinitions()
@@ -108,7 +118,12 @@ describe('getCategoryDefinitions', () => {
 
   it('uses override icon when a built-in category has a custom icon override', () => {
     listCustomCategoriesMock.mockReturnValue([
-      { id: Category.Groceries, label: 'Comida', color: '#ff0000', icon: '🛒✨' },
+      {
+        id: Category.Groceries,
+        label: 'Comida',
+        color: '#ff0000',
+        icon: '🛒✨',
+      },
     ])
 
     const defs = getCategoryDefinitions()
@@ -229,7 +244,12 @@ describe('getCategoryDefinition', () => {
 
   it('uses override icon for a built-in when override has an icon', () => {
     listCustomCategoriesMock.mockReturnValue([
-      { id: Category.InternalTransfer, label: 'Mis transferencias', color: '#0000ff', icon: '💼' },
+      {
+        id: Category.InternalTransfer,
+        label: 'Mis transferencias',
+        color: '#0000ff',
+        icon: '💼',
+      },
     ])
 
     const def = getCategoryDefinition(Category.InternalTransfer)
@@ -238,7 +258,11 @@ describe('getCategoryDefinition', () => {
 
   it('falls back to built-in icon for a built-in override with no icon', () => {
     listCustomCategoriesMock.mockReturnValue([
-      { id: Category.InternalTransfer, label: 'Mis transferencias', color: '#0000ff' },
+      {
+        id: Category.InternalTransfer,
+        label: 'Mis transferencias',
+        color: '#0000ff',
+      },
     ])
 
     const def = getCategoryDefinition(Category.InternalTransfer)
@@ -276,7 +300,9 @@ describe('accessor agreement', () => {
       getCategoryDefinitions().find((c) => c.id === Category.InternalTransfer)
         ?.isIgnored
     ).toBe(false)
-    expect(getCategoryDefinition(Category.InternalTransfer).isIgnored).toBe(false)
+    expect(getCategoryDefinition(Category.InternalTransfer).isIgnored).toBe(
+      false
+    )
   })
 })
 
@@ -300,7 +326,12 @@ describe('isCategoryIgnored', () => {
 
   it('returns true when custom override sets isIgnored: true', () => {
     listCustomCategoriesMock.mockReturnValue([
-      { id: Category.Shopping, label: 'Compras', color: '#ff0000', isIgnored: true },
+      {
+        id: Category.Shopping,
+        label: 'Compras',
+        color: '#ff0000',
+        isIgnored: true,
+      },
     ])
 
     expect(isCategoryIgnored(Category.Shopping)).toBe(true)
@@ -308,7 +339,12 @@ describe('isCategoryIgnored', () => {
 
   it('returns false when custom override sets isIgnored: false', () => {
     listCustomCategoriesMock.mockReturnValue([
-      { id: Category.Shopping, label: 'Compras', color: '#ff0000', isIgnored: false },
+      {
+        id: Category.Shopping,
+        label: 'Compras',
+        color: '#ff0000',
+        isIgnored: false,
+      },
     ])
 
     expect(isCategoryIgnored(Category.Shopping)).toBe(false)

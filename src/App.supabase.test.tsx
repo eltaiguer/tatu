@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { transactionStore } from './stores/transaction-store'
 
 const {
@@ -210,7 +216,9 @@ describe('App with supabase enabled', () => {
     fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
       target: { value: 'test@example.com' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Restablecer contraseña' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Restablecer contraseña' })
+    )
 
     await waitFor(() =>
       expect(requestPasswordResetMock).toHaveBeenCalledWith('test@example.com')
@@ -235,9 +243,7 @@ describe('App with supabase enabled', () => {
     await waitFor(() =>
       expect(updatePasswordMock).toHaveBeenCalledWith('new-secret123')
     )
-    await waitFor(() =>
-      expect(signOutMock).toHaveBeenCalledWith(null)
-    )
+    await waitFor(() => expect(signOutMock).toHaveBeenCalledWith(null))
     await waitFor(() =>
       expect(
         screen.getByRole('heading', { name: 'Ingresar a Tatú' })
@@ -306,9 +312,7 @@ describe('App with supabase enabled', () => {
     expect(loadUserTransactionsMock).not.toHaveBeenCalled()
   })
 
-  it(
-    'updates and soft-deletes transactions from transactions view',
-    async () => {
+  it('updates and soft-deletes transactions from transactions view', async () => {
     getCurrentSessionMock.mockReturnValue({
       access_token: 'access',
       refresh_token: 'refresh',
@@ -399,9 +403,7 @@ describe('App with supabase enabled', () => {
     await waitFor(() =>
       expect(screen.queryByText('New merchant')).not.toBeInTheDocument()
     )
-    },
-    15000
-  )
+  }, 15000)
 
   it('applies edit to future matching transactions only', async () => {
     getCurrentSessionMock.mockReturnValue({

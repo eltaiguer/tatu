@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { Transactions } from './Transactions'
 import type { Transaction } from '../models'
 
@@ -98,22 +105,18 @@ describe('Transactions', () => {
       screen.getByPlaceholderText('Buscar por comercio o descripción...'),
       { target: { value: 'alpha' } }
     )
-    fireEvent.change(
-      screen.getByLabelText('Filtro fecha desde'),
-      { target: { value: '2026-01-12' } }
-    )
-    fireEvent.change(
-      screen.getByLabelText('Filtro fecha hasta'),
-      { target: { value: '2026-01-18' } }
-    )
-    fireEvent.change(
-      screen.getByLabelText('Filtro categoría'),
-      { target: { value: 'groceries' } }
-    )
-    fireEvent.change(
-      screen.getByLabelText('Filtro cuenta'),
-      { target: { value: 'credit_card' } }
-    )
+    fireEvent.change(screen.getByLabelText('Filtro fecha desde'), {
+      target: { value: '2026-01-12' },
+    })
+    fireEvent.change(screen.getByLabelText('Filtro fecha hasta'), {
+      target: { value: '2026-01-18' },
+    })
+    fireEvent.change(screen.getByLabelText('Filtro categoría'), {
+      target: { value: 'groceries' },
+    })
+    fireEvent.change(screen.getByLabelText('Filtro cuenta'), {
+      target: { value: 'credit_card' },
+    })
 
     expect(screen.getAllByText('Alpha Card').length).toBeGreaterThan(0)
     expect(screen.queryByText('Alpha Market')).not.toBeInTheDocument()
@@ -348,9 +351,7 @@ describe('Transactions', () => {
 
     expect(screen.getAllByText('12 seleccionadas').length).toBeGreaterThan(0)
 
-    fireEvent.click(
-      screen.getByText('Seleccionar las 25 transacciones')
-    )
+    fireEvent.click(screen.getByText('Seleccionar las 25 transacciones'))
 
     expect(screen.getAllByText('25 seleccionadas').length).toBeGreaterThan(0)
   })
@@ -592,9 +593,7 @@ describe('Transactions', () => {
     )
 
     await act(async () => {
-      fireEvent.click(
-        screen.getAllByRole('button', { name: /Editar/ })[0]
-      )
+      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
     fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
@@ -697,9 +696,7 @@ describe('Transactions', () => {
     )
 
     await act(async () => {
-      fireEvent.click(
-        screen.getAllByRole('button', { name: /Editar/ })[0]
-      )
+      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
     fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
@@ -728,9 +725,7 @@ describe('Transactions', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
     )
 
-    fireEvent.click(
-      screen.getAllByRole('button', { name: /Editar/ })[0]
-    )
+    fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
 
     fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
 
@@ -738,7 +733,9 @@ describe('Transactions', () => {
       target: { value: 'new-tag' },
     })
 
-    fireEvent.click(screen.getByRole('button', { name: /Crear etiqueta "new-tag"/ }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Crear etiqueta "new-tag"/ })
+    )
 
     fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
 

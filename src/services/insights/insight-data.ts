@@ -85,7 +85,7 @@ function merchantOf(tx: Transaction): string {
 function monthKeyDiff(fromMonthKey: string, toMonthKeyStr: string): number {
   const [fromYear, fromMonth] = fromMonthKey.split('-').map(Number)
   const [toYear, toMonth] = toMonthKeyStr.split('-').map(Number)
-  return (toYear * 12 + toMonth) - (fromYear * 12 + fromMonth)
+  return toYear * 12 + toMonth - (fromYear * 12 + fromMonth)
 }
 
 function buildCategoryTotals(

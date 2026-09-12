@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
-import { inferInternalTransfers, isTransferCategory } from './internal-transfers'
+import {
+  inferInternalTransfers,
+  isTransferCategory,
+} from './internal-transfers'
 
 function makeTransaction(
   id: string,
@@ -51,7 +54,9 @@ describe('internal transfer inference', () => {
       }),
     ])
 
-    expect(result.every((tx) => tx.category === Category.InternalTransfer)).toBe(true)
+    expect(
+      result.every((tx) => tx.category === Category.InternalTransfer)
+    ).toBe(true)
   })
 
   it('does not override explicit non-transfer category with confidence 1', () => {
@@ -121,7 +126,9 @@ describe('internal transfer inference', () => {
       }),
     ])
 
-    expect(result.every((tx) => tx.category === Category.InternalTransfer)).toBe(true)
+    expect(
+      result.every((tx) => tx.category === Category.InternalTransfer)
+    ).toBe(true)
   })
 
   it('does not mark an unpaired credit supernet as Transfer (external incoming payment)', () => {
@@ -162,7 +169,9 @@ describe('internal transfer inference', () => {
       }),
     ])
 
-    expect(result.every((tx) => tx.category === Category.InternalTransfer)).toBe(true)
+    expect(
+      result.every((tx) => tx.category === Category.InternalTransfer)
+    ).toBe(true)
   })
 
   it('pairs a credit card payment credit (AI-tagged) with a bank account debit', () => {
@@ -190,7 +199,9 @@ describe('internal transfer inference', () => {
       }),
     ])
 
-    expect(result.every((tx) => tx.category === Category.InternalTransfer)).toBe(true)
+    expect(
+      result.every((tx) => tx.category === Category.InternalTransfer)
+    ).toBe(true)
   })
 
   it('does not pair unrelated debit and credit across currencies just because both are transfer descriptions', () => {

@@ -14,7 +14,10 @@ export function formatCurrency(amount: number, currency: Currency): string {
   return `${symbol} ${formatted}`
 }
 
-export function formatCurrencyShort(amount: number, currency: Currency): string {
+export function formatCurrencyShort(
+  amount: number,
+  currency: Currency
+): string {
   const abs = Math.abs(toSafeNumber(amount))
   const sym = currency === 'UYU' ? '$U' : 'US$'
   if (abs >= 1_000_000) return `${sym} ${(abs / 1_000_000).toFixed(1)}M`
