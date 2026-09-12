@@ -90,9 +90,14 @@ export async function signOut(
 export async function requestPasswordReset(email: string): Promise<void> {
   const client = getSupabaseClient()
   const redirectTo = getPasswordRecoveryRedirectUrl()
-  const { error } = await client.auth.resetPasswordForEmail(email, redirectTo ? {
-    redirectTo,
-  } : undefined)
+  const { error } = await client.auth.resetPasswordForEmail(
+    email,
+    redirectTo
+      ? {
+          redirectTo,
+        }
+      : undefined
+  )
   if (error) {
     throw new Error(error.message)
   }

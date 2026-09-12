@@ -83,8 +83,8 @@ describe('Description overrides', () => {
 
     const override = getDescriptionOverride('---- 999999 ----')
     expect(override).toBeNull()
-    expect(getDescriptionOverride('---- 123456 ----')?.friendlyDescription).toBe(
-      'Ajuste bancario'
-    )
+    expect(
+      getDescriptionOverride('---- 123456 ----')?.friendlyDescription
+    ).toBe('Ajuste bancario')
   })
 })

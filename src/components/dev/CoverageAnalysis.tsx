@@ -65,7 +65,10 @@ async function runAnalysis(session: SupabaseSession): Promise<AnalysisResult> {
     const categoryCounts = new Map<string, number>()
     for (const tx of txs) {
       if (tx.category) {
-        categoryCounts.set(tx.category, (categoryCounts.get(tx.category) ?? 0) + 1)
+        categoryCounts.set(
+          tx.category,
+          (categoryCounts.get(tx.category) ?? 0) + 1
+        )
       }
     }
     const dbCategory = [...categoryCounts.entries()].sort(
@@ -99,13 +102,7 @@ async function runAnalysis(session: SupabaseSession): Promise<AnalysisResult> {
   }
 }
 
-function Pill({
-  label,
-  color,
-}: {
-  label: string
-  color: string
-}) {
+function Pill({ label, color }: { label: string; color: string }) {
   return (
     <span
       style={{
@@ -130,25 +127,68 @@ function MerchantTable({ rows }: { rows: MerchantStat[] }) {
 
   return (
     <div style={{ marginTop: 8 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+      <table
+        style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}
+      >
         <thead>
-          <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
-            <th style={{ padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>
+          <tr
+            style={{
+              borderBottom: '1px solid var(--border)',
+              textAlign: 'left',
+            }}
+          >
+            <th
+              style={{
+                padding: '6px 8px',
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+              }}
+            >
               Merchant
             </th>
-            <th style={{ padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            <th
+              style={{
+                padding: '6px 8px',
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+              }}
+            >
               Classified as
             </th>
-            <th style={{ padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            <th
+              style={{
+                padding: '6px 8px',
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+              }}
+            >
               DB category
             </th>
-            <th style={{ padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            <th
+              style={{
+                padding: '6px 8px',
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+              }}
+            >
               Conf
             </th>
-            <th style={{ padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            <th
+              style={{
+                padding: '6px 8px',
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+              }}
+            >
               Freq
             </th>
-            <th style={{ padding: '6px 8px', color: 'var(--text-muted)', fontWeight: 600 }}>
+            <th
+              style={{
+                padding: '6px 8px',
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+              }}
+            >
               Override
             </th>
           </tr>
@@ -178,10 +218,20 @@ function MerchantTable({ rows }: { rows: MerchantStat[] }) {
               <td style={{ padding: '6px 8px', color: 'var(--text-muted)' }}>
                 {row.dbCategory ?? '—'}
               </td>
-              <td style={{ padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
+              <td
+                style={{
+                  padding: '6px 8px',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {(row.confidence * 100).toFixed(0)}%
               </td>
-              <td style={{ padding: '6px 8px', fontVariantNumeric: 'tabular-nums' }}>
+              <td
+                style={{
+                  padding: '6px 8px',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
                 {row.frequency}
               </td>
               <td style={{ padding: '6px 8px' }}>
@@ -211,7 +261,11 @@ function MerchantTable({ rows }: { rows: MerchantStat[] }) {
   )
 }
 
-export function CoverageAnalysis({ session }: { session: SupabaseSession | null }) {
+export function CoverageAnalysis({
+  session,
+}: {
+  session: SupabaseSession | null
+}) {
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -235,7 +289,14 @@ export function CoverageAnalysis({ session }: { session: SupabaseSession | null 
 
   return (
     <div style={{ padding: '16px 24px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
         <Button
           variant="outline"
           onClick={() => void handleRun()}
@@ -252,7 +313,14 @@ export function CoverageAnalysis({ session }: { session: SupabaseSession | null 
       {result && (
         <div>
           {/* Summary pills */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              flexWrap: 'wrap',
+              marginBottom: 16,
+            }}
+          >
             <Pill
               label={`${result.totalUnique} merchants únicos`}
               color="oklch(0.45 0.05 260)"
@@ -286,7 +354,9 @@ export function CoverageAnalysis({ session }: { session: SupabaseSession | null 
             {result.overrideCount} overrides de usuario confirmados.{' '}
             {result.lowInOverrides > 0 && (
               <span style={{ color: 'var(--neg)' }}>
-                {result.lowInOverrides} merchants con override están en la zona baja — ya cubiertos por el usuario, buenos para patrones derivados.
+                {result.lowInOverrides} merchants con override están en la zona
+                baja — ya cubiertos por el usuario, buenos para patrones
+                derivados.
               </span>
             )}
           </div>
@@ -304,11 +374,16 @@ export function CoverageAnalysis({ session }: { session: SupabaseSession | null 
                   border: '1px solid var(--border)',
                   cursor: 'pointer',
                   fontWeight: activeTab === t ? 600 : 400,
-                  background: activeTab === t ? 'var(--surface-2)' : 'transparent',
+                  background:
+                    activeTab === t ? 'var(--surface-2)' : 'transparent',
                   color: 'var(--text)',
                 }}
               >
-                {t === 'low' ? `Baja (${result.low.length})` : t === 'medium' ? `Media (${result.medium.length})` : `Alta (${result.high.length})`}
+                {t === 'low'
+                  ? `Baja (${result.low.length})`
+                  : t === 'medium'
+                    ? `Media (${result.medium.length})`
+                    : `Alta (${result.high.length})`}
               </button>
             ))}
           </div>

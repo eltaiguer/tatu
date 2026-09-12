@@ -24,8 +24,7 @@ function isPasswordResetMode(): boolean {
     : window.location.hash
   const hashParams = new URLSearchParams(hash)
   const isRecoveryHash =
-    hashParams.get('type') === 'recovery' &&
-    hashParams.has('access_token')
+    hashParams.get('type') === 'recovery' && hashParams.has('access_token')
 
   return (
     new URLSearchParams(window.location.search).get('mode') ===

@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  tokenize,
-  bigramSimilarity,
-  fuzzyTokenSimilarity,
-} from './tokenizer'
+import { tokenize, bigramSimilarity, fuzzyTokenSimilarity } from './tokenizer'
 
 describe('Tokenizer', () => {
   describe('tokenize', () => {
@@ -29,10 +25,7 @@ describe('Tokenizer', () => {
     })
 
     it('should remove numeric-only tokens', () => {
-      expect(tokenize('Spotify P3d110f721')).toEqual([
-        'spotify',
-        'p3d110f721',
-      ])
+      expect(tokenize('Spotify P3d110f721')).toEqual(['spotify', 'p3d110f721'])
     })
 
     it('should remove short tokens (< 2 chars)', () => {
@@ -86,7 +79,10 @@ describe('Tokenizer', () => {
   describe('fuzzyTokenSimilarity', () => {
     it('should return 1 for identical token sets', () => {
       expect(
-        fuzzyTokenSimilarity(['devoto', 'supermercado'], ['devoto', 'supermercado'])
+        fuzzyTokenSimilarity(
+          ['devoto', 'supermercado'],
+          ['devoto', 'supermercado']
+        )
       ).toBe(1)
     })
 

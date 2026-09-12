@@ -50,8 +50,8 @@ export function Onboarding({ onImport, onDemo, userName }: OnboardingProps) {
         className="text-muted-foreground mx-auto mt-2.5"
         style={{ maxWidth: 460 }}
       >
-        Importá tu primer extracto de Santander y en segundos vas a ver todos tus
-        gastos ordenados, en pesos y dólares.
+        Importá tu primer extracto de Santander y en segundos vas a ver todos
+        tus gastos ordenados, en pesos y dólares.
       </p>
 
       <div className="grid grid-cols-1 gap-3 my-7 text-left sm:grid-cols-3">

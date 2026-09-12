@@ -58,11 +58,21 @@ describe('Layout System', () => {
     it('should define shadow scale from sm to 2xl', () => {
       const rootStyle = getComputedStyle(document.documentElement)
 
-      expect(rootStyle.getPropertyValue('--shadow-sm').trim()).toContain('0 1px 2px')
-      expect(rootStyle.getPropertyValue('--shadow-md').trim()).toContain('0 4px 6px')
-      expect(rootStyle.getPropertyValue('--shadow-lg').trim()).toContain('0 10px 15px')
-      expect(rootStyle.getPropertyValue('--shadow-xl').trim()).toContain('0 20px 25px')
-      expect(rootStyle.getPropertyValue('--shadow-2xl').trim()).toContain('0 25px 50px')
+      expect(rootStyle.getPropertyValue('--shadow-sm').trim()).toContain(
+        '0 1px 2px'
+      )
+      expect(rootStyle.getPropertyValue('--shadow-md').trim()).toContain(
+        '0 4px 6px'
+      )
+      expect(rootStyle.getPropertyValue('--shadow-lg').trim()).toContain(
+        '0 10px 15px'
+      )
+      expect(rootStyle.getPropertyValue('--shadow-xl').trim()).toContain(
+        '0 20px 25px'
+      )
+      expect(rootStyle.getPropertyValue('--shadow-2xl').trim()).toContain(
+        '0 25px 50px'
+      )
     })
   })
 

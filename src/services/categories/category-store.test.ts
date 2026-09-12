@@ -50,7 +50,10 @@ describe('Custom category store', () => {
     const food = addCustomCategory({ label: 'Food', color: '#ff0000' })
     expect(food.id).not.toBe('food')
 
-    const groceries = addCustomCategory({ label: 'Groceries', color: '#00ff00' })
+    const groceries = addCustomCategory({
+      label: 'Groceries',
+      color: '#00ff00',
+    })
     expect(groceries.id).not.toBe('groceries')
 
     // Still a usable, unique id rather than a collision or an empty string

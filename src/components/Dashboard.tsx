@@ -84,13 +84,22 @@ function SectionDivider({ label, sub }: { label: string; sub?: string }) {
       </h2>
       {sub && (
         <span
-          style={{ fontSize: 12.5, color: 'var(--text-faint)', whiteSpace: 'nowrap' }}
+          style={{
+            fontSize: 12.5,
+            color: 'var(--text-faint)',
+            whiteSpace: 'nowrap',
+          }}
         >
           {sub}
         </span>
       )}
       <span
-        style={{ flex: 1, height: 1, background: 'var(--border)', alignSelf: 'center' }}
+        style={{
+          flex: 1,
+          height: 1,
+          background: 'var(--border)',
+          alignSelf: 'center',
+        }}
       />
     </div>
   )
@@ -179,7 +188,9 @@ function AccountExpenseCard({
           >
             {label}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>{sublabel}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+            {sublabel}
+          </div>
         </div>
       </div>
 
@@ -280,7 +291,7 @@ export function Dashboard({
   // ignored categories (transfers, user-flagged) and split parents are out.
   const countedTransactions = useMemo(
     () => transactions.filter((tx) => !isExcludedFromTotals(tx)),
-    [transactions],
+    [transactions]
   )
 
   // Data exists but every row is ignored — a zeroed dashboard would look like
@@ -291,11 +302,13 @@ export function Dashboard({
   // Falls back to the raw rows when everything is ignored, so a transfers-only
   // dataset still labels the statement month instead of today's.
   const latestDate = useMemo(() => {
-    const source = countedTransactions.length ? countedTransactions : transactions
+    const source = countedTransactions.length
+      ? countedTransactions
+      : transactions
     if (source.length === 0) return new Date()
     return source.reduce(
       (latest, tx) => (tx.date > latest ? tx.date : latest),
-      source[0].date,
+      source[0].date
     )
   }, [countedTransactions, transactions])
 
@@ -320,13 +333,13 @@ export function Dashboard({
   // Account spend by source
   const acctSpend = useMemo(
     () => spendByAccount(transactions, homeCurrency, fxRate),
-    [transactions, homeCurrency, fxRate],
+    [transactions, homeCurrency, fxRate]
   )
 
   // "Este mes" — converted + combined totals in home currency
   const monthSummary = useMemo(
     () => buildCurrentMonthSummary(transactions, homeCurrency, fxRate),
-    [transactions, homeCurrency, fxRate],
+    [transactions, homeCurrency, fxRate]
   )
 
   // Category breakdown — all history (for donut)
@@ -337,7 +350,11 @@ export function Dashboard({
   }, [])
 
   const categoryData = useMemo(() => {
-    const data = buildCategorySpendingConverted(transactions, homeCurrency, fxRate)
+    const data = buildCategorySpendingConverted(
+      transactions,
+      homeCurrency,
+      fxRate
+    )
     const total = data.reduce((s, r) => s + r.total, 0) || 1
     return data.map((row) => {
       const display = getCategoryDisplay(row.category)
@@ -389,13 +406,13 @@ export function Dashboard({
           gastos: m.expense,
           neto: m.net,
         })),
-    [transactions, homeCurrency, fxRate],
+    [transactions, homeCurrency, fxRate]
   )
 
   // Currency split
   const currencySplit = useMemo(
     () => buildCurrencySplit(transactions, homeCurrency, fxRate),
-    [transactions, homeCurrency, fxRate],
+    [transactions, homeCurrency, fxRate]
   )
 
   // KPI values
@@ -414,7 +431,7 @@ export function Dashboard({
   // ¿Estás ahorrando? values
   const avgNet = Math.round(
     monthlyTrend.reduce((s, m) => s + m.neto, 0) /
-      Math.max(monthlyTrend.length, 1),
+      Math.max(monthlyTrend.length, 1)
   )
   const positiveMonths = monthlyTrend.filter((m) => m.neto >= 0).length
   const saving = avgNet >= 0
@@ -450,7 +467,7 @@ export function Dashboard({
       [...countedTransactions]
         .sort((a, b) => b.date.getTime() - a.date.getTime())
         .slice(0, 6),
-    [countedTransactions],
+    [countedTransactions]
   )
 
   const greeting = userName ? `Hola, ${userName} 👋` : 'Hola 👋'
@@ -479,7 +496,10 @@ export function Dashboard({
           <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
             {label}
           </p>
-          <p className="font-mono" style={{ fontSize: 13, color: 'var(--text-faint)' }}>
+          <p
+            className="font-mono"
+            style={{ fontSize: 13, color: 'var(--text-faint)' }}
+          >
             {formatCurrency(value, homeCurrency)}
           </p>
         </div>
@@ -630,14 +650,18 @@ export function Dashboard({
             <h2 className="mb-2">Todas tus transacciones están ignoradas</h2>
             <p className="text-muted-foreground max-w-md mx-auto">
               Importaste {transactions.length}{' '}
-              {transactions.length === 1 ? 'transacción' : 'transacciones'}, pero
-              todas caen en categorías ignoradas (transferencias u otras que
-              marcaste), así que no suman a ningún total. Cambiales la categoría
-              o desmarcá “ignorar” para verlas acá.
+              {transactions.length === 1 ? 'transacción' : 'transacciones'},
+              pero todas caen en categorías ignoradas (transferencias u otras
+              que marcaste), así que no suman a ningún total. Cambiales la
+              categoría o desmarcá “ignorar” para verlas acá.
             </p>
           </div>
           {onNavigateToCategories && (
-            <Button size="lg" variant="outline" onClick={onNavigateToCategories}>
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={onNavigateToCategories}
+            >
               Revisar categorías
             </Button>
           )}
@@ -652,9 +676,7 @@ export function Dashboard({
               Período analizado: {periodRange}
             </p>
           )}
-          <div
-            className="grid grid-cols-1 sm:grid-cols-3 gap-4"
-          >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <AccountExpenseCard
               icon={CreditCard}
               label="Tarjeta de crédito"
@@ -732,10 +754,15 @@ export function Dashboard({
                 </div>
                 <div
                   className="font-mono"
-                  style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8 }}
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--text-faint)',
+                    marginTop: 8,
+                  }}
                 >
-                  US$ {Math.round(monthSummary.split.USD).toLocaleString('es-UY')}{' '}
-                  + $U{' '}
+                  US${' '}
+                  {Math.round(monthSummary.split.USD).toLocaleString('es-UY')} +
+                  $U{' '}
                   {Math.round(monthSummary.split.UYU).toLocaleString('es-UY')}
                 </div>
               </div>
@@ -750,8 +777,7 @@ export function Dashboard({
                   className="font-mono"
                   style={{
                     fontSize: 22,
-                    color:
-                      monthSummary.net >= 0 ? 'var(--pos)' : 'var(--neg)',
+                    color: monthSummary.net >= 0 ? 'var(--pos)' : 'var(--neg)',
                   }}
                 >
                   {monthSummary.net >= 0 ? '+' : '−'}
@@ -869,9 +895,7 @@ export function Dashboard({
                     >
                       ¿Estás ahorrando?
                     </h2>
-                    <span
-                      style={{ fontSize: 11, color: 'var(--text-faint)' }}
-                    >
+                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>
                       Últimos 12 meses
                     </span>
                   </div>
@@ -897,14 +921,18 @@ export function Dashboard({
                     {saving ? (
                       <>
                         Te queda dinero la mayoría de los meses. Ahorrás{' '}
-                        <strong>{formatCurrency(Math.abs(avgNet), homeCurrency)}</strong>{' '}
+                        <strong>
+                          {formatCurrency(Math.abs(avgNet), homeCurrency)}
+                        </strong>{' '}
                         por mes en promedio.
                       </>
                     ) : (
                       <>
                         Estás gastando más de lo que ingresás. En promedio te
                         faltan{' '}
-                        <strong>{formatCurrency(Math.abs(avgNet), homeCurrency)}</strong>{' '}
+                        <strong>
+                          {formatCurrency(Math.abs(avgNet), homeCurrency)}
+                        </strong>{' '}
                         por mes.
                       </>
                     )}
@@ -940,7 +968,9 @@ export function Dashboard({
                       tick={{ fontSize: 11 }}
                       axisLine={false}
                       tickLine={false}
-                      tickFormatter={(v) => formatCurrencyShort(v, homeCurrency)}
+                      tickFormatter={(v) =>
+                        formatCurrencyShort(v, homeCurrency)
+                      }
                       width={60}
                     />
                     <Tooltip content={savingsTooltip} />
@@ -1079,16 +1109,16 @@ export function Dashboard({
                 </div>
 
                 <CategoryBreakdownList
-                  rows={categoryData.slice(0, 7).map<CategoryBreakdownRow>(
-                    (row) => ({
+                  rows={categoryData
+                    .slice(0, 7)
+                    .map<CategoryBreakdownRow>((row) => ({
                       id: row.categoryId,
                       label: row.label,
                       color: row.color,
                       emoji: row.emoji,
                       amount: row.value,
                       pct: row.pct,
-                    }),
-                  )}
+                    }))}
                   currency={homeCurrency}
                   showPercent
                   onClickRow={
@@ -1153,9 +1183,7 @@ export function Dashboard({
                   flexWrap: 'wrap',
                 }}
               >
-                <div
-                  style={{ display: 'flex', alignItems: 'center', gap: 10 }}
-                >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span
                     style={{
                       width: 10,
@@ -1177,9 +1205,7 @@ export function Dashboard({
                     </div>
                   </div>
                 </div>
-                <div
-                  style={{ display: 'flex', alignItems: 'center', gap: 10 }}
-                >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span
                     style={{
                       width: 10,
@@ -1272,11 +1298,19 @@ export function Dashboard({
               >
                 <defs>
                   <linearGradient id="gradIngresos" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--pos)" stopOpacity={0.22} />
+                    <stop
+                      offset="5%"
+                      stopColor="var(--pos)"
+                      stopOpacity={0.22}
+                    />
                     <stop offset="95%" stopColor="var(--pos)" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="gradGastos" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--neg)" stopOpacity={0.2} />
+                    <stop
+                      offset="5%"
+                      stopColor="var(--neg)"
+                      stopOpacity={0.2}
+                    />
                     <stop offset="95%" stopColor="var(--neg)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
@@ -1378,7 +1412,7 @@ export function Dashboard({
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {recentTransactions.map((tx, i) => {
                   const catDef = getCategoryDefinition(
-                    tx.category ?? 'uncategorized',
+                    tx.category ?? 'uncategorized'
                   )
                   const isCredit = tx.type === 'credit'
                   const showConverted = tx.currency !== homeCurrency

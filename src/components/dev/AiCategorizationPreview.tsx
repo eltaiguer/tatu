@@ -105,7 +105,10 @@ export function AiCategorizationPreview({
       // Step 1: rule-based categorization on every transaction (no context,
       // matching what the CSV parsers do at import time)
       const ruleResults = new Map(
-        sample.map((tx) => [tx.id, categorizeTransaction(tx.description, tx.type)])
+        sample.map((tx) => [
+          tx.id,
+          categorizeTransaction(tx.description, tx.type),
+        ])
       )
 
       // Step 2: apply same override filter as production
@@ -134,17 +137,25 @@ export function AiCategorizationPreview({
         source: tx.source,
       }))
 
-      const aiResults = toEnrich.length > 0
-        ? (await enrichTransactionsWithAi(inputs, config, buildCorrectionContext()))
-            .results
-        : new Map()
+      const aiResults =
+        toEnrich.length > 0
+          ? (
+              await enrichTransactionsWithAi(
+                inputs,
+                config,
+                buildCorrectionContext()
+              )
+            ).results
+          : new Map()
 
       // Step 4: build rows
       const built: PreviewRow[] = sample.map((tx) => {
         const ruleCat = getCategoryDefinition(
           ruleResults.get(tx.id)?.category ?? 'uncategorized'
         ).id
-        const storedCat = getCategoryDefinition(tx.category ?? 'uncategorized').id
+        const storedCat = getCategoryDefinition(
+          tx.category ?? 'uncategorized'
+        ).id
         const aiResult = aiResults.get(tx.id)
 
         let finalCategory: string
@@ -181,7 +192,14 @@ export function AiCategorizationPreview({
 
       setRows(built)
       setRunState('done')
-      console.debug('[AI Preview] sample:', sample.length, 'overridden:', overriddenIds.size, 'to AI:', toEnrich.length)
+      console.debug(
+        '[AI Preview] sample:',
+        sample.length,
+        'overridden:',
+        overriddenIds.size,
+        'to AI:',
+        toEnrich.length
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido')
       setRunState('error')
@@ -226,7 +244,8 @@ export function AiCategorizationPreview({
             color: 'var(--destructive)',
             margin: 0,
             padding: '8px 12px',
-            background: 'color-mix(in srgb, var(--destructive) 10%, transparent)',
+            background:
+              'color-mix(in srgb, var(--destructive) 10%, transparent)',
             borderRadius: 6,
           }}
         >
@@ -244,10 +263,16 @@ export function AiCategorizationPreview({
             }}
           >
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              <strong style={{ color: 'var(--foreground)' }}>{diffCount}</strong>{' '}
+              <strong style={{ color: 'var(--foreground)' }}>
+                {diffCount}
+              </strong>{' '}
               diferencia{diffCount !== 1 ? 's' : ''} ·{' '}
-              <strong style={{ color: 'var(--foreground)' }}>{aiCount}</strong> por IA ·{' '}
-              <strong style={{ color: 'var(--foreground)' }}>{overrideCount}</strong> con override
+              <strong style={{ color: 'var(--foreground)' }}>{aiCount}</strong>{' '}
+              por IA ·{' '}
+              <strong style={{ color: 'var(--foreground)' }}>
+                {overrideCount}
+              </strong>{' '}
+              con override
             </span>
             <label
               style={{
@@ -292,23 +317,29 @@ export function AiCategorizationPreview({
                     zIndex: 1,
                   }}
                 >
-                  {['Fecha', 'Descripción', 'Nombre sugerido', 'Almacenada', 'Final', 'Fuente', 'Confianza'].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        style={{
-                          padding: '8px 12px',
-                          textAlign: 'left',
-                          fontWeight: 500,
-                          color: 'var(--text-muted)',
-                          borderBottom: '1px solid var(--border)',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {h}
-                      </th>
-                    )
-                  )}
+                  {[
+                    'Fecha',
+                    'Descripción',
+                    'Nombre sugerido',
+                    'Almacenada',
+                    'Final',
+                    'Fuente',
+                    'Confianza',
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        padding: '8px 12px',
+                        textAlign: 'left',
+                        fontWeight: 500,
+                        color: 'var(--text-muted)',
+                        borderBottom: '1px solid var(--border)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -346,16 +377,21 @@ export function AiCategorizationPreview({
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        color: row.source === 'ai' && row.aiDisplayDescription !== row.originalDescription
-                          ? 'var(--foreground)'
-                          : 'var(--text-muted)',
+                        color:
+                          row.source === 'ai' &&
+                          row.aiDisplayDescription !== row.originalDescription
+                            ? 'var(--foreground)'
+                            : 'var(--text-muted)',
                       }}
                       title={row.aiDisplayDescription}
                     >
                       {row.source === 'ai' ? row.aiDisplayDescription : '—'}
                     </td>
                     <td style={cellStyle}>
-                      <CategoryBadge categoryId={row.storedCategory} size="sm" />
+                      <CategoryBadge
+                        categoryId={row.storedCategory}
+                        size="sm"
+                      />
                     </td>
                     <td style={cellStyle}>
                       <CategoryBadge categoryId={row.finalCategory} size="sm" />

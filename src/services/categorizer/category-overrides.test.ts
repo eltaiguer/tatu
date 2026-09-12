@@ -10,12 +10,15 @@ import {
 } from './category-overrides'
 import { Category } from '../../models'
 
-const { getActiveSupabaseSessionMock, upsertCategoryOverrideMock, deleteCategoryOverrideMock } =
-  vi.hoisted(() => ({
-    getActiveSupabaseSessionMock: vi.fn(),
-    upsertCategoryOverrideMock: vi.fn(),
-    deleteCategoryOverrideMock: vi.fn(),
-  }))
+const {
+  getActiveSupabaseSessionMock,
+  upsertCategoryOverrideMock,
+  deleteCategoryOverrideMock,
+} = vi.hoisted(() => ({
+  getActiveSupabaseSessionMock: vi.fn(),
+  upsertCategoryOverrideMock: vi.fn(),
+  deleteCategoryOverrideMock: vi.fn(),
+}))
 
 vi.mock('../supabase/runtime', () => ({
   getActiveSupabaseSession: getActiveSupabaseSessionMock,

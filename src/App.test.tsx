@@ -1,5 +1,12 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import App from './App'
 import { transactionStore } from './stores/transaction-store'
 import { listCustomCategories } from './services/categories/category-store'
@@ -116,28 +123,42 @@ describe('App', () => {
 
     // With no transactions, Onboarding is shown after sync completes
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: /Bienvenido a Tatú/i })).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: /Bienvenido a Tatú/i })
+      ).toBeInTheDocument()
     )
   })
 
   it('opens import view when clicking the sidebar Importar button', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Importar' })
+      ).toBeInTheDocument()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
-    expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Importar Transacciones' })
+    ).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
   })
 
   it('shows supported file types on import view', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Importar' })
+      ).toBeInTheDocument()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
     expect(screen.getByText('Tarjeta de Crédito')).toBeInTheDocument()
     expect(screen.getByText('Cuenta USD')).toBeInTheDocument()
     expect(screen.getByText('Cuenta UYU')).toBeInTheDocument()
-    expect(screen.getByText(/Extracto de tarjeta Santander/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Extracto de tarjeta Santander/)
+    ).toBeInTheDocument()
   })
 
   it('switches to transactions view from sidebar navigation', async () => {
@@ -154,11 +175,17 @@ describe('App', () => {
       },
     ])
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Transacciones' })
+      ).toBeInTheDocument()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Transacciones' })
+      ).toBeInTheDocument()
     )
     expect(screen.getByText(/movimiento.*·/)).toBeInTheDocument()
   })
@@ -178,7 +205,11 @@ describe('App', () => {
     ])
 
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Transacciones' })
+      ).toBeInTheDocument()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
     await act(async () => {
       fireEvent.click(
@@ -198,9 +229,13 @@ describe('App', () => {
     })
 
     await waitFor(() =>
-      expect(transactionStore.getState().transactions[0].category).toBe('groceries')
+      expect(transactionStore.getState().transactions[0].category).toBe(
+        'groceries'
+      )
     )
-    expect(transactionStore.getState().transactions[0].categoryConfidence).toBeGreaterThan(0)
+    expect(
+      transactionStore.getState().transactions[0].categoryConfidence
+    ).toBeGreaterThan(0)
     expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0)
     expect(
       screen.getByText('1 transacción auto-categorizada')
@@ -222,7 +257,11 @@ describe('App', () => {
     ])
 
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Transacciones' })
+      ).toBeInTheDocument()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     await act(async () => {
@@ -244,7 +283,9 @@ describe('App', () => {
 
     await waitFor(() =>
       expect(
-        screen.getByText('No se encontraron categorías automáticas para las transacciones seleccionadas')
+        screen.getByText(
+          'No se encontraron categorías automáticas para las transacciones seleccionadas'
+        )
       ).toBeInTheDocument()
     )
     // Category must not be overwritten when nothing matched — previously a bug
@@ -254,10 +295,16 @@ describe('App', () => {
 
   it('switches to categorías view from sidebar navigation', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Categorías' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Categorías' })
+      ).toBeInTheDocument()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Categorías' }))
 
-    expect(screen.getByRole('heading', { name: 'Categorías y reglas' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Categorías y reglas' })
+    ).toBeInTheDocument()
   })
 
   it('filters Transacciones by category when deep-linking from Resumen', async () => {
@@ -288,28 +335,40 @@ describe('App', () => {
 
     render(<App />)
     await waitFor(() =>
-      expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0),
+      expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0)
     )
     // Click the category row in the breakdown list (last occurrence, list is clickable)
     const allAlimentacion = screen.getAllByText('Alimentación')
     const topCategoryLink = allAlimentacion[allAlimentacion.length - 1]
     fireEvent.click(topCategoryLink)
 
-    expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Transacciones' })
+    ).toBeInTheDocument()
   })
 
   it('opens import as a dialog overlay without navigating away from current view', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Importar' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Importar' })
+      ).toBeInTheDocument()
+    )
     expect(screen.getByRole('button', { name: 'Importar' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
-    expect(screen.getByRole('heading', { name: 'Importar Transacciones' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Importar Transacciones' })
+    ).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
   })
 
   it('applies dark theme when user preferences return dark', async () => {
-    loadUserPreferencesMock.mockResolvedValue({ theme: 'dark', currency: 'USD', fxRate: 40.5 })
+    loadUserPreferencesMock.mockResolvedValue({
+      theme: 'dark',
+      currency: 'USD',
+      fxRate: 40.5,
+    })
 
     render(<App />)
 
@@ -320,13 +379,25 @@ describe('App', () => {
 
   it('sidebar nav items are visible and functional', async () => {
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Resumen' })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Resumen' })
+      ).toBeInTheDocument()
+    )
 
     expect(screen.getByRole('button', { name: 'Resumen' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Análisis' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Categorías' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Configuración' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Transacciones' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Análisis' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Categorías' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Configuración' })
+    ).toBeInTheDocument()
   })
 
   it('bulk categorizes selected transactions and updates the store', async () => {
@@ -355,12 +426,18 @@ describe('App', () => {
 
     render(<App />)
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Transacciones' })
+      ).toBeInTheDocument()
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
-    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0])
-    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0])
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0]
+    )
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0]
+    )
 
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
@@ -410,12 +487,18 @@ describe('App', () => {
     ])
     render(<App />)
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Transacciones' })
+      ).toBeInTheDocument()
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
-    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0])
-    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0])
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0]
+    )
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0]
+    )
 
     fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
 
@@ -448,11 +531,15 @@ describe('App', () => {
 
     render(<App />)
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Transacciones' })
+      ).toBeInTheDocument()
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
-    fireEvent.click(screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0])
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0]
+    )
 
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
@@ -462,14 +549,18 @@ describe('App', () => {
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'recurrente' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /Crear etiqueta "recurrente"/ }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Crear etiqueta "recurrente"/ })
+    )
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
     })
 
     await waitFor(() => {
-      const tx = transactionStore.getState().transactions.find((t) => t.id === 'tx-1')
+      const tx = transactionStore
+        .getState()
+        .transactions.find((t) => t.id === 'tx-1')
       expect(tx?.tags).toContain('recurrente')
     })
     expect(updateTransactionMock).toHaveBeenCalledTimes(1)
@@ -491,7 +582,9 @@ describe('App', () => {
 
     render(<App />)
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Transacciones' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Transacciones' })
+      ).toBeInTheDocument()
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
@@ -501,8 +594,12 @@ describe('App', () => {
 
     // No checkboxes selected — the bulk selection toolbar should not be visible
     // (the toolbar is identified by its selection count status span)
-    expect(screen.queryByRole('status', { name: /seleccionada/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Eliminar$/ })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('status', { name: /seleccionada/i })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /^Eliminar$/ })
+    ).not.toBeInTheDocument()
   })
 
   it('mobile hamburger opens nav sheet and closes on nav item click', async () => {
@@ -519,7 +616,11 @@ describe('App', () => {
       },
     ])
     render(<App />)
-    await waitFor(() => expect(screen.getByRole('button', { name: /abrir menú/i })).toBeInTheDocument())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /abrir menú/i })
+      ).toBeInTheDocument()
+    )
 
     const hamburger = screen.getByRole('button', { name: /abrir menú/i })
     expect(hamburger).toBeInTheDocument()
@@ -530,7 +631,9 @@ describe('App', () => {
     })
 
     expect(hamburger).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('dialog', { name: /menú de navegación/i })).toBeInTheDocument()
+    expect(
+      screen.getByRole('dialog', { name: /menú de navegación/i })
+    ).toBeInTheDocument()
 
     const dialogNavButtons = screen
       .getByRole('dialog', { name: /menú de navegación/i })
@@ -543,7 +646,9 @@ describe('App', () => {
     })
 
     expect(hamburger).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.getByRole('heading', { name: 'Transacciones' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Transacciones' })
+    ).toBeInTheDocument()
   })
 
   it('clears custom categories from memory on sign out', async () => {
@@ -561,7 +666,9 @@ describe('App', () => {
 
     render(<App />)
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Categorías' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Categorías' })
+      ).toBeInTheDocument()
     )
 
     // After sync, the custom category is in memory

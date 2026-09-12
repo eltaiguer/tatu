@@ -87,9 +87,8 @@ describe('supabase description overrides service', () => {
   })
 
   it('upserts an override', async () => {
-    const { upsertDescriptionOverride } = await import(
-      './description-overrides'
-    )
+    const { upsertDescriptionOverride } =
+      await import('./description-overrides')
     await upsertDescriptionOverride(session, {
       descriptionNormalized: 'devoto',
       descriptionOriginal: 'AUT 998877 DEVOTO',
@@ -104,9 +103,8 @@ describe('supabase description overrides service', () => {
   })
 
   it('deletes an override', async () => {
-    const { deleteDescriptionOverride } = await import(
-      './description-overrides'
-    )
+    const { deleteDescriptionOverride } =
+      await import('./description-overrides')
     await deleteDescriptionOverride(session, 'devoto')
 
     expect(deleteMock).toHaveBeenCalledTimes(1)
@@ -117,4 +115,3 @@ describe('supabase description overrides service', () => {
     )
   })
 })
-

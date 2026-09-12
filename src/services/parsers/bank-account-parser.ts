@@ -60,9 +60,7 @@ function parseCurrency(moneda: string): 'USD' | 'UYU' {
   if (moneda === 'USD' || moneda === 'UYU') {
     return moneda
   }
-  throw new Error(
-    `Moneda no reconocida: "${moneda}". Se esperaba USD o UYU.`
-  )
+  throw new Error(`Moneda no reconocida: "${moneda}". Se esperaba USD o UYU.`)
 }
 
 /**
@@ -188,7 +186,11 @@ function parseRow(
       .trim()
 
     // Auto-categorize based on transaction details
-    const { category, confidence, description: patternDescription } = categorizeTransaction(description, type)
+    const {
+      category,
+      confidence,
+      description: patternDescription,
+    } = categorizeTransaction(description, type)
 
     const transaction: Transaction = {
       id: generateTransactionId(

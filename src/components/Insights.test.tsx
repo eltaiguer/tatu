@@ -7,15 +7,12 @@ import { Category } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 import type { InsightsResult } from '../services/insights/insight-generator'
 
-const {
-  getCachedInsightsMock,
-  saveCachedInsightsMock,
-  generateInsightsMock,
-} = vi.hoisted(() => ({
-  getCachedInsightsMock: vi.fn(),
-  saveCachedInsightsMock: vi.fn(),
-  generateInsightsMock: vi.fn(),
-}))
+const { getCachedInsightsMock, saveCachedInsightsMock, generateInsightsMock } =
+  vi.hoisted(() => ({
+    getCachedInsightsMock: vi.fn(),
+    saveCachedInsightsMock: vi.fn(),
+    generateInsightsMock: vi.fn(),
+  }))
 
 vi.mock('../services/insights/insight-cache', () => ({
   getCachedInsights: getCachedInsightsMock,
@@ -34,7 +31,10 @@ vi.mock('../services/insights/insight-generator', async () => {
 
 const session = { user: { id: 'user-1' } } as unknown as SupabaseSession
 
-function makeTransaction(id: string, overrides: Partial<Transaction> = {}): Transaction {
+function makeTransaction(
+  id: string,
+  overrides: Partial<Transaction> = {}
+): Transaction {
   return {
     id,
     date: new Date('2026-06-10T00:00:00.000Z'),
@@ -65,7 +65,9 @@ const sampleResult: InsightsResult = {
   ],
 }
 
-function renderInsights(overrides: Partial<Parameters<typeof Insights>[0]> = {}) {
+function renderInsights(
+  overrides: Partial<Parameters<typeof Insights>[0]> = {}
+) {
   return render(
     <Insights
       transactions={transactions}
@@ -90,7 +92,9 @@ describe('Insights', () => {
     const onNavigateToImport = vi.fn()
     renderInsights({ transactions: [], onNavigateToImport })
 
-    expect(screen.getByText('Importá tus movimientos primero')).toBeInTheDocument()
+    expect(
+      screen.getByText('Importá tus movimientos primero')
+    ).toBeInTheDocument()
     expect(getCachedInsightsMock).not.toHaveBeenCalled()
   })
 
@@ -98,7 +102,9 @@ describe('Insights', () => {
     const onNavigateToSettings = vi.fn()
     renderInsights({ aiEnabled: false, claudeApiKey: '', onNavigateToSettings })
 
-    expect(screen.getByText('Activá la IA para ver insights')).toBeInTheDocument()
+    expect(
+      screen.getByText('Activá la IA para ver insights')
+    ).toBeInTheDocument()
     expect(getCachedInsightsMock).not.toHaveBeenCalled()
   })
 
@@ -108,7 +114,9 @@ describe('Insights', () => {
     renderInsights()
 
     await waitFor(() =>
-      expect(screen.getByText('Generá tus primeros insights')).toBeInTheDocument()
+      expect(
+        screen.getByText('Generá tus primeros insights')
+      ).toBeInTheDocument()
     )
   })
 
@@ -133,7 +141,9 @@ describe('Insights', () => {
     renderInsights()
 
     await waitFor(() =>
-      expect(screen.getByText('Restaurantes domina tu gasto')).toBeInTheDocument()
+      expect(
+        screen.getByText('Restaurantes domina tu gasto')
+      ).toBeInTheDocument()
     )
     expect(screen.getByText('¿Dónde se fue tu dinero?')).toBeInTheDocument()
     expect(screen.getByText('US$ 100,00')).toBeInTheDocument()
@@ -172,7 +182,9 @@ describe('Insights', () => {
 
     renderInsights()
 
-    await waitFor(() => expect(screen.getByText(/desactualizados/)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText(/desactualizados/)).toBeInTheDocument()
+    )
   })
 
   it('generates and caches new insights when the generate button is clicked', async () => {
@@ -189,11 +201,16 @@ describe('Insights', () => {
     await user.click(screen.getByText('Generar insights'))
 
     await waitFor(() =>
-      expect(screen.getByText('Restaurantes domina tu gasto')).toBeInTheDocument()
+      expect(
+        screen.getByText('Restaurantes domina tu gasto')
+      ).toBeInTheDocument()
     )
 
     expect(generateInsightsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ historyStart: '2026-06-10', historyEnd: '2026-06-10' }),
+      expect.objectContaining({
+        historyStart: '2026-06-10',
+        historyEnd: '2026-06-10',
+      }),
       'sk-test'
     )
     expect(saveCachedInsightsMock).toHaveBeenCalledWith(

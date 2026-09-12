@@ -48,7 +48,10 @@ const TYPE_ORDER: InsightType[] = [
   'anomaly',
 ]
 
-const TYPE_META: Record<InsightType, { label: string; icon: typeof TrendingDown }> = {
+const TYPE_META: Record<
+  InsightType,
+  { label: string; icon: typeof TrendingDown }
+> = {
   bleeding_money: { label: '¿Dónde se fue tu dinero?', icon: TrendingDown },
   easiest_cut: { label: 'Fácil de recortar', icon: Scissors },
   recurring: { label: 'Suscripciones y cargos recurrentes', icon: Repeat },
@@ -56,14 +59,20 @@ const TYPE_META: Record<InsightType, { label: string; icon: typeof TrendingDown 
   anomaly: { label: 'Anomalías', icon: AlertTriangle },
 }
 
-const SEVERITY_RANK: Record<InsightSeverity, number> = { high: 0, medium: 1, low: 2 }
+const SEVERITY_RANK: Record<InsightSeverity, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+}
 const SEVERITY_COLOR: Record<InsightSeverity, string> = {
   high: 'var(--neg)',
   medium: 'var(--accent)',
   low: 'var(--text-faint)',
 }
 
-function groupAndSortInsights(insights: Insight[]): Array<{ type: InsightType; items: Insight[] }> {
+function groupAndSortInsights(
+  insights: Insight[]
+): Array<{ type: InsightType; items: Insight[] }> {
   const byType = new Map<InsightType, Insight[]>()
   insights.forEach((insight) => {
     const list = byType.get(insight.type) ?? []
@@ -121,7 +130,9 @@ export function Insights({
       .catch((e) => {
         if (!cancelled) {
           setError(
-            e instanceof Error ? e.message : 'No se pudieron cargar los insights'
+            e instanceof Error
+              ? e.message
+              : 'No se pudieron cargar los insights'
           )
         }
       })
@@ -174,11 +185,19 @@ export function Insights({
             gap: 10,
           }}
         >
-          <Sparkles size={22} style={{ color: 'var(--accent)' }} aria-hidden="true" />
+          <Sparkles
+            size={22}
+            style={{ color: 'var(--accent)' }}
+            aria-hidden="true"
+          />
           Insights
         </h1>
-        <p className="text-muted-foreground" style={{ fontSize: 14, marginTop: 4 }}>
-          ¿Dónde se fue tu dinero? ¿Cómo podés gastar menos? — toda tu historia, de un vistazo.
+        <p
+          className="text-muted-foreground"
+          style={{ fontSize: 14, marginTop: 4 }}
+        >
+          ¿Dónde se fue tu dinero? ¿Cómo podés gastar menos? — toda tu historia,
+          de un vistazo.
         </p>
       </div>
 
@@ -276,7 +295,10 @@ export function Insights({
           {cached.isStale && (
             <Card
               className="p-4"
-              style={{ borderColor: 'var(--accent)', background: 'var(--accent-soft)' }}
+              style={{
+                borderColor: 'var(--accent)',
+                background: 'var(--accent-soft)',
+              }}
             >
               <p style={{ fontSize: 13, margin: 0 }}>
                 Tus transacciones cambiaron desde la última vez que generaste
@@ -324,10 +346,16 @@ export function Insights({
                     marginBottom: 12,
                   }}
                 >
-                  <Icon size={16} style={{ color: 'var(--text-muted)' }} aria-hidden="true" />
+                  <Icon
+                    size={16}
+                    style={{ color: 'var(--text-muted)' }}
+                    aria-hidden="true"
+                  />
                   {meta.label}
                 </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+                >
                   {group.items.map((insight, i) => (
                     <Card
                       key={`${group.type}-${i}`}
@@ -346,7 +374,13 @@ export function Insights({
                         }}
                       >
                         <div style={{ flex: 1, minWidth: 200 }}>
-                          <p style={{ fontWeight: 600, fontSize: 14, margin: '0 0 4px' }}>
+                          <p
+                            style={{
+                              fontWeight: 600,
+                              fontSize: 14,
+                              margin: '0 0 4px',
+                            }}
+                          >
                             {insight.title}
                           </p>
                           <p
@@ -357,7 +391,10 @@ export function Insights({
                           </p>
                           {insight.category && (
                             <div style={{ marginTop: 8 }}>
-                              <CategoryBadge categoryId={insight.category} size="sm" />
+                              <CategoryBadge
+                                categoryId={insight.category}
+                                size="sm"
+                              />
                             </div>
                           )}
                         </div>
@@ -365,16 +402,25 @@ export function Insights({
                           {typeof insight.amount === 'number' && (
                             <p
                               className="font-mono"
-                              style={{ fontSize: 16, fontWeight: 600, margin: 0 }}
+                              style={{
+                                fontSize: 16,
+                                fontWeight: 600,
+                                margin: 0,
+                              }}
                             >
                               {insight.amount < 0 ? '−' : ''}
-                              {formatCurrency(Math.abs(insight.amount), insight.currency)}
+                              {formatCurrency(
+                                Math.abs(insight.amount),
+                                insight.currency
+                              )}
                             </p>
                           )}
                           {insight.category && (
                             <button
                               onClick={() =>
-                                onNavigateToTransactions({ category: insight.category })
+                                onNavigateToTransactions({
+                                  category: insight.category,
+                                })
                               }
                               style={{
                                 marginTop: 6,

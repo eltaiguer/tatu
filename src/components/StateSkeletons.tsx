@@ -109,9 +109,11 @@ export function TransactionTableSkeleton({ rows = 8 }: { rows?: number }) {
 
       <Card className="overflow-hidden">
         <div className="border-b border-border bg-muted/40 px-4 py-3 hidden md:flex gap-4">
-          {['w-4', 'w-16', 'w-40', 'w-24', 'w-16', 'w-10', 'w-16'].map((w, i) => (
-            <Skeleton key={i} className={`h-3 ${w}`} />
-          ))}
+          {['w-4', 'w-16', 'w-40', 'w-24', 'w-16', 'w-10', 'w-16'].map(
+            (w, i) => (
+              <Skeleton key={i} className={`h-3 ${w}`} />
+            )
+          )}
         </div>
         {Array.from({ length: rows }).map((_, i) => (
           <div
@@ -136,4 +138,3 @@ export function TransactionTableSkeleton({ rows = 8 }: { rows?: number }) {
     </div>
   )
 }
-

@@ -72,7 +72,9 @@ export function addCustomCategory(input: {
 
 export function updateCustomCategory(
   id: string,
-  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>>
+  updates: Partial<
+    Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
+  >
 ): void {
   _customCategories = _customCategories.map((c) =>
     c.id === id ? { ...c, ...updates } : c
@@ -91,9 +93,8 @@ export async function syncCustomCategoryToCloud(id: string): Promise<void> {
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { upsertCustomCategory } = await import(
-        '../supabase/custom-categories'
-      )
+      const { upsertCustomCategory } =
+        await import('../supabase/custom-categories')
       await upsertCustomCategory(session, {
         id: category.id,
         label: category.label,
@@ -121,7 +122,9 @@ export async function addCustomCategoryWithSync(input: {
 
 export async function updateCustomCategoryWithSync(
   id: string,
-  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>>
+  updates: Partial<
+    Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
+  >
 ): Promise<void> {
   updateCustomCategory(id, updates)
   const category = _customCategories.find((c) => c.id === id)
@@ -131,9 +134,8 @@ export async function updateCustomCategoryWithSync(
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { upsertCustomCategory } = await import(
-        '../supabase/custom-categories'
-      )
+      const { upsertCustomCategory } =
+        await import('../supabase/custom-categories')
       await upsertCustomCategory(session, {
         id: category.id,
         label: category.label,
@@ -150,7 +152,9 @@ export async function updateCustomCategoryWithSync(
 
 export function upsertBuiltinOverride(
   id: string,
-  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>>
+  updates: Partial<
+    Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
+  >
 ): void {
   const existing = _customCategories.find((c) => c.id === id)
   if (existing) {
@@ -172,7 +176,9 @@ export function upsertBuiltinOverride(
 
 export async function upsertBuiltinOverrideWithSync(
   id: string,
-  updates: Partial<Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>>
+  updates: Partial<
+    Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
+  >
 ): Promise<void> {
   upsertBuiltinOverride(id, updates)
   await syncCustomCategoryToCloud(id)
@@ -185,9 +191,8 @@ export async function removeCustomCategoryWithSync(id: string): Promise<void> {
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { archiveCustomCategory } = await import(
-        '../supabase/custom-categories'
-      )
+      const { archiveCustomCategory } =
+        await import('../supabase/custom-categories')
       await archiveCustomCategory(session, id)
     }
   } catch {

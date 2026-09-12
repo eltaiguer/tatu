@@ -67,9 +67,7 @@ describe('Categories', () => {
 
   it('opens new category form when clicking Nueva categoría', () => {
     render(<Categories transactions={[]} />)
-    fireEvent.click(
-      screen.getByRole('button', { name: /Nueva categoría/ })
-    )
+    fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
 
     expect(screen.getByLabelText('Nombre de categoría')).toBeInTheDocument()
     expect(screen.getByLabelText('Color de categoría')).toBeInTheDocument()
@@ -78,9 +76,7 @@ describe('Categories', () => {
 
   it('creates a new custom category', () => {
     render(<Categories transactions={[]} />)
-    fireEvent.click(
-      screen.getByRole('button', { name: /Nueva categoría/ })
-    )
+    fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
 
     fireEvent.change(screen.getByLabelText('Nombre de categoría'), {
       target: { value: 'Mascotas' },
@@ -92,7 +88,11 @@ describe('Categories', () => {
   })
 
   it('edits custom category color and icon', async () => {
-    const custom = addCustomCategory({ label: 'Coffee', color: '#ff0000', icon: '☕' })
+    const custom = addCustomCategory({
+      label: 'Coffee',
+      color: '#ff0000',
+      icon: '☕',
+    })
 
     render(<Categories transactions={[makeTx({ category: custom.id })]} />)
 
@@ -114,7 +114,11 @@ describe('Categories', () => {
   })
 
   it('deletes a custom category', async () => {
-    const custom = addCustomCategory({ label: 'Yoga', color: '#aabbcc', icon: '🧘' })
+    const custom = addCustomCategory({
+      label: 'Yoga',
+      color: '#aabbcc',
+      icon: '🧘',
+    })
     expect(listCustomCategories()).toHaveLength(1)
 
     render(<Categories transactions={[]} />)

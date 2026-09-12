@@ -22,11 +22,15 @@ interface TransactionStoreActions {
 
 export type TransactionStore = TransactionStoreState & TransactionStoreActions
 
-export function normalizeTransactions(transactions: Transaction[]): Transaction[] {
+export function normalizeTransactions(
+  transactions: Transaction[]
+): Transaction[] {
   return inferInternalTransfers(
     transactions.map((tx) => {
       const date =
-        tx.date instanceof Date ? tx.date : new Date(tx.date as unknown as string)
+        tx.date instanceof Date
+          ? tx.date
+          : new Date(tx.date as unknown as string)
       return { ...tx, date }
     })
   )

@@ -34,8 +34,6 @@ interface SettingsProps {
   onSetAiModel: (model: string) => void
 }
 
-
-
 function SettingRow({
   label,
   description,
@@ -186,7 +184,13 @@ export function Settings({
           description="Usado para convertir entre USD y UYU en resúmenes y análisis"
           control={
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+              <span
+                style={{
+                  fontSize: 13,
+                  color: 'var(--text-muted)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 1 US$ =
               </span>
               <input
@@ -211,7 +215,9 @@ export function Settings({
                   textAlign: 'right',
                 }}
               />
-              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>$U</span>
+              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                $U
+              </span>
             </div>
           }
         />
@@ -267,8 +273,8 @@ export function Settings({
                 style={{ color: 'var(--brand)', textDecoration: 'underline' }}
               >
                 console.anthropic.com
-              </a>
-              {' '}· El costo de uso es tuyo · Se guarda en tu cuenta
+              </a>{' '}
+              · El costo de uso es tuyo · Se guarda en tu cuenta
             </>
           }
           control={
@@ -312,7 +318,12 @@ export function Settings({
           label="Modelo"
           description="Haiku es más rápido y económico; Sonnet es más preciso"
           control={
-            <div style={{ opacity: aiEnabled ? 1 : 0.5, pointerEvents: aiEnabled ? 'auto' : 'none' }}>
+            <div
+              style={{
+                opacity: aiEnabled ? 1 : 0.5,
+                pointerEvents: aiEnabled ? 'auto' : 'none',
+              }}
+            >
               <SegmentedToggle
                 options={[
                   { label: 'Haiku', value: 'claude-haiku-4-5' as const },
@@ -369,7 +380,13 @@ export function Settings({
                   <div style={{ fontSize: 14, fontWeight: 600 }}>
                     {userName}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--text-muted)',
+                      marginTop: 1,
+                    }}
+                  >
                     {userEmail} · sincronizado en la nube
                   </div>
                 </div>
@@ -429,8 +446,15 @@ export function Settings({
             borderTop: '1px solid var(--border)',
           }}
         >
-          <p style={{ fontSize: 12, color: 'var(--brand-text)', lineHeight: 1.5 }}>
-            Tus movimientos se guardan cifrados en tu cuenta y se sincronizan de forma segura. Nunca compartimos tus datos financieros con terceros.
+          <p
+            style={{
+              fontSize: 12,
+              color: 'var(--brand-text)',
+              lineHeight: 1.5,
+            }}
+          >
+            Tus movimientos se guardan cifrados en tu cuenta y se sincronizan de
+            forma segura. Nunca compartimos tus datos financieros con terceros.
           </p>
         </div>
       </SectionCard>
@@ -444,7 +468,12 @@ export function Settings({
             <Button
               variant="outline"
               onClick={() => handleExport('csv')}
-              style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+              style={{
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
             >
               <Download size={14} />
               Exportar CSV
@@ -458,7 +487,12 @@ export function Settings({
             <Button
               variant="outline"
               onClick={() => handleExport('pdf')}
-              style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
+              style={{
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
             >
               <Download size={14} />
               Exportar PDF
@@ -478,7 +512,9 @@ export function Settings({
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--neg)' }}>
               Eliminar todos los datos
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            <div
+              style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}
+            >
               Borra todas las transacciones, categorías y reglas guardadas
             </div>
           </div>

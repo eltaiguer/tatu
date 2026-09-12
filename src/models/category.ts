@@ -103,4 +103,3 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   [Category.Fees]: '#fb7185',
   [Category.Uncategorized]: '#94a3b8',
 }
-

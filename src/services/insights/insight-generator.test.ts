@@ -151,7 +151,9 @@ describe('parseInsightsResponse', () => {
       insights: [{ type: 'trend', title: 'x', narrative: 'y' }],
     })
 
-    expect(parseInsightsResponse(text, baseInput).insights[0].severity).toBe('medium')
+    expect(parseInsightsResponse(text, baseInput).insights[0].severity).toBe(
+      'medium'
+    )
   })
 
   it('throws a descriptive error when the response is not valid JSON', () => {
@@ -162,7 +164,7 @@ describe('parseInsightsResponse', () => {
 })
 
 describe('generateInsights', () => {
-  it('calls Claude with the insights model and the user\'s API key', async () => {
+  it("calls Claude with the insights model and the user's API key", async () => {
     messagesCreateMock.mockResolvedValueOnce({
       content: [{ type: 'text', text: JSON.stringify({ insights: [] }) }],
     })
@@ -172,7 +174,9 @@ describe('generateInsights', () => {
     expect(messagesCreateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'claude-opus-4-8',
-        messages: [{ role: 'user', content: expect.stringContaining('"historyStart"') }],
+        messages: [
+          { role: 'user', content: expect.stringContaining('"historyStart"') },
+        ],
       })
     )
   })

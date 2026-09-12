@@ -59,9 +59,7 @@ export function analyzeTemporalPatterns(
     if (txs.length < MIN_WEEKLY) continue
 
     // Sort by date ascending
-    const sorted = [...txs].sort(
-      (a, b) => a.date.getTime() - b.date.getTime()
-    )
+    const sorted = [...txs].sort((a, b) => a.date.getTime() - b.date.getTime())
 
     // Check if amounts are consistent (within tolerance)
     const avgAmount =
@@ -81,8 +79,7 @@ export function analyzeTemporalPatterns(
 
     if (intervals.length === 0) continue
 
-    const avgInterval =
-      intervals.reduce((s, d) => s + d, 0) / intervals.length
+    const avgInterval = intervals.reduce((s, d) => s + d, 0) / intervals.length
 
     const pattern = detectFrequency(
       avgInterval,
@@ -115,9 +112,7 @@ function detectFrequency(
     amountsConsistent &&
     avgInterval >= MONTHLY_MIN_DAYS &&
     avgInterval <= MONTHLY_MAX_DAYS &&
-    intervals.every(
-      (d) => d >= MONTHLY_MIN_DAYS && d <= MONTHLY_MAX_DAYS
-    )
+    intervals.every((d) => d >= MONTHLY_MIN_DAYS && d <= MONTHLY_MAX_DAYS)
   ) {
     return {
       frequency: 'monthly',

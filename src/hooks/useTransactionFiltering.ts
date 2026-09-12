@@ -9,7 +9,6 @@ export type SortDirection = 'asc' | 'desc'
 
 const ITEMS_PER_PAGE = 12
 
-
 export function useTransactionFiltering({
   transactions,
   initialFilter,
@@ -158,9 +157,7 @@ export function useTransactionFiltering({
     () =>
       Array.from(
         new Set(
-          transactions
-            .map((tx) => tx.category?.trim() ?? '')
-            .filter(Boolean)
+          transactions.map((tx) => tx.category?.trim() ?? '').filter(Boolean)
         )
       ).sort((a, b) =>
         getCategoryDisplay(a).label.localeCompare(

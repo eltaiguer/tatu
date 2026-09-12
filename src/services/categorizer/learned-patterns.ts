@@ -114,9 +114,7 @@ export function invalidateLearnedPatternsCache(): void {
  * Uses token voting: if multiple tokens match, the category with
  * the most matching tokens wins.
  */
-export function matchLearnedPattern(
-  description: string
-): PatternMatch | null {
+export function matchLearnedPattern(description: string): PatternMatch | null {
   const patterns = getLearnedPatterns()
   if (patterns.size === 0) return null
 
@@ -156,6 +154,9 @@ export function matchLearnedPattern(
   return {
     category: bestCategory,
     confidence,
-    matchedPattern: `learned:${[...patterns.entries()].filter(([, c]) => c === bestCategory).map(([t]) => t).join(',')}`,
+    matchedPattern: `learned:${[...patterns.entries()]
+      .filter(([, c]) => c === bestCategory)
+      .map(([t]) => t)
+      .join(',')}`,
   }
 }

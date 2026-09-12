@@ -8,10 +8,7 @@ import {
   clearAllDescriptionOverrides,
   setDescriptionOverride,
 } from '../descriptions/description-overrides'
-import {
-  addCustomPattern,
-  clearAllCustomPatterns,
-} from './custom-patterns'
+import { addCustomPattern, clearAllCustomPatterns } from './custom-patterns'
 import { invalidateLearnedPatternsCache } from './learned-patterns'
 import { analyzeTemporalPatterns } from './temporal-patterns'
 import { Category } from '../../models'
@@ -312,11 +309,9 @@ describe('Transaction Categorizer', () => {
       }))
       const temporalPatterns = analyzeTemporalPatterns(txs)
 
-      const result = categorizeTransaction(
-        'Monthly Service XYZ',
-        'debit',
-        { temporalPatterns }
-      )
+      const result = categorizeTransaction('Monthly Service XYZ', 'debit', {
+        temporalPatterns,
+      })
 
       expect(result.category).toBe(Category.Utilities)
       expect(result.confidence).toBeGreaterThan(0.5)

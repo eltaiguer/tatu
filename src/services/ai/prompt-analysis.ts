@@ -11,7 +11,9 @@ interface DescriptionSample {
   displayDescription?: string
 }
 
-function deduplicateByDescription(transactions: Transaction[]): DescriptionSample[] {
+function deduplicateByDescription(
+  transactions: Transaction[]
+): DescriptionSample[] {
   const seen = new Set<string>()
   const samples: DescriptionSample[] = []
   for (const tx of transactions) {

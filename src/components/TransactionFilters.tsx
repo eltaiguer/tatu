@@ -362,9 +362,7 @@ export function TransactionFilters({
           }}
         >
           <div>
-            <label
-              className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5"
-            >
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">
               Monto mínimo
             </label>
             <Input
@@ -376,9 +374,7 @@ export function TransactionFilters({
             />
           </div>
           <div>
-            <label
-              className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5"
-            >
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">
               Monto máximo
             </label>
             <Input

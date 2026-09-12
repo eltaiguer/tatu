@@ -65,7 +65,11 @@ export function CategoryBreakdownList({
               {row.label}
             </span>
             <span
-              style={{ display: 'inline-flex', gap: 10, alignItems: 'baseline' }}
+              style={{
+                display: 'inline-flex',
+                gap: 10,
+                alignItems: 'baseline',
+              }}
             >
               <span className="font-mono" style={{ fontSize: 13 }}>
                 {formatCurrency(row.amount, currency)}

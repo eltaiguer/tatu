@@ -55,9 +55,8 @@ export async function setDescriptionOverrideWithSync(input: {
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { upsertDescriptionOverride } = await import(
-        '../supabase/description-overrides'
-      )
+      const { upsertDescriptionOverride } =
+        await import('../supabase/description-overrides')
       await upsertDescriptionOverride(session, {
         descriptionNormalized: descriptionKey,
         descriptionOriginal: input.description,
@@ -94,9 +93,8 @@ export async function clearDescriptionOverrideWithSync(
     const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { deleteDescriptionOverride } = await import(
-        '../supabase/description-overrides'
-      )
+      const { deleteDescriptionOverride } =
+        await import('../supabase/description-overrides')
       await deleteDescriptionOverride(session, descriptionKey)
     }
   } catch {

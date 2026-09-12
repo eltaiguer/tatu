@@ -324,9 +324,7 @@ export function EditTransactionDialog({
             Cancelar
           </Button>
           <Button type="button" onClick={onSave} disabled={isPending}>
-            {isPending && (
-              <Loader2 size={14} className="mr-1.5 animate-spin" />
-            )}
+            {isPending && <Loader2 size={14} className="mr-1.5 animate-spin" />}
             Guardar cambios
           </Button>
         </DialogFooter>

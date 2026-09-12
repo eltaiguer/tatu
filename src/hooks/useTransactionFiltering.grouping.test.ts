@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import type { Transaction } from '../models'
 
-function makeTransaction(id: string, overrides: Partial<Transaction> = {}): Transaction {
+function makeTransaction(
+  id: string,
+  overrides: Partial<Transaction> = {}
+): Transaction {
   return {
     id,
     date: new Date('2025-01-01'),
@@ -67,7 +70,9 @@ describe('split grouping logic (useTransactionFiltering)', () => {
   })
 
   it('renders orphan children (parent not in set) as standalone rows', () => {
-    const child = makeTransaction('child-0', { splitParentId: 'missing-parent' })
+    const child = makeTransaction('child-0', {
+      splitParentId: 'missing-parent',
+    })
     const other = makeTransaction('other')
 
     const result = applyGrouping([other, child])

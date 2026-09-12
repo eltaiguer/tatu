@@ -98,7 +98,6 @@ describe('Transaction Store - Duplicates', () => {
 
     expect(duplicates).toEqual(['tx-2'])
   })
-
 })
 
 describe('Transaction Store - addTransactions', () => {
@@ -175,8 +174,12 @@ describe('Transaction Store - addTransactions', () => {
     store.getState().addTransactions([debit, credit])
 
     const txs = store.getState().transactions
-    expect(txs.find((tx) => tx.id === 'tx-debit')?.category).toBe('internal_transfer')
-    expect(txs.find((tx) => tx.id === 'tx-credit')?.category).toBe('internal_transfer')
+    expect(txs.find((tx) => tx.id === 'tx-debit')?.category).toBe(
+      'internal_transfer'
+    )
+    expect(txs.find((tx) => tx.id === 'tx-credit')?.category).toBe(
+      'internal_transfer'
+    )
   })
 })
 

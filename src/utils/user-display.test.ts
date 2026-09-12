@@ -19,11 +19,15 @@ function makeSession(overrides: {
 
 describe('getFriendlyName', () => {
   it('returns the first name from full_name metadata', () => {
-    expect(getFriendlyName(makeSession({ full_name: 'Maria Perez' }))).toBe('Maria')
+    expect(getFriendlyName(makeSession({ full_name: 'Maria Perez' }))).toBe(
+      'Maria'
+    )
   })
 
   it('capitalizes the first letter of full_name', () => {
-    expect(getFriendlyName(makeSession({ full_name: 'jose gazzano' }))).toBe('Jose')
+    expect(getFriendlyName(makeSession({ full_name: 'jose gazzano' }))).toBe(
+      'Jose'
+    )
   })
 
   it('handles single-word full_name', () => {
@@ -31,19 +35,27 @@ describe('getFriendlyName', () => {
   })
 
   it('derives name from email local-part when no full_name', () => {
-    expect(getFriendlyName(makeSession({ email: 'jose@example.com' }))).toBe('Jose')
+    expect(getFriendlyName(makeSession({ email: 'jose@example.com' }))).toBe(
+      'Jose'
+    )
   })
 
   it('strips trailing digits from email local-part', () => {
-    expect(getFriendlyName(makeSession({ email: 'jgazzano10@example.com' }))).toBe('Jgazzano')
+    expect(
+      getFriendlyName(makeSession({ email: 'jgazzano10@example.com' }))
+    ).toBe('Jgazzano')
   })
 
   it('takes first dot-separated segment from email', () => {
-    expect(getFriendlyName(makeSession({ email: 'maria.perez@example.com' }))).toBe('Maria')
+    expect(
+      getFriendlyName(makeSession({ email: 'maria.perez@example.com' }))
+    ).toBe('Maria')
   })
 
   it('takes first underscore-separated segment from email', () => {
-    expect(getFriendlyName(makeSession({ email: 'maria_perez@example.com' }))).toBe('Maria')
+    expect(
+      getFriendlyName(makeSession({ email: 'maria_perez@example.com' }))
+    ).toBe('Maria')
   })
 
   it('returns empty string when session is null', () => {

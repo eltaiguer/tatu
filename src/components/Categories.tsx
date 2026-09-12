@@ -68,19 +68,37 @@ export function Categories({ transactions }: CategoriesProps) {
   const isEditing = form.id.length > 0
 
   function resetForm() {
-    setForm({ id: '', label: '', color: DEFAULT_CATEGORY_COLOR, icon: '🏷️', isIgnored: false })
+    setForm({
+      id: '',
+      label: '',
+      color: DEFAULT_CATEGORY_COLOR,
+      icon: '🏷️',
+      isIgnored: false,
+    })
     setShowForm(false)
   }
 
   function openNewForm() {
-    setForm({ id: '', label: '', color: DEFAULT_CATEGORY_COLOR, icon: '🏷️', isIgnored: false })
+    setForm({
+      id: '',
+      label: '',
+      color: DEFAULT_CATEGORY_COLOR,
+      icon: '🏷️',
+      isIgnored: false,
+    })
     setShowForm(true)
   }
 
   function startEdit(categoryId: string) {
     const cat = categoryDefinitions.find((c) => c.id === categoryId)
     if (!cat) return
-    setForm({ id: cat.id, label: cat.label, color: cat.color, icon: cat.icon || '🏷️', isIgnored: cat.isIgnored ?? false })
+    setForm({
+      id: cat.id,
+      label: cat.label,
+      color: cat.color,
+      icon: cat.icon || '🏷️',
+      isIgnored: cat.isIgnored ?? false,
+    })
     setShowForm(true)
   }
 
@@ -287,7 +305,13 @@ export function Categories({ transactions }: CategoriesProps) {
             <div>
               <label
                 htmlFor="cat-label"
-                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  marginBottom: 6,
+                  color: 'var(--text-muted)',
+                }}
               >
                 Nombre
               </label>
@@ -295,14 +319,22 @@ export function Categories({ transactions }: CategoriesProps) {
                 id="cat-label"
                 aria-label="Nombre de categoría"
                 value={form.label}
-                onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, label: e.target.value }))
+                }
                 placeholder="Ej. Café"
               />
             </div>
             <div>
               <label
                 htmlFor="cat-color"
-                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  marginBottom: 6,
+                  color: 'var(--text-muted)',
+                }}
               >
                 Color
               </label>
@@ -311,14 +343,22 @@ export function Categories({ transactions }: CategoriesProps) {
                 aria-label="Color de categoría"
                 type="color"
                 value={form.color}
-                onChange={(e) => setForm((f) => ({ ...f, color: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, color: e.target.value }))
+                }
                 className="h-10"
               />
             </div>
             <div>
               <label
                 htmlFor="cat-icon"
-                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  marginBottom: 6,
+                  color: 'var(--text-muted)',
+                }}
               >
                 Icono
               </label>
@@ -326,17 +366,32 @@ export function Categories({ transactions }: CategoriesProps) {
                 id="cat-icon"
                 aria-label="Icono de categoría"
                 value={form.icon}
-                onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, icon: e.target.value }))
+                }
                 placeholder="🏷️"
                 maxLength={2}
               />
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: 4,
+            }}
+          >
             <label
               htmlFor="cat-ignored"
-              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
             >
               <Checkbox
                 id="cat-ignored"
@@ -346,9 +401,18 @@ export function Categories({ transactions }: CategoriesProps) {
                 }
               />
               <div>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>Ignorar en totales</span>
-                <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 6 }}>
-                  Las transacciones de esta categoría no suman en gastos ni ingresos
+                <span style={{ fontSize: 13, fontWeight: 500 }}>
+                  Ignorar en totales
+                </span>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--text-faint)',
+                    marginLeft: 6,
+                  }}
+                >
+                  Las transacciones de esta categoría no suman en gastos ni
+                  ingresos
                 </span>
               </div>
             </label>
@@ -433,7 +497,17 @@ export function Categories({ transactions }: CategoriesProps) {
                   >
                     {cat.label}
                     {cat.isIgnored && (
-                      <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-faint)', background: 'var(--border)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 500,
+                          color: 'var(--text-faint)',
+                          background: 'var(--border)',
+                          borderRadius: 4,
+                          padding: '1px 5px',
+                          flexShrink: 0,
+                        }}
+                      >
                         ignorada
                       </span>
                     )}
@@ -504,12 +578,22 @@ export function Categories({ transactions }: CategoriesProps) {
         <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
           Reglas de auto-categorización
         </h3>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-          Creá reglas para categorizar transacciones automáticamente según el texto de la descripción.
+        <p
+          style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}
+        >
+          Creá reglas para categorizar transacciones automáticamente según el
+          texto de la descripción.
         </p>
 
         {/* Add pattern form */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            marginBottom: 16,
+          }}
+        >
           {/* Row 1: pattern + type + category */}
           <div
             style={{
@@ -522,7 +606,13 @@ export function Categories({ transactions }: CategoriesProps) {
             <div style={{ flex: '1 1 auto', minWidth: 160 }}>
               <label
                 htmlFor="pattern-text"
-                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  marginBottom: 6,
+                  color: 'var(--text-muted)',
+                }}
               >
                 Patrón
               </label>
@@ -538,7 +628,13 @@ export function Categories({ transactions }: CategoriesProps) {
             <div>
               <label
                 htmlFor="pattern-match"
-                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  marginBottom: 6,
+                  color: 'var(--text-muted)',
+                }}
               >
                 Tipo
               </label>
@@ -569,7 +665,13 @@ export function Categories({ transactions }: CategoriesProps) {
             <div>
               <label
                 htmlFor="pattern-category"
-                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  marginBottom: 6,
+                  color: 'var(--text-muted)',
+                }}
               >
                 Categoría
               </label>
@@ -612,7 +714,13 @@ export function Categories({ transactions }: CategoriesProps) {
             <div style={{ flex: '1 1 auto', minWidth: 160 }}>
               <label
                 htmlFor="pattern-description"
-                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  marginBottom: 6,
+                  color: 'var(--text-muted)',
+                }}
               >
                 Descripción (opcional)
               </label>
@@ -627,7 +735,13 @@ export function Categories({ transactions }: CategoriesProps) {
             </div>
             <div>
               <label
-                style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text-muted)' }}
+                style={{
+                  display: 'block',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  marginBottom: 6,
+                  color: 'var(--text-muted)',
+                }}
               >
                 Aplicar a
               </label>
@@ -657,7 +771,10 @@ export function Categories({ transactions }: CategoriesProps) {
                       fontSize: 13,
                       cursor: 'pointer',
                       border: 'none',
-                      borderRight: value === 'future_only' ? '1px solid var(--border)' : 'none',
+                      borderRight:
+                        value === 'future_only'
+                          ? '1px solid var(--border)'
+                          : 'none',
                       background:
                         patternForm.applyScope === value
                           ? 'var(--brand)'
@@ -785,7 +902,8 @@ export function Categories({ transactions }: CategoriesProps) {
               padding: '16px 0',
             }}
           >
-            No hay reglas personalizadas. Creá una para categorizar automáticamente tus transacciones.
+            No hay reglas personalizadas. Creá una para categorizar
+            automáticamente tus transacciones.
           </p>
         )}
       </div>

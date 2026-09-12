@@ -32,4 +32,9 @@ export interface TransactionsFilter {
 export type { CustomCategoryRecord } from './custom-category'
 
 // Category system
-export { Category, CATEGORY_LABELS, CATEGORY_ICONS, CATEGORY_COLORS } from './category'
+export {
+  Category,
+  CATEGORY_LABELS,
+  CATEGORY_ICONS,
+  CATEGORY_COLORS,
+} from './category'

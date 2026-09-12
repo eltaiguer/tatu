@@ -1,8 +1,8 @@
-import { Category, CATEGORY_COLORS, CATEGORY_LABELS } from '../models';
+import { Category, CATEGORY_COLORS, CATEGORY_LABELS } from '../models'
 import {
   getCategoryDefinition,
   ID_ALIASES,
-} from '../services/categories/category-registry';
+} from '../services/categories/category-registry'
 
 export type CategoryIconName =
   | 'groceries'
@@ -22,13 +22,13 @@ export type CategoryIconName =
   | 'internal_transfer'
   | 'external_transfer'
   | 'fees'
-  | 'uncategorized';
+  | 'uncategorized'
 
 export interface CategoryDisplay {
-  id: string;
-  label: string;
-  color: string;
-  icon: CategoryIconName;
+  id: string
+  label: string
+  color: string
+  icon: CategoryIconName
 }
 
 const MODERN_META: Record<Category, { icon: CategoryIconName }> = {
@@ -50,10 +50,10 @@ const MODERN_META: Record<Category, { icon: CategoryIconName }> = {
   [Category.ExternalTransfer]: { icon: 'external_transfer' },
   [Category.Fees]: { icon: 'fees' },
   [Category.Uncategorized]: { icon: 'uncategorized' },
-};
+}
 
 function isModernCategory(id: string): id is Category {
-  return Object.values(Category).includes(id as Category);
+  return Object.values(Category).includes(id as Category)
 }
 
 function humanizeCategoryId(categoryId: string): string {
@@ -62,28 +62,30 @@ function humanizeCategoryId(categoryId: string): string {
     .replace(/[_-]+/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
-    .map((word) => word.toLowerCase());
+    .map((word) => word.toLowerCase())
 
   if (words.length === 0) {
-    return CATEGORY_LABELS[Category.Uncategorized];
+    return CATEGORY_LABELS[Category.Uncategorized]
   }
 
-  const humanized = words.join(' ');
-  return humanized.charAt(0).toUpperCase() + humanized.slice(1);
+  const humanized = words.join(' ')
+  return humanized.charAt(0).toUpperCase() + humanized.slice(1)
 }
 
-export function getCategoryDisplay(categoryId?: string | null): CategoryDisplay {
-  const normalizedId = (categoryId || Category.Uncategorized).toLowerCase();
+export function getCategoryDisplay(
+  categoryId?: string | null
+): CategoryDisplay {
+  const normalizedId = (categoryId || Category.Uncategorized).toLowerCase()
 
-  const modernId = ID_ALIASES[normalizedId] ?? normalizedId;
+  const modernId = ID_ALIASES[normalizedId] ?? normalizedId
   if (isModernCategory(modernId)) {
-    const def = getCategoryDefinition(modernId);
+    const def = getCategoryDefinition(modernId)
     return {
       id: modernId,
       label: def.label,
       color: def.color,
       icon: MODERN_META[modernId].icon,
-    };
+    }
   }
 
   const customDef = getCategoryDefinition(normalizedId)
@@ -101,5 +103,5 @@ export function getCategoryDisplay(categoryId?: string | null): CategoryDisplay 
     label: humanizeCategoryId(normalizedId),
     color: CATEGORY_COLORS[Category.Uncategorized],
     icon: MODERN_META[Category.Uncategorized].icon,
-  };
+  }
 }

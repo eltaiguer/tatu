@@ -1,7 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { Currency } from '../../models'
 import type { InsightInput } from './insight-data'
-import { buildInsightSystemPrompt, buildInsightUserMessage } from './insight-prompt'
+import {
+  buildInsightSystemPrompt,
+  buildInsightUserMessage,
+} from './insight-prompt'
 
 export type InsightType =
   | 'bleeding_money'

@@ -79,9 +79,7 @@ export function SplitTransactionDialog({
   const canConfirm = isBalanced && hasAllAmounts && !pending
 
   function updatePart(idx: number, patch: Partial<SplitPartDraft>) {
-    setParts((prev) =>
-      prev.map((p, i) => (i === idx ? { ...p, ...patch } : p))
-    )
+    setParts((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)))
   }
 
   function addPart() {
