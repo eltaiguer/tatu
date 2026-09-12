@@ -8,8 +8,15 @@
  * - Bank Account format: "1234.56" (period as decimal)
  * - Handles both formats automatically
  *
+ * An empty value is 0 — the debito/credito columns are legitimately blank
+ * depending on the direction of the movement. Anything else that does not
+ * parse throws: returning NaN would flow into `amount` and from there into
+ * every dashboard total, chart and insight, where the original bad value is
+ * no longer identifiable.
+ *
  * @param value - The string value to parse
- * @returns Parsed number, or 0 if empty/invalid
+ * @returns Parsed number, or 0 if empty
+ * @throws If the value is non-empty and not a number
  */
 export function parseSantanderNumber(value: string): number {
   if (!value || value.trim() === '') {
@@ -18,15 +25,18 @@ export function parseSantanderNumber(value: string): number {
 
   const trimmed = value.trim()
 
-  // Check if it uses comma as decimal separator (credit card format)
-  if (trimmed.includes(',')) {
-    // Remove thousand separators (periods) and replace comma with period
-    const normalized = trimmed.replace(/\./g, '').replace(',', '.')
-    return parseFloat(normalized)
+  // Comma as decimal separator (credit card format): drop the thousands
+  // separators, then swap the decimal comma for a period.
+  const normalized = trimmed.includes(',')
+    ? trimmed.replace(/\./g, '').replace(',', '.')
+    : trimmed
+
+  const parsed = Number(normalized)
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Importe ilegible: "${value}"`)
   }
 
-  // Otherwise, it's already in US format (bank account format)
-  return parseFloat(trimmed)
+  return parsed
 }
 
 /**

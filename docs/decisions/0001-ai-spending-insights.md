@@ -1,13 +1,32 @@
 # ADR-0001: AI-Powered Spending Insights
 
 ## Status
-Accepted. **Partially superseded by [ADR-0002](0002-insights-integral-view.md)**:
-the per-period navigation/caching decisions below (month stepper, one
-cache row per `(user_id, period_start, period_end)`, `deltaVsPriorPeriod`)
-were replaced by an all-time integral view. The BYO-key client-side
-pattern, the `claude-opus-4-8` model choice for insight generation, and the
+Accepted — Phase 1 shipped in #42.
+
+**Partially superseded by [ADR-0002](0002-insights-integral-view.md)**: the
+per-period navigation/caching decisions below (month stepper, one cache row
+per `(user_id, period_start, period_end)`, `deltaVsPriorPeriod`) were
+replaced by an all-time integral view. The BYO-key client-side pattern, the
+`claude-opus-4-8` model choice for insight generation, and the
 deterministic-math discipline (the model narrates, never computes) are
 unaffected and still stand as originally decided here.
+
+Corrections applied after implementation — places where this document
+described code that does not exist, independent of the ADR-0002
+supersession:
+
+- Insights builds on `src/services/charts/chart-data.ts` only.
+  `src/services/aggregator/aggregation.ts`, named below, was never wired up
+  and has been deleted — extending it would have been wasted work.
+- The Insights UI does **not** reuse `DateRangePicker`; that component had no
+  importer at all and has been deleted. (Under ADR-0002 there is no date
+  selection in the view at all.)
+- The `ai_insights` DDL below matches neither the shipped ADR-0001 schema nor
+  the current one. `supabase/schema.sql` is the source of truth — see the
+  Data Model note.
+- Prompt-caching and batch-truncation handling were added to
+  `transaction-ai.ts` after this ADR (#49, #52); the "no `output_config.format`,
+  parse defensively" decision is unchanged.
 
 ## Date
 2026-07-22
@@ -46,6 +65,16 @@ Tatu already has a working, shipped AI integration
 Because each user supplies their own key, there is no shared secret at risk
 of leaking — the exposure is a user to their own credential, in their own
 session. This is a deliberate, already-shipped decision, not an oversight.
+
+**Accepted risk — the key is stored in plaintext at rest.**
+`user_preferences.claude_api_key` is a plain `text` column. RLS scopes it so
+no other user can read it, but it is readable by anyone with database or
+Supabase dashboard access, and it appears in backups. There is no
+server-side component in this architecture to hold a decryption secret, so
+encrypting it would only move the problem: the key material would have to
+live in the client bundle. This is recorded as an accepted risk rather than
+an oversight. Revisit it if Tatu ever gains a backend, or moves off
+bring-your-own-key — either would need its own ADR.
 
 There is no serverless layer in this repo (no `supabase/functions`) — all
 backend logic is client + Supabase Postgres/RLS.
@@ -138,6 +167,16 @@ shippable slice stays small.
 
 New table `ai_insights`, RLS-scoped per user like every other table in
 `schema.sql`:
+
+> **`supabase/schema.sql` is the source of truth — this DDL is neither the
+> shipped nor the current shape.** ADR-0001 shipped as a composite
+> `primary key (user_id, period_start, period_end)` with no `id` column;
+> ADR-0002 then replaced that with `user_id` alone (one cached row per user,
+> no period scoping). The DDL below is the original proposal, kept only for
+> context. Do not provision a database from it, and note that moving from
+> the ADR-0001 shape to the current one needs a one-time
+> `drop table if exists public.ai_insights;` — `schema.sql` is applied
+> manually (see `supabase/README.md`).
 
 ```sql
 create table ai_insights (

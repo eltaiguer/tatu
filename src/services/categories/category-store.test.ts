@@ -44,6 +44,32 @@ describe('Custom category store', () => {
     expect(categories[0].color).toBe('#ff0000')
   })
 
+  it('never hands a custom category a reserved built-in or alias id', () => {
+    // 'food' is an ID_ALIASES key for groceries; a custom category taking it
+    // would override Alimentación's ignore flag in every total.
+    const food = addCustomCategory({ label: 'Food', color: '#ff0000' })
+    expect(food.id).not.toBe('food')
+
+    const groceries = addCustomCategory({ label: 'Groceries', color: '#00ff00' })
+    expect(groceries.id).not.toBe('groceries')
+
+    // Still a usable, unique id rather than a collision or an empty string
+    expect(food.id).toMatch(/^food-\d+$/)
+    expect(new Set([food.id, groceries.id]).size).toBe(2)
+  })
+
+  it('never hands a custom category the legacy ignored id', () => {
+    // isCategoryIgnored treats 'ignored' as ignore-by-default, so a category
+    // slugged that way would silently drop its transactions from every total.
+    const c = addCustomCategory({ label: 'Ignored', color: '#ff0000' })
+    expect(c.id).not.toBe('ignored')
+  })
+
+  it('does not treat inherited Object properties as reserved ids', () => {
+    const c = addCustomCategory({ label: 'Constructor', color: '#ff0000' })
+    expect(c.id).toBe('constructor')
+  })
+
   it('updates a custom category', () => {
     const category = addCustomCategory({
       label: 'Coffee',

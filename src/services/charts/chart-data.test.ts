@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildCategorySpending,
-  buildIncomeExpenseSummary,
-  buildMonthlyTrends,
   buildCategorySpendingConverted,
   buildMonthlyTrendsConverted,
   buildCurrentMonthSummary,
@@ -28,186 +25,6 @@ function makeTransaction(
     ...overrides,
   }
 }
-
-describe('chart-data', () => {
-  it('builds category spending for a currency using debits only', () => {
-    const transactions = [
-      makeTransaction('tx-1', {
-        amount: 20,
-        currency: 'USD',
-        type: 'debit',
-        category: Category.Groceries,
-      }),
-      makeTransaction('tx-2', {
-        amount: 5,
-        currency: 'USD',
-        type: 'credit',
-        category: Category.Groceries,
-      }),
-      makeTransaction('tx-3', {
-        amount: 10,
-        currency: 'USD',
-        type: 'debit',
-        category: Category.Restaurants,
-      }),
-      makeTransaction('tx-4', {
-        amount: 30,
-        currency: 'UYU',
-        type: 'debit',
-        category: Category.Restaurants,
-      }),
-    ]
-
-    const result = buildCategorySpending(transactions, 'USD')
-
-    expect(result).toEqual([
-      { category: Category.Groceries, total: 20 },
-      { category: Category.Restaurants, total: 10 },
-    ])
-  })
-
-  it('builds monthly trends per currency', () => {
-    const transactions = [
-      makeTransaction('tx-1', {
-        amount: 100,
-        type: 'credit',
-        category: Category.Income,
-        currency: 'USD',
-        date: new Date('2025-01-15T00:00:00.000Z'),
-      }),
-      makeTransaction('tx-2', {
-        amount: 40,
-        type: 'debit',
-        currency: 'USD',
-        date: new Date('2025-01-20T00:00:00.000Z'),
-      }),
-      makeTransaction('tx-3', {
-        amount: 10,
-        type: 'debit',
-        currency: 'USD',
-        date: new Date('2025-02-01T00:00:00.000Z'),
-      }),
-    ]
-
-    const result = buildMonthlyTrends(transactions, 'USD')
-
-    expect(result).toEqual([
-      { month: '2025-01', income: 100, expense: 40, net: 60 },
-      { month: '2025-02', income: 0, expense: 10, net: -10 },
-    ])
-  })
-
-  it('counts all non-ignored credits as income regardless of category', () => {
-    const transactions = [
-      makeTransaction('salary', {
-        amount: 200,
-        type: 'credit',
-        category: Category.Income,
-        currency: 'USD',
-      }),
-      makeTransaction('refund', {
-        amount: 30,
-        type: 'credit',
-        category: Category.Groceries,
-        currency: 'USD',
-      }),
-      makeTransaction('received', {
-        amount: 50,
-        type: 'credit',
-        category: Category.Uncategorized,
-        currency: 'USD',
-      }),
-    ]
-
-    const result = buildIncomeExpenseSummary(transactions, 'USD')
-
-    expect(result.income).toBe(280)
-    expect(result.expense).toBe(0)
-    expect(result.net).toBe(280)
-  })
-
-  it('builds income vs expense summary per currency', () => {
-    const transactions = [
-      makeTransaction('tx-1', {
-        amount: 50,
-        type: 'credit',
-        category: Category.Income,
-        currency: 'USD',
-      }),
-      makeTransaction('tx-2', {
-        amount: 25,
-        type: 'debit',
-        currency: 'USD',
-      }),
-    ]
-
-    const result = buildIncomeExpenseSummary(transactions, 'USD')
-
-    expect(result).toEqual({
-      income: 50,
-      expense: 25,
-      net: 25,
-    })
-  })
-
-  it('ignores transactions in a different currency', () => {
-    const transactions = [
-      makeTransaction('usd-income', {
-        amount: 100,
-        type: 'credit',
-        category: Category.Income,
-        currency: 'USD',
-      }),
-      makeTransaction('usd-expense', { amount: 30, type: 'debit', currency: 'USD' }),
-      makeTransaction('uyu-income', {
-        amount: 1000,
-        type: 'credit',
-        category: Category.Income,
-        currency: 'UYU',
-      }),
-      makeTransaction('uyu-expense', { amount: 500, type: 'debit', currency: 'UYU' }),
-    ]
-
-    const result = buildIncomeExpenseSummary(transactions, 'USD')
-
-    expect(result.income).toBe(100)
-    expect(result.expense).toBe(30)
-    expect(result.net).toBe(70)
-  })
-
-  it('excludes transfer category from spending and summary metrics (original)', () => {
-    const transactions = [
-      makeTransaction('tx-1', {
-        amount: 200,
-        type: 'debit',
-        currency: 'USD',
-        category: Category.InternalTransfer,
-      }),
-      makeTransaction('tx-2', {
-        amount: 100,
-        type: 'credit',
-        currency: 'USD',
-        category: Category.InternalTransfer,
-      }),
-      makeTransaction('tx-3', {
-        amount: 80,
-        type: 'debit',
-        currency: 'USD',
-        category: Category.Groceries,
-      }),
-    ]
-
-    expect(buildCategorySpending(transactions, 'USD')).toEqual([
-      { category: Category.Groceries, total: 80 },
-    ])
-
-    expect(buildIncomeExpenseSummary(transactions, 'USD')).toEqual({
-      income: 0,
-      expense: 80,
-      net: -80,
-    })
-  })
-})
 
 describe('chart-data multicurrency converting selectors', () => {
   const RATE = 40
@@ -420,6 +237,114 @@ describe('chart-data multicurrency converting selectors', () => {
       expect(result.card.count).toBe(0)
       expect(result.usd.count).toBe(0)
       expect(result.uyu.count).toBe(0)
+    })
+
+    it('excludes legacy pre-rename transfer ids from account spend', () => {
+      const txs = [
+        makeTx('real', { source: 'bank_account', currency: 'USD', amount: 40 }),
+        makeTx('legacy', {
+          source: 'bank_account',
+          currency: 'USD',
+          amount: 1000,
+          category: 'transfer',
+        }),
+      ]
+      const result = spendByAccount(txs, 'USD', RATE)
+      expect(result.usd.conv).toBe(40)
+      expect(result.usd.count).toBe(1)
+    })
+  })
+
+  describe('ignored categories are never counted', () => {
+    it('keeps legacy transfer ids out of category spending', () => {
+      const transactions = [
+        makeTransaction('tx-1', {
+          amount: 30,
+          category: Category.Groceries,
+        }),
+        makeTransaction('tx-2', { amount: 900, category: 'transfer' }),
+        makeTransaction('tx-3', { amount: 700, category: 'transfers' }),
+      ]
+
+      const result = buildCategorySpendingConverted(transactions, 'USD', 40)
+
+      expect(result).toEqual([{ category: Category.Groceries, total: 30 }])
+    })
+
+    it('keeps legacy transfer ids out of monthly trends', () => {
+      const transactions = [
+        makeTransaction('tx-1', {
+          date: new Date('2025-03-10T00:00:00.000Z'),
+          amount: 30,
+          category: Category.Groceries,
+        }),
+        makeTransaction('tx-2', {
+          date: new Date('2025-03-12T00:00:00.000Z'),
+          amount: 900,
+          category: 'transfer',
+        }),
+      ]
+
+      const result = buildMonthlyTrendsConverted(transactions, 'USD', 40)
+
+      expect(result).toEqual([
+        { month: '2025-03', income: 0, expense: 30, net: -30 },
+      ])
+    })
+
+    it('keeps legacy transfer ids out of the currency split', () => {
+      const transactions = [
+        makeTransaction('tx-1', { amount: 25, currency: 'USD' }),
+        makeTransaction('tx-2', {
+          amount: 4000,
+          currency: 'UYU',
+          category: 'transfer',
+        }),
+      ]
+
+      const result = buildCurrencySplit(transactions, 'USD', 40)
+
+      expect(result.total).toBe(25)
+      expect(result.UYU).toBe(0)
+      expect(result.pctUSD).toBe(100)
+    })
+
+    it('picks the reference month from counted transactions only', () => {
+      const transactions = [
+        makeTransaction('tx-1', {
+          date: new Date('2025-03-10T00:00:00.000Z'),
+          amount: 30,
+          category: Category.Groceries,
+        }),
+        // A later month containing nothing but an ignored transfer must not
+        // become the "este mes" reference month.
+        makeTransaction('tx-2', {
+          date: new Date('2025-04-02T00:00:00.000Z'),
+          amount: 5000,
+          category: Category.InternalTransfer,
+        }),
+      ]
+
+      const result = buildCurrentMonthSummary(transactions, 'USD', 40)
+
+      expect(result.expense).toBe(30)
+      expect(result.count).toBe(1)
+      expect(result.monthLabel).toContain('marzo')
+    })
+
+    it('returns an empty summary when every transaction is ignored', () => {
+      const transactions = [
+        makeTransaction('tx-1', {
+          amount: 5000,
+          category: Category.InternalTransfer,
+        }),
+      ]
+
+      const result = buildCurrentMonthSummary(transactions, 'USD', 40)
+
+      expect(result.count).toBe(0)
+      expect(result.expense).toBe(0)
+      expect(result.monthLabel).toBe('')
     })
   })
 })

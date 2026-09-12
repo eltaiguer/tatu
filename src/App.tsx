@@ -393,6 +393,7 @@ function App() {
                   transactions={transactions}
                   userName={getFriendlyName(session) || undefined}
                   onNavigateToImport={() => setImportOpen(true)}
+                  onNavigateToCategories={() => setCurrentView('categories')}
                   onNavigateToTransactions={navigateToTransactions}
                   homeCurrency={preferredCurrency}
                   fxRate={fxRate}

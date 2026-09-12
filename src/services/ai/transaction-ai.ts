@@ -28,6 +28,13 @@ export interface AiCorrectionContext {
   customPatterns: CustomPattern[]
 }
 
+// Each result object costs roughly 45-60 output tokens, so a 150-row batch
+// needs ~8,250 — which overflowed the previous 8192 cap and truncated the
+// JSON. The fix is the cap, not the batch size: shrinking batches instead
+// would have tripled the request count, and since the system prompt is
+// below the cache minimum on the default model (see below) that would have
+// tripled its cost too.
+const MAX_OUTPUT_TOKENS = 16000
 const BATCH_SIZE = 150
 
 function buildSystemPrompt(customCategories: CustomCategory[]): string {
@@ -190,61 +197,158 @@ export function applyAiEnrichment(
   })
 }
 
+interface AiEnrichmentBatchResponse {
+  stop_reason?: string | null
+  content: Array<{ type: string; text?: string }>
+}
+
+/** Parses one batch response into results, or throws a diagnosable error. */
+function parseBatchResponse(
+  response: AiEnrichmentBatchResponse,
+  inputs: AiEnrichmentInput[],
+  context: AiCorrectionContext
+): AiEnrichmentResult[] {
+  // A response cut off at max_tokens leaves invalid JSON behind. Saying so
+  // beats letting JSON.parse fail on the fragment with an opaque message.
+  if (response.stop_reason === 'max_tokens') {
+    throw new Error(
+      'La respuesta del modelo quedó truncada (límite de tokens alcanzado). ' +
+        'Probá importar menos transacciones a la vez.'
+    )
+  }
+
+  const block = response.content[0]
+  if (!block || block.type !== 'text' || typeof block.text !== 'string') {
+    throw new Error(
+      `Respuesta inesperada del modelo (tipo: ${block?.type ?? 'vacío'})`
+    )
+  }
+
+  let parsed: Array<{
+    id: string
+    displayDescription: string
+    category: string
+    confidence?: number
+  }>
+  try {
+    // Claude occasionally wraps output in markdown fences despite instructions
+    const raw = block.text.trim()
+    const jsonText = raw.startsWith('[')
+      ? raw
+      : (raw.match(/\[[\s\S]*\]/)?.[0] ?? raw)
+    parsed = JSON.parse(jsonText) as typeof parsed
+  } catch (e) {
+    throw new Error(
+      `No se pudo parsear la respuesta del modelo: ${e instanceof Error ? e.message : String(e)}`
+    )
+  }
+
+  const results: AiEnrichmentResult[] = []
+  for (const item of parsed) {
+    if (!item.id || typeof item.displayDescription !== 'string') continue
+    const rawConfidence =
+      typeof item.confidence === 'number' ? item.confidence : 0.7
+    results.push({
+      id: item.id,
+      category: validateCategory(item.category ?? '', context.customCategories),
+      displayDescription:
+        item.displayDescription.trim() ||
+        (inputs.find((t) => t.id === item.id)?.description ?? item.id),
+      confidence: Math.min(1, Math.max(0, rawConfidence)),
+    })
+  }
+  return results
+}
+
+/** 401/403 mean the credential is wrong; retrying cannot help. */
+function isNonRetryable(error: unknown): boolean {
+  const status = (error as { status?: number })?.status
+  return status === 401 || status === 403
+}
+
+export interface AiEnrichmentOutcome {
+  results: Map<string, AiEnrichmentResult>
+  /**
+   * Set when some batches failed but others succeeded. The successful results
+   * are still returned — a single bad batch must not discard a whole import's
+   * worth of enrichment.
+   */
+  partialFailure?: string
+}
+
 export async function enrichTransactionsWithAi(
   inputs: AiEnrichmentInput[],
   config: AiConfig,
   context: AiCorrectionContext
-): Promise<Map<string, AiEnrichmentResult>> {
+): Promise<AiEnrichmentOutcome> {
   const client = new Anthropic({
     apiKey: config.apiKey,
     dangerouslyAllowBrowser: true,
   })
 
-  const systemPrompt = buildSystemPrompt(context.customCategories)
+  // Identical across every batch (it depends only on customCategories), which
+  // makes it a stable cache prefix. Volatile per-batch data lives in the user
+  // message, after this breakpoint.
+  //
+  // Caveat: at ~1,200 tokens this prompt is below the minimum cacheable
+  // prefix for claude-haiku-4-5 (4,096), the default model — there the
+  // breakpoint is silently inert, with no error and cache_read_input_tokens
+  // of 0. It does engage on claude-sonnet-4-6 (minimum 1,024), the other
+  // option in Settings. Kept because it is free and correct; verify with
+  // usage.cache_read_input_tokens before claiming a saving on Haiku.
+  const systemPrompt = [
+    {
+      type: 'text' as const,
+      text: buildSystemPrompt(context.customCategories),
+      cache_control: { type: 'ephemeral' as const },
+    },
+  ]
+
   const results = new Map<string, AiEnrichmentResult>()
+  const failures: string[] = []
+  let batchCount = 0
 
   for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
+    batchCount += 1
     const batch = inputs.slice(i, i + BATCH_SIZE)
-    const userMessage = buildUserMessage(batch, context)
 
-    const response = await client.messages.create({
-      model: config.model,
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    })
-
-    const block = response.content[0]
-    if (block.type !== 'text')
-      throw new Error(
-        `Respuesta inesperada del modelo (tipo: ${block.type})`
-      )
-
-    let parsed: Array<{ id: string; displayDescription: string; category: string; confidence?: number }>
     try {
-      // Claude occasionally wraps output in markdown fences despite instructions
-      const raw = block.text.trim()
-      const jsonText = raw.startsWith('[')
-        ? raw
-        : (raw.match(/\[[\s\S]*\]/)?.[0] ?? raw)
-      parsed = JSON.parse(jsonText) as typeof parsed
-    } catch (e) {
-      throw new Error(
-        `No se pudo parsear la respuesta del modelo: ${e instanceof Error ? e.message : String(e)}`
-      )
-    }
+      const response = (await client.messages.create({
+        model: config.model,
+        max_tokens: MAX_OUTPUT_TOKENS,
+        system: systemPrompt,
+        messages: [
+          { role: 'user', content: buildUserMessage(batch, context) },
+        ],
+      })) as AiEnrichmentBatchResponse
 
-    for (const item of parsed) {
-      if (!item.id || typeof item.displayDescription !== 'string') continue
-      const rawConfidence = typeof item.confidence === 'number' ? item.confidence : 0.7
-      results.set(item.id, {
-        id: item.id,
-        category: validateCategory(item.category ?? '', context.customCategories),
-        displayDescription: item.displayDescription.trim() || (inputs.find((t) => t.id === item.id)?.description ?? item.id),
-        confidence: Math.min(1, Math.max(0, rawConfidence)),
-      })
+      for (const result of parseBatchResponse(response, inputs, context)) {
+        results.set(result.id, result)
+      }
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+
+      // Batch isolation is for transient faults. A bad key or revoked
+      // permission fails identically for every remaining batch, so carrying
+      // on would fire one doomed request per batch — 20 of them on a
+      // 3,000-row import — before the user sees the same message. The SDK
+      // does not retry these either.
+      if (isNonRetryable(error)) {
+        break
+      }
     }
   }
 
-  return results
+  // Every batch failed — this is a hard failure, not a partial one.
+  if (failures.length > 0 && failures.length === batchCount) {
+    throw new Error(failures[0])
+  }
+
+  return {
+    results,
+    partialFailure:
+      failures.length > 0
+        ? `${failures.length} de ${batchCount} lotes fallaron: ${failures[0]}`
+        : undefined,
+  }
 }

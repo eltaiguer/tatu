@@ -143,7 +143,13 @@ export async function restoreTransaction(
 
 export interface UpdateTransactionInput {
   description?: string
-  displayDescription?: string
+  /**
+   * `undefined` leaves the column untouched; `null` (or '') clears it. The
+   * distinction matters: every field here is guarded by `!== undefined`, so
+   * passing `undefined` to mean "clear" silently omits the column from the
+   * payload and the old value survives on the server.
+   */
+  displayDescription?: string | null
   category?: string
   categoryConfidence?: number
   tags?: string[]

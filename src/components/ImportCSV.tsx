@@ -24,6 +24,14 @@ interface ImportCSVProps {
   ) => Promise<{
     added: Transaction[];
     duplicates: Transaction[];
+    /**
+     * Set when the import succeeded but AI enrichment did not, so the user can
+     * tell a dead API key apart from the model categorizing badly.
+     */
+    /** Enrichment did not run at all. */
+    aiError?: string;
+    /** Enrichment ran but some batches failed; the rest were applied. */
+    aiPartial?: string;
   }>;
 }
 
@@ -99,13 +107,18 @@ export function ImportCSV({
         setFileType('uyu_account');
       }
 
-      const { added, duplicates } = onTransactionsImported
+      const { added, duplicates, aiError, aiPartial } = onTransactionsImported
         ? await onTransactionsImported(result.transactions, {
             parsedData: result,
             csvContent,
             fileName: file.name,
           })
-        : transactionStore.getState().addTransactions(result.transactions);
+        : {
+            ...transactionStore.getState().addTransactions(result.transactions),
+            // Local-only path never runs AI enrichment.
+            aiError: undefined as string | undefined,
+            aiPartial: undefined as string | undefined,
+          };
 
       setImportSummary({
         total: result.transactions.length,
@@ -117,6 +130,20 @@ export function ImportCSV({
       toast.success(
         `${added.length} nueva${added.length === 1 ? '' : 's'} · ${duplicates.length} duplicada${duplicates.length === 1 ? '' : 's'} omitida${duplicates.length === 1 ? '' : 's'}`
       );
+
+      // The import succeeded, but the AI step did not — say so, otherwise a
+      // dead API key looks identical to poor categorization. Total failure
+      // and partial failure need different wording: telling the user "no
+      // disponible" when 10 of 12 batches did enrich is simply wrong.
+      if (aiError) {
+        toast.warning(
+          `Categorización con IA no disponible: ${aiError}. Se usaron las reglas de categorización.`
+        );
+      } else if (aiPartial) {
+        toast.warning(
+          `Categorización con IA incompleta: ${aiPartial}. El resto se categorizó con reglas.`
+        );
+      }
 
       if (onImportComplete) {
         onImportComplete();

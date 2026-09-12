@@ -270,3 +270,56 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,`
     })
   })
 })
+
+describe('parseBankAccountCSV — malformed input is reported, not absorbed', () => {
+  const header = `Cliente,Gazzano      A Jose,
+Cuenta,Ca De Ahorro Atm,
+Número,007003529538,
+Moneda,USD,
+Sucursal,02 - 18 De Julio,
+
+Movimientos,
+Desde:,01/11/2025,Hasta:,30/11/2025
+
+Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,`
+
+  it('reports the row when an amount cannot be parsed', () => {
+    const csv = `${header}
+27/11/2025,598386,DEBITO,ALGO,n/d,,11749.61,`
+
+    expect(() => parseBankAccountCSV(csv, 'test.csv')).toThrow(/n\/d/)
+  })
+
+  it('rejects a currency it does not recognise instead of storing it', () => {
+    // 'Pesos' would be cast straight into tx.currency, where convert() treats
+    // anything non-USD as UYU and the database check constraint rejects the
+    // insert with an opaque error far from the cause.
+    const csv = `Cliente,Gazzano      A Jose,
+Cuenta,Ca De Ahorro Atm,
+Número,007003529538,
+Moneda,Pesos,
+Sucursal,02 - 18 De Julio,
+
+Movimientos,
+Desde:,01/11/2025,Hasta:,30/11/2025
+
+Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
+27/11/2025,598386,DEBITO,ALGO,-174.65,,11749.61,`
+
+    expect(() => parseBankAccountCSV(csv, 'test.csv')).toThrow(/Pesos/)
+  })
+
+  it('reports an unrecognised file instead of returning zero transactions', () => {
+    // Distinct from a statement that genuinely has no movements: here the
+    // column header is missing entirely, so the file was not understood.
+    const csv = `Cliente,Gazzano      A Jose,
+Cuenta,Ca De Ahorro Atm,
+Número,007003529538,
+Moneda,USD,
+Sucursal,02 - 18 De Julio,
+
+Algo,Totalmente,Distinto,`
+
+    expect(() => parseBankAccountCSV(csv, 'test.csv')).toThrow(/movimientos/i)
+  })
+})

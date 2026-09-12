@@ -17,7 +17,12 @@ export interface CustomCategoryRecord {
   label: string
   color: string
   icon?: string
-  isIgnored: boolean
+  /**
+   * undefined when the column is NULL. The schema has it NOT NULL DEFAULT
+   * false, so this is defensive rather than reachable today — but a null must
+   * not read as an explicit false, which would override a built-in's default.
+   */
+  isIgnored?: boolean
   isArchived: boolean
   createdAt: string
   updatedAt: string
@@ -29,7 +34,7 @@ function rowToRecord(row: CustomCategoryRow): CustomCategoryRecord {
     label: row.label,
     color: row.color,
     icon: row.icon ?? undefined,
-    isIgnored: row.is_ignored ?? false,
+    isIgnored: row.is_ignored ?? undefined,
     isArchived: row.is_archived,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -60,7 +65,7 @@ export async function upsertCustomCategory(
     label: string
     color: string
     icon?: string
-    isIgnored: boolean
+    isIgnored?: boolean
     isArchived?: boolean
   }
 ): Promise<void> {
@@ -72,7 +77,9 @@ export async function upsertCustomCategory(
       label: category.label,
       color: category.color,
       icon: category.icon ?? null,
-      is_ignored: category.isIgnored,
+      // custom_categories.is_ignored is NOT NULL DEFAULT false — writing null
+      // is rejected by Postgres, so an unset flag persists as false.
+      is_ignored: category.isIgnored ?? false,
       is_archived: category.isArchived ?? false,
     },
     { onConflict: 'user_id,id' }

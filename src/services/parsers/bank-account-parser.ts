@@ -35,19 +35,17 @@ export function parseBankAccountCSV(
   // Extract metadata from header rows
   const metadata = extractMetadata(rows)
 
-  // Determine file type based on currency
+  // The currency drives tx.currency, which convert() and the database check
+  // constraint both depend on — validate rather than cast.
+  const currency = parseCurrency(metadata.moneda)
   const fileType: FileType =
-    metadata.moneda === 'USD' ? 'bank_account_usd' : 'bank_account_uyu'
+    currency === 'USD' ? 'bank_account_usd' : 'bank_account_uyu'
 
-  // Find where transactions start (after "Movimientos," row)
+  // Find where transactions start (after the column header row)
   const transactionsStartIndex = findTransactionsStart(rows)
 
   // Parse transactions
-  const transactions = parseTransactions(
-    rows,
-    transactionsStartIndex,
-    metadata.moneda as 'USD' | 'UYU'
-  )
+  const transactions = parseTransactions(rows, transactionsStartIndex, currency)
 
   return {
     fileType,
@@ -56,6 +54,15 @@ export function parseBankAccountCSV(
     fileName,
     parsedAt: new Date(),
   }
+}
+
+function parseCurrency(moneda: string): 'USD' | 'UYU' {
+  if (moneda === 'USD' || moneda === 'UYU') {
+    return moneda
+  }
+  throw new Error(
+    `Moneda no reconocida: "${moneda}". Se esperaba USD o UYU.`
+  )
 }
 
 /**
@@ -104,7 +111,17 @@ function parseTransactions(
   startIndex: number,
   currency: 'USD' | 'UYU'
 ): Transaction[] {
-  if (startIndex === -1 || startIndex >= rows.length) {
+  // -1 means the column header was never found: the file was not understood.
+  // That is different from a statement whose header is present but which has
+  // no movements, which legitimately yields an empty list.
+  if (startIndex === -1) {
+    throw new Error(
+      'No se encontró la sección de movimientos en el archivo. ' +
+        '¿Es un extracto de cuenta de Santander?'
+    )
+  }
+
+  if (startIndex >= rows.length) {
     return []
   }
 
@@ -118,6 +135,22 @@ function parseTransactions(
       continue
     }
 
+    // idIndex must stay exactly `i - startIndex`: it feeds
+    // generateTransactionId, and any change to it would give every row a new
+    // id, breaking dedup against transactions already stored (see #57).
+    transactions.push(parseRow(row, i, i - startIndex, currency))
+  }
+
+  return transactions
+}
+
+function parseRow(
+  row: string[],
+  rowIndex: number,
+  idIndex: number,
+  currency: 'USD' | 'UYU'
+): Transaction {
+  try {
     const rawTransaction: BankAccountTransaction = {
       fecha: row[0],
       referencia: row[1] || '',
@@ -162,7 +195,7 @@ function parseTransactions(
         rawTransaction.fecha,
         description,
         rawTransaction.debito + rawTransaction.credito,
-        i - startIndex
+        idIndex
       ),
       date: parseSantanderDate(rawTransaction.fecha),
       description,
@@ -177,8 +210,11 @@ function parseTransactions(
       rawData: rawTransaction,
     }
 
-    transactions.push(transaction)
+    return transaction
+  } catch (error) {
+    // Row number is 1-based to match what the user sees in a spreadsheet.
+    throw new Error(
+      `Fila ${rowIndex + 1}: ${error instanceof Error ? error.message : String(error)}`
+    )
   }
-
-  return transactions
 }
