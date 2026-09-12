@@ -67,6 +67,17 @@ function isEligibleDebit(tx: Transaction): boolean {
   )
 }
 
+/**
+ * Rounds to cents. Every number handed to the model goes through this: the
+ * prompt asks it to echo amounts back exactly and insight-generator validates
+ * them with ===, so unrounded FX residue (50000 / 40.5 = 1234.5679012345679)
+ * would make a legitimate echo of 1234.57 fail validation and get dropped —
+ * the card then renders with no number on it, silently.
+ */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
 function merchantOf(tx: Transaction): string {
   return (tx.displayDescription ?? tx.description).trim()
 }
@@ -91,8 +102,8 @@ function buildCategoryTotals(
 
   return totals.map((d) => ({
     category: d.category,
-    amount: d.total,
-    pctOfTotal: (d.total / grandTotal) * 100,
+    amount: round2(d.total),
+    pctOfTotal: round2((d.total / grandTotal) * 100),
   }))
 }
 
@@ -116,6 +127,7 @@ function buildTopMerchants(
   return Array.from(byMerchant.values())
     .sort((a, b) => b.amount - a.amount)
     .slice(0, TOP_MERCHANTS_LIMIT)
+    .map((m) => ({ ...m, amount: round2(m.amount) }))
 }
 
 function median(values: number[]): number {
@@ -184,7 +196,7 @@ function detectRecurringCharges(
 
     charges.push({
       merchant,
-      approxAmount,
+      approxAmount: round2(approxAmount),
       cadence: cadenceFromGap(averageGapDays(sortedDates)),
       monthsSeen,
       lastSeenMonth,
@@ -250,6 +262,10 @@ export function buildInsightInput(
       allTransactions,
       homeCurrency,
       fxRate
-    ).map((d) => ({ month: d.month, income: d.income, expense: d.expense })),
+    ).map((d) => ({
+      month: d.month,
+      income: round2(d.income),
+      expense: round2(d.expense),
+    })),
   }
 }

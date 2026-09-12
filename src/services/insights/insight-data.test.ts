@@ -173,3 +173,104 @@ describe('buildInsightInput', () => {
     expect(result.homeCurrency).toBe('UYU')
   })
 })
+
+describe('buildInsightInput — amounts are rounded for the model', () => {
+  // The prompt asks the model to echo amounts back EXACTLY, and the generator
+  // validates them with ===. Float residue from convert() makes that a
+  // lottery, so every monetary field is rounded where the input is built.
+  function isRounded(value: number): boolean {
+    return (
+      Number.isFinite(value) &&
+      Math.abs(value * 100 - Math.round(value * 100)) < 1e-9
+    )
+  }
+
+  it('rounds converted category totals and percentages to 2 decimals', () => {
+    // 50000 UYU / 40.5 = 1234.5679012345679 in USD
+    const transactions = [
+      makeTransaction('a', {
+        amount: 50000,
+        currency: 'UYU',
+        category: Category.Restaurants,
+      }),
+      makeTransaction('b', {
+        amount: 33333,
+        currency: 'UYU',
+        category: Category.Groceries,
+      }),
+    ]
+
+    const input = buildInsightInput(transactions, 'USD', 40.5)
+
+    expect(input.categoryTotals.length).toBeGreaterThan(0)
+    for (const c of input.categoryTotals) {
+      expect(isRounded(c.amount)).toBe(true)
+      expect(isRounded(c.pctOfTotal)).toBe(true)
+    }
+  })
+
+  it('rounds merchant totals to 2 decimals', () => {
+    const input = buildInsightInput(
+      [
+        makeTransaction('a', {
+          amount: 50000,
+          currency: 'UYU',
+          description: 'RESTAURANTE X',
+          category: Category.Restaurants,
+        }),
+      ],
+      'USD',
+      40.5
+    )
+
+    expect(input.topMerchants.length).toBeGreaterThan(0)
+    for (const m of input.topMerchants) {
+      expect(isRounded(m.amount)).toBe(true)
+    }
+  })
+
+  it('rounds recurring-charge amounts to 2 decimals', () => {
+    const transactions = [0, 1, 2].map((i) =>
+      makeTransaction(`r${i}`, {
+        date: new Date(Date.UTC(2026, 3 + i, 10)),
+        amount: 50000,
+        currency: 'UYU',
+        description: 'SPOTIFY',
+        category: Category.Entertainment,
+      })
+    )
+
+    const input = buildInsightInput(transactions, 'USD', 40.5)
+
+    expect(input.recurringCharges.length).toBeGreaterThan(0)
+    for (const r of input.recurringCharges) {
+      expect(isRounded(r.approxAmount)).toBe(true)
+    }
+  })
+
+  it('rounds monthly trend income and expense to 2 decimals', () => {
+    const input = buildInsightInput(
+      [
+        makeTransaction('a', {
+          amount: 50000,
+          currency: 'UYU',
+          category: Category.Restaurants,
+        }),
+        makeTransaction('b', {
+          amount: 77777,
+          currency: 'UYU',
+          type: 'credit',
+          category: Category.Income,
+        }),
+      ],
+      'USD',
+      40.5
+    )
+
+    expect(input.monthlyTrend.length).toBeGreaterThan(0)
+    for (const m of input.monthlyTrend) {
+      expect(isRounded(m.income)).toBe(true)
+      expect(isRounded(m.expense)).toBe(true)
+    }
+  })
+})
