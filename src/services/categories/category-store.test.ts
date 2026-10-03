@@ -138,4 +138,38 @@ describe('Custom category store', () => {
       expect.objectContaining({ id: created.id, isIgnored: false })
     )
   })
+
+  it('removes a new category whose remote save failed', async () => {
+    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+    upsertCustomCategoryMock.mockRejectedValue(new Error('timeout'))
+
+    await expect(
+      addCustomCategoryWithSync({ label: 'Viajes', color: '#112233' })
+    ).rejects.toThrow('timeout')
+    expect(listCustomCategories()).toEqual([])
+  })
+
+  it('restores only the edited category when its save fails', async () => {
+    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+    upsertCustomCategoryMock.mockResolvedValue(undefined)
+    const a = await addCustomCategoryWithSync({ label: 'A', color: '#111111' })
+    const b = await addCustomCategoryWithSync({ label: 'B', color: '#222222' })
+    upsertCustomCategoryMock.mockRejectedValueOnce(new Error('timeout'))
+
+    await expect(
+      updateCustomCategoryWithSync(a.id, { label: 'A2' })
+    ).rejects.toThrow('timeout')
+    expect(listCustomCategories().map((c) => c.label)).toEqual(['A', 'B'])
+    expect(listCustomCategories().find((c) => c.id === b.id)).toBeDefined()
+  })
+
+  it('puts back a category whose remote archive failed', async () => {
+    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+    upsertCustomCategoryMock.mockResolvedValue(undefined)
+    archiveCustomCategoryMock.mockRejectedValue(new Error('timeout'))
+    const a = await addCustomCategoryWithSync({ label: 'A', color: '#111111' })
+
+    await expect(removeCustomCategoryWithSync(a.id)).rejects.toThrow('timeout')
+    expect(listCustomCategories().map((c) => c.id)).toEqual([a.id])
+  })
 })

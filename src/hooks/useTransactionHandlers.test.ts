@@ -744,6 +744,58 @@ describe('useTransactionHandlers — deleting a single split part', () => {
   })
 })
 
+describe('useTransactionHandlers — applying a new rule to past rows', () => {
+  const rule = {
+    id: 'r1',
+    pattern: 'UBER',
+    matchType: 'contains' as const,
+    category: 'transport',
+    createdAt: '',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    transactionStore.getState().clearTransactions()
+    transactionStore.getState().setTransactions([
+      makeTransaction('a', { description: 'UBER TRIP' }),
+      makeTransaction('b', { description: 'UBER TRIP 2' }),
+      makeTransaction('c', { description: 'DEVOTO' }),
+      makeTransaction('part', {
+        description: 'UBER TRIP',
+        splitParentId: 'x',
+        category: 'restaurants',
+      }),
+    ])
+  })
+
+  const stored = (id: string) =>
+    transactionStore.getState().transactions.find((t) => t.id === id)
+
+  it('applies to matching rows but leaves split parts their own category', async () => {
+    const { handlers } = setup()
+
+    const result = await handlers.handleApplyPatternToPast(rule)
+
+    expect(result).toEqual({ updated: 2, failed: 0 })
+    expect(stored('a')?.category).toBe('transport')
+    expect(stored('c')?.category).toBe('groceries')
+    expect(stored('part')?.category).toBe('restaurants')
+  })
+
+  it('keeps and counts only the rows that saved when some writes fail', async () => {
+    mocks.updateRemoteTransaction.mockImplementation(async (_s, id) => {
+      if (id === 'b') throw new Error('timeout')
+    })
+    const { handlers } = setup()
+
+    const result = await handlers.handleApplyPatternToPast(rule)
+
+    expect(result).toEqual({ updated: 1, failed: 1 })
+    expect(stored('a')?.category).toBe('transport')
+    expect(stored('b')?.category).toBe('groceries')
+  })
+})
+
 describe('useTransactionHandlers — resetting a friendly name', () => {
   const MERCHANT = 'SUPERMERCADO DISCO'
 

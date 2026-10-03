@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { Toaster } from 'sonner'
 import { Categories } from './Categories'
 import type { Transaction } from '../models'
 import {
@@ -8,6 +9,20 @@ import {
   listCustomCategories,
   replaceCustomCategories,
 } from '../services/categories/category-store'
+
+// Category and rule changes are saved to Supabase before they count; give
+// these view tests a signed-in session and a server that accepts writes.
+vi.mock('../services/supabase/runtime', () => ({
+  getActiveSupabaseSession: () => ({ user: { id: 'user-1' } }),
+}))
+vi.mock('../services/supabase/custom-categories', () => ({
+  upsertCustomCategory: vi.fn().mockResolvedValue(undefined),
+  archiveCustomCategory: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('../services/supabase/custom-patterns', () => ({
+  upsertCustomPattern: vi.fn().mockResolvedValue(undefined),
+  deleteCustomPattern: vi.fn().mockResolvedValue(undefined),
+}))
 
 function makeTx(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -145,7 +160,78 @@ describe('Categories', () => {
     })
     fireEvent.click(removeBtn)
 
-    expect(screen.queryByText(/"farmashop"/)).not.toBeInTheDocument()
+    // Removed once the server confirms the delete.
+    await waitFor(() =>
+      expect(screen.queryByText(/"farmashop"/)).not.toBeInTheDocument()
+    )
+  })
+
+  it('reports how many past transactions a new rule was applied to', async () => {
+    const onApplyPatternToPast = vi
+      .fn()
+      .mockResolvedValue({ updated: 3, failed: 0 })
+    render(
+      <>
+        <Categories
+          transactions={[]}
+          onApplyPatternToPast={onApplyPatternToPast}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
+      target: { value: 'farmashop' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Pasadas y futuras' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
+
+    expect(
+      await screen.findByText('Regla creada · aplicada a 3 transacciones')
+    ).toBeInTheDocument()
+  })
+
+  it('says how many past transactions failed instead of claiming success', async () => {
+    const onApplyPatternToPast = vi
+      .fn()
+      .mockResolvedValue({ updated: 2, failed: 1 })
+    render(
+      <>
+        <Categories
+          transactions={[]}
+          onApplyPatternToPast={onApplyPatternToPast}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
+      target: { value: 'farmashop' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Pasadas y futuras' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
+
+    expect(
+      await screen.findByText(/Se aplicó a 2 de 3 transacciones/)
+    ).toBeInTheDocument()
+  })
+
+  it('confirms a new category only after it is saved', async () => {
+    render(
+      <>
+        <Categories transactions={[]} />
+        <Toaster />
+      </>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
+    fireEvent.change(screen.getByLabelText('Nombre de categoría'), {
+      target: { value: 'Viajes' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar categoría' }))
+
+    expect(
+      await screen.findByText('Categoría "Viajes" creada')
+    ).toBeInTheDocument()
   })
 
   it('opens the uncategorized transactions from "Sin categoría"', () => {

@@ -3,6 +3,7 @@ import { Download, Eye, EyeOff } from 'lucide-react'
 import { getFriendlyName } from '../utils/user-display'
 import { Button } from './ui/button'
 import { toast } from 'sonner'
+import { userErrorMessage } from '../utils/user-error'
 import type { Transaction } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 import { exportTransactions } from '../services/export/export'
@@ -118,7 +119,12 @@ export function Settings({
       confirmLabel: 'Eliminar todo',
     })
     if (!confirmed) return
-    await onResetAllData()
+    try {
+      await onResetAllData()
+      toast.success('Datos eliminados')
+    } catch (error) {
+      toast.error(userErrorMessage(error, 'No se pudieron borrar los datos'))
+    }
   }
 
   return (

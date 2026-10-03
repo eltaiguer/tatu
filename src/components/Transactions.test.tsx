@@ -12,6 +12,20 @@ import { Transactions } from './Transactions'
 import type { Transaction } from '../models'
 import { NeedsConfirmationError } from '../utils/user-error'
 
+// Category and rule changes are saved to Supabase before they count; give
+// these view tests a signed-in session and a server that accepts writes.
+vi.mock('../services/supabase/runtime', () => ({
+  getActiveSupabaseSession: () => ({ user: { id: 'user-1' } }),
+}))
+vi.mock('../services/supabase/custom-categories', () => ({
+  upsertCustomCategory: vi.fn().mockResolvedValue(undefined),
+  archiveCustomCategory: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('../services/supabase/custom-patterns', () => ({
+  upsertCustomPattern: vi.fn().mockResolvedValue(undefined),
+  deleteCustomPattern: vi.fn().mockResolvedValue(undefined),
+}))
+
 function makeTransaction(index: number, description?: string): Transaction {
   return {
     id: `tx-${index}`,
@@ -422,6 +436,12 @@ describe('Transactions', () => {
       target: { value: 'services' },
     })
     fireEvent.click(screen.getByLabelText('Crear categoría'))
+    // The new category is selected once it is saved.
+    await waitFor(() =>
+      expect(screen.getByLabelText('Categoría dropdown')).toHaveTextContent(
+        /services/i
+      )
+    )
     fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
     fireEvent.click(screen.getAllByText('monthly')[0])
     fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))

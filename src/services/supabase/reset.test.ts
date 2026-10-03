@@ -40,7 +40,9 @@ describe('supabase reset service', () => {
     const { resetUserSupabaseData } = await import('./reset')
     await resetUserSupabaseData(session)
 
-    expect(fromMock).toHaveBeenCalledTimes(7)
+    expect(fromMock).toHaveBeenCalledTimes(8)
+    // Cached insights were computed from the deleted data.
+    expect(fromMock).toHaveBeenCalledWith('ai_insights')
     expect(eqMock).toHaveBeenCalledWith('user_id', 'user-1')
   })
 })

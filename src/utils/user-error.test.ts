@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { UserFacingError, userErrorMessage } from './user-error'
+import { UserFacingError, aiErrorMessage, userErrorMessage } from './user-error'
 
 describe('userErrorMessage', () => {
   afterEach(() => {
@@ -26,6 +26,19 @@ describe('userErrorMessage', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(userErrorMessage(new TypeError('Failed to fetch'), 'x')).toMatch(
       /Sin conexión/
+    )
+  })
+})
+
+describe('aiErrorMessage', () => {
+  it('turns SDK errors into Spanish the user can act on', () => {
+    expect(aiErrorMessage('401 invalid x-api-key')).toBe(
+      'la clave API de Anthropic no es válida'
+    )
+    expect(aiErrorMessage('429 rate_limit_error')).toMatch(/límite/)
+    expect(aiErrorMessage('529 Overloaded')).toMatch(/no está disponible/)
+    expect(aiErrorMessage('something odd')).toBe(
+      'error inesperado del servicio de IA'
     )
   })
 })

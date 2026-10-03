@@ -287,9 +287,11 @@ describe('ImportCSV', () => {
 
     // ... but the user is told the AI step did not run, and why.
     await waitFor(() => expect(toastMock.warning).toHaveBeenCalledTimes(1))
+    // Translated: the raw SDK text never reaches the user.
     expect(toastMock.warning.mock.calls[0][0]).toContain(
-      '401 invalid x-api-key'
+      'la clave API de Anthropic no es válida'
     )
+    expect(toastMock.warning.mock.calls[0][0]).not.toContain('x-api-key')
   })
 
   it('does not warn about AI when the import reports no AI failure', async () => {

@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
+import { userErrorMessage } from '../utils/user-error'
 import { Plus, Pencil, Trash, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -22,13 +24,18 @@ import {
   addCustomPatternWithSync,
   listCustomPatterns,
   removeCustomPatternWithSync,
-  testPattern,
+  type CustomPattern,
   type MatchType,
 } from '../services/categorizer/custom-patterns'
 
 interface CategoriesProps {
   transactions: Transaction[]
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
+  // Applies a new rule to existing transactions; resolves with how many
+  // were updated and how many failed.
+  onApplyPatternToPast?: (
+    pattern: CustomPattern
+  ) => Promise<{ updated: number; failed: number }>
 }
 
 function getCategoryTransactionCount(
@@ -46,6 +53,7 @@ function getCategoryTransactionCount(
 export function Categories({
   transactions,
   onNavigateToTransactions,
+  onApplyPatternToPast,
 }: CategoriesProps) {
   const [, setCategoriesVersion] = useState(0)
   const [showForm, setShowForm] = useState(false)
@@ -106,97 +114,75 @@ export function Categories({
     setShowForm(true)
   }
 
+  // Every change reports success only after it reached the server; on
+  // failure the store helpers have already undone it locally, and the
+  // re-render in `finally` shows that restored state.
   async function handleSave() {
     if (!form.label.trim()) return
-    if (isEditing) {
-      const cat = categoryDefinitions.find((c) => c.id === form.id)
-      if (cat?.isCustom) {
-        await updateCustomCategoryWithSync(form.id, {
-          label: form.label.trim(),
+    const label = form.label.trim()
+    try {
+      if (isEditing) {
+        const cat = categoryDefinitions.find((c) => c.id === form.id)
+        if (cat?.isCustom) {
+          await updateCustomCategoryWithSync(form.id, {
+            label,
+            color: form.color,
+            icon: form.icon.trim() || '🏷️',
+            isIgnored: form.isIgnored,
+          })
+        } else {
+          await upsertBuiltinOverrideWithSync(form.id, {
+            label,
+            color: form.color,
+            icon: form.icon.trim() || undefined,
+            isIgnored: form.isIgnored,
+          })
+        }
+        toast.success(`Categoría "${label}" guardada`)
+      } else {
+        await addCustomCategoryWithSync({
+          label,
           color: form.color,
           icon: form.icon.trim() || '🏷️',
           isIgnored: form.isIgnored,
         })
-      } else {
-        await upsertBuiltinOverrideWithSync(form.id, {
-          label: form.label.trim(),
-          color: form.color,
-          icon: form.icon.trim() || undefined,
-          isIgnored: form.isIgnored,
-        })
+        toast.success(`Categoría "${label}" creada`)
       }
-    } else {
-      await addCustomCategoryWithSync({
-        label: form.label.trim(),
-        color: form.color,
-        icon: form.icon.trim() || '🏷️',
-        isIgnored: form.isIgnored,
-      })
+      resetForm()
+    } catch (error) {
+      toast.error(userErrorMessage(error, 'No se pudo guardar la categoría'))
+    } finally {
+      setCategoriesVersion((v) => v + 1)
     }
-    resetForm()
-    setCategoriesVersion((v) => v + 1)
   }
 
   async function handleDelete(categoryId: string) {
-    await removeCustomCategoryWithSync(categoryId)
-    if (form.id === categoryId) resetForm()
-    setCategoriesVersion((v) => v + 1)
+    const label = getCategoryDisplay(categoryId).label
+    try {
+      await removeCustomCategoryWithSync(categoryId)
+      if (form.id === categoryId) resetForm()
+      toast.success(`Categoría "${label}" eliminada`)
+    } catch (error) {
+      toast.error(userErrorMessage(error, 'No se pudo eliminar la categoría'))
+    } finally {
+      setCategoriesVersion((v) => v + 1)
+    }
   }
 
   async function handleAddPattern() {
     if (!patternForm.pattern.trim()) return
-    const newPattern = await addCustomPatternWithSync({
-      pattern: patternForm.pattern,
-      matchType: patternForm.matchType,
-      category: patternForm.category,
-      description: patternForm.description.trim() || undefined,
-    })
-
-    if (patternForm.applyScope === 'past_and_future') {
-      const matching = transactions.filter((tx) =>
-        testPattern(tx.description, newPattern)
-      )
-      if (matching.length > 0) {
-        void import('../services/supabase/runtime')
-          .then(({ getActiveSupabaseSession }) => {
-            const session = getActiveSupabaseSession()
-            if (!session) return
-            return import('../services/supabase/transactions').then(
-              ({ updateTransaction }) =>
-                Promise.all(
-                  matching.map((tx) =>
-                    updateTransaction(session, tx.id, {
-                      category: newPattern.category,
-                      categoryConfidence: 0.95,
-                      ...(newPattern.description
-                        ? { displayDescription: newPattern.description }
-                        : {}),
-                    })
-                  )
-                )
-            )
-          })
-          .catch(console.error)
-
-        void import('../stores/transaction-store').then(
-          ({ transactionStore }) => {
-            const state = transactionStore.getState()
-            state.setTransactions(
-              state.transactions.map((tx) => {
-                if (!testPattern(tx.description, newPattern)) return tx
-                return {
-                  ...tx,
-                  category: newPattern.category,
-                  categoryConfidence: 0.95 as const,
-                  ...(newPattern.description
-                    ? { displayDescription: newPattern.description }
-                    : {}),
-                }
-              })
-            )
-          }
-        )
-      }
+    let created: CustomPattern
+    try {
+      created = await addCustomPatternWithSync({
+        pattern: patternForm.pattern,
+        matchType: patternForm.matchType,
+        category: patternForm.category,
+        description: patternForm.description.trim() || undefined,
+      })
+    } catch (error) {
+      toast.error(userErrorMessage(error, 'No se pudo crear la regla'))
+      setCustomPatterns(listCustomPatterns())
+      return
     }
 
     setPatternForm({
@@ -207,11 +193,40 @@ export function Categories({
       applyScope: 'future_only',
     })
     setCustomPatterns(listCustomPatterns())
+
+    if (patternForm.applyScope !== 'past_and_future' || !onApplyPatternToPast) {
+      toast.success('Regla creada')
+      return
+    }
+    try {
+      const { updated, failed } = await onApplyPatternToPast(created)
+      if (failed > 0) {
+        toast.error(
+          `Regla creada. Se aplicó a ${updated} de ${updated + failed} transacciones; el resto no se pudo guardar.`
+        )
+      } else {
+        toast.success(
+          updated === 0
+            ? 'Regla creada · ninguna transacción anterior coincide'
+            : `Regla creada · aplicada a ${updated} ${updated === 1 ? 'transacción' : 'transacciones'}`
+        )
+      }
+    } catch (error) {
+      toast.error(
+        `La regla se guardó, pero no se pudo aplicar a las transacciones anteriores: ${userErrorMessage(error, 'error al guardar')}`
+      )
+    }
   }
 
-  function handleRemovePattern(id: string) {
-    void removeCustomPatternWithSync(id)
-    setCustomPatterns(listCustomPatterns())
+  async function handleRemovePattern(id: string) {
+    try {
+      await removeCustomPatternWithSync(id)
+      toast.success('Regla eliminada')
+    } catch (error) {
+      toast.error(userErrorMessage(error, 'No se pudo eliminar la regla'))
+    } finally {
+      setCustomPatterns(listCustomPatterns())
+    }
   }
 
   return (
@@ -896,7 +911,9 @@ export function Categories({
                     )}
                   </div>
                   <button
-                    onClick={() => handleRemovePattern(cp.id)}
+                    onClick={() => {
+                      void handleRemovePattern(cp.id)
+                    }}
                     aria-label={`Eliminar regla ${cp.pattern}`}
                     style={{
                       background: 'none',

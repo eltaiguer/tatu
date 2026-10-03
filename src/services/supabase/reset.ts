@@ -25,4 +25,6 @@ export async function resetUserSupabaseData(
   await deleteByUser(session, 'custom_categories')
   await deleteByUser(session, 'custom_patterns')
   await deleteByUser(session, 'user_preferences')
+  // Cached insights were computed from the data just deleted.
+  await deleteByUser(session, 'ai_insights')
 }

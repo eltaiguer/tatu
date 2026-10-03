@@ -5,6 +5,7 @@ import { Button } from './ui/button'
 import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { aiErrorMessage, userErrorMessage } from '../utils/user-error'
 import { parseCSV } from '../services/parsers/csv-parser'
 import { transactionStore } from '../stores/transaction-store'
 import type { ParsedData, Transaction } from '../models'
@@ -95,9 +96,13 @@ export function ImportCSV({
     setImportState('validating')
     setErrorMessage('')
 
+    // Parse errors are ours and already in Spanish; anything after parsing
+    // (saving, the network) is translated so raw backend text never shows.
+    let parsed = false
     try {
       const csvContent = await readFileAsText(file)
       const result = parseCSV(csvContent, file.name)
+      parsed = true
 
       if (result.fileType === 'credit_card') {
         setFileType('credit_card')
@@ -137,11 +142,11 @@ export function ImportCSV({
       // disponible" when 10 of 12 batches did enrich is simply wrong.
       if (aiError) {
         toast.warning(
-          `Categorización con IA no disponible: ${aiError}. Se usaron las reglas de categorización.`
+          `Categorización con IA no disponible: ${aiErrorMessage(aiError)}. Se usaron las reglas de categorización.`
         )
       } else if (aiPartial) {
         toast.warning(
-          `Categorización con IA incompleta: ${aiPartial}. El resto se categorizó con reglas.`
+          `Categorización con IA incompleta: ${aiErrorMessage(aiPartial)}. El resto se categorizó con reglas.`
         )
       }
 
@@ -152,7 +157,11 @@ export function ImportCSV({
       console.error('import failed:', error)
       setImportState('error')
       setErrorMessage(
-        error instanceof Error ? error.message : 'Error al procesar el archivo'
+        parsed
+          ? userErrorMessage(error, 'No se pudo guardar la importación')
+          : error instanceof Error
+            ? error.message
+            : 'Error al procesar el archivo'
       )
     }
   }

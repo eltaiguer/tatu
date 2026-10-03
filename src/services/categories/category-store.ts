@@ -1,4 +1,5 @@
 import { isReservedCategoryId } from './category-aliases'
+import { UserFacingError } from '../../utils/user-error'
 
 export const DEFAULT_CATEGORY_COLOR = '#0ea5e9'
 
@@ -85,27 +86,43 @@ export function removeCustomCategory(id: string): void {
   _customCategories = _customCategories.filter((c) => c.id !== id)
 }
 
-export async function syncCustomCategoryToCloud(id: string): Promise<void> {
+// The *WithSync functions apply a change locally, push it, and on failure
+// undo exactly that change (not a snapshot of the whole list, which would
+// also undo concurrent edits) before rethrowing, so the UI never shows a
+// category the server doesn't have.
+async function requireSession() {
+  const { getActiveSupabaseSession } = await import('../supabase/runtime')
+  const session = getActiveSupabaseSession()
+  if (!session) {
+    throw new UserFacingError(
+      'Tu sesión terminó. Iniciá sesión de nuevo para guardar cambios.'
+    )
+  }
+  return session
+}
+
+async function pushCategory(id: string): Promise<void> {
   const category = _customCategories.find((c) => c.id === id)
   if (!category) return
+  const session = await requireSession()
+  const { upsertCustomCategory } = await import('../supabase/custom-categories')
+  await upsertCustomCategory(session, {
+    id: category.id,
+    label: category.label,
+    color: category.color,
+    icon: category.icon,
+    isIgnored: category.isIgnored,
+    isArchived: false,
+  })
+}
 
-  try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { upsertCustomCategory } =
-        await import('../supabase/custom-categories')
-      await upsertCustomCategory(session, {
-        id: category.id,
-        label: category.label,
-        color: category.color,
-        icon: category.icon,
-        isIgnored: category.isIgnored,
-        isArchived: false,
-      })
-    }
-  } catch {
-    // in-memory state remains applied
+function restoreCategory(id: string, previous: CustomCategory | undefined) {
+  if (previous) {
+    _customCategories = _customCategories.some((c) => c.id === id)
+      ? _customCategories.map((c) => (c.id === id ? previous : c))
+      : [..._customCategories, previous]
+  } else {
+    _customCategories = _customCategories.filter((c) => c.id !== id)
   }
 }
 
@@ -116,7 +133,12 @@ export async function addCustomCategoryWithSync(input: {
   isIgnored?: boolean
 }): Promise<CustomCategory> {
   const created = addCustomCategory(input)
-  await syncCustomCategoryToCloud(created.id)
+  try {
+    await pushCategory(created.id)
+  } catch (error) {
+    restoreCategory(created.id, undefined)
+    throw error
+  }
   return created
 }
 
@@ -126,27 +148,14 @@ export async function updateCustomCategoryWithSync(
     Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
   >
 ): Promise<void> {
+  const previous = _customCategories.find((c) => c.id === id)
+  if (!previous) return
   updateCustomCategory(id, updates)
-  const category = _customCategories.find((c) => c.id === id)
-  if (!category) return
-
   try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { upsertCustomCategory } =
-        await import('../supabase/custom-categories')
-      await upsertCustomCategory(session, {
-        id: category.id,
-        label: category.label,
-        color: category.color,
-        icon: category.icon,
-        isIgnored: category.isIgnored,
-        isArchived: false,
-      })
-    }
-  } catch {
-    // in-memory update remains applied
+    await pushCategory(id)
+  } catch (error) {
+    restoreCategory(id, previous)
+    throw error
   }
 }
 
@@ -180,22 +189,26 @@ export async function upsertBuiltinOverrideWithSync(
     Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
   >
 ): Promise<void> {
+  const previous = _customCategories.find((c) => c.id === id)
   upsertBuiltinOverride(id, updates)
-  await syncCustomCategoryToCloud(id)
+  try {
+    await pushCategory(id)
+  } catch (error) {
+    restoreCategory(id, previous)
+    throw error
+  }
 }
 
 export async function removeCustomCategoryWithSync(id: string): Promise<void> {
+  const previous = _customCategories.find((c) => c.id === id)
   removeCustomCategory(id)
-
   try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { archiveCustomCategory } =
-        await import('../supabase/custom-categories')
-      await archiveCustomCategory(session, id)
-    }
-  } catch {
-    // in-memory deletion remains applied
+    const session = await requireSession()
+    const { archiveCustomCategory } =
+      await import('../supabase/custom-categories')
+    await archiveCustomCategory(session, id)
+  } catch (error) {
+    restoreCategory(id, previous)
+    throw error
   }
 }
