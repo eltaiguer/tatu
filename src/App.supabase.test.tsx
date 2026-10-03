@@ -1,3 +1,4 @@
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { transactionStore } from './stores/transaction-store'
@@ -149,7 +150,11 @@ describe('App with supabase enabled', () => {
 
   it('renders authentication form when no session exists', async () => {
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     expect(
       screen.getByRole('heading', { name: 'Ingresar a Tatú' })
@@ -163,7 +168,11 @@ describe('App with supabase enabled', () => {
     )
 
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
       target: { value: 'test@example.com' },
@@ -191,7 +200,11 @@ describe('App with supabase enabled', () => {
     })
 
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
       target: { value: 'test@example.com' },
@@ -217,7 +230,11 @@ describe('App with supabase enabled', () => {
 
   it('triggers password reset request', async () => {
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
       target: { value: 'test@example.com' },
@@ -235,7 +252,11 @@ describe('App with supabase enabled', () => {
     window.history.replaceState({}, '', '/?mode=reset-password')
 
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     expect(
       screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
@@ -269,7 +290,11 @@ describe('App with supabase enabled', () => {
     })
 
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     expect(
       screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
@@ -292,7 +317,11 @@ describe('App with supabase enabled', () => {
     })
 
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     expect(
       screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
@@ -310,7 +339,11 @@ describe('App with supabase enabled', () => {
     })
 
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     expect(
       screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
@@ -341,7 +374,11 @@ describe('App with supabase enabled', () => {
     ])
 
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     await waitFor(() =>
       expect(loadUserTransactionsMock).toHaveBeenCalledTimes(1)
@@ -451,7 +488,11 @@ describe('App with supabase enabled', () => {
     ])
 
     const { default: App } = await import('./App')
-    render(<App />)
+    render(
+      <MemoryRouter>
+        <App />
+      </MemoryRouter>
+    )
 
     await waitFor(() =>
       expect(loadUserTransactionsMock).toHaveBeenCalledTimes(1)

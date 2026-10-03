@@ -2,57 +2,49 @@ import { useEffect, useMemo, useState } from 'react'
 import { isCategoryIgnored } from '../services/categories/category-registry'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
-import type { Transaction, TransactionsFilter } from '../models'
+import type { Transaction } from '../models'
+import {
+  DEFAULT_URL_FILTERS,
+  type UrlFilterState,
+} from '../services/filters/url-filters'
 
 export type SortField = 'date' | 'amount' | 'description' | 'category'
 export type SortDirection = 'asc' | 'desc'
 
 const ITEMS_PER_PAGE = 12
 
+// `initial` seeds the filters once (from the URL). To apply a different
+// initial state, remount the consumer — the view does this on navigations.
 export function useTransactionFiltering({
   transactions,
-  initialFilter,
+  initial = DEFAULT_URL_FILTERS,
 }: {
   transactions: Transaction[]
-  initialFilter?: TransactionsFilter
+  initial?: UrlFilterState
 }) {
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm] = useState(initial.search)
   const [dateFromFilter, setDateFromFilter] = useState('')
   const [dateToFilter, setDateToFilter] = useState('')
-  const [categoryFilters, setCategoryFilters] = useState<string[]>([])
-  const [accountFilters, setAccountFilters] = useState<string[]>([])
+  const [categoryFilters, setCategoryFilters] = useState<string[]>(
+    initial.categories
+  )
+  const [accountFilters, setAccountFilters] = useState<string[]>(
+    initial.accounts
+  )
   const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'UYU'>(
-    'all'
+    initial.currency
   )
   const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>(
-    'all'
+    initial.type
   )
-  const [minAmount, setMinAmount] = useState('')
-  const [maxAmount, setMaxAmount] = useState('')
-  const [showIgnored, setShowIgnored] = useState(false)
+  const [minAmount, setMinAmount] = useState(initial.min)
+  const [maxAmount, setMaxAmount] = useState(initial.max)
+  const [showIgnored, setShowIgnored] = useState(initial.showIgnored)
 
   const newestDate = useMemo(() => {
     if (transactions.length === 0) return null
     return new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
   }, [transactions])
-
-  // Keyed on the filter's primitive fields, not the object identity. A caller
-  // passing an inline object literal gives a new identity on every render,
-  // which would re-run this effect every render and re-set state with fresh
-  // array literals — an unbounded render loop, and a silent undo of any
-  // filter the user changed in the meantime.
-  const initialCategory = initialFilter?.category
-  const initialAccountType = initialFilter?.accountType
-  const initialCurrency = initialFilter?.currency
-
-  useEffect(() => {
-    if (!initialCategory && !initialAccountType && !initialCurrency) return
-    if (initialCategory) setCategoryFilters([initialCategory])
-    if (initialAccountType && initialAccountType !== 'all') {
-      setAccountFilters([initialAccountType])
-    }
-    setCurrencyFilter(initialCurrency ?? 'all')
-  }, [initialCategory, initialAccountType, initialCurrency])
 
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')

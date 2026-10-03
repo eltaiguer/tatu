@@ -40,7 +40,12 @@ import {
   DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
 import { isCategoryIgnored } from '../services/categories/category-registry'
-import type { TransactionsFilter } from '../models'
+import {
+  DEFAULT_URL_FILTERS,
+  serializeFilterParams,
+  type UrlFilterState,
+  type UrlPeriod,
+} from '../services/filters/url-filters'
 
 /* ---- Period helpers ---- */
 const MONTHS_ES = [
@@ -871,7 +876,12 @@ function txDone(count: number, participleStem: string): string {
 
 interface BaseTransactionsProps {
   transactions: Transaction[]
-  initialFilter?: TransactionsFilter
+  // Filters to start from (parsed from the URL). Read once; the parent
+  // remounts the view to apply a new set.
+  initialFilters?: UrlFilterState
+  // Called with the serialized filter state whenever it changes, so the
+  // parent can keep the URL in sync.
+  onFiltersChange?: (search: string) => void
   homeCurrency?: string
   fxRate?: number
   // Mutation handlers reject on failure and resolve with what changed; the
@@ -931,7 +941,8 @@ type TransactionsProps = BaseTransactionsProps & DeleteProps
 
 export function Transactions({
   transactions,
-  initialFilter,
+  initialFilters = DEFAULT_URL_FILTERS,
+  onFiltersChange,
   homeCurrency = 'USD',
   fxRate = 40.5,
   onUpdateTransaction,
@@ -983,23 +994,70 @@ export function Transactions({
     paginatedTransactionIds,
     filteredTransactionIds,
     clearAllFilters,
-  } = useTransactionFiltering({ transactions, initialFilter })
+  } = useTransactionFiltering({ transactions, initial: initialFilters })
 
   /* ---- Period state ---- */
-  const deepLinked = !!(
-    initialFilter &&
-    (initialFilter.category ||
-      (initialFilter.accountType && initialFilter.accountType !== 'all') ||
-      (initialFilter.currency && initialFilter.currency !== 'all'))
-  )
-
   const [period, setPeriod] = useState<Period>(() => {
+    const newest =
+      transactions.length > 0
+        ? new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
+        : new Date()
+    const fromUrl = initialFilters.period
+    if (fromUrl) {
+      return fromUrl.mode === 'recent'
+        ? { mode: 'recent', n: fromUrl.n, anchor: newest }
+        : fromUrl
+    }
+    // A link that filters by category/account/currency but names no period
+    // means all time; a plain visit starts on the newest month.
+    const deepLinked =
+      initialFilters.categories.length > 0 ||
+      initialFilters.accounts.length > 0 ||
+      initialFilters.currency !== 'all'
     if (deepLinked || transactions.length === 0) return { mode: 'all' }
-    const newest = new Date(
-      Math.max(...transactions.map((tx) => tx.date.getTime()))
-    )
     return { mode: 'month', y: newest.getFullYear(), m: newest.getMonth() }
   })
+
+  // Clearing filters also clears the period: it is part of what the URL
+  // records, and the table already shows every date once the dates clear.
+  function clearFiltersAndPeriod() {
+    clearAllFilters()
+    setPeriod({ mode: 'all' })
+  }
+
+  // Keep the URL in step with the filters (the parent decides how).
+  useEffect(() => {
+    if (!onFiltersChange) return
+    const urlPeriod: UrlPeriod =
+      period.mode === 'recent' ? { mode: 'recent', n: period.n } : period
+    onFiltersChange(
+      serializeFilterParams({
+        search: searchTerm,
+        categories: categoryFilters,
+        accounts: accountFilters.filter(
+          (a): a is 'credit_card' | 'bank_account' =>
+            a === 'credit_card' || a === 'bank_account'
+        ),
+        currency: currencyFilter,
+        type: typeFilter,
+        min: minAmount,
+        max: maxAmount,
+        showIgnored,
+        period: urlPeriod,
+      })
+    )
+  }, [
+    onFiltersChange,
+    period,
+    searchTerm,
+    categoryFilters,
+    accountFilters,
+    currencyFilter,
+    typeFilter,
+    minAmount,
+    maxAmount,
+    showIgnored,
+  ])
 
   useEffect(() => {
     const range = periodRange(period)
@@ -1622,7 +1680,7 @@ export function Transactions({
         onTypeChange={setTypeFilter}
         onMinAmountChange={setMinAmount}
         onMaxAmountChange={setMaxAmount}
-        onClearAll={clearAllFilters}
+        onClearAll={clearFiltersAndPeriod}
       />
 
       {/* Table */}
@@ -1645,7 +1703,7 @@ export function Transactions({
         onToggleSelect={toggleTransactionSelection}
         onHeaderCheckboxChange={handleHeaderCheckboxChange}
         onSort={handleSort}
-        onClearFilters={clearAllFilters}
+        onClearFilters={clearFiltersAndPeriod}
         onShowIgnoredChange={setShowIgnored}
         onEdit={startEditTransaction}
         onDelete={(transaction) => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { Transaction } from '../models'
+import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
 import { useTransactionFiltering } from './useTransactionFiltering'
 
 function makeTransaction(
@@ -280,7 +281,7 @@ describe('useTransactionFiltering — derived array identity', () => {
   })
 })
 
-describe('useTransactionFiltering — initialFilter', () => {
+describe('useTransactionFiltering — initial state from the URL', () => {
   const transactions = [
     makeTransaction('a', { category: 'groceries', currency: 'USD' }),
     makeTransaction('b', { category: 'restaurants', currency: 'UYU' }),
@@ -290,21 +291,28 @@ describe('useTransactionFiltering — initialFilter', () => {
     const { result } = renderHook(() =>
       useTransactionFiltering({
         transactions,
-        initialFilter: { category: 'restaurants', currency: 'UYU' },
+        initial: {
+          ...DEFAULT_URL_FILTERS,
+          categories: ['restaurants'],
+          currency: 'UYU',
+        },
       })
     )
     expect(result.current.filteredTransactions.map((t) => t.id)).toEqual(['b'])
   })
 
   it('does not reset a user filter change when the parent re-renders', () => {
-    // A parent passing an inline object literal gives a new identity on every
-    // render; keying the effect on identity would silently undo the user's
-    // own filter edits mid-session.
+    // The initial state is read once; a parent re-rendering with a fresh
+    // object must not undo the user's own filter edits mid-session.
     const { result, rerender } = renderHook(
       ({ category }: { category: string }) =>
         useTransactionFiltering({
           transactions,
-          initialFilter: { category, currency: 'UYU' },
+          initial: {
+            ...DEFAULT_URL_FILTERS,
+            categories: [category],
+            currency: 'UYU',
+          },
         }),
       { initialProps: { category: 'restaurants' } }
     )

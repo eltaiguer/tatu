@@ -1,4 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
+import { pathForView, titleForView, viewFromPath } from './routes'
+import {
+  filterToSearch,
+  parseFilterParams,
+} from './services/filters/url-filters'
 import {
   DashboardSkeleton,
   TransactionTableSkeleton,
@@ -47,12 +53,47 @@ import { useTransactionHandlers } from './hooks/useTransactionHandlers'
 import { getFriendlyName } from './utils/user-display'
 
 function App() {
-  const [currentView, setCurrentView] = useState<View>('overview')
+  const location = useLocation()
+  const navigate = useNavigate()
+  const navigationType = useNavigationType()
+  // The URL is the source of truth for the view (refresh, back/forward and
+  // links all work).
+  const currentView = viewFromPath(location.pathname)
   const [importOpen, setImportOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [pendingTxFilter, setPendingTxFilter] = useState<
-    import('./models').TransactionsFilter | null
-  >(null)
+
+  // Navigates unless already there, so re-clicking the current view doesn't
+  // stack duplicate history entries. A plain nav (no query) to the current
+  // view keeps its query too: Transacciones always carries its filters in
+  // the URL, and re-clicking it must not wipe them.
+  function go(view: View, search = '') {
+    if (view === currentView && (!search || `?${search}` === location.search)) {
+      return
+    }
+    navigate(pathForView(view) + (search ? `?${search}` : ''))
+  }
+
+  // Transacciones writes its filters into the URL with REPLACE; only other
+  // navigations (links from other views, back/forward) remount it so it
+  // re-reads the filters from the URL.
+  const transactionsKeyRef = useRef(location.key)
+  if (navigationType !== 'REPLACE') {
+    transactionsKeyRef.current = location.key
+  }
+
+  const handleTransactionFiltersChange = useCallback(
+    (search: string) => {
+      const next = search ? `?${search}` : ''
+      if (next === location.search) return
+      navigate({ pathname: location.pathname, search: next }, { replace: true })
+    },
+    [location.pathname, location.search, navigate]
+  )
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+    document.title = titleForView(currentView)
+  }, [currentView])
   const [syncStatus, setSyncStatus] = useState<'loading' | 'ready' | 'error'>(
     'loading'
   )
@@ -136,7 +177,7 @@ function App() {
       setPreferredCurrency('USD')
       setFxRate(40.5)
       resetPrefsLoaded()
-      setCurrentView('overview')
+      navigate('/', { replace: true })
       setImportOpen(false)
       setAuthError('')
       setAuthNotice('')
@@ -173,8 +214,7 @@ function App() {
   function navigateToTransactions(
     filter: import('./models').TransactionsFilter
   ) {
-    setPendingTxFilter(filter)
-    setCurrentView('transactions')
+    go('transactions', filterToSearch(filter))
   }
 
   const {
@@ -254,10 +294,7 @@ function App() {
       {/* Sidebar (desktop only — hidden on mobile via CSS) */}
       <AppSidebar
         view={currentView}
-        onNavigate={(v) => {
-          if (v === 'transactions') setPendingTxFilter(null)
-          setCurrentView(v)
-        }}
+        onNavigate={(v) => go(v)}
         onImport={() => setImportOpen(true)}
         onSignOut={() => {
           void handleSignOut()
@@ -285,8 +322,7 @@ function App() {
           <SidebarInner
             view={currentView}
             onNavigate={(v) => {
-              if (v === 'transactions') setPendingTxFilter(null)
-              setCurrentView(v)
+              go(v)
               setMobileMenuOpen(false)
             }}
             onImport={() => {
@@ -399,7 +435,7 @@ function App() {
                   transactions={transactions}
                   userName={getFriendlyName(session) || undefined}
                   onNavigateToImport={() => setImportOpen(true)}
-                  onNavigateToCategories={() => setCurrentView('categories')}
+                  onNavigateToCategories={() => go('categories')}
                   onNavigateToTransactions={navigateToTransactions}
                   homeCurrency={preferredCurrency}
                   fxRate={fxRate}
@@ -447,8 +483,10 @@ function App() {
               )}
               {currentView === 'transactions' && transactions.length > 0 && (
                 <Transactions
+                  key={transactionsKeyRef.current}
                   transactions={transactions}
-                  initialFilter={pendingTxFilter ?? undefined}
+                  initialFilters={parseFilterParams(location.search)}
+                  onFiltersChange={handleTransactionFiltersChange}
                   homeCurrency={preferredCurrency}
                   fxRate={fxRate}
                   onUpdateTransaction={handleUpdateTransaction}
@@ -474,7 +512,7 @@ function App() {
                   aiEnabled={aiEnabled}
                   claudeApiKey={claudeApiKey}
                   onNavigateToTransactions={navigateToTransactions}
-                  onNavigateToSettings={() => setCurrentView('settings')}
+                  onNavigateToSettings={() => go('settings')}
                   onNavigateToImport={() => setImportOpen(true)}
                 />
               )}
@@ -532,7 +570,7 @@ function App() {
           <ImportCSV
             onImportComplete={() => {
               setImportOpen(false)
-              setCurrentView('transactions')
+              go('transactions')
             }}
             onTransactionsImported={handleTransactionsImported}
           />
