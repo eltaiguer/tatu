@@ -54,6 +54,7 @@ import { CurrencyToggle } from './CurrencyToggle'
 import {
   formatCurrency,
   formatCurrencyShort,
+  fitMonoFontSize,
   formatDateCompact,
 } from '../utils/formatting'
 import { IconTile } from './ui/icon-tile'
@@ -825,7 +826,7 @@ export function Dashboard({
                   : 'Sin datos'}
               </div>
             </Card>
-            <Card className="p-5">
+            <Card className="p-5" style={{ containerType: 'inline-size' }}>
               <div
                 className="text-muted-foreground"
                 style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
@@ -834,7 +835,15 @@ export function Dashboard({
               </div>
               <div
                 className="font-mono"
-                style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}
+                style={{
+                  fontSize: fitMonoFontSize(
+                    formatCurrency(avgMonthly, homeCurrency),
+                    20
+                  ),
+                  fontWeight: 700,
+                  marginBottom: 4,
+                  whiteSpace: 'nowrap',
+                }}
               >
                 {formatCurrency(avgMonthly, homeCurrency)}
               </div>
@@ -1073,15 +1082,11 @@ export function Dashboard({
                 Sin gastos registrados.
               </p>
             ) : (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'min(240px, 100%) 1fr',
-                  gap: 36,
-                  alignItems: 'center',
-                }}
-              >
-                <div style={{ position: 'relative', width: 220, height: 220 }}>
+              <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[240px_1fr] sm:gap-9">
+                <div
+                  className="mx-auto sm:mx-0"
+                  style={{ position: 'relative', width: 220, height: 220 }}
+                >
                   <ResponsiveContainer width={220} height={220}>
                     <PieChart>
                       <Pie
