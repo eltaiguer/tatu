@@ -50,8 +50,8 @@ describe('formatCurrency', () => {
 })
 
 describe('formatCurrencyShort', () => {
-  it('formats values under 1k normally', () => {
-    expect(formatCurrencyShort(999, 'UYU')).toBe('$U 999,00')
+  it('formats values under 1k as whole numbers', () => {
+    expect(formatCurrencyShort(999.4, 'UYU')).toBe('$U 999')
   })
 
   it('abbreviates thousands with k', () => {
@@ -62,12 +62,23 @@ describe('formatCurrencyShort', () => {
     expect(formatCurrencyShort(2_500_000, 'USD')).toBe('US$ 2.5M')
   })
 
-  it('strips sign before threshold comparison', () => {
-    expect(formatCurrencyShort(-2000, 'UYU')).toBe('$U 2k')
+  it('keeps the minus sign on negative values (chart ticks below zero)', () => {
+    expect(formatCurrencyShort(-12_000, 'USD')).toBe('-US$ 12k')
+    expect(formatCurrencyShort(-2_500_000, 'USD')).toBe('-US$ 2.5M')
+    expect(formatCurrencyShort(-500, 'UYU')).toBe('-$U 500')
   })
 
-  it('clamps NaN to zero (renders as normal format)', () => {
-    expect(formatCurrencyShort(NaN, 'USD')).toBe('US$ 0,00')
+  it('renders zero and small round values without decimals', () => {
+    expect(formatCurrencyShort(0, 'USD')).toBe('US$ 0')
+    expect(formatCurrencyShort(999, 'UYU')).toBe('$U 999')
+  })
+
+  it('uses the magnitude for threshold comparison', () => {
+    expect(formatCurrencyShort(-2000, 'UYU')).toBe('-$U 2k')
+  })
+
+  it('clamps NaN to zero', () => {
+    expect(formatCurrencyShort(NaN, 'USD')).toBe('US$ 0')
   })
 })
 

@@ -44,6 +44,8 @@ import {
   buildCurrencySplit,
   spendByAccount,
   isExcludedFromTotals,
+  summarizeSavings,
+  niceTicks,
 } from '../services/charts/chart-data'
 import type { AccountSpend } from '../services/charts/chart-data'
 import { convert } from '../services/currency/convert'
@@ -428,13 +430,19 @@ export function Dashboard({
       ? Math.round(totalExpenseTrend / monthlyTrend.length)
       : 0
 
-  // ¿Estás ahorrando? values
-  const avgNet = Math.round(
-    monthlyTrend.reduce((s, m) => s + m.neto, 0) /
-      Math.max(monthlyTrend.length, 1)
+  // ¿Estás ahorrando? values — headline is the median month so a single
+  // one-off inflow can't make a mostly-losing year read as "saving".
+  const savings = summarizeSavings(
+    monthlyTrend.map((m) => ({ month: m.month, net: m.neto }))
   )
-  const positiveMonths = monthlyTrend.filter((m) => m.neto >= 0).length
-  const saving = avgNet >= 0
+  const typicalNet = Math.round(savings.typicalNet)
+  const saving = typicalNet >= 0
+  const { positiveMonths } = savings
+  const negativeMonths = savings.totalMonths - positiveMonths
+  const savingsTicks = niceTicks(
+    Math.min(0, ...monthlyTrend.map((m) => m.neto)),
+    Math.max(0, ...monthlyTrend.map((m) => m.neto))
+  )
 
   // Top merchants — all history in home currency
   const topMerchants = useMemo(() => {
@@ -903,7 +911,7 @@ export function Dashboard({
                     className="text-muted-foreground"
                     style={{ fontSize: 12, fontWeight: 500 }}
                   >
-                    Promedio mensual (ingresos − gastos)
+                    Mes típico (mediana de ingresos − gastos)
                   </div>
                   <div
                     className="font-mono"
@@ -915,25 +923,33 @@ export function Dashboard({
                     }}
                   >
                     {saving ? '+' : '−'}
-                    {formatCurrency(Math.abs(avgNet), homeCurrency)}
+                    {formatCurrency(Math.abs(typicalNet), homeCurrency)}
                   </div>
                   <p style={{ fontSize: 13.5, marginTop: 12, lineHeight: 1.5 }}>
-                    {saving ? (
+                    {positiveMonths > negativeMonths
+                      ? 'Te queda dinero la mayoría de los meses.'
+                      : positiveMonths < negativeMonths
+                        ? 'Gastás más de lo que ingresás la mayoría de los meses.'
+                        : 'La mitad de los meses te queda dinero y la otra mitad no.'}
+                    {savings.outlier && (
                       <>
-                        Te queda dinero la mayoría de los meses. Ahorrás{' '}
+                        {' '}
+                        El promedio (
                         <strong>
-                          {formatCurrency(Math.abs(avgNet), homeCurrency)}
-                        </strong>{' '}
-                        por mes en promedio.
-                      </>
-                    ) : (
-                      <>
-                        Estás gastando más de lo que ingresás. En promedio te
-                        faltan{' '}
-                        <strong>
-                          {formatCurrency(Math.abs(avgNet), homeCurrency)}
-                        </strong>{' '}
-                        por mes.
+                          {savings.meanNet >= 0 ? '+' : '−'}
+                          {formatCurrency(
+                            Math.abs(savings.meanNet),
+                            homeCurrency
+                          )}
+                        </strong>
+                        ) está {savings.meanNet >= 0 ? 'inflado' : 'hundido'}{' '}
+                        por {savings.outlier.month} (
+                        {savings.outlier.net >= 0 ? '+' : '−'}
+                        {formatCurrency(
+                          Math.abs(savings.outlier.net),
+                          homeCurrency
+                        )}
+                        ).
                       </>
                     )}
                   </p>
@@ -968,10 +984,16 @@ export function Dashboard({
                       tick={{ fontSize: 11 }}
                       axisLine={false}
                       tickLine={false}
+                      ticks={savingsTicks}
+                      domain={[
+                        savingsTicks[0],
+                        savingsTicks[savingsTicks.length - 1],
+                      ]}
+                      interval={0}
                       tickFormatter={(v) =>
                         formatCurrencyShort(v, homeCurrency)
                       }
-                      width={60}
+                      width={72}
                     />
                     <Tooltip content={savingsTooltip} />
                     <ReferenceLine

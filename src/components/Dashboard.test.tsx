@@ -478,4 +478,42 @@ describe('Dashboard', () => {
     expect(screen.getByText('Gasto por moneda')).toBeInTheDocument()
     expect(screen.getByText('Mayores comercios')).toBeInTheDocument()
   })
+
+  it('does not call a mostly-losing year "saving" because of one large inflow', () => {
+    const tx = (
+      id: string,
+      month: string,
+      type: 'debit' | 'credit',
+      amount: number
+    ) =>
+      makeTransaction({
+        id,
+        date: new Date(`2026-${month}-10T00:00:00.000Z`),
+        currency: 'USD',
+        type,
+        amount,
+        category: type === 'credit' ? Category.Income : Category.Groceries,
+      })
+    // Three losing months and one with a 35k inflow: the mean is positive,
+    // the typical month is not.
+    const transactions = [
+      tx('jan', '01', 'debit', 1000),
+      tx('feb', '02', 'debit', 1200),
+      tx('mar-in', '03', 'credit', 35000),
+      tx('apr', '04', 'debit', 900),
+    ]
+
+    render(
+      <Dashboard transactions={transactions} homeCurrency="USD" fxRate={40} />
+    )
+
+    expect(
+      screen.queryByText(/Te queda dinero la mayoría de los meses/)
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/Gastás más de lo que ingresás la mayoría de los meses/)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/está inflado por/)).toBeInTheDocument()
+    expect(screen.getByText('1 de 4 meses en positivo')).toBeInTheDocument()
+  })
 })

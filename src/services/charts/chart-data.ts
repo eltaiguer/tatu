@@ -226,3 +226,80 @@ export function spendByAccount(
 
   return map
 }
+
+export interface SavingsSummary {
+  // Median monthly net — the "typical month", robust to one-off inflows.
+  typicalNet: number
+  meanNet: number
+  positiveMonths: number
+  totalMonths: number
+  // Month whose net pulls the mean to the opposite sign of the median, so the
+  // card can explain why the average looks different from the typical month.
+  outlier: { month: string; net: number } | null
+}
+
+export function summarizeSavings(
+  months: { month: string; net: number }[]
+): SavingsSummary {
+  const totalMonths = months.length
+  if (totalMonths === 0) {
+    return {
+      typicalNet: 0,
+      meanNet: 0,
+      positiveMonths: 0,
+      totalMonths: 0,
+      outlier: null,
+    }
+  }
+
+  const nets = months.map((m) => m.net).sort((a, b) => a - b)
+  const mid = Math.floor(totalMonths / 2)
+  const typicalNet =
+    totalMonths % 2 === 0 ? (nets[mid - 1] + nets[mid]) / 2 : nets[mid]
+  const meanNet = nets.reduce((s, n) => s + n, 0) / totalMonths
+  const positiveMonths = months.filter((m) => m.net >= 0).length
+
+  const outlier =
+    meanNet >= 0 !== typicalNet >= 0
+      ? months.reduce((max, m) =>
+          Math.abs(m.net) > Math.abs(max.net) ? m : max
+        )
+      : null
+
+  return {
+    typicalNet,
+    meanNet,
+    positiveMonths,
+    totalMonths,
+    outlier: outlier ? { month: outlier.month, net: outlier.net } : null,
+  }
+}
+
+// Round, evenly spaced axis ticks (steps of 1/2/2.5/5 × 10^n) that always
+// include zero, so abbreviated labels like "US$ 10k" never look uneven.
+export function niceTicks(min: number, max: number, count = 5): number[] {
+  const lo = Math.min(min, 0)
+  const hi = Math.max(max, 0)
+  if (lo === hi) return [0]
+
+  const rough = (hi - lo) / Math.max(count - 1, 1)
+  const magnitude = 10 ** Math.floor(Math.log10(rough))
+  const residual = rough / magnitude
+  const step =
+    magnitude *
+    (residual <= 1
+      ? 1
+      : residual <= 2
+        ? 2
+        : residual <= 2.5
+          ? 2.5
+          : residual <= 5
+            ? 5
+            : 10)
+
+  const first = Math.floor(lo / step)
+  const last = Math.ceil(hi / step)
+  const ticks: number[] = []
+  for (let i = first; i <= last; i++) ticks.push(i * step)
+  return ticks
+}
