@@ -29,7 +29,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from './components/ui/sheet'
-import { Sun, Moon, Menu, Monitor, Upload } from 'lucide-react'
+import { Menu, Upload } from 'lucide-react'
 import { Button } from './components/ui/button'
 import { useStore } from 'zustand'
 import { transactionStore } from './stores/transaction-store'
@@ -88,8 +88,6 @@ function App() {
   const {
     theme,
     setTheme,
-    isDark,
-    cycleTheme,
     preferredCurrency,
     setPreferredCurrency,
     fxRate,
@@ -538,54 +536,6 @@ function App() {
           />
         </DialogContent>
       </Dialog>
-
-      {/* Floating theme toggle */}
-      <button
-        onClick={cycleTheme}
-        aria-label={
-          theme === 'auto'
-            ? 'Tema automático (según sistema)'
-            : isDark
-              ? 'Cambiar a modo claro'
-              : 'Cambiar a modo oscuro'
-        }
-        style={{
-          position: 'fixed',
-          bottom: 22,
-          right: 22,
-          zIndex: 60,
-          width: 42,
-          height: 42,
-          borderRadius: 999,
-          border: '1px solid var(--border)',
-          background: 'var(--surface)',
-          color: 'var(--text-muted)',
-          display: 'grid',
-          placeItems: 'center',
-          cursor: 'pointer',
-          boxShadow: 'var(--shadow-md)',
-          transition: 'background 0.13s, color 0.13s',
-        }}
-        onMouseOver={(e) => {
-          ;(e.currentTarget as HTMLButtonElement).style.background =
-            'var(--surface-2)'
-          ;(e.currentTarget as HTMLButtonElement).style.color = 'var(--text)'
-        }}
-        onMouseOut={(e) => {
-          ;(e.currentTarget as HTMLButtonElement).style.background =
-            'var(--surface)'
-          ;(e.currentTarget as HTMLButtonElement).style.color =
-            'var(--text-muted)'
-        }}
-      >
-        {theme === 'auto' ? (
-          <Monitor size={18} />
-        ) : isDark ? (
-          <Sun size={18} />
-        ) : (
-          <Moon size={18} />
-        )}
-      </button>
 
       <Toaster />
     </div>
