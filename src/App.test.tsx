@@ -817,6 +817,35 @@ describe('App', () => {
       expect(screen.queryByText('Cantina abril')).not.toBeInTheDocument()
     })
 
+    it('keeps the filters when re-clicking Transacciones', async () => {
+      loadUserTransactionsMock.mockResolvedValue([
+        tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),
+      ])
+      renderApp('/transacciones?q=cantina&periodo=todo')
+      await screen.findAllByText('Cantina')
+
+      fireEvent.click(screen.getByRole('button', { name: /Transacciones/ }))
+
+      expect(currentUrl()).toBe('/transacciones?q=cantina&periodo=todo')
+      expect(screen.getByPlaceholderText(/Buscar por comercio/)).toHaveValue(
+        'cantina'
+      )
+    })
+
+    it('drops the period from the URL when filters are cleared', async () => {
+      loadUserTransactionsMock.mockResolvedValue([
+        tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),
+      ])
+      renderApp('/transacciones?categoria=restaurants&periodo=2026-03')
+      await screen.findAllByText('Cantina')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Limpiar todo' }))
+
+      await waitFor(() =>
+        expect(currentUrl()).toBe('/transacciones?periodo=todo')
+      )
+    })
+
     it('keeps filter edits in the URL without adding history entries', async () => {
       loadUserTransactionsMock.mockResolvedValue([
         tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),

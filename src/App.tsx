@@ -63,11 +63,14 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Navigates unless already there, so re-clicking the current view doesn't
-  // stack duplicate history entries.
+  // stack duplicate history entries. A plain nav (no query) to the current
+  // view keeps its query too: Transacciones always carries its filters in
+  // the URL, and re-clicking it must not wipe them.
   function go(view: View, search = '') {
-    const target = pathForView(view) + (search ? `?${search}` : '')
-    if (target === location.pathname + location.search) return
-    navigate(target)
+    if (view === currentView && (!search || `?${search}` === location.search)) {
+      return
+    }
+    navigate(pathForView(view) + (search ? `?${search}` : ''))
   }
 
   // Transacciones writes its filters into the URL with REPLACE; only other

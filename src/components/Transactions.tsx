@@ -1018,6 +1018,13 @@ export function Transactions({
     return { mode: 'month', y: newest.getFullYear(), m: newest.getMonth() }
   })
 
+  // Clearing filters also clears the period: it is part of what the URL
+  // records, and the table already shows every date once the dates clear.
+  function clearFiltersAndPeriod() {
+    clearAllFilters()
+    setPeriod({ mode: 'all' })
+  }
+
   // Keep the URL in step with the filters (the parent decides how).
   useEffect(() => {
     if (!onFiltersChange) return
@@ -1673,7 +1680,7 @@ export function Transactions({
         onTypeChange={setTypeFilter}
         onMinAmountChange={setMinAmount}
         onMaxAmountChange={setMaxAmount}
-        onClearAll={clearAllFilters}
+        onClearAll={clearFiltersAndPeriod}
       />
 
       {/* Table */}
@@ -1696,7 +1703,7 @@ export function Transactions({
         onToggleSelect={toggleTransactionSelection}
         onHeaderCheckboxChange={handleHeaderCheckboxChange}
         onSort={handleSort}
-        onClearFilters={clearAllFilters}
+        onClearFilters={clearFiltersAndPeriod}
         onShowIgnoredChange={setShowIgnored}
         onEdit={startEditTransaction}
         onDelete={(transaction) => {
