@@ -1,9 +1,11 @@
+import { useRef } from 'react'
 import type { SupabaseSession } from '../services/supabase/client'
 import type { Transaction } from '../models'
 import { transactionStore } from '../stores/transaction-store'
 import {
   persistTransactions,
   softDeleteTransaction,
+  restoreTransactions,
   updateTransaction as updateRemoteTransaction,
   splitTransaction as remoteSplitTransaction,
   unsplitTransaction as remoteUnsplitTransaction,
@@ -21,7 +23,7 @@ import {
   setDescriptionOverrideWithSync,
   getDescriptionOverride,
 } from '../services/descriptions/description-overrides'
-import { buildDescriptionOverrideKey } from '../services/descriptions/normalization'
+import { findSimilarTransactions } from '../services/descriptions/similar-transactions'
 import {
   completeImportRun,
   createImportRun,
@@ -41,16 +43,40 @@ import {
   applyAiEnrichment,
 } from '../services/ai'
 import { buildCorrectionContext } from '../services/ai/correction-context'
+import { NeedsConfirmationError, UserFacingError } from '../utils/user-error'
 
+const MISSING_TRANSACTION = new UserFacingError(
+  'La transacción ya no existe. Recargá para ver el estado actual.'
+)
+
+// Deleting a split row can't be undone: a parent's parts are hard-deleted, and
+// a soft-deleted part would collide with a later re-split's deterministic ids.
+function isSplitRow(tx: Transaction): boolean {
+  return Boolean(tx.isSplitParent || tx.splitParentId)
+}
+
+export interface DeleteResult {
+  removed: Transaction[]
+  // False when the delete hard-removed data, so no undo can be offered.
+  reversible: boolean
+}
+
+// Mutation handlers throw on failure (and on no-op preconditions) and return
+// what actually changed, so the UI only reports success that happened. They
+// write through the store's functional actions, never a snapshot taken before
+// an await, so concurrent mutations don't overwrite each other.
 export function useTransactionHandlers({
   session,
   setError,
-  setNotice,
 }: {
   session: SupabaseSession | null
   setError: (msg: string) => void
-  setNotice: (msg: string) => void
 }) {
+  // Undo runs from a toast after this render; it must use the session that
+  // is current then (or none, after sign-out), not the one captured now.
+  const sessionRef = useRef(session)
+  sessionRef.current = session
+
   /**
    * Imports a parsed statement. AI enrichment is best-effort: if it fails the
    * import still completes with the rule-based categories, but the reason is
@@ -144,14 +170,6 @@ export function useTransactionHandlers({
         importId: importRunId ?? undefined,
       })
       state.addTransactions(toStore)
-
-      if (importRunId) {
-        await completeImportRun(session, importRunId, {
-          totalRows: transactionsToImport.length,
-          insertedRows: added.length,
-          duplicateRows: duplicates.length,
-        })
-      }
     } catch (error) {
       if (importRunId) {
         await failImportRun(
@@ -161,6 +179,20 @@ export function useTransactionHandlers({
         )
       }
       throw error
+    }
+
+    // The rows are already saved and visible; failing to close the audit
+    // record must not report the import itself as failed.
+    if (importRunId) {
+      try {
+        await completeImportRun(session, importRunId, {
+          totalRows: transactionsToImport.length,
+          insertedRows: added.length,
+          duplicateRows: duplicates.length,
+        })
+      } catch (error) {
+        console.error('Could not complete import run record:', error)
+      }
     }
 
     return { added, duplicates, aiError, aiPartial }
@@ -174,436 +206,360 @@ export function useTransactionHandlers({
       tags?: string[]
       applyScope: 'single' | 'matching_past_and_future' | 'future_matching_only'
     }
-  ) {
+  ): Promise<{ affected: number }> {
     const state = transactionStore.getState()
     const current = state.transactions.find((tx) => tx.id === transactionId)
     if (!current) {
-      return
+      throw MISSING_TRANSACTION
     }
 
     const trimmedDisplayDescription = updates.displayDescription?.trim()
-    const applyToMatching = updates.applyScope === 'matching_past_and_future'
-    const applyToFutureOnly = updates.applyScope === 'future_matching_only'
+    const renamed =
+      !!trimmedDisplayDescription &&
+      trimmedDisplayDescription !== current.description
     const nextCategory = updates.category?.trim() || undefined
     const nextTags = updates.tags
 
-    if (applyToMatching) {
-      // Whether the user actually renamed anything. When they did, a
-      // merchant-keyed description override is written below and becomes the
-      // single source of the friendly name — so the per-row values must be
-      // cleared, or rows keep disagreeing with each other. When they did not,
-      // there is no replacement name, and clearing would destroy per-row
-      // values (e.g. AI-enriched ones) that nothing else supplies.
-      const renames =
-        !!trimmedDisplayDescription &&
-        trimmedDisplayDescription !== current.description
-      const targetKey = buildDescriptionOverrideKey(current.description)
-      const matchingTransactions = state.transactions.filter((tx) => {
-        const key = buildDescriptionOverrideKey(tx.description)
-        return key !== null && key === targetKey
-      })
-
-      try {
-        if (
-          trimmedDisplayDescription &&
-          trimmedDisplayDescription !== current.description
-        ) {
-          await setDescriptionOverrideWithSync({
-            description: current.description,
-            friendlyDescription: trimmedDisplayDescription,
-            category: nextCategory,
-          })
-        } else {
-          await clearDescriptionOverrideWithSync(current.description)
-        }
-
-        if (nextCategory) {
-          await setMerchantCategoryOverrideWithSync(
-            current.description,
-            nextCategory
-          )
-        } else {
-          await clearMerchantCategoryOverrideWithSync(current.description)
-        }
-
-        if (session) {
-          await Promise.all(
-            matchingTransactions.map((tx) =>
-              updateRemoteTransaction(session, tx.id, {
-                category: nextCategory,
-                ...(nextCategory !== undefined && { categoryConfidence: 1 }),
-                // null clears the column; omitting the key leaves it alone.
-                // Only clear when an override was actually written to
-                // replace it — see `renames` above.
-                ...(renames && { displayDescription: null }),
-              })
-            )
-          )
-
-          if (nextTags !== undefined) {
-            await updateRemoteTransaction(session, transactionId, {
-              tags: nextTags,
-            })
-          }
-        }
-
-        state.setTransactions(
-          state.transactions.map((tx) => {
-            if (buildDescriptionOverrideKey(tx.description) !== targetKey) {
-              return tx
-            }
-
-            const categoryUpdates = nextCategory
-              ? { category: nextCategory, categoryConfidence: 1 as const }
-              : {}
-            const tagsUpdates =
-              tx.id === transactionId && nextTags !== undefined
-                ? { tags: nextTags }
-                : {}
-
-            return {
-              ...tx,
-              ...categoryUpdates,
-              ...tagsUpdates,
-              // Mirrors the remote write above: only cleared when an
-              // override now supplies the name.
-              ...(renames && { displayDescription: undefined }),
-            }
-          })
-        )
-        setError('')
-      } catch (error) {
-        setError(
-          error instanceof Error
-            ? error.message
-            : 'No se pudo actualizar la transacción'
-        )
+    async function writeOverrides(current: Transaction) {
+      if (renamed) {
+        await setDescriptionOverrideWithSync({
+          description: current.description,
+          friendlyDescription: trimmedDisplayDescription!,
+          category: nextCategory,
+        })
+      } else {
+        await clearDescriptionOverrideWithSync(current.description)
       }
-      return
+
+      if (nextCategory) {
+        await setMerchantCategoryOverrideWithSync(
+          current.description,
+          nextCategory
+        )
+      } else {
+        await clearMerchantCategoryOverrideWithSync(current.description)
+      }
     }
 
-    if (applyToFutureOnly) {
-      try {
-        if (
-          trimmedDisplayDescription &&
-          trimmedDisplayDescription !== current.description
-        ) {
-          await setDescriptionOverrideWithSync({
-            description: current.description,
-            friendlyDescription: trimmedDisplayDescription,
-            category: nextCategory,
-          })
-        } else {
-          await clearDescriptionOverrideWithSync(current.description)
-        }
+    if (updates.applyScope === 'matching_past_and_future') {
+      // When the user renamed, a merchant-keyed description override is
+      // written and becomes the single source of the friendly name — so the
+      // per-row values must be cleared, or rows keep disagreeing. When they
+      // did not, clearing would destroy per-row values (e.g. AI-enriched
+      // ones) that nothing else supplies.
+      const matching = findSimilarTransactions(state.transactions, current)
+      const matchingIds = new Set(matching.map((tx) => tx.id))
 
-        if (nextCategory) {
-          await setMerchantCategoryOverrideWithSync(
-            current.description,
-            nextCategory
+      await writeOverrides(current)
+
+      if (session) {
+        await Promise.all(
+          matching.map((tx) =>
+            updateRemoteTransaction(session, tx.id, {
+              category: nextCategory,
+              ...(nextCategory !== undefined && { categoryConfidence: 1 }),
+              // null clears the column; omitting the key leaves it alone.
+              ...(renamed && { displayDescription: null }),
+            })
           )
-        } else {
-          await clearMerchantCategoryOverrideWithSync(current.description)
-        }
+        )
 
-        if (session) {
+        if (nextTags !== undefined) {
           await updateRemoteTransaction(session, transactionId, {
-            // null, not undefined, when the name is being reset: undefined
-            // omits the column and the old value survives on the server
-            // while the local store clears it (see UpdateTransactionInput).
-            displayDescription:
-              trimmedDisplayDescription &&
-              trimmedDisplayDescription !== current.description
-                ? trimmedDisplayDescription
-                : null,
-            category: nextCategory,
-            ...(nextCategory !== undefined && { categoryConfidence: 1 }),
             tags: nextTags,
           })
         }
-
-        state.updateTransaction(transactionId, {
-          displayDescription:
-            trimmedDisplayDescription &&
-            trimmedDisplayDescription !== current.description
-              ? trimmedDisplayDescription
-              : undefined,
-          category: nextCategory,
-          ...(nextCategory !== undefined && { categoryConfidence: 1 }),
-          tags: nextTags,
-        })
-        setError('')
-      } catch (error) {
-        setError(
-          error instanceof Error
-            ? error.message
-            : 'No se pudo actualizar la transacción'
-        )
       }
-      return
+
+      // Same id set as the remote writes above, so local and server agree.
+      transactionStore.getState().mapTransactions((tx) => {
+        if (!matchingIds.has(tx.id)) {
+          return tx
+        }
+        return {
+          ...tx,
+          ...(nextCategory && {
+            category: nextCategory,
+            categoryConfidence: 1 as const,
+          }),
+          ...(tx.id === transactionId &&
+            nextTags !== undefined && { tags: nextTags }),
+          ...(renamed && { displayDescription: undefined }),
+        }
+      })
+      setError('')
+      return { affected: matching.length }
     }
 
-    try {
-      const singleDisplayDescription =
-        trimmedDisplayDescription &&
-        trimmedDisplayDescription !== current.description
-          ? trimmedDisplayDescription
-          : undefined
+    if (updates.applyScope === 'future_matching_only') {
+      await writeOverrides(current)
 
       if (session) {
         await updateRemoteTransaction(session, transactionId, {
-          // null, not undefined — see the note on UpdateTransactionInput.
-          displayDescription: singleDisplayDescription ?? null,
+          // null, not undefined, when the name is being reset: undefined
+          // omits the column and the old value survives on the server
+          // while the local store clears it (see UpdateTransactionInput).
+          displayDescription: renamed ? trimmedDisplayDescription : null,
           category: nextCategory,
           ...(nextCategory !== undefined && { categoryConfidence: 1 }),
           tags: nextTags,
         })
       }
 
-      state.updateTransaction(transactionId, {
-        displayDescription: singleDisplayDescription,
+      transactionStore.getState().updateTransaction(transactionId, {
+        displayDescription: renamed ? trimmedDisplayDescription : undefined,
         category: nextCategory,
         ...(nextCategory !== undefined && { categoryConfidence: 1 }),
         tags: nextTags,
       })
       setError('')
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo actualizar la transacción'
-      )
+      return { affected: 1 }
     }
+
+    const singleDisplayDescription = renamed
+      ? trimmedDisplayDescription
+      : undefined
+
+    if (session) {
+      await updateRemoteTransaction(session, transactionId, {
+        // null, not undefined — see the note on UpdateTransactionInput.
+        displayDescription: singleDisplayDescription ?? null,
+        category: nextCategory,
+        ...(nextCategory !== undefined && { categoryConfidence: 1 }),
+        tags: nextTags,
+      })
+    }
+
+    transactionStore.getState().updateTransaction(transactionId, {
+      displayDescription: singleDisplayDescription,
+      category: nextCategory,
+      ...(nextCategory !== undefined && { categoryConfidence: 1 }),
+      tags: nextTags,
+    })
+    setError('')
+    return { affected: 1 }
   }
 
-  async function handleDeleteTransaction(transactionId: string) {
-    const state = transactionStore.getState()
-    const tx = state.transactions.find((t) => t.id === transactionId)
+  // Split parts (the targets' own, and those of any split parent among them)
+  // are hard-deleted: their ids are deterministic, so a soft-deleted part
+  // would come back invisible after a later re-split. Everything else is
+  // soft-deleted. Then all of them leave the store.
+  async function deleteRows(targets: Transaction[]): Promise<DeleteResult> {
+    const all = transactionStore.getState().transactions
+    const parentIds = new Set(
+      targets.filter((tx) => tx.isSplitParent).map((tx) => tx.id)
+    )
+    const hardIds = [
+      ...all
+        .filter((tx) => tx.splitParentId && parentIds.has(tx.splitParentId))
+        .map((tx) => tx.id),
+      ...targets.filter((tx) => tx.splitParentId).map((tx) => tx.id),
+    ]
+    const hardSet = new Set(hardIds)
+    const softTargets = targets.filter((tx) => !hardSet.has(tx.id))
 
-    try {
-      if (tx?.isSplitParent) {
-        const childIds = state.transactions
-          .filter((t) => t.splitParentId === transactionId)
-          .map((t) => t.id)
-
-        if (session && childIds.length > 0) {
-          await hardDeleteTransactions(session, childIds)
-        }
-        state.removeTransactions(childIds)
+    if (session) {
+      if (hardIds.length > 0) {
+        await hardDeleteTransactions(session, hardIds)
       }
-
-      if (session) {
-        await softDeleteTransaction(session, transactionId)
-      }
-
-      state.removeTransaction(transactionId)
-      setError('')
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo eliminar la transacción'
+      await Promise.all(
+        softTargets.map((tx) => softDeleteTransaction(session, tx.id))
       )
     }
+
+    transactionStore
+      .getState()
+      .removeTransactions([...targets.map((tx) => tx.id), ...hardIds])
+    setError('')
+    return { removed: targets, reversible: !targets.some(isSplitRow) }
+  }
+
+  // Throws NeedsConfirmationError before writing anything when the delete
+  // can't be undone and the caller hasn't confirmed it.
+  async function handleDeleteTransaction(
+    transactionId: string,
+    options: { allowIrreversible?: boolean } = {}
+  ): Promise<DeleteResult> {
+    const tx = transactionStore
+      .getState()
+      .transactions.find((t) => t.id === transactionId)
+    if (!tx) {
+      throw MISSING_TRANSACTION
+    }
+    if (isSplitRow(tx) && !options.allowIrreversible) {
+      throw new NeedsConfirmationError()
+    }
+    return deleteRows([tx])
+  }
+
+  async function handleBulkDeleteTransactions(
+    transactionIds: string[],
+    options: { allowIrreversible?: boolean } = {}
+  ): Promise<DeleteResult> {
+    if (transactionIds.length === 0) {
+      return { removed: [], reversible: true }
+    }
+    const ids = new Set(transactionIds)
+    const targets = transactionStore
+      .getState()
+      .transactions.filter((tx) => ids.has(tx.id))
+    if (targets.length === 0) {
+      throw MISSING_TRANSACTION
+    }
+    if (targets.some(isSplitRow) && !options.allowIrreversible) {
+      throw new NeedsConfirmationError()
+    }
+    return deleteRows(targets)
+  }
+
+  // Undo for a reversible delete: one remote request for all rows, then put
+  // them back in the store (rows already present — e.g. re-imported in the
+  // meantime — are left as they are).
+  async function handleRestoreTransactions(
+    transactions: Transaction[]
+  ): Promise<{ restored: number }> {
+    const currentSession = sessionRef.current
+    if (!currentSession) {
+      throw new UserFacingError(
+        'Tu sesión terminó; iniciá sesión de nuevo para deshacer.'
+      )
+    }
+    await restoreTransactions(
+      currentSession,
+      transactions.map((tx) => tx.id)
+    )
+    transactionStore.getState().addTransactions(transactions)
+    setError('')
+    return { restored: transactions.length }
   }
 
   async function handleSplitTransaction(
     transactionId: string,
     parts: SplitPart[]
-  ) {
-    const state = transactionStore.getState()
-    const parent = state.transactions.find((tx) => tx.id === transactionId)
-    if (!parent || !session) {
-      return
+  ): Promise<{ parts: number }> {
+    const parent = transactionStore
+      .getState()
+      .transactions.find((tx) => tx.id === transactionId)
+    if (!parent) {
+      throw MISSING_TRANSACTION
+    }
+    if (!session) {
+      throw new UserFacingError('Iniciá sesión para dividir transacciones.')
     }
 
-    try {
-      const { parent: updatedParent, children } = await remoteSplitTransaction(
-        session,
-        parent,
-        parts
-      )
-      state.updateTransaction(updatedParent.id, updatedParent)
-      state.addTransactions(children)
-      setError('')
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo dividir la transacción'
-      )
-    }
+    const { parent: updatedParent, children } = await remoteSplitTransaction(
+      session,
+      parent,
+      parts
+    )
+    const store = transactionStore.getState()
+    store.updateTransaction(updatedParent.id, updatedParent)
+    store.addTransactions(children)
+    setError('')
+    return { parts: children.length }
   }
 
   async function handleUnsplitTransaction(transactionId: string) {
     const state = transactionStore.getState()
     const parent = state.transactions.find((tx) => tx.id === transactionId)
-    if (!parent || !session) {
-      return
+    if (!parent) {
+      throw MISSING_TRANSACTION
+    }
+    if (!session) {
+      throw new UserFacingError('Iniciá sesión para restaurar transacciones.')
     }
 
     const childIds = state.transactions
       .filter((tx) => tx.splitParentId === transactionId)
       .map((tx) => tx.id)
 
-    try {
-      const restored = await remoteUnsplitTransaction(session, parent, childIds)
-      state.updateTransaction(restored.id, restored)
-      state.removeTransactions(childIds)
-      setError('')
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudo restaurar la transacción'
-      )
-    }
+    const restored = await remoteUnsplitTransaction(session, parent, childIds)
+    const store = transactionStore.getState()
+    store.updateTransaction(restored.id, restored)
+    store.removeTransactions(childIds)
+    setError('')
   }
 
   async function handleBulkCategorizeTransactions(
     transactionIds: string[],
     category: string
-  ) {
-    if (transactionIds.length === 0 || !category.trim()) {
-      return
+  ): Promise<{ updated: number }> {
+    if (!category.trim()) {
+      throw new UserFacingError('Elegí una categoría.')
     }
-
-    const state = transactionStore.getState()
-    const targetIds = new Set(transactionIds)
-
-    try {
-      if (session) {
-        await Promise.all(
-          transactionIds.map((id) =>
-            updateRemoteTransaction(session, id, {
-              category,
-              categoryConfidence: 1,
-            })
-          )
-        )
-      }
-
-      state.setTransactions(
-        state.transactions.map((transaction) => {
-          if (!targetIds.has(transaction.id)) {
-            return transaction
-          }
-          return { ...transaction, category, categoryConfidence: 1 }
-        })
-      )
-      setError('')
-      setNotice(
-        `${transactionIds.length} transacción${transactionIds.length === 1 ? '' : 'es'} categorizada${transactionIds.length === 1 ? '' : 's'}`
-      )
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudieron categorizar las transacciones'
-      )
-      setNotice('')
-    }
-  }
-
-  async function handleBulkDeleteTransactions(transactionIds: string[]) {
     if (transactionIds.length === 0) {
-      return
+      return { updated: 0 }
     }
+    const ids = new Set(transactionIds)
+    const targets = transactionStore
+      .getState()
+      .transactions.filter((tx) => ids.has(tx.id))
+    if (targets.length === 0) {
+      throw MISSING_TRANSACTION
+    }
+    const targetIds = new Set(targets.map((tx) => tx.id))
 
-    const state = transactionStore.getState()
-
-    const selectedSet = new Set(transactionIds)
-    const childIdsToHardDelete = state.transactions
-      .filter((tx) => tx.splitParentId && selectedSet.has(tx.splitParentId))
-      .map((tx) => tx.id)
-
-    try {
-      if (session) {
-        if (childIdsToHardDelete.length > 0) {
-          await hardDeleteTransactions(session, childIdsToHardDelete)
-        }
-        await Promise.all(
-          transactionIds.map((id) => softDeleteTransaction(session, id))
-        )
-      }
-
-      const allToRemove = new Set([...transactionIds, ...childIdsToHardDelete])
-      state.setTransactions(
-        state.transactions.filter(
-          (transaction) => !allToRemove.has(transaction.id)
+    if (session) {
+      await Promise.all(
+        targets.map((tx) =>
+          updateRemoteTransaction(session, tx.id, {
+            category,
+            categoryConfidence: 1,
+          })
         )
       )
-      setError('')
-      setNotice(
-        `${transactionIds.length} transacción${transactionIds.length === 1 ? '' : 'es'} eliminada${transactionIds.length === 1 ? '' : 's'}`
-      )
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudieron eliminar las transacciones'
-      )
-      setNotice('')
     }
+
+    transactionStore
+      .getState()
+      .mapTransactions((tx) =>
+        targetIds.has(tx.id) ? { ...tx, category, categoryConfidence: 1 } : tx
+      )
+    setError('')
+    return { updated: targets.length }
   }
 
   async function handleBulkTagTransactions(
     transactionIds: string[],
     tag: string
-  ) {
-    if (transactionIds.length === 0 || !tag.trim()) {
-      return
-    }
-
+  ): Promise<{ updated: number }> {
     const trimmedTag = tag.trim()
-    const state = transactionStore.getState()
-    const targetIds = new Set(transactionIds)
+    if (!trimmedTag) {
+      throw new UserFacingError('Escribí una etiqueta.')
+    }
+    const ids = new Set(transactionIds)
+    // Rows that already carry the tag are left alone and not counted.
+    const targets = transactionStore
+      .getState()
+      .transactions.filter(
+        (tx) => ids.has(tx.id) && !(tx.tags ?? []).includes(trimmedTag)
+      )
+    const targetIds = new Set(targets.map((tx) => tx.id))
 
-    try {
-      if (session) {
-        await Promise.all(
-          transactionIds.map((id) => {
-            const transaction = state.transactions.find((tx) => tx.id === id)
-            const currentTags = transaction?.tags ?? []
-            if (currentTags.includes(trimmedTag)) {
-              return Promise.resolve()
-            }
-            return updateRemoteTransaction(session, id, {
-              tags: [...currentTags, trimmedTag],
-            })
+    if (session) {
+      await Promise.all(
+        targets.map((tx) =>
+          updateRemoteTransaction(session, tx.id, {
+            tags: [...(tx.tags ?? []), trimmedTag],
           })
         )
-      }
-
-      state.setTransactions(
-        state.transactions.map((transaction) => {
-          if (!targetIds.has(transaction.id)) {
-            return transaction
-          }
-          const currentTags = transaction.tags ?? []
-          if (currentTags.includes(trimmedTag)) {
-            return transaction
-          }
-          return { ...transaction, tags: [...currentTags, trimmedTag] }
-        })
       )
-      setError('')
-      setNotice(
-        `Tag "${trimmedTag}" agregado a ${transactionIds.length} transacción${transactionIds.length === 1 ? '' : 'es'}`
-      )
-    } catch (error) {
-      setError(
-        error instanceof Error ? error.message : 'No se pudo agregar el tag'
-      )
-      setNotice('')
     }
+
+    transactionStore
+      .getState()
+      .mapTransactions((tx) =>
+        targetIds.has(tx.id)
+          ? { ...tx, tags: [...(tx.tags ?? []), trimmedTag] }
+          : tx
+      )
+    setError('')
+    return { updated: targets.length }
   }
 
-  async function handleAutoCategorizeTransactions(transactionIds: string[]) {
-    if (transactionIds.length === 0) {
-      return
-    }
-
+  async function handleAutoCategorizeTransactions(
+    transactionIds: string[]
+  ): Promise<{ categorized: number }> {
     const state = transactionStore.getState()
     const targetIds = new Set(transactionIds)
 
@@ -633,9 +589,13 @@ export function useTransactionHandlers({
       temporalPatterns,
     }
 
-    const categorizedTransactions = state.transactions
+    const matched = new Map<
+      string,
+      { category: string; categoryConfidence: number }
+    >()
+    state.transactions
       .filter((transaction) => targetIds.has(transaction.id))
-      .map((transaction) => {
+      .forEach((transaction) => {
         const result = categorizeTransaction(
           transaction.description,
           transaction.type,
@@ -645,72 +605,39 @@ export function useTransactionHandlers({
             currency: transaction.currency,
           }
         )
-
-        return {
-          id: transaction.id,
-          category: result.category,
-          categoryConfidence: result.confidence,
+        if (result.category !== 'uncategorized') {
+          matched.set(transaction.id, {
+            category: result.category,
+            categoryConfidence: result.confidence,
+          })
         }
       })
 
-    const matchedTransactions = categorizedTransactions.filter(
-      (transaction) => transaction.category !== 'uncategorized'
-    )
-
-    if (matchedTransactions.length === 0) {
-      setNotice(
-        'No se encontraron categorías automáticas para las transacciones seleccionadas'
-      )
-      return
+    if (matched.size === 0) {
+      return { categorized: 0 }
     }
 
-    try {
-      if (session) {
-        await Promise.all(
-          matchedTransactions.map((transaction) =>
-            updateRemoteTransaction(session, transaction.id, {
-              category: transaction.category,
-              categoryConfidence: transaction.categoryConfidence,
-            })
-          )
+    if (session) {
+      await Promise.all(
+        Array.from(matched.entries()).map(([id, update]) =>
+          updateRemoteTransaction(session, id, update)
         )
-      }
-
-      state.setTransactions(
-        state.transactions.map((transaction) => {
-          const categorized = matchedTransactions.find(
-            (entry) => entry.id === transaction.id
-          )
-
-          if (!categorized) {
-            return transaction
-          }
-
-          return {
-            ...transaction,
-            category: categorized.category,
-            categoryConfidence: categorized.categoryConfidence,
-          }
-        })
       )
-      setError('')
-      setNotice(
-        `${matchedTransactions.length} transacción${matchedTransactions.length === 1 ? '' : 'es'} auto-categorizada${matchedTransactions.length === 1 ? '' : 's'}`
-      )
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'No se pudieron auto-categorizar las transacciones'
-      )
-      setNotice('')
     }
+
+    transactionStore.getState().mapTransactions((transaction) => {
+      const update = matched.get(transaction.id)
+      return update ? { ...transaction, ...update } : transaction
+    })
+    setError('')
+    return { categorized: matched.size }
   }
 
   return {
     handleTransactionsImported,
     handleUpdateTransaction,
     handleDeleteTransaction,
+    handleRestoreTransactions,
     handleSplitTransaction,
     handleUnsplitTransaction,
     handleBulkCategorizeTransactions,

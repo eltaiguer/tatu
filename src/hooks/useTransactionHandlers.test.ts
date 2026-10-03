@@ -18,6 +18,12 @@ const mocks = vi.hoisted(() => ({
     model: 'claude-haiku-4-5',
   })),
   splitTransaction: vi.fn(),
+  softDeleteTransaction: vi.fn<[unknown, string], Promise<void>>(
+    async () => undefined
+  ),
+  restoreTransactions: vi.fn<[unknown, string[]], Promise<void>>(
+    async () => undefined
+  ),
   unsplitTransaction: vi.fn<[unknown, unknown, string[]], Promise<unknown>>(),
   hardDeleteTransactions: vi.fn<[unknown, string[]], Promise<void>>(
     async () => undefined
@@ -40,7 +46,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../services/supabase/transactions', () => ({
   persistTransactions: mocks.persistTransactions,
-  softDeleteTransaction: vi.fn(async () => undefined),
+  softDeleteTransaction: mocks.softDeleteTransaction,
+  restoreTransactions: mocks.restoreTransactions,
   updateTransaction: mocks.updateRemoteTransaction,
   splitTransaction: mocks.splitTransaction,
   unsplitTransaction: mocks.unsplitTransaction,
@@ -84,6 +91,7 @@ vi.mock('../services/ai/correction-context', () => ({
 }))
 
 import { useTransactionHandlers } from './useTransactionHandlers'
+import { NeedsConfirmationError } from '../utils/user-error'
 import { transactionStore } from '../stores/transaction-store'
 
 const session = { user: { id: 'user-1' } } as SupabaseSession
@@ -114,11 +122,10 @@ function makeImportContext() {
 
 function setup() {
   const setError = vi.fn()
-  const setNotice = vi.fn()
   const { result } = renderHook(() =>
-    useTransactionHandlers({ session, setError, setNotice })
+    useTransactionHandlers({ session, setError })
   )
-  return { handlers: result.current, setError, setNotice }
+  return { handlers: result.current, setError }
 }
 
 describe('useTransactionHandlers — import with AI enrichment', () => {
@@ -213,6 +220,20 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     expect(mocks.completeImportRun).not.toHaveBeenCalled()
   })
 
+  it('does not report a saved import as failed when closing its audit record fails', async () => {
+    mocks.completeImportRun.mockRejectedValueOnce(new Error('timeout'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { handlers } = setup()
+
+    const result = await handlers.handleTransactionsImported(
+      [makeTransaction('tx-1')],
+      makeImportContext()
+    )
+
+    expect(result.added).toHaveLength(1)
+    expect(mocks.failImportRun).not.toHaveBeenCalled()
+  })
+
   it('reports a partial batch failure to the caller', async () => {
     // Some batches succeeded, so enrichment did not throw — but the user must
     // still learn that part of the import was not enriched.
@@ -289,13 +310,33 @@ describe('useTransactionHandlers — apply scope', () => {
     it('changes every transaction sharing the description', async () => {
       const { handlers } = setup()
 
-      await handlers.handleUpdateTransaction('same-1', {
+      const result = await handlers.handleUpdateTransaction('same-1', {
         category: 'restaurants',
         applyScope: 'matching_past_and_future',
       })
 
       expect(stored('same-1')?.category).toBe('restaurants')
       expect(stored('same-2')?.category).toBe('restaurants')
+      // The count the UI reports is the number of rows written remotely.
+      const patched = new Set(
+        mocks.updateRemoteTransaction.mock.calls.map((call) => call[1])
+      )
+      expect(result.affected).toBe(patched.size)
+      expect(result.affected).toBe(2)
+    })
+
+    it('fails the edit when the rule for future imports could not be saved', async () => {
+      mocks.setMerchantCategoryOverrideWithSync.mockRejectedValueOnce(
+        new Error('timeout')
+      )
+      const { handlers } = setup()
+
+      await expect(
+        handlers.handleUpdateTransaction('same-1', {
+          category: 'restaurants',
+          applyScope: 'matching_past_and_future',
+        })
+      ).rejects.toThrow('timeout')
     })
 
     it('leaves non-matching transactions alone', async () => {
@@ -411,23 +452,69 @@ describe('useTransactionHandlers — bulk operations', () => {
     return transactionStore.getState().transactions.find((t) => t.id === id)
   }
 
-  it('categorizes only the selected transactions', async () => {
-    const { handlers, setNotice } = setup()
+  it('categorizes only the selected transactions and reports how many', async () => {
+    const { handlers } = setup()
 
-    await handlers.handleBulkCategorizeTransactions(['a', 'b'], 'restaurants')
+    const result = await handlers.handleBulkCategorizeTransactions(
+      ['a', 'b'],
+      'restaurants'
+    )
 
+    expect(result.updated).toBe(2)
     expect(stored('a')?.category).toBe('restaurants')
     expect(stored('b')?.category).toBe('restaurants')
     expect(stored('c')?.category).toBe('groceries')
-    expect(setNotice).toHaveBeenCalled()
   })
 
   it('does nothing when the selection is empty', async () => {
     const { handlers } = setup()
 
-    await handlers.handleBulkCategorizeTransactions([], 'restaurants')
+    const result = await handlers.handleBulkCategorizeTransactions(
+      [],
+      'restaurants'
+    )
 
+    expect(result.updated).toBe(0)
     expect(mocks.updateRemoteTransaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects and leaves the store alone when a remote write fails', async () => {
+    mocks.updateRemoteTransaction.mockRejectedValueOnce(new Error('timeout'))
+    const { handlers } = setup()
+
+    await expect(
+      handlers.handleBulkCategorizeTransactions(['a'], 'restaurants')
+    ).rejects.toThrow('timeout')
+    expect(stored('a')?.category).toBe('groceries')
+  })
+
+  it('counts only rows that actually gained the tag', async () => {
+    const { handlers } = setup()
+
+    await handlers.handleBulkTagTransactions(['a'], 'viaje')
+    const second = await handlers.handleBulkTagTransactions(['a', 'b'], 'viaje')
+
+    expect(second.updated).toBe(1)
+  })
+
+  it('does not lose a row restored while a bulk write was in flight', async () => {
+    // A bulk categorize awaits the server; meanwhile an undo re-adds a row.
+    // The categorize must write against the store as it is then, not the
+    // snapshot it read before awaiting.
+    let release!: () => void
+    mocks.updateRemoteTransaction.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (release = resolve))
+    )
+    const { handlers } = setup()
+    const pending = handlers.handleBulkCategorizeTransactions(['a'], 'food')
+    await Promise.resolve()
+
+    transactionStore.getState().addTransactions([makeTransaction('z')])
+    release()
+    await pending
+
+    expect(stored('z')).toBeDefined()
+    expect(stored('a')?.category).toBe('food')
   })
 
   it('adds a tag without duplicating one already present', async () => {
@@ -439,14 +526,50 @@ describe('useTransactionHandlers — bulk operations', () => {
     expect(stored('a')?.tags).toEqual(['viaje'])
   })
 
-  it('removes the selected transactions on bulk delete', async () => {
+  it('removes the selected transactions on bulk delete, reversibly', async () => {
     const { handlers } = setup()
 
-    await handlers.handleBulkDeleteTransactions(['a', 'b'])
+    const result = await handlers.handleBulkDeleteTransactions(['a', 'b'])
 
+    expect(result.reversible).toBe(true)
+    expect(result.removed.map((tx) => tx.id)).toEqual(['a', 'b'])
     expect(stored('a')).toBeUndefined()
     expect(stored('b')).toBeUndefined()
     expect(stored('c')).toBeDefined()
+  })
+
+  it('restores deleted transactions in one request and puts them back', async () => {
+    const { handlers } = setup()
+    const { removed } = await handlers.handleBulkDeleteTransactions(['a', 'b'])
+
+    const result = await handlers.handleRestoreTransactions(removed)
+
+    expect(result.restored).toBe(2)
+    expect(mocks.restoreTransactions).toHaveBeenCalledTimes(1)
+    expect(mocks.restoreTransactions.mock.calls[0][1]).toEqual(['a', 'b'])
+    expect(stored('a')).toBeDefined()
+    expect(stored('b')).toBeDefined()
+  })
+
+  it('does not put rows back locally when the restore fails', async () => {
+    const { handlers } = setup()
+    const { removed } = await handlers.handleBulkDeleteTransactions(['a'])
+    mocks.restoreTransactions.mockRejectedValueOnce(new Error('timeout'))
+
+    await expect(handlers.handleRestoreTransactions(removed)).rejects.toThrow(
+      'timeout'
+    )
+    expect(stored('a')).toBeUndefined()
+  })
+
+  it('rejects a delete whose remote write fails and keeps the row', async () => {
+    mocks.softDeleteTransaction.mockRejectedValueOnce(new Error('timeout'))
+    const { handlers } = setup()
+
+    await expect(handlers.handleDeleteTransaction('a')).rejects.toThrow(
+      'timeout'
+    )
+    expect(stored('a')).toBeDefined()
   })
 })
 
@@ -498,15 +621,16 @@ describe('useTransactionHandlers — split and unsplit', () => {
     expect(transactionStore.getState().transactions).toHaveLength(3)
   })
 
-  it('reports a split failure without changing the store', async () => {
+  it('rejects a failed split without changing the store', async () => {
     mocks.splitTransaction.mockRejectedValue(new Error('no se pudo'))
-    const { handlers, setError } = setup()
+    const { handlers } = setup()
 
-    await handlers.handleSplitTransaction('parent', [
-      { description: 'Comida', amount: 600 },
-    ])
+    await expect(
+      handlers.handleSplitTransaction('parent', [
+        { description: 'Comida', amount: 600 },
+      ])
+    ).rejects.toThrow('no se pudo')
 
-    expect(setError).toHaveBeenCalledWith('no se pudo')
     expect(stored('parent')?.isSplitParent).toBeFalsy()
     expect(transactionStore.getState().transactions).toHaveLength(1)
   })
@@ -561,7 +685,18 @@ describe('useTransactionHandlers — split and unsplit', () => {
       { description: 'Bebida', amount: 400 },
     ])
 
-    await handlers.handleDeleteTransaction('parent')
+    // Irreversible, so it refuses until the caller confirms — and writes
+    // nothing before that.
+    await expect(handlers.handleDeleteTransaction('parent')).rejects.toThrow(
+      NeedsConfirmationError
+    )
+    expect(mocks.hardDeleteTransactions).not.toHaveBeenCalled()
+    expect(mocks.softDeleteTransaction).not.toHaveBeenCalled()
+
+    const result = await handlers.handleDeleteTransaction('parent', {
+      allowIrreversible: true,
+    })
+    expect(result.reversible).toBe(false)
 
     // Children are hard-deleted rather than soft-deleted: they only exist as
     // a subdivision of the parent, so leaving them behind would orphan rows
@@ -571,6 +706,41 @@ describe('useTransactionHandlers — split and unsplit', () => {
       expect.arrayContaining(['parent_split_0', 'parent_split_1'])
     )
     expect(transactionStore.getState().transactions).toHaveLength(0)
+  })
+})
+
+describe('useTransactionHandlers — deleting a single split part', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    transactionStore.getState().clearTransactions()
+    transactionStore
+      .getState()
+      .setTransactions([
+        makeTransaction('parent', { isSplitParent: true }),
+        makeTransaction('parent_split_0', { splitParentId: 'parent' }),
+        makeTransaction('parent_split_1', { splitParentId: 'parent' }),
+      ])
+  })
+
+  it('needs confirmation, then hard-deletes the part instead of soft-deleting it', async () => {
+    // A soft-deleted part would block a later re-split, which reuses the id.
+    const { handlers } = setup()
+
+    await expect(
+      handlers.handleDeleteTransaction('parent_split_1')
+    ).rejects.toThrow(NeedsConfirmationError)
+
+    await handlers.handleDeleteTransaction('parent_split_1', {
+      allowIrreversible: true,
+    })
+
+    expect(mocks.hardDeleteTransactions.mock.calls[0][1]).toEqual([
+      'parent_split_1',
+    ])
+    expect(mocks.softDeleteTransaction).not.toHaveBeenCalled()
+    expect(transactionStore.getState().transactions.map((tx) => tx.id)).toEqual(
+      ['parent', 'parent_split_0']
+    )
   })
 })
 

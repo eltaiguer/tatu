@@ -181,6 +181,7 @@ function App() {
     handleTransactionsImported,
     handleUpdateTransaction,
     handleDeleteTransaction,
+    handleRestoreTransactions,
     handleSplitTransaction,
     handleUnsplitTransaction,
     handleBulkCategorizeTransactions,
@@ -190,7 +191,6 @@ function App() {
   } = useTransactionHandlers({
     session,
     setError: setAuthError,
-    setNotice: setAuthNotice,
   })
 
   if (!session || authMode === 'reset') {
@@ -453,6 +453,8 @@ function App() {
                   fxRate={fxRate}
                   onUpdateTransaction={handleUpdateTransaction}
                   onDeleteTransaction={handleDeleteTransaction}
+                  onRestoreTransactions={handleRestoreTransactions}
+                  onReload={refetch}
                   onAutoCategorizeTransactions={
                     handleAutoCategorizeTransactions
                   }

@@ -7,8 +7,10 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import { Toaster } from 'sonner'
 import { Transactions } from './Transactions'
 import type { Transaction } from '../models'
+import { NeedsConfirmationError } from '../utils/user-error'
 
 function makeTransaction(index: number, description?: string): Transaction {
   return {
@@ -231,7 +233,9 @@ describe('Transactions', () => {
   })
 
   it('allows selecting transactions and triggering auto-categorization', async () => {
-    const onAutoCategorizeTransactions = vi.fn().mockResolvedValue(undefined)
+    const onAutoCategorizeTransactions = vi
+      .fn()
+      .mockResolvedValue({ categorized: 1 })
 
     render(
       <Transactions
@@ -263,8 +267,8 @@ describe('Transactions', () => {
     let resolveAutoCategorize: (() => void) | undefined
     const onAutoCategorizeTransactions = vi.fn(
       () =>
-        new Promise<void>((resolve) => {
-          resolveAutoCategorize = resolve
+        new Promise<{ categorized: number }>((resolve) => {
+          resolveAutoCategorize = () => resolve({ categorized: 1 })
         })
     )
 
@@ -386,7 +390,7 @@ describe('Transactions', () => {
   })
 
   it('triggers transaction update from modal edit', async () => {
-    const onUpdateTransaction = vi.fn().mockResolvedValue(undefined)
+    const onUpdateTransaction = vi.fn().mockResolvedValue({ affected: 1 })
 
     const transactions = [
       {
@@ -437,8 +441,57 @@ describe('Transactions', () => {
     )
   })
 
+  it('keeps the editor open and shows an error when saving fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onUpdateTransaction = vi.fn().mockRejectedValue(new Error('boom'))
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'merchant')]}
+          onUpdateTransaction={onUpdateTransaction}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Editar merchant' })[0]
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    expect(
+      await screen.findByText('No se pudieron guardar los cambios')
+    ).toBeTruthy()
+    expect(screen.queryByText('Cambios guardados')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Descripción edición')).toBeInTheDocument()
+  })
+
+  it('reports how many transactions an apply-to-similar edit changed', async () => {
+    const onUpdateTransaction = vi.fn().mockResolvedValue({ affected: 13 })
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'merchant')]}
+          onUpdateTransaction={onUpdateTransaction}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Editar merchant' })[0]
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    expect(
+      await screen.findByText('Cambios aplicados a 13 transacciones')
+    ).toBeTruthy()
+  })
+
   it('sends matching scope when selected in editor', async () => {
-    const onUpdateTransaction = vi.fn().mockResolvedValue(undefined)
+    const onUpdateTransaction = vi.fn().mockResolvedValue({ affected: 1 })
 
     render(
       <Transactions
@@ -469,7 +522,7 @@ describe('Transactions', () => {
   })
 
   it('sends future scope when selected in editor', async () => {
-    const onUpdateTransaction = vi.fn().mockResolvedValue(undefined)
+    const onUpdateTransaction = vi.fn().mockResolvedValue({ affected: 1 })
 
     render(
       <Transactions
@@ -500,7 +553,7 @@ describe('Transactions', () => {
   })
 
   it('validates empty description before saving edit', async () => {
-    const onUpdateTransaction = vi.fn().mockResolvedValue(undefined)
+    const onUpdateTransaction = vi.fn().mockResolvedValue({ affected: 1 })
 
     render(
       <Transactions
@@ -551,20 +604,63 @@ describe('Transactions', () => {
     expect(screen.getByText('fixed-cost')).toBeInTheDocument()
   })
 
-  it('triggers delete callback only after confirmation', async () => {
-    const onDeleteTransaction = vi.fn().mockResolvedValue(undefined)
+  it('deletes without asking and offers an undo that restores the row', async () => {
+    const tx = makeTransaction(1, 'to-delete')
+    const onDeleteTransaction = vi
+      .fn()
+      .mockResolvedValue({ removed: [tx], reversible: true })
+    const onRestoreTransactions = vi.fn().mockResolvedValue({ restored: 1 })
 
     render(
-      <Transactions
-        transactions={[makeTransaction(1, 'to-delete')]}
-        onDeleteTransaction={onDeleteTransaction}
-      />
+      <>
+        <Transactions
+          transactions={[tx]}
+          onDeleteTransaction={onDeleteTransaction}
+          onRestoreTransactions={onRestoreTransactions}
+        />
+        <Toaster />
+      </>
     )
 
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Eliminar to-delete' })[0]
     )
 
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(onDeleteTransaction).toHaveBeenCalledWith('tx-1', {
+        allowIrreversible: false,
+      })
+    )
+    expect(await screen.findByText('1 transacción eliminada')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+
+    expect(onRestoreTransactions).toHaveBeenCalledWith([tx])
+    expect(await screen.findByText('1 transacción restaurada')).toBeTruthy()
+  })
+
+  it('asks for confirmation only when the delete cannot be undone', async () => {
+    const tx = { ...makeTransaction(1, 'split-parent'), isSplitParent: true }
+    const onDeleteTransaction = vi
+      .fn()
+      .mockRejectedValueOnce(new NeedsConfirmationError())
+      .mockResolvedValueOnce({ removed: [tx], reversible: false })
+
+    render(
+      <>
+        <Transactions
+          transactions={[tx]}
+          onDeleteTransaction={onDeleteTransaction}
+          onRestoreTransactions={vi.fn()}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Eliminar split-parent' })[0]
+    )
     await waitFor(() => screen.getByRole('alertdialog'))
     fireEvent.click(
       within(screen.getByRole('alertdialog')).getByRole('button', {
@@ -573,17 +669,26 @@ describe('Transactions', () => {
     )
 
     await waitFor(() =>
-      expect(onDeleteTransaction).toHaveBeenCalledWith('tx-1')
+      expect(onDeleteTransaction).toHaveBeenLastCalledWith('tx-1', {
+        allowIrreversible: true,
+      })
     )
+    expect(await screen.findByText('1 transacción eliminada')).toBeTruthy()
+    expect(
+      screen.queryByRole('button', { name: 'Deshacer' })
+    ).not.toBeInTheDocument()
   })
 
-  it('does not delete when confirmation is rejected', async () => {
-    const onDeleteTransaction = vi.fn()
+  it('does not delete when an irreversible delete is not confirmed', async () => {
+    const onDeleteTransaction = vi
+      .fn()
+      .mockRejectedValue(new NeedsConfirmationError())
 
     render(
       <Transactions
         transactions={[makeTransaction(1, 'to-keep')]}
         onDeleteTransaction={onDeleteTransaction}
+        onRestoreTransactions={vi.fn()}
       />
     )
 
@@ -598,11 +703,39 @@ describe('Transactions', () => {
       })
     )
 
-    expect(onDeleteTransaction).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    )
+    expect(onDeleteTransaction).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows an error, not a success, when a delete fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onDeleteTransaction = vi.fn().mockRejectedValue(new Error('boom'))
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'to-keep')]}
+          onDeleteTransaction={onDeleteTransaction}
+          onRestoreTransactions={vi.fn()}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('button', { name: 'Eliminar to-keep' })[0]
+    )
+
+    expect(
+      await screen.findByText('No se pudo eliminar la transacción')
+    ).toBeTruthy()
+    expect(screen.queryByText(/eliminada/)).not.toBeInTheDocument()
   })
 
   it('bulk categorizes selected transactions', async () => {
-    const onBulkCategorize = vi.fn().mockResolvedValue(undefined)
+    const onBulkCategorize = vi.fn().mockResolvedValue({ updated: 2 })
 
     render(
       <Transactions
@@ -644,17 +777,23 @@ describe('Transactions', () => {
     )
   })
 
-  it('bulk deletes selected transactions after confirmation', async () => {
-    const onBulkDelete = vi.fn().mockResolvedValue(undefined)
+  it('bulk deletes without asking and offers undo for all of them', async () => {
+    const a = makeTransaction(1, 'Merchant A')
+    const b = makeTransaction(2, 'Merchant B')
+    const onBulkDelete = vi
+      .fn()
+      .mockResolvedValue({ removed: [a, b], reversible: true })
+    const onRestoreTransactions = vi.fn().mockResolvedValue({ restored: 2 })
 
     render(
-      <Transactions
-        transactions={[
-          makeTransaction(1, 'Merchant A'),
-          makeTransaction(2, 'Merchant B'),
-        ]}
-        onBulkDelete={onBulkDelete}
-      />
+      <>
+        <Transactions
+          transactions={[a, b]}
+          onBulkDelete={onBulkDelete}
+          onRestoreTransactions={onRestoreTransactions}
+        />
+        <Toaster />
+      </>
     )
 
     fireEvent.click(
@@ -663,35 +802,32 @@ describe('Transactions', () => {
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant B' })[0]
     )
-
     fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
 
-    await waitFor(() => screen.getByRole('alertdialog'))
-    fireEvent.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Eliminar',
+    await waitFor(() =>
+      expect(onBulkDelete).toHaveBeenCalledWith(['tx-1', 'tx-2'], {
+        allowIrreversible: false,
       })
     )
-
-    await waitFor(() =>
-      expect(onBulkDelete).toHaveBeenCalledWith(['tx-1', 'tx-2'])
-    )
+    expect(await screen.findByText('2 transacciones eliminadas')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+    expect(onRestoreTransactions).toHaveBeenCalledWith([a, b])
   })
 
-  it('does not bulk delete when confirmation is rejected', async () => {
-    const onBulkDelete = vi.fn()
+  it('does not bulk delete when an irreversible delete is not confirmed', async () => {
+    const onBulkDelete = vi.fn().mockRejectedValue(new NeedsConfirmationError())
 
     render(
       <Transactions
         transactions={[makeTransaction(1, 'Merchant A')]}
         onBulkDelete={onBulkDelete}
+        onRestoreTransactions={vi.fn()}
       />
     )
 
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
     )
-
     fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
 
     await waitFor(() => screen.getByRole('alertdialog'))
@@ -701,11 +837,59 @@ describe('Transactions', () => {
       })
     )
 
-    expect(onBulkDelete).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    )
+    expect(onBulkDelete).toHaveBeenCalledTimes(1)
+  })
+
+  it('says what applied when a bulk edit fails part-way', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onBulkCategorize = vi.fn().mockResolvedValue({ updated: 1 })
+    const onBulkTag = vi.fn().mockRejectedValue(new Error('boom'))
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'Devoto')]}
+          onBulkCategorize={onBulkCategorize}
+          onBulkTag={onBulkTag}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+    )
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
+    })
+    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
+      target: { value: 'entretenimiento' },
+    })
+    const options = screen.getAllByText('Entretenimiento')
+    fireEvent.click(options[options.length - 1])
+    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
+      target: { value: 'viaje' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: /Crear etiqueta "viaje"/ })
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+
+    expect(
+      await screen.findByText(
+        /Se aplicó la categoría, pero falló el resto: No se pudieron actualizar/
+      )
+    ).toBeTruthy()
+    expect(screen.queryByText(/actualizada/)).not.toBeInTheDocument()
   })
 
   it('bulk tags selected transactions', async () => {
-    const onBulkTag = vi.fn().mockResolvedValue(undefined)
+    const onBulkTag = vi.fn().mockResolvedValue({ updated: 2 })
 
     render(
       <Transactions
@@ -741,7 +925,7 @@ describe('Transactions', () => {
   })
 
   it('bulk tags with a new tag via create button', async () => {
-    const onBulkTag = vi.fn().mockResolvedValue(undefined)
+    const onBulkTag = vi.fn().mockResolvedValue({ updated: 2 })
 
     render(
       <Transactions

@@ -62,4 +62,27 @@ describe('Category overrides', () => {
     expect(upsertCategoryOverrideMock).toHaveBeenCalledTimes(1)
     expect(deleteCategoryOverrideMock).toHaveBeenCalledTimes(1)
   })
+
+  it('reports a failed remote save and rolls the local rule back', async () => {
+    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+    setMerchantCategoryOverride('Devoto', Category.Restaurants)
+    upsertCategoryOverrideMock.mockRejectedValue(new Error('timeout'))
+
+    await expect(
+      setMerchantCategoryOverrideWithSync('Devoto', Category.Groceries)
+    ).rejects.toThrow('timeout')
+    // The screen keeps showing what the server has, not the failed change.
+    expect(getMerchantCategoryOverride('Devoto')).toBe(Category.Restaurants)
+  })
+
+  it('restores a rule whose remote delete failed', async () => {
+    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+    setMerchantCategoryOverride('Devoto', Category.Groceries)
+    deleteCategoryOverrideMock.mockRejectedValue(new Error('timeout'))
+
+    await expect(
+      clearMerchantCategoryOverrideWithSync('Devoto')
+    ).rejects.toThrow('timeout')
+    expect(getMerchantCategoryOverride('Devoto')).toBe(Category.Groceries)
+  })
 })

@@ -1,5 +1,11 @@
 import type { Transaction } from '../../models'
 import { getSupabaseClient, type SupabaseSession } from './client'
+import { UserFacingError } from '../../utils/user-error'
+
+// PostgREST answers an UPDATE that matched no rows with success; callers
+// reporting "saved" need to know nothing was written (row deleted elsewhere).
+const MISSING_ROW_MESSAGE =
+  'La transacción ya no existe en el servidor. Recargá para ver el estado actual.'
 
 interface TransactionRow {
   user_id: string
@@ -137,30 +143,45 @@ export async function softDeleteTransaction(
   transactionId: string
 ): Promise<void> {
   const client = getSupabaseClient()
-  const { error } = await client
+  const { data, error } = await client
     .from('transactions')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq('user_id', session.user.id)
     .eq('transaction_id', transactionId)
+    .select('transaction_id')
 
   if (error) {
     throw new Error(error.message)
   }
+  if (!data || data.length === 0) {
+    throw new UserFacingError(MISSING_ROW_MESSAGE)
+  }
 }
 
-export async function restoreTransaction(
+// Undoes soft deletes in one request, so a failure can't leave some rows
+// restored and others not. Throws unless every id came back.
+export async function restoreTransactions(
   session: SupabaseSession,
-  transactionId: string
+  transactionIds: string[]
 ): Promise<void> {
+  if (transactionIds.length === 0) {
+    return
+  }
   const client = getSupabaseClient()
-  const { error } = await client
+  const { data, error } = await client
     .from('transactions')
     .update({ is_deleted: false, deleted_at: null })
     .eq('user_id', session.user.id)
-    .eq('transaction_id', transactionId)
+    .in('transaction_id', transactionIds)
+    .select('transaction_id')
 
   if (error) {
     throw new Error(error.message)
+  }
+  if (!data || data.length !== transactionIds.length) {
+    throw new UserFacingError(
+      'No se pudieron restaurar todas las transacciones. Recargá para ver el estado actual.'
+    )
   }
 }
 
@@ -210,14 +231,18 @@ export async function updateTransaction(
   }
 
   const client = getSupabaseClient()
-  const { error } = await client
+  const { data, error } = await client
     .from('transactions')
     .update(payload)
     .eq('user_id', session.user.id)
     .eq('transaction_id', transactionId)
+    .select('transaction_id')
 
   if (error) {
     throw new Error(error.message)
+  }
+  if (!data || data.length === 0) {
+    throw new UserFacingError(MISSING_ROW_MESSAGE)
   }
 }
 

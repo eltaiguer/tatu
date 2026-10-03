@@ -47,7 +47,7 @@ interface TransactionTableProps {
   allPageSelected: boolean
   somePageSelected: boolean
   isBusy: boolean
-  pendingTransactionId: string | null
+  pendingTransactionIds: ReadonlySet<string>
   sortField: SortField
   sortDirection: SortDirection
   hasActiveFilters: boolean
@@ -74,7 +74,7 @@ export function TransactionTable({
   allPageSelected,
   somePageSelected,
   isBusy,
-  pendingTransactionId,
+  pendingTransactionIds,
   sortField,
   sortDirection,
   hasActiveFilters,
@@ -506,7 +506,7 @@ export function TransactionTable({
                             variant="ghost"
                             size="sm"
                             aria-label={`Restaurar ${displayDescription}`}
-                            disabled={pendingTransactionId === transaction.id}
+                            disabled={pendingTransactionIds.has(transaction.id)}
                             onClick={() => onUnsplit(transaction)}
                             title="Restaurar (quitar división)"
                           >
@@ -518,7 +518,7 @@ export function TransactionTable({
                             variant="ghost"
                             size="sm"
                             aria-label={`Dividir ${displayDescription}`}
-                            disabled={pendingTransactionId === transaction.id}
+                            disabled={pendingTransactionIds.has(transaction.id)}
                             onClick={() => onSplit(transaction)}
                             title="Dividir transacción"
                           >
@@ -529,7 +529,7 @@ export function TransactionTable({
                           variant="ghost"
                           size="sm"
                           aria-label={`Editar ${displayDescription}`}
-                          disabled={pendingTransactionId === transaction.id}
+                          disabled={pendingTransactionIds.has(transaction.id)}
                           onClick={() => onEdit(transaction)}
                         >
                           <Pencil size={14} />
@@ -538,7 +538,7 @@ export function TransactionTable({
                           variant="ghost"
                           size="sm"
                           aria-label={`Eliminar ${displayDescription}`}
-                          disabled={pendingTransactionId === transaction.id}
+                          disabled={pendingTransactionIds.has(transaction.id)}
                           onClick={() => onDelete(transaction)}
                         >
                           <Trash2 size={14} />
@@ -753,7 +753,7 @@ export function TransactionTable({
                       variant="ghost"
                       size="icon"
                       aria-label={`Restaurar ${displayDescription}`}
-                      disabled={pendingTransactionId === transaction.id}
+                      disabled={pendingTransactionIds.has(transaction.id)}
                       onClick={() => onUnsplit(transaction)}
                     >
                       <Undo2 size={16} />
@@ -764,7 +764,7 @@ export function TransactionTable({
                       variant="ghost"
                       size="icon"
                       aria-label={`Dividir ${displayDescription}`}
-                      disabled={pendingTransactionId === transaction.id}
+                      disabled={pendingTransactionIds.has(transaction.id)}
                       onClick={() => onSplit(transaction)}
                     >
                       <Scissors size={16} />
@@ -774,7 +774,7 @@ export function TransactionTable({
                     variant="ghost"
                     size="icon"
                     aria-label={`Editar ${displayDescription}`}
-                    disabled={pendingTransactionId === transaction.id}
+                    disabled={pendingTransactionIds.has(transaction.id)}
                     onClick={() => onEdit(transaction)}
                   >
                     <Pencil size={16} />
@@ -784,7 +784,7 @@ export function TransactionTable({
                     size="icon"
                     aria-label={`Eliminar ${displayDescription}`}
                     className="text-destructive hover:text-destructive"
-                    disabled={pendingTransactionId === transaction.id}
+                    disabled={pendingTransactionIds.has(transaction.id)}
                     onClick={() => onDelete(transaction)}
                   >
                     <Trash2 size={16} />
