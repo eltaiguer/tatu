@@ -176,7 +176,10 @@ describe('Settings', () => {
       screen.getByText(/las funciones de IA\s+los envían a Anthropic/)
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/la descripción y el monto de cada movimiento/)
+      screen.getByText(/la descripción, el monto y la moneda de cada/)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/tus reglas y correcciones previas/)
     ).toBeInTheDocument()
   })
 
