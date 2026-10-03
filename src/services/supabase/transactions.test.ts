@@ -5,6 +5,8 @@ const {
   selectMock,
   eqMock,
   isMock,
+  orderMock,
+  rangeMock,
   upsertMock,
   updateMock,
   eqForUpdateMock,
@@ -14,6 +16,8 @@ const {
   selectMock: vi.fn(),
   eqMock: vi.fn(),
   isMock: vi.fn(),
+  orderMock: vi.fn(),
+  rangeMock: vi.fn(),
   upsertMock: vi.fn(),
   updateMock: vi.fn(),
   eqForUpdateMock: vi.fn(),
@@ -47,26 +51,31 @@ describe('supabase transactions service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    isMock.mockResolvedValue({
-      data: [
-        {
-          user_id: 'user-1',
-          transaction_id: 'tx-1',
-          date: '2026-02-01T00:00:00.000Z',
-          description: 'Compra',
-          amount: 100,
-          currency: 'UYU',
-          type: 'debit',
-          source: 'bank_account',
-          category: 'groceries',
-          category_confidence: 0.9,
-          balance: 2000,
-          raw_data: { referencia: '1' },
-        },
-      ],
+    rangeMock.mockImplementation(async (from: number) => ({
+      data:
+        from > 0
+          ? []
+          : [
+              {
+                user_id: 'user-1',
+                transaction_id: 'tx-1',
+                date: '2026-02-01T00:00:00.000Z',
+                description: 'Compra',
+                amount: 100,
+                currency: 'UYU',
+                type: 'debit',
+                source: 'bank_account',
+                category: 'groceries',
+                category_confidence: 0.9,
+                balance: 2000,
+                raw_data: { referencia: '1' },
+              },
+            ],
       error: null,
-    })
+    }))
 
+    orderMock.mockReturnValue({ range: rangeMock })
+    isMock.mockReturnValue({ order: orderMock })
     eqMock.mockReturnValue({ is: isMock })
     selectMock.mockReturnValue({ eq: eqMock })
 
@@ -97,6 +106,94 @@ describe('supabase transactions service', () => {
     expect(isMock).toHaveBeenCalledWith('is_deleted', false)
     expect(transactions).toHaveLength(1)
     expect(transactions[0].id).toBe('tx-1')
+  })
+
+  it('loads every transaction when the account exceeds the server row cap', async () => {
+    // PostgREST caps each response at max-rows (1000 by default) without
+    // erroring, so a single unpaged select silently drops the rest.
+    const SERVER_MAX_ROWS = 1000
+    const TOTAL = 1053
+    const allRows = Array.from({ length: TOTAL }, (_, i) => ({
+      user_id: 'user-1',
+      transaction_id: `tx-${String(i).padStart(4, '0')}`,
+      date: '2026-02-01T00:00:00.000Z',
+      description: 'Compra',
+      amount: 100,
+      currency: 'UYU',
+      type: 'debit',
+      source: 'bank_account',
+      category: null,
+      category_confidence: null,
+      balance: null,
+      raw_data: {},
+    }))
+    rangeMock.mockImplementation(async (from: number, to: number) => ({
+      data: allRows.slice(from, Math.min(to + 1, from + SERVER_MAX_ROWS)),
+      error: null,
+    }))
+
+    const { loadUserTransactions } = await import('./transactions')
+    const transactions = await loadUserTransactions(session)
+
+    expect(transactions).toHaveLength(TOTAL)
+    expect(new Set(transactions.map((tx) => tx.id)).size).toBe(TOTAL)
+    expect(orderMock).toHaveBeenCalledWith('transaction_id', {
+      ascending: true,
+    })
+  })
+
+  it('still loads everything when the server cap is below the page size', async () => {
+    const SERVER_MAX_ROWS = 300
+    const allRows = Array.from({ length: 700 }, (_, i) => ({
+      user_id: 'user-1',
+      transaction_id: `tx-${String(i).padStart(4, '0')}`,
+      date: '2026-02-01T00:00:00.000Z',
+      description: 'Compra',
+      amount: 1,
+      currency: 'UYU',
+      type: 'debit',
+      source: 'bank_account',
+      category: null,
+      category_confidence: null,
+      balance: null,
+      raw_data: {},
+    }))
+    rangeMock.mockImplementation(async (from: number, to: number) => ({
+      data: allRows.slice(from, Math.min(to + 1, from + SERVER_MAX_ROWS)),
+      error: null,
+    }))
+
+    const { loadUserTransactions } = await import('./transactions')
+    const transactions = await loadUserTransactions(session)
+
+    expect(transactions).toHaveLength(700)
+  })
+
+  it('throws when any page fails instead of returning a partial list', async () => {
+    rangeMock.mockImplementation(async (from: number) =>
+      from === 0
+        ? {
+            data: Array.from({ length: 1000 }, (_, i) => ({
+              user_id: 'user-1',
+              transaction_id: `tx-${i}`,
+              date: '2026-02-01T00:00:00.000Z',
+              description: 'Compra',
+              amount: 1,
+              currency: 'UYU',
+              type: 'debit',
+              source: 'bank_account',
+              category: null,
+              category_confidence: null,
+              balance: null,
+              raw_data: {},
+            })),
+            error: null,
+          }
+        : { data: null, error: { message: 'timeout' } }
+    )
+
+    const { loadUserTransactions } = await import('./transactions')
+    await expect(loadUserTransactions(session)).rejects.toThrow('timeout')
   })
 
   it('upserts transactions with user ownership', async () => {
