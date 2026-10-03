@@ -5,6 +5,9 @@ const {
   selectMock,
   eqMock,
   isMock,
+  gtMock,
+  orderMock,
+  limitMock,
   upsertMock,
   updateMock,
   eqForUpdateMock,
@@ -14,6 +17,9 @@ const {
   selectMock: vi.fn(),
   eqMock: vi.fn(),
   isMock: vi.fn(),
+  gtMock: vi.fn(),
+  orderMock: vi.fn(),
+  limitMock: vi.fn(),
   upsertMock: vi.fn(),
   updateMock: vi.fn(),
   eqForUpdateMock: vi.fn(),
@@ -43,32 +49,88 @@ const session: SupabaseSession = {
   },
 }
 
+type FakeRow = Record<string, unknown> & { transaction_id: string }
+
+function makeRow(i: number): FakeRow {
+  return {
+    user_id: 'user-1',
+    transaction_id: `tx-${String(i).padStart(4, '0')}`,
+    date: '2026-02-01T00:00:00.000Z',
+    description: 'Compra',
+    amount: 100,
+    currency: 'UYU',
+    type: 'debit',
+    source: 'bank_account',
+    category: null,
+    category_confidence: null,
+    balance: null,
+    raw_data: {},
+  }
+}
+
+// In-memory stand-in for the transactions table behind PostgREST: each read
+// returns rows with transaction_id above the .gt() bound, sorted, and capped at
+// the server's max-rows no matter what .limit() asks for. `beforePage` lets a
+// test change the table between page requests, as another device would.
+const table = {
+  rows: [] as FakeRow[],
+  maxRows: 1000,
+  beforePage: (() => {}) as (page: number) => void,
+  failOnPage: -1,
+}
+
+function installFakeTable() {
+  let page = 0
+  let after: string | undefined
+  const builder = {
+    eq: eqMock,
+    is: isMock,
+    gt: gtMock,
+    order: orderMock,
+    limit: limitMock,
+  }
+  selectMock.mockReturnValue(builder)
+  eqMock.mockReturnValue(builder)
+  isMock.mockReturnValue(builder)
+  orderMock.mockReturnValue(builder)
+  gtMock.mockImplementation((_column: string, value: string) => {
+    after = value
+    return builder
+  })
+  limitMock.mockImplementation(async (n: number) => {
+    table.beforePage(page)
+    const current = page++
+    const bound = after
+    after = undefined
+    if (current === table.failOnPage) {
+      return { data: null, error: { message: 'timeout' } }
+    }
+    const data = [...table.rows]
+      .sort((a, b) => a.transaction_id.localeCompare(b.transaction_id))
+      .filter((row) => bound === undefined || row.transaction_id > bound)
+      .slice(0, Math.min(n, table.maxRows))
+    return { data, error: null }
+  })
+}
+
 describe('supabase transactions service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    isMock.mockResolvedValue({
-      data: [
-        {
-          user_id: 'user-1',
-          transaction_id: 'tx-1',
-          date: '2026-02-01T00:00:00.000Z',
-          description: 'Compra',
-          amount: 100,
-          currency: 'UYU',
-          type: 'debit',
-          source: 'bank_account',
-          category: 'groceries',
-          category_confidence: 0.9,
-          balance: 2000,
-          raw_data: { referencia: '1' },
-        },
-      ],
-      error: null,
-    })
-
-    eqMock.mockReturnValue({ is: isMock })
-    selectMock.mockReturnValue({ eq: eqMock })
+    table.rows = [
+      {
+        ...makeRow(1),
+        transaction_id: 'tx-1',
+        category: 'groceries',
+        category_confidence: 0.9,
+        balance: 2000,
+        raw_data: { referencia: '1' },
+      },
+    ]
+    table.maxRows = 1000
+    table.beforePage = () => {}
+    table.failOnPage = -1
+    installFakeTable()
 
     upsertMock.mockResolvedValue({ error: null })
 
@@ -97,6 +159,56 @@ describe('supabase transactions service', () => {
     expect(isMock).toHaveBeenCalledWith('is_deleted', false)
     expect(transactions).toHaveLength(1)
     expect(transactions[0].id).toBe('tx-1')
+  })
+
+  it('loads every transaction when the account exceeds the server row cap', async () => {
+    // PostgREST caps each response at max-rows (1000 by default) without
+    // erroring, so a single unpaged select silently drops the rest.
+    table.rows = Array.from({ length: 1053 }, (_, i) => makeRow(i))
+
+    const { loadUserTransactions } = await import('./transactions')
+    const transactions = await loadUserTransactions(session)
+
+    expect(transactions).toHaveLength(1053)
+    expect(new Set(transactions.map((tx) => tx.id)).size).toBe(1053)
+  })
+
+  it('still loads everything when the server cap is below the page size', async () => {
+    table.maxRows = 300
+    table.rows = Array.from({ length: 700 }, (_, i) => makeRow(i))
+
+    const { loadUserTransactions } = await import('./transactions')
+    const transactions = await loadUserTransactions(session)
+
+    expect(transactions).toHaveLength(700)
+  })
+
+  it('neither skips nor duplicates rows when the table changes mid-load', async () => {
+    table.rows = Array.from({ length: 1053 }, (_, i) => makeRow(i))
+    table.beforePage = (page) => {
+      if (page === 1) {
+        // Another device deletes an already-read row and inserts one that
+        // sorts before the cursor, between our first and second request.
+        table.rows = table.rows.filter((r) => r.transaction_id !== 'tx-0000')
+        table.rows.push({ ...makeRow(0), transaction_id: 'tx-0000a' })
+      }
+    }
+
+    const { loadUserTransactions } = await import('./transactions')
+    const ids = (await loadUserTransactions(session)).map((tx) => tx.id)
+
+    expect(new Set(ids).size).toBe(ids.length)
+    for (let i = 1; i < 1053; i++) {
+      expect(ids).toContain(`tx-${String(i).padStart(4, '0')}`)
+    }
+  })
+
+  it('throws when any page fails instead of returning a partial list', async () => {
+    table.rows = Array.from({ length: 1500 }, (_, i) => makeRow(i))
+    table.failOnPage = 1
+
+    const { loadUserTransactions } = await import('./transactions')
+    await expect(loadUserTransactions(session)).rejects.toThrow('timeout')
   })
 
   it('upserts transactions with user ownership', async () => {

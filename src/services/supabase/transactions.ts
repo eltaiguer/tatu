@@ -64,22 +64,45 @@ function rowToTransaction(row: TransactionRow): Transaction {
   }
 }
 
+// PostgREST silently truncates each response at its max-rows setting (1000 by
+// default), so the full history has to be read page by page. Pages are keyed on
+// the primary key (transaction_id > last seen) rather than offsets, so a row
+// inserted or deleted elsewhere mid-load can't shift a later page and skip or
+// duplicate a row. The loop ends on an empty page rather than a short one — a
+// short page may just mean the server cap is lower than LOAD_PAGE_SIZE.
+const LOAD_PAGE_SIZE = 1000
+
 export async function loadUserTransactions(
   session: SupabaseSession
 ): Promise<Transaction[]> {
   const client = getSupabaseClient()
-  const { data, error } = await client
-    .from('transactions')
-    .select('*')
-    .eq('user_id', session.user.id)
-    .is('is_deleted', false)
+  const rows: TransactionRow[] = []
 
-  if (error) {
-    throw new Error(error.message)
+  for (;;) {
+    let query = client
+      .from('transactions')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .is('is_deleted', false)
+    const lastId = rows[rows.length - 1]?.transaction_id
+    if (lastId !== undefined) {
+      query = query.gt('transaction_id', lastId)
+    }
+    const { data, error } = await query
+      .order('transaction_id', { ascending: true })
+      .limit(LOAD_PAGE_SIZE)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+    if (!data || data.length === 0) {
+      break
+    }
+    rows.push(...(data as TransactionRow[]))
   }
 
-  return (data ?? [])
-    .map((row) => rowToTransaction(row as TransactionRow))
+  return rows
+    .map((row) => rowToTransaction(row))
     .sort((a, b) => b.date.getTime() - a.date.getTime())
 }
 
