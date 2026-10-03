@@ -8,6 +8,8 @@ import { toMonthKey } from '../../utils/date-utils'
 export interface CategorySpendingDatum {
   category: string
   total: number
+  // Number of expense rows summed into `total` (same filter).
+  count: number
 }
 
 export interface MonthlyTrendDatum {
@@ -57,7 +59,7 @@ export function buildCategorySpendingConverted(
   homeCurrency: Currency,
   fxRate: number
 ): CategorySpendingDatum[] {
-  const grouped = new Map<string, number>()
+  const grouped = new Map<string, { total: number; count: number }>()
 
   transactions.forEach((tx) => {
     if (tx.type !== 'debit' || isExcludedFromTotals(tx)) return
@@ -65,11 +67,14 @@ export function buildCategorySpendingConverted(
     // links to exactly the rows it sums.
     const category = normalizeCategoryId(tx.category)
     const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    grouped.set(category, (grouped.get(category) ?? 0) + converted)
+    const entry = grouped.get(category) ?? { total: 0, count: 0 }
+    entry.total += converted
+    entry.count += 1
+    grouped.set(category, entry)
   })
 
   return Array.from(grouped.entries())
-    .map(([category, total]) => ({ category, total }))
+    .map(([category, { total, count }]) => ({ category, total, count }))
     .sort((a, b) => b.total - a.total)
 }
 

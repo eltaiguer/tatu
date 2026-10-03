@@ -9,6 +9,10 @@ import {
   listCustomCategories,
   replaceCustomCategories,
 } from '../services/categories/category-store'
+import {
+  addCustomPattern,
+  clearAllCustomPatterns,
+} from '../services/categorizer/custom-patterns'
 
 // Category and rule changes are saved to Supabase before they count; give
 // these view tests a signed-in session and a server that accepts writes.
@@ -41,6 +45,7 @@ function makeTx(overrides: Partial<Transaction> = {}): Transaction {
 
 describe('Categories', () => {
   beforeEach(() => {
+    clearAllCustomPatterns()
     replaceCustomCategories([])
     vi.restoreAllMocks()
   })
@@ -57,16 +62,91 @@ describe('Categories', () => {
     expect(screen.getByText('Transporte')).toBeInTheDocument()
   })
 
-  it('shows transaction count per category', () => {
+  it("shows each category's spend and how many expenses make it up", () => {
     const txs = [
-      makeTx({ id: '1', category: 'groceries' }),
-      makeTx({ id: '2', category: 'groceries' }),
-      makeTx({ id: '3', category: 'restaurants' }),
+      makeTx({ id: '1', category: 'groceries', amount: 100, currency: 'USD' }),
+      makeTx({ id: '2', category: 'groceries', amount: 400, currency: 'UYU' }),
+      makeTx({ id: '3', category: 'restaurants', amount: 7, currency: 'USD' }),
+      // A refund in the same category is not an expense.
+      makeTx({
+        id: '4',
+        category: 'groceries',
+        amount: 50,
+        currency: 'USD',
+        type: 'credit',
+      }),
     ]
-    render(<Categories transactions={txs} />)
+    render(<Categories transactions={txs} homeCurrency="USD" fxRate={40} />)
 
-    expect(screen.getByText('2 movimientos')).toBeInTheDocument()
-    expect(screen.getByText('1 movimiento')).toBeInTheDocument()
+    expect(screen.getByText(/US\$ 110,00 · 2 gastos/)).toBeInTheDocument()
+    expect(screen.getByText(/US\$ 7,00 · 1 gasto$/)).toBeInTheDocument()
+  })
+
+  it('lists categories by spend, largest first, ignored ones last', () => {
+    const txs = [
+      makeTx({ id: '1', category: 'restaurants', amount: 5, currency: 'USD' }),
+      makeTx({ id: '2', category: 'groceries', amount: 50, currency: 'USD' }),
+    ]
+    render(<Categories transactions={txs} homeCurrency="USD" fxRate={40} />)
+
+    const names = screen
+      .getAllByRole('button', { name: /^Editar categoría/ })
+      .map((b) => b.getAttribute('aria-label'))
+    expect(names.indexOf('Editar categoría Alimentación')).toBeLessThan(
+      names.indexOf('Editar categoría Restaurantes')
+    )
+    expect(names.indexOf('Editar categoría Restaurantes')).toBeLessThan(
+      names.indexOf('Editar categoría Salud')
+    )
+  })
+
+  it("shows a category's spend as soon as it stops being ignored", async () => {
+    render(
+      <Categories
+        transactions={[
+          makeTx({
+            id: '1',
+            category: 'external_transfer',
+            amount: 9,
+            currency: 'USD',
+          }),
+        ]}
+        homeCurrency="USD"
+        fxRate={40}
+      />
+    )
+    // Ignored by default: counted, but no spend.
+    expect(screen.queryByText(/US\$ 9,00/)).not.toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Editar categoría Transferencias externas',
+      })
+    )
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    expect(await screen.findByText(/US\$ 9,00 · 1 gasto/)).toBeInTheDocument()
+  })
+
+  it('gives a deleted category that still has expenses its own card', () => {
+    render(
+      <Categories
+        transactions={[
+          makeTx({
+            id: '1',
+            category: 'cafe-viejo',
+            amount: 3,
+            currency: 'USD',
+          }),
+        ]}
+        homeCurrency="USD"
+        fxRate={40}
+      />
+    )
+
+    expect(screen.getByText('sin definir')).toBeInTheDocument()
+    expect(screen.getByText(/US\$ 3,00 · 1 gasto/)).toBeInTheDocument()
   })
 
   it('excludes the inert split-parent row from the transaction count', () => {
@@ -75,9 +155,10 @@ describe('Categories', () => {
       makeTx({ id: '1_split_0', category: 'groceries', splitParentId: '1' }),
       makeTx({ id: '1_split_1', category: 'restaurants', splitParentId: '1' }),
     ]
-    render(<Categories transactions={txs} />)
+    render(<Categories transactions={txs} homeCurrency="UYU" fxRate={40} />)
 
-    expect(screen.getAllByText('1 movimiento')).toHaveLength(2)
+    // Each part is one expense; the parent counts nowhere.
+    expect(screen.getAllByText(/· 1 gasto$/)).toHaveLength(2)
   })
 
   it('opens new category form when clicking Nueva categoría', () => {
@@ -166,6 +247,28 @@ describe('Categories', () => {
     )
   })
 
+  it("shows how many transactions each rule's pattern matches", () => {
+    addCustomPattern({
+      pattern: 'uber',
+      matchType: 'contains',
+      category: 'transport',
+    })
+    render(
+      <Categories
+        transactions={[
+          makeTx({ id: '1', description: 'UBER TRIP' }),
+          makeTx({ id: '2', description: 'UBER EATS' }),
+          makeTx({ id: '3', description: 'DEVOTO' }),
+        ]}
+      />
+    )
+
+    expect(screen.getByText(/2 transacciones coinciden/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Agregar regla/ })
+    ).toHaveTextContent('Agregar regla')
+  })
+
   it('reports how many past transactions a new rule was applied to', async () => {
     const onApplyPatternToPast = vi
       .fn()
@@ -246,9 +349,7 @@ describe('Categories', () => {
       />
     )
 
-    fireEvent.click(
-      screen.getByRole('button', { name: /2 movimientos · Revisar/ })
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar 2' }))
     expect(onNavigateToTransactions).toHaveBeenCalledWith({
       categories: ['uncategorized'],
     })

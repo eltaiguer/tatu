@@ -105,8 +105,8 @@ describe('chart-data multicurrency converting selectors', () => {
       ]
       const result = buildCategorySpendingConverted(txs, 'UYU', RATE)
       expect(result).toEqual([
-        { category: Category.Groceries, total: 24 },
-        { category: Category.Uncategorized, total: 7 },
+        { category: Category.Groceries, total: 24, count: 2 },
+        { category: Category.Uncategorized, total: 7, count: 3 },
       ])
     })
 
@@ -430,7 +430,9 @@ describe('chart-data multicurrency converting selectors', () => {
 
       const result = buildCategorySpendingConverted(transactions, 'USD', 40)
 
-      expect(result).toEqual([{ category: Category.Groceries, total: 30 }])
+      expect(result).toEqual([
+        { category: Category.Groceries, total: 30, count: 1 },
+      ])
     })
 
     it('keeps legacy transfer ids out of monthly trends', () => {

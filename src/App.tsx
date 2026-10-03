@@ -530,6 +530,8 @@ function App() {
               {currentView === 'categories' && (
                 <Categories
                   transactions={transactions}
+                  homeCurrency={preferredCurrency}
+                  fxRate={fxRate}
                   onNavigateToTransactions={navigateToTransactions}
                   onApplyPatternToPast={handleApplyPatternToPast}
                 />

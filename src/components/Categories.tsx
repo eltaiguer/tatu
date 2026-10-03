@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { userErrorMessage } from '../utils/user-error'
 import { Plus, Pencil, Trash, X } from 'lucide-react'
@@ -6,7 +6,7 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Badge } from './ui/badge'
 import { Checkbox } from './ui/checkbox'
-import type { Transaction, TransactionsFilter } from '../models'
+import type { Currency, Transaction, TransactionsFilter } from '../models'
 import { Category, isSplitParentTx } from '../models'
 import {
   getCategoryDefinition,
@@ -20,16 +20,22 @@ import {
   DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
 import { getCategoryDisplay } from '../utils/category-display'
+import { formatCurrency } from '../utils/formatting'
+import { buildCategorySpendingConverted } from '../services/charts/chart-data'
+import { normalizeCategoryId } from '../services/categories/category-aliases'
 import {
   addCustomPatternWithSync,
   listCustomPatterns,
   removeCustomPatternWithSync,
+  testPattern,
   type CustomPattern,
   type MatchType,
 } from '../services/categorizer/custom-patterns'
 
 interface CategoriesProps {
   transactions: Transaction[]
+  homeCurrency?: Currency
+  fxRate?: number
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
   // Applies a new rule to existing transactions; resolves with how many
   // were updated and how many failed.
@@ -52,10 +58,12 @@ function getCategoryTransactionCount(
 
 export function Categories({
   transactions,
+  homeCurrency = 'USD',
+  fxRate = 40.5,
   onNavigateToTransactions,
   onApplyPatternToPast,
 }: CategoriesProps) {
-  const [, setCategoriesVersion] = useState(0)
+  const [categoriesVersion, setCategoriesVersion] = useState(0)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
     id: '',
@@ -228,6 +236,72 @@ export function Categories({
       setCustomPatterns(listCustomPatterns())
     }
   }
+
+  // Rows each rule's pattern matches, counted like any list of movements in
+  // the app (split parts in, split parents out). It says what the pattern
+  // matches, not which rows it categorized — overlapping rules, manual edits
+  // and future-only rules make those differ. Memoized: typing in the rule
+  // form must not rescan every transaction per rule.
+  const matchCounts = useMemo(
+    () =>
+      new Map(
+        customPatterns.map((rule) => [
+          rule.id,
+          transactions.filter(
+            (tx) => !isSplitParentTx(tx) && testPattern(tx.description, rule)
+          ).length,
+        ])
+      ),
+    [transactions, customPatterns]
+  )
+
+  // Spend per category: the same expense rows (and the same function)
+  // Resumen sums, so a card's amount, its count and the rows its link opens
+  // agree.
+  const spending = useMemo(
+    () =>
+      new Map(
+        buildCategorySpendingConverted(transactions, homeCurrency, fxRate).map(
+          (row) => [row.category, row]
+        )
+      ),
+    // categoriesVersion: ignoring/un-ignoring a category here changes which
+    // rows count, without changing `transactions`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [transactions, homeCurrency, fxRate, categoriesVersion]
+  )
+  const definedIds = new Set(
+    categoryDefinitions.map((cat) => normalizeCategoryId(cat.id))
+  )
+  // Transactions can keep a category whose definition was deleted; Resumen
+  // still counts them, so they get a card too (no edit/delete).
+  const orphanCards = Array.from(spending.keys())
+    .filter((id) => !definedIds.has(id))
+    .map((id) => {
+      const display = getCategoryDisplay(id)
+      return {
+        id,
+        label: display.label,
+        color: display.color,
+        icon: '🏷️',
+        isIgnored: false,
+        isCustom: false,
+        isOrphan: true,
+      }
+    })
+  const categoryCards = [
+    ...categoryDefinitions.map((cat) => ({ ...cat, isOrphan: false })),
+    ...orphanCards,
+  ].sort((a, b) => {
+    // Spending first (largest first), then the rest by name; ignored last.
+    if (Boolean(a.isIgnored) !== Boolean(b.isIgnored)) {
+      return a.isIgnored ? 1 : -1
+    }
+    const spendA = spending.get(normalizeCategoryId(a.id))?.total ?? 0
+    const spendB = spending.get(normalizeCategoryId(b.id))?.total ?? 0
+    if (spendA !== spendB) return spendB - spendA
+    return a.label.localeCompare(b.label, 'es')
+  })
 
   return (
     <div>
@@ -468,8 +542,11 @@ export function Categories({
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-          {categoryDefinitions.map((cat) => {
+          {categoryCards.map((cat) => {
             const count = getCategoryTransactionCount(transactions, cat.id)
+            const spend = cat.isIgnored
+              ? undefined
+              : spending.get(normalizeCategoryId(cat.id))
             return (
               <div
                 key={cat.id}
@@ -515,6 +592,22 @@ export function Categories({
                     }}
                   >
                     {cat.label}
+                    {cat.isOrphan && (
+                      <span
+                        title="Categoría eliminada que todavía tiene transacciones"
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 500,
+                          color: 'var(--text-faint)',
+                          background: 'var(--border)',
+                          borderRadius: 4,
+                          padding: '1px 5px',
+                          flexShrink: 0,
+                        }}
+                      >
+                        sin definir
+                      </span>
+                    )}
                     {cat.isIgnored && (
                       <span
                         style={{
@@ -538,31 +631,62 @@ export function Categories({
                       marginTop: 1,
                     }}
                   >
-                    {cat.id === Category.Uncategorized &&
-                    count > 0 &&
-                    onNavigateToTransactions ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onNavigateToTransactions({
-                            categories: [Category.Uncategorized],
-                          })
-                        }
-                        className="font-medium text-[color:var(--brand-text)] underline-offset-2 hover:underline"
-                      >
-                        {count} {count === 1 ? 'movimiento' : 'movimientos'} ·
-                        Revisar
-                      </button>
+                    {spend && spend.total > 0 ? (
+                      onNavigateToTransactions ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onNavigateToTransactions({
+                              categories: [normalizeCategoryId(cat.id)],
+                              type: 'debit',
+                            })
+                          }
+                          aria-label={`Ver los gastos en ${cat.label}`}
+                          className="font-mono text-[12px] font-medium text-[color:var(--text)] underline-offset-2 hover:underline"
+                        >
+                          {formatCurrency(spend.total, homeCurrency)} ·{' '}
+                          {spend.count} {spend.count === 1 ? 'gasto' : 'gastos'}
+                        </button>
+                      ) : (
+                        <span className="font-mono text-[12px] text-[color:var(--text)]">
+                          {formatCurrency(spend.total, homeCurrency)} ·{' '}
+                          {spend.count} {spend.count === 1 ? 'gasto' : 'gastos'}
+                        </span>
+                      )
                     ) : (
                       <>
                         {count} {count === 1 ? 'movimiento' : 'movimientos'}
+                        {!cat.isIgnored && count > 0 && ' · sin gastos'}
                       </>
                     )}
+                    {cat.id === Category.Uncategorized &&
+                      count > 0 &&
+                      onNavigateToTransactions && (
+                        <>
+                          {' · '}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onNavigateToTransactions({
+                                categories: [Category.Uncategorized],
+                              })
+                            }
+                            className="text-[11px] font-medium text-[color:var(--brand-text)] underline-offset-2 hover:underline"
+                          >
+                            Revisar {count}
+                          </button>
+                        </>
+                      )}
                   </div>
                 </div>
 
                 {/* Edit (all) / delete (custom only) */}
-                <div style={{ display: 'flex', gap: 4 }}>
+                <div
+                  style={{
+                    display: cat.isOrphan ? 'none' : 'flex',
+                    gap: 4,
+                  }}
+                >
                   <button
                     onClick={() => startEdit(cat.id)}
                     aria-label={`Editar categoría ${cat.label}`}
@@ -833,10 +957,10 @@ export function Categories({
             <Button
               onClick={handleAddPattern}
               disabled={!patternForm.pattern.trim()}
-              aria-label="Agregar regla"
               style={{ height: 40 }}
             >
               <Plus size={15} />
+              Agregar regla
             </Button>
           </div>
         </div>
@@ -890,7 +1014,7 @@ export function Categories({
                     <Badge
                       style={{
                         backgroundColor: catDisplay.color + '20',
-                        color: catDisplay.color,
+                        color: 'var(--text)',
                         border: 'none',
                       }}
                     >
@@ -909,6 +1033,18 @@ export function Categories({
                         · &quot;{cp.description}&quot;
                       </span>
                     )}
+                    <span
+                      style={{
+                        fontSize: 12,
+                        color: 'var(--text-muted)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      · {matchCounts.get(cp.id) ?? 0}{' '}
+                      {matchCounts.get(cp.id) === 1
+                        ? 'transacción coincide'
+                        : 'transacciones coinciden'}
+                    </span>
                   </div>
                   <button
                     onClick={() => {
