@@ -353,4 +353,48 @@ describe('supabase transactions service', () => {
 
     expect(updateMock).not.toHaveBeenCalled()
   })
+
+  describe('findExistingTransactionIds', () => {
+    it('splits existing ids into active and deleted, in chunks', async () => {
+      const inMock = vi.fn(async (_col: string, chunk: string[]) => ({
+        data: chunk
+          .filter((id) => id !== 'new')
+          .map((id) => ({
+            transaction_id: id,
+            is_deleted: id.startsWith('gone'),
+          })),
+        error: null,
+      }))
+      fromMock.mockImplementation(() => ({
+        select: () => ({ eq: () => ({ in: inMock }) }),
+      }))
+      const ids = [
+        'new',
+        'gone-1',
+        ...Array.from({ length: 250 }, (_, i) => `kept-${i}`),
+      ]
+
+      const { findExistingTransactionIds } = await import('./transactions')
+      const result = await findExistingTransactionIds(session, ids)
+
+      expect(inMock).toHaveBeenCalledTimes(2)
+      expect([...result.deleted]).toEqual(['gone-1'])
+      expect(result.active.size).toBe(250)
+      expect(result.active.has('new')).toBe(false)
+    })
+
+    it('throws when the lookup fails', async () => {
+      fromMock.mockImplementation(() => ({
+        select: () => ({
+          eq: () => ({
+            in: async () => ({ data: null, error: { message: 'timeout' } }),
+          }),
+        }),
+      }))
+      const { findExistingTransactionIds } = await import('./transactions')
+      await expect(findExistingTransactionIds(session, ['a'])).rejects.toThrow(
+        'timeout'
+      )
+    })
+  })
 })

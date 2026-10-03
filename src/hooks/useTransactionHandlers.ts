@@ -6,6 +6,7 @@ import {
   persistTransactions,
   softDeleteTransaction,
   restoreTransactions,
+  findExistingTransactionIds,
   updateTransaction as updateRemoteTransaction,
   splitTransaction as remoteSplitTransaction,
   unsplitTransaction as remoteUnsplitTransaction,
@@ -103,6 +104,8 @@ export function useTransactionHandlers({
   ): Promise<{
     added: Transaction[]
     duplicates: Transaction[]
+    /** Rows the user deleted before; skipped so they stay deleted. */
+    previouslyDeleted?: Transaction[]
     /** Enrichment did not run at all. */
     aiError?: string
     /** Enrichment ran but some batches failed; the rest were applied. */
@@ -111,6 +114,15 @@ export function useTransactionHandlers({
     if (!session) {
       return transactionStore.getState().addTransactions(transactionsToImport)
     }
+
+    // Classify against the server before writing anything (the in-memory
+    // store never holds deleted rows and can lag other devices): deleted rows
+    // are skipped so they stay deleted, existing ones are duplicates — and
+    // never upserted over the user's edits.
+    const remote = await findExistingTransactionIds(
+      session,
+      transactionsToImport.map((tx) => tx.id)
+    )
 
     let importRunId: string | null = null
     if (context) {
@@ -123,10 +135,18 @@ export function useTransactionHandlers({
     }
 
     const state = transactionStore.getState()
-    const duplicateIds = new Set(state.findDuplicateIds(transactionsToImport))
-    const added = transactionsToImport.filter((tx) => !duplicateIds.has(tx.id))
-    const duplicates = transactionsToImport.filter((tx) =>
-      duplicateIds.has(tx.id)
+    const duplicateIds = new Set([
+      ...state.findDuplicateIds(transactionsToImport),
+      ...remote.active,
+    ])
+    const previouslyDeleted = transactionsToImport.filter((tx) =>
+      remote.deleted.has(tx.id)
+    )
+    const added = transactionsToImport.filter(
+      (tx) => !duplicateIds.has(tx.id) && !remote.deleted.has(tx.id)
+    )
+    const duplicates = transactionsToImport.filter(
+      (tx) => duplicateIds.has(tx.id) && !remote.deleted.has(tx.id)
     )
 
     const aiConfig = getAiConfig()
@@ -195,14 +215,16 @@ export function useTransactionHandlers({
         await completeImportRun(session, importRunId, {
           totalRows: transactionsToImport.length,
           insertedRows: added.length,
-          duplicateRows: duplicates.length,
+          // The schema has no column for skipped deleted rows; they were not
+          // inserted, so they count as duplicates (total = inserted + dup).
+          duplicateRows: duplicates.length + previouslyDeleted.length,
         })
       } catch (error) {
         console.error('Could not complete import run record:', error)
       }
     }
 
-    return { added, duplicates, aiError, aiPartial }
+    return { added, duplicates, previouslyDeleted, aiError, aiPartial }
   }
 
   async function handleUpdateTransaction(

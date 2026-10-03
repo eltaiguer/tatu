@@ -25,6 +25,8 @@ interface ImportCSVProps {
   ) => Promise<{
     added: Transaction[]
     duplicates: Transaction[]
+    /** Rows deleted before; skipped so they stay deleted. */
+    previouslyDeleted?: Transaction[]
     /**
      * Set when the import succeeded but AI enrichment did not, so the user can
      * tell a dead API key apart from the model categorizing badly.
@@ -112,7 +114,13 @@ export function ImportCSV({
         setFileType('uyu_account')
       }
 
-      const { added, duplicates, aiError, aiPartial } = onTransactionsImported
+      const {
+        added,
+        duplicates,
+        previouslyDeleted = [],
+        aiError,
+        aiPartial,
+      } = onTransactionsImported
         ? await onTransactionsImported(result.transactions, {
             parsedData: result,
             csvContent,
@@ -132,8 +140,12 @@ export function ImportCSV({
       })
 
       setImportState('success')
+      const deletedCount = previouslyDeleted.length
       toast.success(
-        `${added.length} nueva${added.length === 1 ? '' : 's'} · ${duplicates.length} duplicada${duplicates.length === 1 ? '' : 's'} omitida${duplicates.length === 1 ? '' : 's'}`
+        `${added.length} nueva${added.length === 1 ? '' : 's'} · ${duplicates.length} duplicada${duplicates.length === 1 ? '' : 's'} omitida${duplicates.length === 1 ? '' : 's'}` +
+          (deletedCount > 0
+            ? ` · ${deletedCount} que eliminaste antes ${deletedCount === 1 ? 'omitida' : 'omitidas'}`
+            : '')
       )
 
       // The import succeeded, but the AI step did not — say so, otherwise a
