@@ -70,6 +70,46 @@ describe('chart-data multicurrency converting selectors', () => {
       expect(result[0].total).toBeCloseTo(800) // 10*40 + 400
     })
 
+    it('counts missing, blank and legacy category ids under the one they mean', () => {
+      const txs = [
+        makeTx('1', {
+          amount: 1,
+          currency: 'UYU',
+          type: 'debit',
+          category: undefined,
+        }),
+        makeTx('2', {
+          amount: 2,
+          currency: 'UYU',
+          type: 'debit',
+          category: '',
+        }),
+        makeTx('3', {
+          amount: 4,
+          currency: 'UYU',
+          type: 'debit',
+          category: 'other',
+        }),
+        makeTx('4', {
+          amount: 8,
+          currency: 'UYU',
+          type: 'debit',
+          category: 'food',
+        }),
+        makeTx('5', {
+          amount: 16,
+          currency: 'UYU',
+          type: 'debit',
+          category: Category.Groceries,
+        }),
+      ]
+      const result = buildCategorySpendingConverted(txs, 'UYU', RATE)
+      expect(result).toEqual([
+        { category: Category.Groceries, total: 24 },
+        { category: Category.Uncategorized, total: 7 },
+      ])
+    })
+
     it('excludes credits and transfers', () => {
       const txs = [
         makeTx('1', { type: 'credit', category: Category.Groceries }),

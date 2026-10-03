@@ -901,4 +901,30 @@ describe('App', () => {
       await screen.findByText('Cambios aplicados a 3 transacciones')
     ).toBeInTheDocument()
   })
+
+  it('opens exactly a merchant\'s rows from "Mayores comercios"', async () => {
+    loadUserTransactionsMock.mockResolvedValue([
+      tx('a', '2026-03-10T12:00:00.000Z', 'UBER', 'transport'),
+      tx('b', '2026-03-11T12:00:00.000Z', 'UBER', 'transport'),
+      tx('c', '2026-03-12T12:00:00.000Z', 'UBER EATS', 'restaurants'),
+    ])
+    renderApp('/')
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Ver los gastos en UBER' })
+    )
+
+    await waitFor(() =>
+      expect(currentUrl()).toBe(
+        '/transacciones?comercio=UBER&tipo=debit&periodo=todo'
+      )
+    )
+    expect(
+      await screen.findByRole('button', {
+        name: 'Quitar filtro de comercio UBER',
+      })
+    ).toBeInTheDocument()
+    expect(screen.queryByText('UBER EATS')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/^2 movimientos/).length).toBeGreaterThan(0)
+  })
 })

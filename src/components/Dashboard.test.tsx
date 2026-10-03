@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { Dashboard } from './Dashboard'
 import type { Transaction } from '../models'
 import { Category } from '../models'
@@ -556,5 +556,133 @@ describe('Dashboard', () => {
     ).not.toBeInTheDocument()
 
     vi.useRealTimers()
+  })
+
+  describe('drill-through: every number opens exactly its rows', () => {
+    const CATEGORIES = [
+      Category.Housing,
+      Category.Restaurants,
+      Category.Groceries,
+      Category.Transport,
+      Category.Shopping,
+      Category.Healthcare,
+      Category.Entertainment,
+      Category.Education,
+      Category.Utilities,
+    ]
+    // Nine categories (so an "Otros" bucket exists), descending amounts, all
+    // in March 2026 on the card, plus one income row.
+    const transactions: Transaction[] = [
+      ...CATEGORIES.map((category, i) =>
+        makeTransaction({
+          id: `d-${i}`,
+          date: new Date('2026-03-10T12:00:00.000Z'),
+          description: i === 0 ? 'Alquiler' : `Comercio ${i}`,
+          amount: 1000 - i * 50,
+          currency: 'USD',
+          type: 'debit',
+          source: 'credit_card',
+          category,
+        })
+      ),
+      makeTransaction({
+        id: 'in',
+        date: new Date('2026-03-01T12:00:00.000Z'),
+        amount: 5000,
+        currency: 'USD',
+        type: 'credit',
+        category: Category.Income,
+      }),
+    ]
+
+    function setup() {
+      const onNavigateToTransactions = vi.fn()
+      render(
+        <Dashboard
+          transactions={transactions}
+          homeCurrency="USD"
+          fxRate={40}
+          onNavigateToTransactions={onNavigateToTransactions}
+        />
+      )
+      return onNavigateToTransactions
+    }
+
+    it("category row → that category's expenses", () => {
+      const go = setup()
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Ver los gastos en Restaurantes' })
+      )
+      expect(go).toHaveBeenCalledWith({
+        categories: [Category.Restaurants],
+        type: 'debit',
+      })
+    })
+
+    it('"Otros" row → every category folded into it', () => {
+      const go = setup()
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Ver los gastos en Otros' })
+      )
+      expect(go).toHaveBeenCalledWith({
+        categories: [Category.Education, Category.Utilities],
+        type: 'debit',
+      })
+    })
+
+    it("merchant row → that exact merchant's expenses", () => {
+      const go = setup()
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Ver los gastos en Alquiler' })
+      )
+      expect(go).toHaveBeenCalledWith({ merchant: 'Alquiler', type: 'debit' })
+    })
+
+    it("account card → that account's expenses", () => {
+      const go = setup()
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Ver los gastos de Tarjeta de crédito',
+        })
+      )
+      expect(go).toHaveBeenCalledWith({
+        accountType: 'credit_card',
+        type: 'debit',
+      })
+    })
+
+    it("month card amounts → that month's income or expenses", () => {
+      const go = setup()
+      const march = { mode: 'month', y: 2026, m: 2 }
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Ver los ingresos del mes' })
+      )
+      expect(go).toHaveBeenLastCalledWith({ period: march, type: 'credit' })
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Ver los gastos del mes' })
+      )
+      expect(go).toHaveBeenLastCalledWith({ period: march, type: 'debit' })
+    })
+
+    it("top-category KPI → that category's expenses", () => {
+      const go = setup()
+      fireEvent.click(
+        screen.getByRole('button', { name: /Ver la mayor categoría/ })
+      )
+      expect(go).toHaveBeenCalledWith({
+        categories: [Category.Housing],
+        type: 'debit',
+      })
+    })
+
+    it('month buttons (keyboard equivalent of the bars) → that month', () => {
+      const go = setup()
+      fireEvent.click(
+        screen.getByRole('button', { name: /Ver movimientos de mar/ })
+      )
+      expect(go).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2026, m: 2 },
+      })
+    })
   })
 })

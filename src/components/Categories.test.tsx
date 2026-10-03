@@ -147,4 +147,24 @@ describe('Categories', () => {
 
     expect(screen.queryByText(/"farmashop"/)).not.toBeInTheDocument()
   })
+
+  it('opens the uncategorized transactions from "Sin categoría"', () => {
+    const onNavigateToTransactions = vi.fn()
+    render(
+      <Categories
+        transactions={[
+          makeTx({ id: 'a', category: undefined }),
+          makeTx({ id: 'b', category: '' }),
+        ]}
+        onNavigateToTransactions={onNavigateToTransactions}
+      />
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /2 movimientos · Revisar/ })
+    )
+    expect(onNavigateToTransactions).toHaveBeenCalledWith({
+      categories: ['uncategorized'],
+    })
+  })
 })

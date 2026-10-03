@@ -30,6 +30,14 @@ export function resolveBuiltinAlias(id: string): string {
   return aliasFor(id) ?? id
 }
 
+// The id a transaction's category counts under everywhere (Resumen,
+// Categorías, Transacciones filters): missing or '' is uncategorized, casing
+// is ignored, and pre-rename ids resolve to their current one.
+export function normalizeCategoryId(id?: string | null): string {
+  const lower = (id || Category.Uncategorized).toLowerCase()
+  return aliasFor(lower) ?? lower
+}
+
 // The legacy pseudo-category that "Ignorar" assigns. Not a Category value, but
 // isCategoryIgnored treats it as ignore-by-default, so a custom category
 // slugged 'ignored' would silently drop its transactions from every total.

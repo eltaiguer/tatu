@@ -25,84 +25,97 @@ export function CategoryBreakdownList({
 }: CategoryBreakdownListProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {rows.map((row) => (
-        <div
-          key={row.id}
-          onClick={() => onClickRow?.(row.id)}
-          style={{ cursor: onClickRow ? 'pointer' : 'default' }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'baseline',
-              marginBottom: 5,
-            }}
-          >
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 13.5,
-                fontWeight: 500,
-              }}
-            >
-              {row.emoji ? (
-                <span style={{ fontSize: 14 }}>{row.emoji}</span>
-              ) : (
-                <span
-                  style={{
-                    width: 9,
-                    height: 9,
-                    borderRadius: 3,
-                    background: row.color,
-                    display: 'inline-block',
-                    flexShrink: 0,
-                  }}
-                />
-              )}
-              {row.label}
-            </span>
-            <span
-              style={{
-                display: 'inline-flex',
-                gap: 10,
-                alignItems: 'baseline',
-              }}
-            >
-              <span className="font-mono" style={{ fontSize: 13 }}>
-                {formatCurrency(row.amount, currency)}
-              </span>
-              {showPercent && (
-                <span
-                  className="font-mono text-muted-foreground"
-                  style={{ fontSize: 11.5, width: 38, textAlign: 'right' }}
-                >
-                  {row.pct.toFixed(1)}%
-                </span>
-              )}
-            </span>
-          </div>
-          <div
-            style={{
-              height: 4,
-              borderRadius: 2,
-              background: 'var(--surface-2)',
-              overflow: 'hidden',
-            }}
-          >
+      {rows.map((row) => {
+        const content = (
+          <>
             <div
               style={{
-                height: '100%',
-                width: `${row.pct}%`,
-                background: row.color,
-                borderRadius: 2,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                marginBottom: 5,
               }}
-            />
-          </div>
-        </div>
-      ))}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 13.5,
+                  fontWeight: 500,
+                }}
+              >
+                {row.emoji ? (
+                  <span style={{ fontSize: 14 }}>{row.emoji}</span>
+                ) : (
+                  <span
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: 3,
+                      background: row.color,
+                      display: 'inline-block',
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+                {row.label}
+              </span>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  gap: 10,
+                  alignItems: 'baseline',
+                }}
+              >
+                <span className="font-mono" style={{ fontSize: 13 }}>
+                  {formatCurrency(row.amount, currency)}
+                </span>
+                {showPercent && (
+                  <span
+                    className="font-mono text-muted-foreground"
+                    style={{ fontSize: 11.5, width: 38, textAlign: 'right' }}
+                  >
+                    {row.pct.toFixed(1)}%
+                  </span>
+                )}
+              </span>
+            </div>
+            <div
+              style={{
+                height: 4,
+                borderRadius: 2,
+                background: 'var(--surface-2)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  width: `${row.pct}%`,
+                  background: row.color,
+                  borderRadius: 2,
+                }}
+              />
+            </div>
+          </>
+        )
+        // A real button when rows open their transactions (keyboard and
+        // screen readers), a plain block otherwise.
+        return onClickRow ? (
+          <button
+            key={row.id}
+            type="button"
+            onClick={() => onClickRow(row.id)}
+            aria-label={`Ver los gastos en ${row.label}`}
+            className="block w-full rounded-md text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {content}
+          </button>
+        ) : (
+          <div key={row.id}>{content}</div>
+        )
+      })}
     </div>
   )
 }

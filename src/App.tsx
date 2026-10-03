@@ -517,7 +517,10 @@ function App() {
                 />
               )}
               {currentView === 'categories' && (
-                <Categories transactions={transactions} />
+                <Categories
+                  transactions={transactions}
+                  onNavigateToTransactions={navigateToTransactions}
+                />
               )}
               {currentView === 'settings' && (
                 <Settings

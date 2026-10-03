@@ -1,17 +1,16 @@
-import type { TransactionsFilter } from '../../models'
+import type { TransactionsFilter, UrlPeriod } from '../../models'
+
+export type { UrlPeriod }
 
 // The Transacciones filter state as it lives in the URL, so a filtered view
 // survives a refresh, works with back/forward, and can be linked to
 // ("Restaurantes en marzo" = ?categoria=restaurants&periodo=2026-03).
 
-export type UrlPeriod =
-  | { mode: 'month'; y: number; m: number } // m is 0-based
-  | { mode: 'recent'; n: number }
-  | { mode: 'all' }
-  | { mode: 'range'; from: string; to: string }
-
 export interface UrlFilterState {
   search: string
+  // Exact display name, as "Mayores comercios" groups by (search is a
+  // substring match and would pull in other merchants).
+  merchant: string
   categories: string[]
   accounts: Array<'credit_card' | 'bank_account'>
   currency: 'all' | 'USD' | 'UYU'
@@ -25,6 +24,7 @@ export interface UrlFilterState {
 
 export const DEFAULT_URL_FILTERS: UrlFilterState = {
   search: '',
+  merchant: '',
   categories: [],
   accounts: [],
   currency: 'all',
@@ -76,6 +76,7 @@ export function parseFilterParams(search: string): UrlFilterState {
   const max = params.get('max') ?? ''
   return {
     search: params.get('q') ?? '',
+    merchant: params.get('comercio') ?? '',
     categories: params.getAll('categoria').filter(Boolean),
     accounts: params
       .getAll('cuenta')
@@ -95,6 +96,7 @@ export function parseFilterParams(search: string): UrlFilterState {
 export function serializeFilterParams(state: UrlFilterState): string {
   const params = new URLSearchParams()
   if (state.search) params.set('q', state.search)
+  if (state.merchant) params.set('comercio', state.merchant)
   state.categories.forEach((c) => params.append('categoria', c))
   state.accounts.forEach((a) => params.append('cuenta', a))
   if (state.currency !== 'all') params.set('moneda', state.currency)
@@ -120,22 +122,26 @@ export function serializeFilterParams(state: UrlFilterState): string {
 
 // Deep link from another view. A filtered link with no period means all
 // time — the same default the view used for deep links before URLs existed.
-export function filterToSearch(
-  filter: TransactionsFilter & { period?: UrlPeriod }
-): string {
+export function filterToSearch(filter: TransactionsFilter): string {
+  const categories =
+    filter.categories ?? (filter.category ? [filter.category] : [])
   const state: UrlFilterState = {
     ...DEFAULT_URL_FILTERS,
-    categories: filter.category ? [filter.category] : [],
+    merchant: filter.merchant ?? '',
+    categories,
     accounts:
       filter.accountType && filter.accountType !== 'all'
         ? [filter.accountType]
         : [],
     currency: filter.currency ?? 'all',
+    type: filter.type ?? 'all',
   }
   const filtered =
+    state.merchant !== '' ||
     state.categories.length > 0 ||
     state.accounts.length > 0 ||
-    state.currency !== 'all'
+    state.currency !== 'all' ||
+    state.type !== 'all'
   const period =
     filter.period ?? (filtered ? { mode: 'all' as const } : undefined)
   return serializeFilterParams({ ...state, ...(period && { period }) })

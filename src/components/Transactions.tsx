@@ -16,6 +16,7 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
+  X,
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Category, isSplitParentTx } from '../models'
@@ -960,6 +961,8 @@ export function Transactions({
   const {
     searchTerm,
     setSearchTerm,
+    merchantFilter,
+    setMerchantFilter,
     dateFromFilter,
     setDateFromFilter,
     dateToFilter,
@@ -1034,6 +1037,7 @@ export function Transactions({
     onFiltersChange(
       serializeFilterParams({
         search: searchTerm,
+        merchant: merchantFilter,
         categories: categoryFilters,
         accounts: accountFilters.filter(
           (a): a is 'credit_card' | 'bank_account' =>
@@ -1051,6 +1055,7 @@ export function Transactions({
     onFiltersChange,
     period,
     searchTerm,
+    merchantFilter,
     categoryFilters,
     accountFilters,
     currencyFilter,
@@ -1612,6 +1617,17 @@ export function Transactions({
             {filteredTransactions.length !== 1 ? 's' : ''}
             {hasActiveFilters ? ' · filtrado' : ''} · {periodLabelText}
           </p>
+          {merchantFilter && (
+            <button
+              type="button"
+              onClick={() => setMerchantFilter('')}
+              aria-label={`Quitar filtro de comercio ${merchantFilter}`}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs"
+            >
+              Comercio: <strong>{merchantFilter}</strong>
+              <X size={12} aria-hidden />
+            </button>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <MonthNav
