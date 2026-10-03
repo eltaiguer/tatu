@@ -21,7 +21,9 @@ export function CategoryBadge({
       className={`inline-flex items-center gap-1.5 ${padding} ${textSize} rounded-full font-medium transition-colors`}
       style={{
         backgroundColor: `color-mix(in srgb, ${definition.color} 15%, transparent)`,
-        color: definition.color,
+        // The category's color lives in the tint and icon; the label uses the
+        // theme's text color so it meets AA for any color, incl. custom ones.
+        color: 'var(--text)',
       }}
     >
       {showIcon && definition.icon && (

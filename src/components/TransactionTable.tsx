@@ -3,7 +3,6 @@ import {
   CreditCard,
   Eye,
   EyeOff,
-  Info,
   Pencil,
   Scissors,
   Search,
@@ -18,14 +17,16 @@ import { Card } from './ui/card'
 import { IconTile } from './ui/icon-tile'
 import { Checkbox } from './ui/checkbox'
 import { CategoryBadge } from './CategoryBadge'
-import { ConfidenceBadge } from './ConfidenceBadge'
 import { Category, isSplitParentTx, isSplitChildTx } from '../models'
 import type { Transaction } from '../models'
 import {
   getCategoryDefinition,
   isCategoryIgnored,
 } from '../services/categories/category-registry'
-import { getDisplayDescription } from '../utils/transaction-display'
+import {
+  getDisplayDescription,
+  needsCategoryReview,
+} from '../utils/transaction-display'
 import { formatCurrency, formatDate } from '../utils/formatting'
 import { convert } from '../services/currency/convert'
 import type { Currency } from '../models'
@@ -41,6 +42,22 @@ function getAccountIcon(type: string) {
 export function getAccountLabel(source: string, currency: string): string {
   if (source === 'credit_card') return 'Tarjeta'
   return currency === 'USD' ? 'Cuenta USD' : 'Cuenta $U'
+}
+
+// Flags a category worth a second look (none, or a low-confidence automatic
+// one). The explanation is in the accessible name, not only a tooltip.
+function ReviewMarker() {
+  return (
+    <span
+      className="inline-flex items-center rounded-full border border-[color:var(--accent)] px-1.5 py-px text-[10.5px] font-semibold text-[color:var(--text)]"
+      title="Categoría sin asignar o asignada automáticamente con poca seguridad"
+    >
+      Revisar
+      <span className="sr-only">
+        : categoría sin asignar o asignada automáticamente con poca seguridad
+      </span>
+    </span>
+  )
 }
 
 interface TransactionTableProps {
@@ -97,7 +114,7 @@ export function TransactionTable({
   onUnsplit,
 }: TransactionTableProps) {
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden gap-0">
       {/* Toolbar row: selection count + transfers toggle */}
       <div
         style={{
@@ -189,7 +206,7 @@ export function TransactionTable({
               >
                 <button
                   onClick={() => onSort('date')}
-                  className="flex items-center gap-2 uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
                 >
                   Fecha
                   {sortField === 'date' && <ArrowUpDown size={14} />}
@@ -207,7 +224,7 @@ export function TransactionTable({
               >
                 <button
                   onClick={() => onSort('description')}
-                  className="flex items-center gap-2 uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
                 >
                   Descripción
                   {sortField === 'description' && <ArrowUpDown size={14} />}
@@ -225,7 +242,7 @@ export function TransactionTable({
               >
                 <button
                   onClick={() => onSort('category')}
-                  className="flex items-center gap-2 uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
                 >
                   Categoría
                   {sortField === 'category' && <ArrowUpDown size={14} />}
@@ -233,15 +250,6 @@ export function TransactionTable({
               </th>
               <th className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
                 Cuenta
-              </th>
-              <th className="text-center px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-20">
-                <span
-                  className="inline-flex items-center gap-1"
-                  title="Confianza de la categorización automática. Más barras = más seguridad."
-                >
-                  Conf.
-                  <Info size={12} className="text-muted-foreground/60" />
-                </span>
               </th>
               <th
                 className="text-right px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
@@ -255,13 +263,13 @@ export function TransactionTable({
               >
                 <button
                   onClick={() => onSort('amount')}
-                  className="flex items-center gap-2 ml-auto uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  className="flex items-center gap-2 ml-auto text-[11.5px] font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
                 >
                   Monto
                   {sortField === 'amount' && <ArrowUpDown size={14} />}
                 </button>
               </th>
-              <th className="text-center px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-20">
+              <th className="text-center px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-36">
                 Acción
               </th>
             </tr>
@@ -269,7 +277,7 @@ export function TransactionTable({
           <tbody>
             {paginatedTransactions.length === 0 && hasActiveFilters && (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={7}>
                   <EmptyState
                     compact
                     tone="neutral"
@@ -309,12 +317,13 @@ export function TransactionTable({
                 return (
                   <tr
                     key={transaction.id}
-                    style={
-                      isIgnored || isSplitParent ? { opacity: 0.62 } : undefined
-                    }
-                    className="group border-b border-border hover:bg-muted/30 transition-colors"
+                    // Ignored and split-parent rows read as secondary through
+                    // muted text, not opacity, so their pills keep AA contrast.
+                    className={`group border-b border-border hover:bg-muted/30 transition-colors${
+                      isIgnored || isSplitParent ? ' text-muted-foreground' : ''
+                    }`}
                   >
-                    <td className="px-3.5 py-3 align-middle">
+                    <td className="px-3.5 py-1.5 align-middle">
                       <Checkbox
                         aria-label={`Seleccionar ${displayDescription}`}
                         checked={selectedTransactionIds.includes(
@@ -326,13 +335,13 @@ export function TransactionTable({
                         disabled={isBusy}
                       />
                     </td>
-                    <td className="px-3.5 py-3 whitespace-nowrap">
+                    <td className="px-3.5 py-1.5 whitespace-nowrap">
                       <div className="text-sm">
                         {formatDate(transaction.date)}
                       </div>
                     </td>
                     <td
-                      className="px-3.5 py-3"
+                      className="px-3.5 py-1.5"
                       style={
                         isSplitChild
                           ? {
@@ -382,7 +391,7 @@ export function TransactionTable({
                             }}
                           >
                             <div
-                              className="font-medium truncate"
+                              className="font-medium truncate leading-snug"
                               style={{ maxWidth: 220 }}
                             >
                               {displayDescription}
@@ -428,14 +437,14 @@ export function TransactionTable({
                           </div>
                           {hasFriendlyOverride && (
                             <div
-                              className="text-muted-foreground truncate"
+                              className="text-muted-foreground truncate leading-tight"
                               style={{ fontSize: 11, maxWidth: 220 }}
                             >
                               {transaction.description}
                             </div>
                           )}
                           {(transaction.tags ?? []).length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-1">
+                            <div className="mt-1 flex flex-wrap gap-1">
                               {(transaction.tags ?? []).map((tag) => (
                                 <span
                                   key={`${transaction.id}-${tag}`}
@@ -449,15 +458,18 @@ export function TransactionTable({
                         </div>
                       </div>
                     </td>
-                    <td className="px-3.5 py-3">
-                      <CategoryBadge
-                        categoryId={
-                          transaction.category || Category.Uncategorized
-                        }
-                        size="sm"
-                      />
+                    <td className="px-3.5 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <CategoryBadge
+                          categoryId={
+                            transaction.category || Category.Uncategorized
+                          }
+                          size="sm"
+                        />
+                        {needsCategoryReview(transaction) && <ReviewMarker />}
+                      </div>
                     </td>
-                    <td className="px-3.5 py-3">
+                    <td className="px-3.5 py-1.5">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         {getAccountIcon(transaction.source)}
                         <span>
@@ -468,19 +480,16 @@ export function TransactionTable({
                         </span>
                       </div>
                     </td>
-                    <td className="px-3.5 py-3 text-center">
-                      <ConfidenceBadge
-                        confidence={transaction.categoryConfidence || 0}
-                      />
-                    </td>
-                    <td className="px-3.5 py-3 text-right whitespace-nowrap">
+                    <td className="px-3.5 py-1.5 text-right whitespace-nowrap">
                       <div
-                        className={`font-mono${isIgnored ? ' line-through' : ''}`}
+                        className={`font-mono leading-snug${isIgnored ? ' line-through' : ''}`}
                         style={{
                           color:
-                            transaction.type === 'credit'
-                              ? 'var(--pos)'
-                              : 'var(--text)',
+                            isIgnored || isSplitParent
+                              ? 'var(--text-muted)'
+                              : transaction.type === 'credit'
+                                ? 'var(--pos)'
+                                : 'var(--text)',
                         }}
                       >
                         {transaction.type === 'credit' ? '+' : '-'}
@@ -491,7 +500,7 @@ export function TransactionTable({
                       </div>
                       {convertedAmount !== null && (
                         <div
-                          className="font-mono"
+                          className="font-mono leading-tight"
                           style={{
                             fontSize: 10.5,
                             marginTop: 1,
@@ -506,12 +515,13 @@ export function TransactionTable({
                         </div>
                       )}
                     </td>
-                    <td className="px-3.5 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity duration-[120ms]">
+                    <td className="px-3.5 py-1.5 text-center">
+                      <div className="flex items-center justify-center gap-1 opacity-100 transition-opacity duration-[120ms] [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100">
                         {isSplitParent && onUnsplit && (
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-7 w-7 p-0"
                             aria-label={`Restaurar ${displayDescription}`}
                             disabled={pendingTransactionIds.has(transaction.id)}
                             onClick={() => onUnsplit(transaction)}
@@ -524,6 +534,7 @@ export function TransactionTable({
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-7 w-7 p-0"
                             aria-label={`Dividir ${displayDescription}`}
                             disabled={pendingTransactionIds.has(transaction.id)}
                             onClick={() => onSplit(transaction)}
@@ -535,6 +546,7 @@ export function TransactionTable({
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-7 w-7 p-0"
                           aria-label={`Editar ${displayDescription}`}
                           disabled={pendingTransactionIds.has(transaction.id)}
                           onClick={() => onEdit(transaction)}
@@ -544,6 +556,7 @@ export function TransactionTable({
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-7 w-7 p-0"
                           aria-label={`Eliminar ${displayDescription}`}
                           disabled={pendingTransactionIds.has(transaction.id)}
                           onClick={() => onDelete(transaction)}
@@ -612,7 +625,7 @@ export function TransactionTable({
                 style={
                   isIgnored || isSplitParentM
                     ? {
-                        opacity: 0.62,
+                        color: 'var(--text-muted)',
                         ...(isSplitChildM
                           ? {
                               borderLeft: '2px solid var(--border)',
@@ -696,9 +709,11 @@ export function TransactionTable({
                       className={`font-mono${isIgnored ? ' line-through' : ''}`}
                       style={{
                         color:
-                          transaction.type === 'credit'
-                            ? 'var(--pos)'
-                            : 'var(--text)',
+                          isIgnored || isSplitParentM
+                            ? 'var(--text-muted)'
+                            : transaction.type === 'credit'
+                              ? 'var(--pos)'
+                              : 'var(--text)',
                       }}
                     >
                       {transaction.type === 'credit' ? '+' : '-'}
@@ -738,9 +753,7 @@ export function TransactionTable({
                     categoryId={transaction.category || Category.Uncategorized}
                     size="sm"
                   />
-                  <ConfidenceBadge
-                    confidence={transaction.categoryConfidence || 0}
-                  />
+                  {needsCategoryReview(transaction) && <ReviewMarker />}
                   {(transaction.tags ?? []).map((tag) => (
                     <span
                       key={`${transaction.id}-${tag}`}

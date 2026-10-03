@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react'
 import { Toaster } from 'sonner'
 import { Transactions } from './Transactions'
+import { ITEMS_PER_PAGE } from '../hooks/useTransactionFiltering'
 import type { Transaction } from '../models'
 import { NeedsConfirmationError } from '../utils/user-error'
 
@@ -76,14 +77,51 @@ describe('Transactions', () => {
     }
   })
 
-  it('clamps pagination when filtering reduces total pages', () => {
-    const transactions = Array.from({ length: 25 }, (_, i) =>
-      makeTransaction(i, i === 3 ? 'target merchant' : `transaction ${i}`)
+  it('flags only categories worth reviewing, without a confidence column', () => {
+    render(
+      <Transactions
+        transactions={[
+          { ...makeTransaction(0, 'sin categoria'), category: undefined },
+          {
+            ...makeTransaction(1, 'dudosa'),
+            category: 'groceries',
+            categoryConfidence: 0.4,
+          },
+          {
+            ...makeTransaction(2, 'segura'),
+            category: 'groceries',
+            categoryConfidence: 0.9,
+          },
+          {
+            ...makeTransaction(3, 'manual'),
+            category: 'groceries',
+            categoryConfidence: 1,
+          },
+        ]}
+      />
     )
+
+    expect(screen.queryByText('Conf.')).not.toBeInTheDocument()
+    // Desktop table + mobile list both render; count per layout.
+    const flagged = screen.getAllByText(/categoría sin asignar o asignada/)
+    expect(flagged.length).toBe(4)
+  })
+
+  it('clamps pagination when filtering reduces total pages', () => {
+    // More than one page, all in one month, so "Siguiente" really moves on.
+    const transactions = Array.from({ length: ITEMS_PER_PAGE + 5 }, (_, i) => ({
+      ...makeTransaction(i, i === 3 ? 'target merchant' : `transaction ${i}`),
+      date: new Date(2026, 0, 1, i),
+    }))
 
     render(<Transactions transactions={transactions} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
+    expect(
+      screen.getByText(
+        `Mostrando ${ITEMS_PER_PAGE + 1}-${ITEMS_PER_PAGE + 5} de ${ITEMS_PER_PAGE + 5}`
+      )
+    ).toBeInTheDocument()
     fireEvent.change(
       screen.getByPlaceholderText('Buscar por comercio o descripción...'),
       {
@@ -321,21 +359,29 @@ describe('Transactions', () => {
     )
   })
 
-  it('selects all page transactions via header checkbox', () => {
-    const transactions = Array.from({ length: 25 }, (_, index) =>
-      makeTransaction(index, `merchant ${index}`)
-    )
+  // One full page plus 13 more, all in the same month (one per hour) so the
+  // default "newest month" period shows every row.
+  const P = ITEMS_PER_PAGE
+  const N = P + 13
+  const manyTransactions = () =>
+    Array.from({ length: N }, (_, index) => ({
+      ...makeTransaction(index, `merchant ${index}`),
+      date: new Date(2026, 0, 1, index),
+    }))
 
-    render(<Transactions transactions={transactions} />)
+  it('selects all page transactions via header checkbox', () => {
+    render(<Transactions transactions={manyTransactions()} />)
 
     const headerCheckboxes = screen.getAllByRole('checkbox', {
       name: 'Seleccionar todas',
     })
     fireEvent.click(headerCheckboxes[0])
 
-    expect(screen.getAllByText('12 seleccionadas').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(`${P} seleccionadas`).length).toBeGreaterThan(0)
     expect(
-      screen.getAllByRole('checkbox', { name: 'Seleccionar merchant 24' })[0]
+      screen.getAllByRole('checkbox', {
+        name: `Seleccionar merchant ${N - 1}`,
+      })[0]
     ).toHaveAttribute('aria-checked', 'true')
   })
 
@@ -358,26 +404,22 @@ describe('Transactions', () => {
   })
 
   it('unchecking page header only deselects current page — other pages remain selected', () => {
-    // 25 transactions split across 2 pages (12 on page 1, 13 on page 2)
-    const transactions = Array.from({ length: 25 }, (_, index) =>
-      makeTransaction(index, `merchant ${index}`)
-    )
+    // N transactions split across 2 pages (P on page 1, 13 on page 2)
+    render(<Transactions transactions={manyTransactions()} />)
 
-    render(<Transactions transactions={transactions} />)
-
-    // Select all 25 via header + "select all" link
+    // Select all N via header + "select all" link
     const headerCheckboxes = screen.getAllByRole('checkbox', {
       name: 'Seleccionar todas',
     })
     fireEvent.click(headerCheckboxes[0])
-    fireEvent.click(screen.getByText('Seleccionar las 25 transacciones'))
-    expect(screen.getAllByText('25 seleccionadas').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByText(`Seleccionar las ${N} transacciones`))
+    expect(screen.getAllByText(`${N} seleccionadas`).length).toBeGreaterThan(0)
 
-    // Navigate to page 2, then navigate back to page 1 — all page-1 items remain checked
+    // Navigate to page 2, then back to page 1 — all page-1 items remain checked
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }))
     fireEvent.click(screen.getByRole('button', { name: 'Anterior' }))
 
-    // Uncheck header on page 1 — should only deselect the 12 page-1 items
+    // Uncheck header on page 1 — should only deselect the P page-1 items
     const page1HeaderCheckboxes = screen.getAllByRole('checkbox', {
       name: 'Seleccionar todas',
     })
@@ -388,22 +430,18 @@ describe('Transactions', () => {
   })
 
   it('shows select-all link after selecting full page on multi-page results', () => {
-    const transactions = Array.from({ length: 25 }, (_, index) =>
-      makeTransaction(index, `merchant ${index}`)
-    )
-
-    render(<Transactions transactions={transactions} />)
+    render(<Transactions transactions={manyTransactions()} />)
 
     const headerCheckboxes = screen.getAllByRole('checkbox', {
       name: 'Seleccionar todas',
     })
     fireEvent.click(headerCheckboxes[0])
 
-    expect(screen.getAllByText('12 seleccionadas').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(`${P} seleccionadas`).length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByText('Seleccionar las 25 transacciones'))
+    fireEvent.click(screen.getByText(`Seleccionar las ${N} transacciones`))
 
-    expect(screen.getAllByText('25 seleccionadas').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(`${N} seleccionadas`).length).toBeGreaterThan(0)
   })
 
   it('triggers transaction update from modal edit', async () => {
