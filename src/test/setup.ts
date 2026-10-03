@@ -1,4 +1,4 @@
-import { afterEach } from 'vitest'
+import { afterEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 
@@ -49,4 +49,9 @@ if (typeof window !== 'undefined') {
       dispatchEvent: () => true,
     }),
   })
+}
+
+// jsdom doesn't implement scrolling; views reset scroll on navigation.
+if (typeof window !== 'undefined') {
+  window.scrollTo = vi.fn() as unknown as typeof window.scrollTo
 }

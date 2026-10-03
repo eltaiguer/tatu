@@ -1,5 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import App from './App'
 import { transactionStore } from './stores/transaction-store'
 import { listCustomCategories } from './services/categories/category-store'
@@ -92,6 +93,53 @@ vi.mock('./services/supabase/import-runs', () => ({
   sha256Hex: vi.fn().mockResolvedValue('hash'),
 }))
 
+// Exposes the router's location and a back button, so tests can observe the
+// URL and history the way a user would.
+function RouterProbe() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  return (
+    <>
+      <output data-testid="location">
+        {location.pathname + location.search}
+      </output>
+      <button type="button" onClick={() => navigate(-1)}>
+        test-back
+      </button>
+    </>
+  )
+}
+
+function renderApp(path = '/') {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <App />
+      <RouterProbe />
+    </MemoryRouter>
+  )
+}
+
+const currentUrl = () => screen.getByTestId('location').textContent
+
+function tx(
+  id: string,
+  isoDate: string,
+  description: string,
+  category: string
+) {
+  return {
+    id,
+    date: new Date(isoDate),
+    description,
+    amount: 100,
+    currency: 'UYU' as const,
+    type: 'debit' as const,
+    source: 'credit_card' as const,
+    category,
+    rawData: {},
+  }
+}
+
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -112,7 +160,7 @@ describe('App', () => {
   })
 
   it('renders overview (dashboard) view by default', async () => {
-    render(<App />)
+    renderApp()
 
     // With no transactions, Onboarding is shown after sync completes
     await waitFor(() =>
@@ -125,7 +173,7 @@ describe('App', () => {
   it('has no floating theme button covering content and toasts', async () => {
     // Theme lives in Configuración; the old fixed bottom-right toggle sat on
     // top of row actions and the toast corner.
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('heading', { name: /Bienvenido a Tatú/i })
@@ -140,7 +188,7 @@ describe('App', () => {
   })
 
   it('opens import view when clicking the sidebar Importar button', async () => {
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Importar' })
@@ -155,7 +203,7 @@ describe('App', () => {
   })
 
   it('shows supported file types on import view', async () => {
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Importar' })
@@ -184,7 +232,7 @@ describe('App', () => {
         rawData: {},
       },
     ])
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Transacciones' })
@@ -214,7 +262,7 @@ describe('App', () => {
       },
     ])
 
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Transacciones' })
@@ -266,7 +314,7 @@ describe('App', () => {
       },
     ])
 
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Transacciones' })
@@ -304,7 +352,7 @@ describe('App', () => {
   })
 
   it('switches to categorías view from sidebar navigation', async () => {
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Categorías' })
@@ -343,7 +391,7 @@ describe('App', () => {
       },
     ])
 
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0)
     )
@@ -358,7 +406,7 @@ describe('App', () => {
   })
 
   it('opens import as a dialog overlay without navigating away from current view', async () => {
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Importar' })
@@ -380,7 +428,7 @@ describe('App', () => {
       fxRate: 40.5,
     })
 
-    render(<App />)
+    renderApp()
 
     await waitFor(() =>
       expect(document.documentElement.classList.contains('dark')).toBe(true)
@@ -388,7 +436,7 @@ describe('App', () => {
   })
 
   it('sidebar nav items are visible and functional', async () => {
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Resumen' })
@@ -434,7 +482,7 @@ describe('App', () => {
       },
     ])
 
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Transacciones' })
@@ -495,7 +543,7 @@ describe('App', () => {
         rawData: {},
       },
     ])
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Transacciones' })
@@ -536,7 +584,7 @@ describe('App', () => {
       },
     ])
 
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Transacciones' })
@@ -587,7 +635,7 @@ describe('App', () => {
       },
     ])
 
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Transacciones' })
@@ -622,7 +670,7 @@ describe('App', () => {
         rawData: {},
       },
     ])
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: /abrir menú/i })
@@ -671,7 +719,7 @@ describe('App', () => {
       },
     ])
 
-    render(<App />)
+    renderApp()
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Categorías' })
@@ -687,5 +735,107 @@ describe('App', () => {
 
     // After sign out, the in-memory store must be empty
     expect(listCustomCategories()).toHaveLength(0)
+  })
+
+  describe('URLs', () => {
+    it('opens the view named by the URL on a direct load', async () => {
+      renderApp('/categorias')
+      expect(
+        await screen.findByRole('heading', { name: 'Categorías y reglas' })
+      ).toBeInTheDocument()
+    })
+
+    it('tolerates a trailing slash and capitals in shared links', async () => {
+      renderApp('/Categorias/')
+      expect(
+        await screen.findByRole('heading', { name: 'Categorías y reglas' })
+      ).toBeInTheDocument()
+    })
+
+    it('changes the URL on navigation and goes back with the browser', async () => {
+      renderApp('/')
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Configuración' })
+      )
+      expect(currentUrl()).toBe('/configuracion')
+
+      fireEvent.click(screen.getByRole('button', { name: 'test-back' }))
+      await waitFor(() => expect(currentUrl()).toBe('/'))
+    })
+
+    it('does not stack history when re-clicking the current view', async () => {
+      renderApp('/')
+      const settings = await screen.findByRole('button', {
+        name: 'Configuración',
+      })
+      fireEvent.click(settings)
+      fireEvent.click(settings)
+      fireEvent.click(screen.getByRole('button', { name: 'test-back' }))
+
+      await waitFor(() => expect(currentUrl()).toBe('/'))
+    })
+
+    it('shows an unknown path as Resumen without redirecting', async () => {
+      renderApp('/no-existe')
+      expect(
+        await screen.findByRole('heading', { name: /Bienvenido a Tatú/i })
+      ).toBeInTheDocument()
+      expect(currentUrl()).toBe('/no-existe')
+    })
+
+    it('resets scroll and the tab title when the view changes', async () => {
+      renderApp('/')
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Configuración' })
+      )
+      await waitFor(() => expect(window.scrollTo).toHaveBeenCalledWith(0, 0))
+      expect(document.title).toBe('Configuración · Tatú')
+    })
+
+    it('deep-links to "Restaurantes en marzo"', async () => {
+      loadUserTransactionsMock.mockResolvedValue([
+        tx(
+          'mar-rest',
+          '2026-03-10T12:00:00.000Z',
+          'Cantina marzo',
+          'restaurants'
+        ),
+        tx('mar-food', '2026-03-11T12:00:00.000Z', 'Devoto marzo', 'groceries'),
+        tx(
+          'apr-rest',
+          '2026-04-10T12:00:00.000Z',
+          'Cantina abril',
+          'restaurants'
+        ),
+      ])
+      renderApp('/transacciones?categoria=restaurants&periodo=2026-03')
+
+      expect(
+        (await screen.findAllByText('Cantina marzo')).length
+      ).toBeGreaterThan(0)
+      expect(screen.queryByText('Devoto marzo')).not.toBeInTheDocument()
+      expect(screen.queryByText('Cantina abril')).not.toBeInTheDocument()
+    })
+
+    it('keeps filter edits in the URL without adding history entries', async () => {
+      loadUserTransactionsMock.mockResolvedValue([
+        tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),
+      ])
+      renderApp('/')
+      fireEvent.click(
+        await screen.findByRole('button', { name: /Transacciones/ })
+      )
+      fireEvent.change(
+        await screen.findByPlaceholderText(/Buscar por comercio/),
+        { target: { value: 'cantina' } }
+      )
+
+      await waitFor(() => expect(currentUrl()).toContain('q=cantina'))
+      expect(currentUrl()).toMatch(/^\/transacciones\?/)
+
+      // Back leaves Transacciones instead of undoing the keystroke.
+      fireEvent.click(screen.getByRole('button', { name: 'test-back' }))
+      await waitFor(() => expect(currentUrl()).toBe('/'))
+    })
   })
 })

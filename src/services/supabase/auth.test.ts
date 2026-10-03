@@ -108,6 +108,19 @@ describe('supabase auth service', () => {
     )
   })
 
+  it('sends the reset link to the app root even from a deep page', async () => {
+    window.history.replaceState({}, '', '/configuracion')
+    resetPasswordForEmailMock.mockResolvedValue({ error: null })
+
+    const { requestPasswordReset } = await import('./auth')
+    await requestPasswordReset('test@example.com')
+
+    const calls = resetPasswordForEmailMock.mock.calls
+    const options = calls[calls.length - 1][1]
+    expect(new URL(options.redirectTo).pathname).toBe('/')
+    window.history.replaceState({}, '', '/')
+  })
+
   it('updates password for authenticated user', async () => {
     updateUserMock.mockResolvedValue({ error: null })
 

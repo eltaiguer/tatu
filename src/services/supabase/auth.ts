@@ -22,7 +22,9 @@ function getPasswordRecoveryRedirectUrl(): string | undefined {
 
   const configuredRedirectUrl =
     import.meta.env.VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL?.trim()
-  const fallbackRedirectUrl = `${window.location.origin}${window.location.pathname}`
+  // The app root, not the current deep path: Supabase only honors
+  // allow-listed redirects, and the root is the one that's listed.
+  const fallbackRedirectUrl = `${window.location.origin}/`
   const url = new URL(configuredRedirectUrl || fallbackRedirectUrl)
   url.searchParams.set('mode', 'reset-password')
   return url.toString()
