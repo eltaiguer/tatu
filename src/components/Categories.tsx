@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { userErrorMessage } from '../utils/user-error'
 import { Plus, Pencil, Trash, X } from 'lucide-react'
@@ -63,7 +63,7 @@ export function Categories({
   onNavigateToTransactions,
   onApplyPatternToPast,
 }: CategoriesProps) {
-  const [, setCategoriesVersion] = useState(0)
+  const [categoriesVersion, setCategoriesVersion] = useState(0)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
     id: '',
@@ -237,24 +237,38 @@ export function Categories({
     }
   }
 
-  // Rows a rule's pattern matches, counted like any list of movements in the
-  // app (split parts in, split parents out). It says what the pattern
-  // matches, not which rows it categorized — overlapping rules, manual
-  // edits and future-only rules make those differ.
-  function matchCountFor(rule: CustomPattern): number {
-    return transactions.filter(
-      (tx) => !isSplitParentTx(tx) && testPattern(tx.description, rule)
-    ).length
-  }
+  // Rows each rule's pattern matches, counted like any list of movements in
+  // the app (split parts in, split parents out). It says what the pattern
+  // matches, not which rows it categorized — overlapping rules, manual edits
+  // and future-only rules make those differ. Memoized: typing in the rule
+  // form must not rescan every transaction per rule.
+  const matchCounts = useMemo(
+    () =>
+      new Map(
+        customPatterns.map((rule) => [
+          rule.id,
+          transactions.filter(
+            (tx) => !isSplitParentTx(tx) && testPattern(tx.description, rule)
+          ).length,
+        ])
+      ),
+    [transactions, customPatterns]
+  )
 
   // Spend per category: the same expense rows (and the same function)
   // Resumen sums, so a card's amount, its count and the rows its link opens
-  // agree. Recomputed every render so ignoring/un-ignoring a category here
-  // shows at once.
-  const spending = new Map(
-    buildCategorySpendingConverted(transactions, homeCurrency, fxRate).map(
-      (row) => [row.category, row]
-    )
+  // agree.
+  const spending = useMemo(
+    () =>
+      new Map(
+        buildCategorySpendingConverted(transactions, homeCurrency, fxRate).map(
+          (row) => [row.category, row]
+        )
+      ),
+    // categoriesVersion: ignoring/un-ignoring a category here changes which
+    // rows count, without changing `transactions`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [transactions, homeCurrency, fxRate, categoriesVersion]
   )
   const definedIds = new Set(
     categoryDefinitions.map((cat) => normalizeCategoryId(cat.id))
@@ -1026,8 +1040,8 @@ export function Categories({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      · {matchCountFor(cp)}{' '}
-                      {matchCountFor(cp) === 1
+                      · {matchCounts.get(cp.id) ?? 0}{' '}
+                      {matchCounts.get(cp.id) === 1
                         ? 'transacción coincide'
                         : 'transacciones coinciden'}
                     </span>
