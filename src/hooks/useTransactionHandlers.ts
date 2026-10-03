@@ -340,29 +340,36 @@ export function useTransactionHandlers({
     return { affected: 1 }
   }
 
-  // Hard-deletes the parts of any split parent among `targets`, soft-deletes
-  // the targets, then drops all of them from the store.
+  // Split parts (the targets' own, and those of any split parent among them)
+  // are hard-deleted: their ids are deterministic, so a soft-deleted part
+  // would come back invisible after a later re-split. Everything else is
+  // soft-deleted. Then all of them leave the store.
   async function deleteRows(targets: Transaction[]): Promise<DeleteResult> {
     const all = transactionStore.getState().transactions
     const parentIds = new Set(
       targets.filter((tx) => tx.isSplitParent).map((tx) => tx.id)
     )
-    const childIds = all
-      .filter((tx) => tx.splitParentId && parentIds.has(tx.splitParentId))
-      .map((tx) => tx.id)
+    const hardIds = [
+      ...all
+        .filter((tx) => tx.splitParentId && parentIds.has(tx.splitParentId))
+        .map((tx) => tx.id),
+      ...targets.filter((tx) => tx.splitParentId).map((tx) => tx.id),
+    ]
+    const hardSet = new Set(hardIds)
+    const softTargets = targets.filter((tx) => !hardSet.has(tx.id))
 
     if (session) {
-      if (childIds.length > 0) {
-        await hardDeleteTransactions(session, childIds)
+      if (hardIds.length > 0) {
+        await hardDeleteTransactions(session, hardIds)
       }
       await Promise.all(
-        targets.map((tx) => softDeleteTransaction(session, tx.id))
+        softTargets.map((tx) => softDeleteTransaction(session, tx.id))
       )
     }
 
     transactionStore
       .getState()
-      .removeTransactions([...targets.map((tx) => tx.id), ...childIds])
+      .removeTransactions([...targets.map((tx) => tx.id), ...hardIds])
     setError('')
     return { removed: targets, reversible: !targets.some(isSplitRow) }
   }

@@ -709,6 +709,41 @@ describe('useTransactionHandlers — split and unsplit', () => {
   })
 })
 
+describe('useTransactionHandlers — deleting a single split part', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    transactionStore.getState().clearTransactions()
+    transactionStore
+      .getState()
+      .setTransactions([
+        makeTransaction('parent', { isSplitParent: true }),
+        makeTransaction('parent_split_0', { splitParentId: 'parent' }),
+        makeTransaction('parent_split_1', { splitParentId: 'parent' }),
+      ])
+  })
+
+  it('needs confirmation, then hard-deletes the part instead of soft-deleting it', async () => {
+    // A soft-deleted part would block a later re-split, which reuses the id.
+    const { handlers } = setup()
+
+    await expect(
+      handlers.handleDeleteTransaction('parent_split_1')
+    ).rejects.toThrow(NeedsConfirmationError)
+
+    await handlers.handleDeleteTransaction('parent_split_1', {
+      allowIrreversible: true,
+    })
+
+    expect(mocks.hardDeleteTransactions.mock.calls[0][1]).toEqual([
+      'parent_split_1',
+    ])
+    expect(mocks.softDeleteTransaction).not.toHaveBeenCalled()
+    expect(transactionStore.getState().transactions.map((tx) => tx.id)).toEqual(
+      ['parent', 'parent_split_0']
+    )
+  })
+})
+
 describe('useTransactionHandlers — resetting a friendly name', () => {
   const MERCHANT = 'SUPERMERCADO DISCO'
 

@@ -87,4 +87,17 @@ describe('Description overrides', () => {
       getDescriptionOverride('---- 123456 ----')?.friendlyDescription
     ).toBe('Ajuste bancario')
   })
+
+  it('rolls the local name back when the remote save fails', async () => {
+    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+    upsertDescriptionOverrideMock.mockRejectedValue(new Error('timeout'))
+
+    await expect(
+      setDescriptionOverrideWithSync({
+        description: 'AUT 998877 DEVOTO',
+        friendlyDescription: 'Devoto',
+      })
+    ).rejects.toThrow('timeout')
+    expect(getDescriptionOverride('AUT 998877 DEVOTO')).toBeNull()
+  })
 })

@@ -40,31 +40,46 @@ export function setDescriptionOverride(input: {
   }
 }
 
+// Puts a local entry back as it was when the remote write fails, so the
+// screen never shows a name the server didn't get.
+function restoreOverride(
+  key: string,
+  previous: DescriptionOverride | undefined
+): void {
+  if (previous) overrides[key] = previous
+  else delete overrides[key]
+}
+
 export async function setDescriptionOverrideWithSync(input: {
   description: string
   friendlyDescription: string
   category?: string
 }): Promise<void> {
-  setDescriptionOverride(input)
   const descriptionKey = buildDescriptionOverrideKey(input.description)
+  const previous = descriptionKey ? overrides[descriptionKey] : undefined
+  setDescriptionOverride(input)
   if (!descriptionKey) {
     return
   }
 
-  // Remote failures propagate: the local cache is already updated, but
-  // the caller must know the change didn't reach the server or it
-  // silently disappears on the next reload.
-  const { getActiveSupabaseSession } = await import('../supabase/runtime')
-  const session = getActiveSupabaseSession()
-  if (session) {
-    const { upsertDescriptionOverride } =
-      await import('../supabase/description-overrides')
-    await upsertDescriptionOverride(session, {
-      descriptionNormalized: descriptionKey,
-      descriptionOriginal: input.description,
-      friendlyDescription: input.friendlyDescription,
-      category: input.category,
-    })
+  // Remote failures propagate (after rolling back the local entry) so the
+  // caller can tell the user the change wasn't saved.
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { upsertDescriptionOverride } =
+        await import('../supabase/description-overrides')
+      await upsertDescriptionOverride(session, {
+        descriptionNormalized: descriptionKey,
+        descriptionOriginal: input.description,
+        friendlyDescription: input.friendlyDescription,
+        category: input.category,
+      })
+    }
+  } catch (error) {
+    restoreOverride(descriptionKey, previous)
+    throw error
   }
 }
 
@@ -83,20 +98,23 @@ export async function clearDescriptionOverrideWithSync(
   description: string
 ): Promise<void> {
   const descriptionKey = buildDescriptionOverrideKey(description)
+  const previous = descriptionKey ? overrides[descriptionKey] : undefined
   clearDescriptionOverride(description)
   if (!descriptionKey) {
     return
   }
 
-  // Remote failures propagate: the local cache is already updated, but
-  // the caller must know the change didn't reach the server or it
-  // silently disappears on the next reload.
-  const { getActiveSupabaseSession } = await import('../supabase/runtime')
-  const session = getActiveSupabaseSession()
-  if (session) {
-    const { deleteDescriptionOverride } =
-      await import('../supabase/description-overrides')
-    await deleteDescriptionOverride(session, descriptionKey)
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { deleteDescriptionOverride } =
+        await import('../supabase/description-overrides')
+      await deleteDescriptionOverride(session, descriptionKey)
+    }
+  } catch (error) {
+    restoreOverride(descriptionKey, previous)
+    throw error
   }
 }
 

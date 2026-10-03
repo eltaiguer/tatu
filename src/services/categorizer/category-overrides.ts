@@ -39,29 +39,45 @@ export function setMerchantCategoryOverride(
   invalidateLearnedPatternsCache()
 }
 
+// Puts a local entry back as it was when the remote write fails, so the
+// screen never shows a rule the server didn't get.
+function restoreOverride(
+  key: string,
+  previous: CategoryOverride | undefined
+): void {
+  if (previous) overrides[key] = previous
+  else delete overrides[key]
+  invalidateLearnedPatternsCache()
+}
+
 export async function setMerchantCategoryOverrideWithSync(
   merchantName: string,
   category: string
 ): Promise<void> {
-  setMerchantCategoryOverride(merchantName, category)
   const normalized = normalizeMerchantName(merchantName)
+  const previous = normalized ? overrides[normalized] : undefined
+  setMerchantCategoryOverride(merchantName, category)
   if (!normalized) {
     return
   }
 
-  // Remote failures propagate: the local cache is already updated, but
-  // the caller must know the change didn't reach the server or it
-  // silently disappears on the next reload.
-  const { getActiveSupabaseSession } = await import('../supabase/runtime')
-  const session = getActiveSupabaseSession()
-  if (session) {
-    const { upsertCategoryOverride } =
-      await import('../supabase/category-overrides')
-    await upsertCategoryOverride(session, {
-      merchantNormalized: normalized,
-      merchantOriginal: merchantName,
-      category,
-    })
+  // Remote failures propagate (after rolling back the local entry) so the
+  // caller can tell the user the rule wasn't saved.
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { upsertCategoryOverride } =
+        await import('../supabase/category-overrides')
+      await upsertCategoryOverride(session, {
+        merchantNormalized: normalized,
+        merchantOriginal: merchantName,
+        category,
+      })
+    }
+  } catch (error) {
+    restoreOverride(normalized, previous)
+    throw error
   }
 }
 
@@ -81,20 +97,23 @@ export async function clearMerchantCategoryOverrideWithSync(
   merchantName: string
 ): Promise<void> {
   const normalized = normalizeMerchantName(merchantName)
+  const previous = normalized ? overrides[normalized] : undefined
   clearMerchantCategoryOverride(merchantName)
   if (!normalized) {
     return
   }
 
-  // Remote failures propagate: the local cache is already updated, but
-  // the caller must know the change didn't reach the server or it
-  // silently disappears on the next reload.
-  const { getActiveSupabaseSession } = await import('../supabase/runtime')
-  const session = getActiveSupabaseSession()
-  if (session) {
-    const { deleteCategoryOverride } =
-      await import('../supabase/category-overrides')
-    await deleteCategoryOverride(session, normalized)
+  try {
+    const { getActiveSupabaseSession } = await import('../supabase/runtime')
+    const session = getActiveSupabaseSession()
+    if (session) {
+      const { deleteCategoryOverride } =
+        await import('../supabase/category-overrides')
+      await deleteCategoryOverride(session, normalized)
+    }
+  } catch (error) {
+    restoreOverride(normalized, previous)
+    throw error
   }
 }
 
