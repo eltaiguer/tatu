@@ -40,3 +40,13 @@ export function formatDateCompact(date: Date): string {
     timeZone: 'UTC',
   }).format(date)
 }
+
+// Font size that fits a monospace amount on one line inside its container
+// (which must set `container-type: inline-size`), capped at `maxPx`. Amounts
+// must never be clipped, so long values shrink instead of overflowing.
+// JetBrains Mono glyphs advance 0.6em; the extra margin covers letter-spacing
+// rounding.
+export function fitMonoFontSize(text: string, maxPx: number): string {
+  const cqiPerChar = 100 / (Math.max(text.length, 1) * 0.62)
+  return `min(${maxPx}px, ${cqiPerChar.toFixed(2)}cqi)`
+}

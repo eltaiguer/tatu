@@ -4,6 +4,7 @@ import {
   formatCurrency,
   formatCurrencyShort,
   formatDate,
+  fitMonoFontSize,
 } from './formatting'
 
 describe('toSafeNumber', () => {
@@ -80,5 +81,21 @@ describe('formatDate', () => {
   it('pads single-digit day and month', () => {
     const date = new Date('2025-01-03T12:00:00Z')
     expect(formatDate(date)).toBe('03/01/2025')
+  })
+})
+
+describe('fitMonoFontSize', () => {
+  it('caps at the max size and shrinks longer strings more', () => {
+    expect(fitMonoFontSize('US$ 9,00', 22)).toMatch(/^min\(22px, [\d.]+cqi\)$/)
+    const cqi = (s: string) =>
+      Number(/([\d.]+)cqi/.exec(fitMonoFontSize(s, 22))![1])
+    expect(cqi('-$U 1.234.567,89')).toBeLessThan(cqi('US$ 9,00'))
+  })
+
+  it('leaves room for every glyph at 0.6em per character', () => {
+    const value = '-US$ 1.468,14'
+    const cqi = Number(/([\d.]+)cqi/.exec(fitMonoFontSize(value, 22))![1])
+    // width used = chars × 0.6em, with em = cqi% of the container
+    expect(value.length * 0.6 * cqi).toBeLessThanOrEqual(100)
   })
 })

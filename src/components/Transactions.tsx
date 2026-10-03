@@ -27,7 +27,7 @@ import { BulkEditDialog } from './BulkEditDialog'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
-import { formatCurrency } from '../utils/formatting'
+import { fitMonoFontSize, formatCurrency } from '../utils/formatting'
 import { convert } from '../services/currency/convert'
 import type { Currency } from '../models'
 import { exportTransactions } from '../services/export/export'
@@ -402,12 +402,16 @@ function MonthNav({
 function TotalTile({
   label,
   value,
+  fitTo,
   sub,
   accent,
   icon,
 }: {
   label: string
   value: string
+  // Size the amount as if it were this string, so a row of tiles shares one
+  // font size (that of its longest value).
+  fitTo: string
   sub?: string
   accent?: string
   icon: React.ReactNode
@@ -420,6 +424,7 @@ function TotalTile({
         flexDirection: 'column',
         gap: 3,
         minWidth: 0,
+        containerType: 'inline-size',
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
@@ -456,7 +461,7 @@ function TotalTile({
       <div
         className="font-mono"
         style={{
-          fontSize: 22,
+          fontSize: fitMonoFontSize(fitTo, 22),
           fontWeight: 600,
           color: accent ?? 'var(--text)',
           letterSpacing: '-0.02em',
@@ -502,31 +507,33 @@ function TotalsStrip({
 
   const cur = homeCurrency as Currency
   const net = totals.net
+  const incomeText = formatCurrency(totals.income, cur)
+  const expenseText = formatCurrency(totals.expense, cur)
+  const netText = `${net >= 0 ? '+' : '−'}${formatCurrency(Math.abs(net), cur)}`
+  const fitTo = [incomeText, expenseText, netText].reduce((a, b) =>
+    b.length > a.length ? b : a
+  )
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 12,
-        marginBottom: 16,
-      }}
-    >
+    <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
       <TotalTile
         label="Ingresos"
         icon={<TrendingUp size={14} />}
-        value={formatCurrency(totals.income, cur)}
+        value={incomeText}
+        fitTo={fitTo}
         accent="var(--pos)"
       />
       <TotalTile
         label="Gastos"
         icon={<TrendingDown size={14} />}
-        value={formatCurrency(totals.expense, cur)}
+        value={expenseText}
+        fitTo={fitTo}
       />
       <TotalTile
         label="Balance"
         icon={<Wallet size={14} />}
-        value={`${net >= 0 ? '+' : '−'}${formatCurrency(Math.abs(net), cur)}`}
+        value={netText}
+        fitTo={fitTo}
         accent={net >= 0 ? 'var(--pos)' : 'var(--neg)'}
         sub="Ingresos − gastos"
       />
@@ -534,6 +541,7 @@ function TotalsStrip({
         label="Transferencias"
         icon={<Slash size={14} />}
         value={String(ignoredCount)}
+        fitTo={fitTo}
         sub={
           ignoredCount ? 'Ignoradas · no se cuentan' : 'Ninguna en el período'
         }
