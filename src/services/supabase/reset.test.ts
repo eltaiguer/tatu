@@ -45,4 +45,20 @@ describe('supabase reset service', () => {
     expect(fromMock).toHaveBeenCalledWith('ai_insights')
     expect(eqMock).toHaveBeenCalledWith('user_id', 'user-1')
   })
+
+  it('still succeeds when the insights table is missing', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    eqMock.mockImplementation(async () => ({ error: null }))
+    fromMock.mockImplementation((table: string) => ({
+      delete: () => ({
+        eq: async () =>
+          table === 'ai_insights'
+            ? { error: { message: 'relation "ai_insights" does not exist' } }
+            : { error: null },
+      }),
+    }))
+
+    const { resetUserSupabaseData } = await import('./reset')
+    await expect(resetUserSupabaseData(session)).resolves.toBeUndefined()
+  })
 })

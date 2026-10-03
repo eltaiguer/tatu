@@ -39,8 +39,17 @@ export function userErrorMessage(error: unknown, fallback: string): string {
 }
 
 // The Anthropic SDK reports failures in English with status codes; turn the
-// ones users can act on into Spanish.
+// ones users can act on into Spanish. Messages the app itself wrote (already
+// Spanish) pass through, and a partial-failure prefix ("2 de 12 lotes
+// fallaron: …") is kept so a partial failure never reads like an outage.
 export function aiErrorMessage(raw: string): string {
+  const partial = raw.match(/^(\d+ de \d+ lotes fallaron): ([\s\S]*)$/)
+  if (partial) {
+    return `${partial[1]} (${aiErrorMessage(partial[2])})`
+  }
+  if (/^(La respuesta|Respuesta inesperada|No se pudo)/.test(raw)) {
+    return raw
+  }
   const text = raw.toLowerCase()
   if (/401|403|invalid x-api-key|authentication|api key/.test(text)) {
     return 'la clave API de Anthropic no es válida'

@@ -41,4 +41,16 @@ describe('aiErrorMessage', () => {
       'error inesperado del servicio de IA'
     )
   })
+
+  it('keeps how many batches failed, so partial never reads as total', () => {
+    expect(aiErrorMessage('1 de 12 lotes fallaron: 529 Overloaded')).toBe(
+      '1 de 12 lotes fallaron (el servicio de IA no está disponible en este momento)'
+    )
+  })
+
+  it("passes the app's own Spanish messages through", () => {
+    const msg =
+      'La respuesta del modelo quedó truncada (límite de tokens alcanzado).'
+    expect(aiErrorMessage(msg)).toBe(msg)
+  })
 })
