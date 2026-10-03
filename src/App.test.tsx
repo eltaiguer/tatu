@@ -129,6 +129,23 @@ describe('App', () => {
     )
   })
 
+  it('has no floating theme button covering content and toasts', async () => {
+    // Theme lives in Configuración; the old fixed bottom-right toggle sat on
+    // top of row actions and the toast corner.
+    render(<App />)
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /Bienvenido a Tatú/i })
+      ).toBeInTheDocument()
+    )
+
+    expect(
+      screen.queryByRole('button', {
+        name: /modo (claro|oscuro)|Tema automático/,
+      })
+    ).not.toBeInTheDocument()
+  })
+
   it('opens import view when clicking the sidebar Importar button', async () => {
     render(<App />)
     await waitFor(() =>

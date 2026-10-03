@@ -19,9 +19,6 @@ export function useUserPreferences(session: SupabaseSession | null) {
   const [aiEnabled, setAiEnabled] = useState<boolean>(false)
   const [aiModel, setAiModel] = useState<string>('claude-haiku-4-5')
 
-  const cycleTheme = () =>
-    setTheme((t) => (t === 'light' ? 'dark' : t === 'dark' ? 'auto' : 'light'))
-
   // Listen for system color-scheme changes (used when theme === 'auto')
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -82,7 +79,6 @@ export function useUserPreferences(session: SupabaseSession | null) {
     theme,
     setTheme,
     isDark,
-    cycleTheme,
     preferredCurrency,
     setPreferredCurrency,
     fxRate,
