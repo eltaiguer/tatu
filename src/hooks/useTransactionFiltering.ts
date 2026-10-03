@@ -12,7 +12,7 @@ import {
 export type SortField = 'date' | 'amount' | 'description' | 'category'
 export type SortDirection = 'asc' | 'desc'
 
-const ITEMS_PER_PAGE = 12
+export const ITEMS_PER_PAGE = 25
 
 // `initial` seeds the filters once (from the URL). To apply a different
 // initial state, remount the consumer — the view does this on navigations.

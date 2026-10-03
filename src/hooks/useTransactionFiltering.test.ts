@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { Transaction } from '../models'
 import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
-import { useTransactionFiltering } from './useTransactionFiltering'
+import {
+  ITEMS_PER_PAGE,
+  useTransactionFiltering,
+} from './useTransactionFiltering'
 
 function makeTransaction(
   id: string,
@@ -215,15 +218,17 @@ describe('useTransactionFiltering — sorting', () => {
 })
 
 describe('useTransactionFiltering — pagination', () => {
-  const transactions = Array.from({ length: 30 }, (_, i) =>
+  // Two full pages plus a remainder of 6, whatever the page size is.
+  const P = ITEMS_PER_PAGE
+  const transactions = Array.from({ length: 2 * P + 6 }, (_, i) =>
     makeTransaction(`tx-${String(i).padStart(2, '0')}`, {
-      date: new Date(Date.UTC(2026, 2, i + 1)),
+      date: new Date(Date.UTC(2026, 2, 1) + i * 3_600_000),
     })
   )
 
-  it('paginates into pages of 12', () => {
+  it('paginates into pages of ITEMS_PER_PAGE', () => {
     const { result } = setup(transactions)
-    expect(result.current.paginatedTransactions).toHaveLength(12)
+    expect(result.current.paginatedTransactions).toHaveLength(P)
     expect(result.current.totalPages).toBe(3)
   })
 
@@ -235,8 +240,8 @@ describe('useTransactionFiltering — pagination', () => {
 
   it('exposes ids for the current page and for the whole filtered set', () => {
     const { result } = setup(transactions)
-    expect(result.current.paginatedTransactionIds).toHaveLength(12)
-    expect(result.current.filteredTransactionIds).toHaveLength(30)
+    expect(result.current.paginatedTransactionIds).toHaveLength(P)
+    expect(result.current.filteredTransactionIds).toHaveLength(2 * P + 6)
   })
 
   it('clamps the current page when filtering shrinks the result set', () => {
