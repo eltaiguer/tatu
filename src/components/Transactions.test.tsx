@@ -533,7 +533,7 @@ describe('Transactions', () => {
       screen.getByLabelText('Esta y las que importes en el futuro')
     )
     expect(
-      screen.getByText(/El nombre visible se comparte con las 2 similares/)
+      screen.getByText(/El nombre visible se comparte con todas las similares/)
     ).toBeInTheDocument()
   })
 

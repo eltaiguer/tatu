@@ -30,7 +30,8 @@ interface EditTransactionDialogProps {
   filteredCategorySuggestions: string[]
   filteredTagSuggestions: string[]
   pendingTransactionIds: ReadonlySet<string>
-  // Rows an apply-to-similar edit would write (findSimilarTransactions).
+  // Rows an apply-to-similar edit would visibly change
+  // (countSimilarEditReach).
   similarCount: number
 
   onDescriptionChange: (value: string) => void
@@ -245,7 +246,7 @@ export function EditTransactionDialog({
               {applyScope === 'future_matching_only' && similarCount > 1 && (
                 <p className="pl-6 text-xs text-muted-foreground">
                   La categoría cambia solo en esta. El nombre visible se
-                  comparte con las {similarCount} similares.
+                  comparte con todas las similares.
                 </p>
               )}
             </div>

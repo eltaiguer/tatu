@@ -23,7 +23,10 @@ import {
   setDescriptionOverrideWithSync,
   getDescriptionOverride,
 } from '../services/descriptions/description-overrides'
-import { findSimilarTransactions } from '../services/descriptions/similar-transactions'
+import {
+  countSimilarEditReach,
+  findSimilarTransactions,
+} from '../services/descriptions/similar-transactions'
 import {
   completeImportRun,
   createImportRun,
@@ -288,7 +291,9 @@ export function useTransactionHandlers({
         }
       })
       setError('')
-      return { affected: matching.length }
+      return {
+        affected: countSimilarEditReach(state.transactions, current, renamed),
+      }
     }
 
     if (updates.applyScope === 'future_matching_only') {
