@@ -72,6 +72,6 @@ export function parseCSV(csvContent: string, fileName: string): ParsedData {
 
     default:
       // This should never happen due to detectFileType throwing
-      throw new Error(`Unsupported file type: ${fileType}`)
+      throw new Error(`Tipo de archivo no soportado: ${fileType}`)
   }
 }

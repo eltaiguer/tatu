@@ -7,7 +7,9 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import { Toaster } from 'sonner'
 import { Settings } from './Settings'
+import { UserFacingError } from '../utils/user-error'
 import type { Transaction } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 
@@ -209,5 +211,44 @@ describe('Settings', () => {
       })
     )
     await waitFor(() => expect(onReset).toHaveBeenCalledTimes(1))
+  })
+
+  it('shows an error, not success, when resetting fails', async () => {
+    const onReset = vi
+      .fn()
+      .mockRejectedValue(
+        new UserFacingError('No se pudieron borrar todos los datos.')
+      )
+
+    render(
+      <>
+        <Settings
+          theme="light"
+          onSetTheme={() => {}}
+          preferredCurrency="UYU"
+          onSetCurrency={() => {}}
+          session={null}
+          supabaseEnabled={false}
+          onSignOut={() => {}}
+          transactions={[makeTx()]}
+          onResetAllData={onReset}
+          {...defaultAiProps}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resetear' }))
+    await waitFor(() => screen.getByRole('alertdialog'))
+    fireEvent.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', {
+        name: 'Eliminar todo',
+      })
+    )
+
+    expect(
+      await screen.findByText('No se pudieron borrar todos los datos.')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Datos eliminados')).not.toBeInTheDocument()
   })
 })

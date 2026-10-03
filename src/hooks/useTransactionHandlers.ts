@@ -39,6 +39,10 @@ import {
 } from '../services/categorizer/transaction-categorizer'
 import { analyzeTemporalPatterns } from '../services/categorizer/temporal-patterns'
 import { normalizeMerchantName } from '../services/categorizer/merchant-patterns'
+import {
+  testPattern,
+  type CustomPattern,
+} from '../services/categorizer/custom-patterns'
 
 import {
   getAiConfig,
@@ -638,6 +642,47 @@ export function useTransactionHandlers({
     return { categorized: matched.size }
   }
 
+  // Applies a just-created rule to existing rows. Rows are written one by
+  // one; those that saved stay applied (locally too) and the rest are
+  // reported, so the count matches the server. Split parts keep their own
+  // categories, as with apply-to-similar edits.
+  async function handleApplyPatternToPast(
+    pattern: CustomPattern
+  ): Promise<{ updated: number; failed: number }> {
+    const currentSession = sessionRef.current
+    if (!currentSession) {
+      throw new UserFacingError(
+        'Tu sesión terminó. Iniciá sesión de nuevo para guardar cambios.'
+      )
+    }
+    const targets = transactionStore
+      .getState()
+      .transactions.filter(
+        (tx) => !tx.splitParentId && testPattern(tx.description, pattern)
+      )
+    const changes = {
+      category: pattern.category,
+      categoryConfidence: 0.95,
+      ...(pattern.description && {
+        displayDescription: pattern.description,
+      }),
+    }
+    const results = await Promise.allSettled(
+      targets.map((tx) =>
+        updateRemoteTransaction(currentSession, tx.id, changes)
+      )
+    )
+    const saved = new Set(
+      targets
+        .filter((_, i) => results[i].status === 'fulfilled')
+        .map((tx) => tx.id)
+    )
+    transactionStore
+      .getState()
+      .mapTransactions((tx) => (saved.has(tx.id) ? { ...tx, ...changes } : tx))
+    return { updated: saved.size, failed: targets.length - saved.size }
+  }
+
   return {
     handleTransactionsImported,
     handleUpdateTransaction,
@@ -649,5 +694,6 @@ export function useTransactionHandlers({
     handleBulkDeleteTransactions,
     handleBulkTagTransactions,
     handleAutoCategorizeTransactions,
+    handleApplyPatternToPast,
   }
 }

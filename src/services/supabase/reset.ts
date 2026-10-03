@@ -25,4 +25,12 @@ export async function resetUserSupabaseData(
   await deleteByUser(session, 'custom_categories')
   await deleteByUser(session, 'custom_patterns')
   await deleteByUser(session, 'user_preferences')
+  // Cached insights were computed from the data just deleted. Best-effort:
+  // the table only exists once schema.sql was applied manually (see
+  // supabase/README.md), and a stale cache must not fail the reset.
+  try {
+    await deleteByUser(session, 'ai_insights')
+  } catch (error) {
+    console.warn('Could not clear cached insights during reset:', error)
+  }
 }

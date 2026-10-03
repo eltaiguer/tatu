@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { UserFacingError, userErrorMessage } from './user-error'
+import { UserFacingError, aiErrorMessage, userErrorMessage } from './user-error'
 
 describe('userErrorMessage', () => {
   afterEach(() => {
@@ -27,5 +27,30 @@ describe('userErrorMessage', () => {
     expect(userErrorMessage(new TypeError('Failed to fetch'), 'x')).toMatch(
       /Sin conexión/
     )
+  })
+})
+
+describe('aiErrorMessage', () => {
+  it('turns SDK errors into Spanish the user can act on', () => {
+    expect(aiErrorMessage('401 invalid x-api-key')).toBe(
+      'la clave API de Anthropic no es válida'
+    )
+    expect(aiErrorMessage('429 rate_limit_error')).toMatch(/límite/)
+    expect(aiErrorMessage('529 Overloaded')).toMatch(/no está disponible/)
+    expect(aiErrorMessage('something odd')).toBe(
+      'error inesperado del servicio de IA'
+    )
+  })
+
+  it('keeps how many batches failed, so partial never reads as total', () => {
+    expect(aiErrorMessage('1 de 12 lotes fallaron: 529 Overloaded')).toBe(
+      '1 de 12 lotes fallaron (el servicio de IA no está disponible en este momento)'
+    )
+  })
+
+  it("passes the app's own Spanish messages through", () => {
+    const msg =
+      'La respuesta del modelo quedó truncada (límite de tokens alcanzado).'
+    expect(aiErrorMessage(msg)).toBe(msg)
   })
 })

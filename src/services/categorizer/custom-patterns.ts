@@ -1,3 +1,4 @@
+import { UserFacingError } from '../../utils/user-error'
 import { normalizeMerchantName, type PatternMatch } from './merchant-patterns'
 
 export type MatchType = 'contains' | 'starts_with' | 'exact'
@@ -38,25 +39,32 @@ export function addCustomPattern(
   return pattern
 }
 
-async function syncCustomPatternToCloud(pattern: CustomPattern): Promise<void> {
-  try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { upsertCustomPattern } =
-        await import('../supabase/custom-patterns')
-      await upsertCustomPattern(session, pattern)
-    }
-  } catch (err) {
-    console.error('[custom-patterns] failed to sync to cloud:', err)
+// The *WithSync functions apply a change locally, push it, and on failure
+// undo exactly that change before rethrowing, so the UI never shows a rule
+// the server doesn't have (or hides one it still has).
+async function requireSession() {
+  const { getActiveSupabaseSession } = await import('../supabase/runtime')
+  const session = getActiveSupabaseSession()
+  if (!session) {
+    throw new UserFacingError(
+      'Tu sesión terminó. Iniciá sesión de nuevo para guardar cambios.'
+    )
   }
+  return session
 }
 
 export async function addCustomPatternWithSync(
   input: Omit<CustomPattern, 'id' | 'createdAt'>
 ): Promise<CustomPattern> {
   const pattern = addCustomPattern(input)
-  await syncCustomPatternToCloud(pattern)
+  try {
+    const session = await requireSession()
+    const { upsertCustomPattern } = await import('../supabase/custom-patterns')
+    await upsertCustomPattern(session, pattern)
+  } catch (error) {
+    removeCustomPattern(pattern.id)
+    throw error
+  }
   return pattern
 }
 
@@ -64,23 +72,24 @@ export function removeCustomPattern(id: string): void {
   patterns = patterns.filter((p) => p.id !== id)
 }
 
-async function deleteCustomPatternFromCloud(id: string): Promise<void> {
-  try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { deleteCustomPattern } =
-        await import('../supabase/custom-patterns')
-      await deleteCustomPattern(session, id)
-    }
-  } catch (err) {
-    console.error('[custom-patterns] failed to delete from cloud:', err)
-  }
-}
-
 export async function removeCustomPatternWithSync(id: string): Promise<void> {
+  const index = patterns.findIndex((p) => p.id === id)
+  const previous = patterns[index]
   removeCustomPattern(id)
-  await deleteCustomPatternFromCloud(id)
+  try {
+    const session = await requireSession()
+    const { deleteCustomPattern } = await import('../supabase/custom-patterns')
+    await deleteCustomPattern(session, id)
+  } catch (error) {
+    if (previous && !patterns.some((p) => p.id === id)) {
+      patterns = [
+        ...patterns.slice(0, index),
+        previous,
+        ...patterns.slice(index),
+      ]
+    }
+    throw error
+  }
 }
 
 export function clearAllCustomPatterns(): void {

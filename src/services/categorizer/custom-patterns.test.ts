@@ -139,16 +139,51 @@ describe('Custom Patterns', () => {
       )
     })
 
-    it('does not sync when no session', async () => {
+    it('refuses to save a rule without a session instead of keeping it local', async () => {
       getActiveSupabaseSessionMock.mockReturnValue(null)
 
-      await addCustomPatternWithSync({
-        pattern: 'farmacia',
+      await expect(
+        addCustomPatternWithSync({
+          pattern: 'farmacia',
+          matchType: 'contains',
+          category: Category.Healthcare,
+        })
+      ).rejects.toThrow(/sesión/)
+
+      expect(upsertCustomPatternMock).not.toHaveBeenCalled()
+      expect(listCustomPatterns()).toEqual([])
+    })
+
+    it('drops a new rule whose remote save failed', async () => {
+      getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'u' } })
+      upsertCustomPatternMock.mockRejectedValue(new Error('timeout'))
+
+      await expect(
+        addCustomPatternWithSync({
+          pattern: 'farmacia',
+          matchType: 'contains',
+          category: Category.Healthcare,
+        })
+      ).rejects.toThrow('timeout')
+      expect(listCustomPatterns()).toEqual([])
+    })
+
+    it('puts back a rule whose remote delete failed, in place', async () => {
+      getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'u' } })
+      const a = addCustomPattern({
+        pattern: 'a',
         matchType: 'contains',
         category: Category.Healthcare,
       })
+      const b = addCustomPattern({
+        pattern: 'b',
+        matchType: 'contains',
+        category: Category.Healthcare,
+      })
+      deleteCustomPatternMock.mockRejectedValue(new Error('timeout'))
 
-      expect(upsertCustomPatternMock).not.toHaveBeenCalled()
+      await expect(removeCustomPatternWithSync(a.id)).rejects.toThrow('timeout')
+      expect(listCustomPatterns().map((p) => p.id)).toEqual([a.id, b.id])
     })
   })
 

@@ -51,6 +51,7 @@ import { useAuthSession } from './hooks/useAuthSession'
 import { useTransactionSync } from './hooks/useTransactionSync'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
 import { getFriendlyName } from './utils/user-display'
+import { UserFacingError } from './utils/user-error'
 
 function App() {
   const location = useLocation()
@@ -192,7 +193,22 @@ function App() {
     }
   }
 
+  // Deletes on the server first and clears local state only once that
+  // succeeded. The server delete is several requests; if one fails part-way,
+  // local state is reloaded so it shows what actually remains.
   async function handleResetAllData() {
+    if (session) {
+      try {
+        await resetUserSupabaseData(session)
+      } catch (error) {
+        console.error('reset failed:', error)
+        refetch()
+        throw new UserFacingError(
+          'No se pudieron borrar todos los datos. Recargamos lo que quedó guardado; intentá de nuevo.'
+        )
+      }
+    }
+
     transactionStore.getState().clearTransactions()
     clearAllCategoryOverrides()
     clearAllDescriptionOverrides()
@@ -203,12 +219,6 @@ function App() {
     setPreferredCurrency('USD')
     setFxRate(40.5)
     resetPrefsLoaded()
-
-    if (session) {
-      await resetUserSupabaseData(session)
-    }
-
-    setAuthNotice('Datos eliminados correctamente')
   }
 
   function navigateToTransactions(
@@ -228,6 +238,7 @@ function App() {
     handleBulkDeleteTransactions,
     handleBulkTagTransactions,
     handleAutoCategorizeTransactions,
+    handleApplyPatternToPast,
   } = useTransactionHandlers({
     session,
     setError: setAuthError,
@@ -520,6 +531,7 @@ function App() {
                 <Categories
                   transactions={transactions}
                   onNavigateToTransactions={navigateToTransactions}
+                  onApplyPatternToPast={handleApplyPatternToPast}
                 />
               )}
               {currentView === 'settings' && (

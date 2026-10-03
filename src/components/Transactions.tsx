@@ -36,9 +36,8 @@ import type { Currency } from '../models'
 import { exportTransactions } from '../services/export/export'
 import { useConfirm } from './ConfirmDialog'
 import {
-  addCustomCategory,
+  addCustomCategoryWithSync,
   listCustomCategories,
-  syncCustomCategoryToCloud,
   DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
 import { isCategoryIgnored } from '../services/categories/category-registry'
@@ -1262,17 +1261,22 @@ export function Transactions({
     setEditError('')
   }
 
-  function handleAddCategory() {
+  // Selects the new category only once it is saved, so the edit can't
+  // reference a category the server doesn't have.
+  async function handleAddCategory() {
     const value = newCategoryInput.trim()
     if (!value) return
-    const created = addCustomCategory({
-      label: value,
-      color: DEFAULT_CATEGORY_COLOR,
-      icon: '🏷️',
-    })
-    setEditCategory(created.id)
-    setNewCategoryInput('')
-    void syncCustomCategoryToCloud(created.id)
+    try {
+      const created = await addCustomCategoryWithSync({
+        label: value,
+        color: DEFAULT_CATEGORY_COLOR,
+        icon: '🏷️',
+      })
+      setEditCategory(created.id)
+      setNewCategoryInput('')
+    } catch (error) {
+      reportError(error, 'No se pudo crear la categoría')
+    }
   }
 
   function handleAddTag(tag: string) {
@@ -1773,7 +1777,9 @@ export function Transactions({
         onTagPickerOpenChange={setTagPickerOpen}
         onNewCategoryInputChange={setNewCategoryInput}
         onNewTagInputChange={setNewTagInput}
-        onAddCategory={handleAddCategory}
+        onAddCategory={() => {
+          void handleAddCategory()
+        }}
         onAddTag={handleAddTag}
         onAddInlineTag={handleAddInlineTag}
         onRemoveTag={handleRemoveTag}

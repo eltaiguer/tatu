@@ -396,6 +396,8 @@ describe('App with supabase enabled', () => {
       target: { value: 'services' },
     })
     fireEvent.click(screen.getByLabelText('Crear categoría'))
+    // The new category is selected once it is saved.
+    await waitFor(() => expect(upsertCustomCategoryMock).toHaveBeenCalled())
     fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
     fireEvent.change(screen.getByLabelText('Nueva etiqueta'), {
       target: { value: 'monthly' },
