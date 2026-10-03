@@ -259,10 +259,19 @@ export function summarizeSavings(
   const meanNet = nets.reduce((s, n) => s + n, 0) / totalMonths
   const positiveMonths = months.filter((m) => m.net >= 0).length
 
+  // The month that pulled the mean across zero must lie in the mean's
+  // direction: the largest net when the mean is positive, the smallest when
+  // negative.
   const outlier =
     meanNet >= 0 !== typicalNet >= 0
-      ? months.reduce((max, m) =>
-          Math.abs(m.net) > Math.abs(max.net) ? m : max
+      ? months.reduce((pick, m) =>
+          meanNet >= 0
+            ? m.net > pick.net
+              ? m
+              : pick
+            : m.net < pick.net
+              ? m
+              : pick
         )
       : null
 

@@ -476,6 +476,35 @@ describe('summarizeSavings', () => {
     expect(summary.outlier).toEqual({ month: 'mar', net: 35000 })
   })
 
+  it('names a month in the direction the mean was pulled, not the largest by magnitude', () => {
+    // Median −10, mean +156: the −1000 month is the biggest by magnitude but
+    // it pulls the mean down, so it cannot be what "inflated" it.
+    const summary = summarizeSavings([
+      month('ene', -1000),
+      month('feb', -10),
+      month('mar', -10),
+      month('abr', 900),
+      month('may', 910),
+    ])
+
+    expect(summary.meanNet).toBeGreaterThan(0)
+    expect(summary.outlier).toEqual({ month: 'may', net: 910 })
+  })
+
+  it('picks the most negative month when a loss drags a positive year below zero', () => {
+    const summary = summarizeSavings([
+      month('ene', 100),
+      month('feb', 120),
+      month('mar', 110),
+      month('abr', -2000),
+      month('may', 1500),
+    ])
+
+    expect(summary.typicalNet).toBe(110)
+    expect(summary.meanNet).toBeLessThan(0)
+    expect(summary.outlier).toEqual({ month: 'abr', net: -2000 })
+  })
+
   it('reports no outlier when mean and median agree', () => {
     const summary = summarizeSavings([
       month('ene', 100),
