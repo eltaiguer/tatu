@@ -709,9 +709,11 @@ export function TransactionTable({
                       className={`font-mono${isIgnored ? ' line-through' : ''}`}
                       style={{
                         color:
-                          transaction.type === 'credit'
-                            ? 'var(--pos)'
-                            : 'var(--text)',
+                          isIgnored || isSplitParentM
+                            ? 'var(--text-muted)'
+                            : transaction.type === 'credit'
+                              ? 'var(--pos)'
+                              : 'var(--text)',
                       }}
                     >
                       {transaction.type === 'credit' ? '+' : '-'}
