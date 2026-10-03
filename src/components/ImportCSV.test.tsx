@@ -294,6 +294,27 @@ describe('ImportCSV', () => {
     expect(toastMock.warning.mock.calls[0][0]).not.toContain('x-api-key')
   })
 
+  it('tells the user deleted rows were skipped, with the right plural', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-1')],
+      duplicates: [],
+      previouslyDeleted: [makeTx('tx-2')],
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalled())
+    expect(toastMock.success.mock.calls[0][0]).toBe(
+      '1 nueva · 0 duplicadas omitidas · 1 que eliminaste antes omitida'
+    )
+  })
+
   it('does not warn about AI when the import reports no AI failure', async () => {
     parseCSVMock.mockReturnValue(makeParsedData())
     const onTransactionsImported = vi.fn().mockResolvedValue({

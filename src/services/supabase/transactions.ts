@@ -185,6 +185,41 @@ export async function restoreTransactions(
   }
 }
 
+// Which of `ids` already exist on the server, split by whether the user
+// deleted them. Imports use this instead of the in-memory store, which never
+// holds deleted rows and can lag the server (other devices, sync in flight).
+// Chunked so the id list stays within URL limits.
+const EXISTING_LOOKUP_CHUNK = 200
+
+export async function findExistingTransactionIds(
+  session: SupabaseSession,
+  ids: string[]
+): Promise<{ active: Set<string>; deleted: Set<string> }> {
+  const active = new Set<string>()
+  const deleted = new Set<string>()
+  const unique = Array.from(new Set(ids))
+  const client = getSupabaseClient()
+  for (let i = 0; i < unique.length; i += EXISTING_LOOKUP_CHUNK) {
+    const chunk = unique.slice(i, i + EXISTING_LOOKUP_CHUNK)
+    const { data, error } = await client
+      .from('transactions')
+      .select('transaction_id, is_deleted')
+      .eq('user_id', session.user.id)
+      .in('transaction_id', chunk)
+    if (error) {
+      throw new Error(error.message)
+    }
+    for (const row of (data ?? []) as Array<{
+      transaction_id: string
+      is_deleted: boolean | null
+    }>) {
+      if (row.is_deleted) deleted.add(row.transaction_id)
+      else active.add(row.transaction_id)
+    }
+  }
+  return { active, deleted }
+}
+
 export interface UpdateTransactionInput {
   description?: string
   /**

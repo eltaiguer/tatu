@@ -24,6 +24,12 @@ const mocks = vi.hoisted(() => ({
   restoreTransactions: vi.fn<[unknown, string[]], Promise<void>>(
     async () => undefined
   ),
+  findExistingTransactionIds: vi.fn(
+    async (): Promise<{ active: Set<string>; deleted: Set<string> }> => ({
+      active: new Set(),
+      deleted: new Set(),
+    })
+  ),
   unsplitTransaction: vi.fn<[unknown, unknown, string[]], Promise<unknown>>(),
   hardDeleteTransactions: vi.fn<[unknown, string[]], Promise<void>>(
     async () => undefined
@@ -48,6 +54,7 @@ vi.mock('../services/supabase/transactions', () => ({
   persistTransactions: mocks.persistTransactions,
   softDeleteTransaction: mocks.softDeleteTransaction,
   restoreTransactions: mocks.restoreTransactions,
+  findExistingTransactionIds: mocks.findExistingTransactionIds,
   updateTransaction: mocks.updateRemoteTransaction,
   splitTransaction: mocks.splitTransaction,
   unsplitTransaction: mocks.unsplitTransaction,
@@ -232,6 +239,75 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
 
     expect(result.added).toHaveLength(1)
     expect(mocks.failImportRun).not.toHaveBeenCalled()
+  })
+
+  it('skips rows the user deleted before instead of re-adding them', async () => {
+    mocks.getAiConfig.mockReturnValue({
+      apiKey: '',
+      enabled: false,
+      model: 'claude-haiku-4-5',
+    })
+    mocks.findExistingTransactionIds.mockResolvedValueOnce({
+      active: new Set(),
+      deleted: new Set(['gone']),
+    })
+    const { handlers } = setup()
+
+    const result = await handlers.handleTransactionsImported(
+      [makeTransaction('gone'), makeTransaction('fresh')],
+      makeImportContext()
+    )
+
+    expect(result.added.map((t) => t.id)).toEqual(['fresh'])
+    expect(result.previouslyDeleted?.map((t) => t.id)).toEqual(['gone'])
+    expect(transactionStore.getState().transactions.map((t) => t.id)).toEqual([
+      'fresh',
+    ])
+    const persisted = mocks.persistTransactions.mock
+      .calls[0][1] as Transaction[]
+    expect(persisted.map((t) => t.id)).toEqual(['fresh'])
+    // Audit: total = inserted + duplicates (skipped deleted counted there).
+    expect(mocks.completeImportRun).toHaveBeenCalledWith(session, 'import-1', {
+      totalRows: 2,
+      insertedRows: 1,
+      duplicateRows: 1,
+    })
+  })
+
+  it('treats rows already on the server as duplicates even if not loaded here', async () => {
+    mocks.getAiConfig.mockReturnValue({
+      apiKey: '',
+      enabled: false,
+      model: 'claude-haiku-4-5',
+    })
+    mocks.findExistingTransactionIds.mockResolvedValueOnce({
+      active: new Set(['remote-only']),
+      deleted: new Set(),
+    })
+    const { handlers } = setup()
+
+    const result = await handlers.handleTransactionsImported(
+      [makeTransaction('remote-only')],
+      makeImportContext()
+    )
+
+    // Never upserted over the server copy (it may carry the user's edits).
+    expect(result.added).toEqual([])
+    expect(result.duplicates.map((t) => t.id)).toEqual(['remote-only'])
+    expect(mocks.persistTransactions.mock.calls[0]?.[1] ?? []).toEqual([])
+  })
+
+  it('fails before recording the import when the lookup fails', async () => {
+    mocks.findExistingTransactionIds.mockRejectedValueOnce(new Error('timeout'))
+    const { handlers } = setup()
+
+    await expect(
+      handlers.handleTransactionsImported(
+        [makeTransaction('a')],
+        makeImportContext()
+      )
+    ).rejects.toThrow('timeout')
+    expect(mocks.createImportRun).not.toHaveBeenCalled()
   })
 
   it('reports a partial batch failure to the caller', async () => {

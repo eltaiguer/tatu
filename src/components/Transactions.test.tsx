@@ -69,7 +69,10 @@ describe('Transactions', () => {
       expect(screen.queryByRole('button', { name: 'Último mes' })).toBeNull()
     } finally {
       vi.useRealTimers()
-      process.env.TZ = originalTz
+      // Assigning undefined would set the string "undefined" and leak an
+      // invalid zone into later files in this worker.
+      if (originalTz === undefined) delete process.env.TZ
+      else process.env.TZ = originalTz
     }
   })
 
