@@ -27,6 +27,9 @@ export interface MonthSummary {
   count: number
   split: { USD: number; UYU: number }
   monthLabel: string
+  // True when the latest month with data is today's calendar month — only
+  // then may the UI call it "este mes".
+  isCurrentMonth: boolean
 }
 
 export interface CurrencySplitData {
@@ -95,7 +98,8 @@ export function buildMonthlyTrendsConverted(
 export function buildCurrentMonthSummary(
   transactions: Transaction[],
   homeCurrency: Currency,
-  fxRate: number
+  fxRate: number,
+  now: Date = new Date()
 ): MonthSummary {
   // Reference month comes from countable transactions only — a trailing
   // transfer or ignored row must not drag "este mes" onto an empty month.
@@ -108,6 +112,7 @@ export function buildCurrentMonthSummary(
       count: 0,
       split: { USD: 0, UYU: 0 },
       monthLabel: '',
+      isCurrentMonth: false,
     }
   }
 
@@ -136,6 +141,10 @@ export function buildCurrentMonthSummary(
     }
   })
 
+  // Transaction dates are calendar days stored at UTC midnight; "now" is the
+  // user's local calendar day.
+  const isCurrentMonth = y === now.getFullYear() && m === now.getMonth()
+
   const monthLabel = latest.toLocaleDateString('es-UY', {
     month: 'long',
     year: 'numeric',
@@ -149,6 +158,7 @@ export function buildCurrentMonthSummary(
     count: monthTxs.length,
     split,
     monthLabel,
+    isCurrentMonth,
   }
 }
 
