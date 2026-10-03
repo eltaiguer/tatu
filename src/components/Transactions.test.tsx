@@ -28,6 +28,35 @@ describe('Transactions', () => {
     vi.restoreAllMocks()
   })
 
+  it('calls the newest month "Este mes" in UTC-3 when its first row is dated the 1st', () => {
+    // Tx dates are calendar days stored at UTC midnight; read in local time
+    // in Uruguay, Oct 1 00:00Z is still Sep 30 and the label would disagree
+    // with Resumen.
+    const originalTz = process.env.TZ
+    process.env.TZ = 'America/Montevideo'
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-03T15:00:00.000Z'))
+    try {
+      render(
+        <Transactions
+          transactions={[
+            {
+              ...makeTransaction(0),
+              date: new Date('2026-10-01T00:00:00.000Z'),
+            },
+          ]}
+        />
+      )
+      fireEvent.click(screen.getByRole('button', { name: /2026/ }))
+
+      expect(screen.getByRole('button', { name: 'Este mes' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Último mes' })).toBeNull()
+    } finally {
+      vi.useRealTimers()
+      process.env.TZ = originalTz
+    }
+  })
+
   it('clamps pagination when filtering reduces total pages', () => {
     const transactions = Array.from({ length: 25 }, (_, i) =>
       makeTransaction(i, i === 3 ? 'target merchant' : `transaction ${i}`)
