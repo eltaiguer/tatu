@@ -695,7 +695,13 @@ describe('Transactions', () => {
     render(
       <>
         <Transactions
-          transactions={[tx]}
+          transactions={[
+            tx,
+            {
+              ...makeTransaction(2, 'split-part'),
+              splitParentId: tx.id,
+            },
+          ]}
           onDeleteTransaction={onDeleteTransaction}
           onRestoreTransactions={vi.fn()}
         />

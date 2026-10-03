@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { isCategoryIgnored } from '../services/categories/category-registry'
+import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
 import type { Transaction } from '../models'
@@ -23,6 +24,7 @@ export function useTransactionFiltering({
   initial?: UrlFilterState
 }) {
   const [searchTerm, setSearchTerm] = useState(initial.search)
+  const [merchantFilter, setMerchantFilter] = useState(initial.merchant)
   const [dateFromFilter, setDateFromFilter] = useState('')
   const [dateToFilter, setDateToFilter] = useState('')
   const [categoryFilters, setCategoryFilters] = useState<string[]>(
@@ -68,12 +70,25 @@ export function useTransactionFiltering({
     // transaction paid for a template literal + toLowerCase on every
     // keystroke — and on every render with an empty search box, where the
     // resulting `includes('')` was always true anyway.
+    // Same normalization Resumen and Categorías count with: missing, '',
+    // 'other' and casing all mean "Sin categoría".
+    const categorySet = new Set(categoryFilters.map(normalizeCategoryId))
+
     const filtered = transactions.filter((transaction) => {
+      // A split parent stands for its parts and is excluded from every total;
+      // it never matches on its own fields (it is shown above matching parts
+      // as context instead), so a drill-through adds up to the number clicked.
+      if (transaction.isSplitParent) return false
       if (dateFrom && transaction.date < dateFrom) return false
       if (dateTo && transaction.date > dateTo) return false
       if (
-        categoryFilters.length > 0 &&
-        !categoryFilters.includes(transaction.category ?? '')
+        categorySet.size > 0 &&
+        !categorySet.has(normalizeCategoryId(transaction.category))
+      )
+        return false
+      if (
+        merchantFilter &&
+        getDisplayDescription(transaction) !== merchantFilter
       )
         return false
       if (
@@ -119,6 +134,7 @@ export function useTransactionFiltering({
   }, [
     transactions,
     searchTerm,
+    merchantFilter,
     dateFromFilter,
     dateToFilter,
     categoryFilters,
@@ -149,7 +165,9 @@ export function useTransactionFiltering({
     () =>
       Array.from(
         new Set(
-          transactions.map((tx) => tx.category?.trim() ?? '').filter(Boolean)
+          transactions
+            .filter((tx) => !tx.isSplitParent)
+            .map((tx) => normalizeCategoryId(tx.category))
         )
       ).sort((a, b) =>
         getCategoryDisplay(a).label.localeCompare(
@@ -162,6 +180,7 @@ export function useTransactionFiltering({
 
   const hasActiveFilters =
     Boolean(searchTerm.trim()) ||
+    Boolean(merchantFilter) ||
     categoryFilters.length > 0 ||
     accountFilters.length > 0 ||
     currencyFilter !== 'all' ||
@@ -179,6 +198,7 @@ export function useTransactionFiltering({
 
   function clearAllFilters() {
     setSearchTerm('')
+    setMerchantFilter('')
     setDateFromFilter('')
     setDateToFilter('')
     setCategoryFilters([])
@@ -199,7 +219,10 @@ export function useTransactionFiltering({
     setSortDirection('desc')
   }
 
+  // Matching split parts are shown under their parent (as context, not as a
+  // counted row); other rows keep their order.
   const groupedTransactions = useMemo(() => {
+    const byId = new Map(transactions.map((tx) => [tx.id, tx]))
     const childrenByParent = new Map<string, Transaction[]>()
     filteredTransactions.forEach((tx) => {
       if (tx.splitParentId) {
@@ -214,19 +237,22 @@ export function useTransactionFiltering({
 
     filteredTransactions.forEach((tx) => {
       if (emitted.has(tx.id)) return
-      result.push(tx)
-      emitted.add(tx.id)
-      if (tx.isSplitParent) {
-        const children = childrenByParent.get(tx.id) ?? []
-        children.forEach((child) => {
+      const parent = tx.splitParentId ? byId.get(tx.splitParentId) : undefined
+      if (parent && !emitted.has(parent.id)) {
+        result.push(parent)
+        emitted.add(parent.id)
+        ;(childrenByParent.get(parent.id) ?? []).forEach((child) => {
           result.push(child)
           emitted.add(child.id)
         })
+        return
       }
+      result.push(tx)
+      emitted.add(tx.id)
     })
 
     return result
-  }, [filteredTransactions])
+  }, [filteredTransactions, transactions])
 
   const totalPages = Math.ceil(groupedTransactions.length / ITEMS_PER_PAGE)
   const safeTotalPages = Math.max(1, totalPages)
@@ -257,6 +283,8 @@ export function useTransactionFiltering({
   return {
     searchTerm,
     setSearchTerm,
+    merchantFilter,
+    setMerchantFilter,
     dateFromFilter,
     setDateFromFilter,
     dateToFilter,
@@ -291,6 +319,9 @@ export function useTransactionFiltering({
     safeTotalPages,
     startIndex,
     paginatedTransactions,
+    // Rows on screen across all pages: matching rows plus the split parents
+    // shown above their parts as context. Paging counts these.
+    displayedRowCount: groupedTransactions.length,
     paginatedTransactionIds,
     filteredTransactionIds,
     clearAllFilters,

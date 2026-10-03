@@ -1,6 +1,7 @@
 import type { Currency, Transaction } from '../../models'
-import { Category, isSplitParentTx } from '../../models'
+import { isSplitParentTx } from '../../models'
 import { isCategoryIgnored } from '../categories/category-registry'
+import { normalizeCategoryId } from '../categories/category-aliases'
 import { convert } from '../currency/convert'
 import { toMonthKey } from '../../utils/date-utils'
 
@@ -30,6 +31,10 @@ export interface MonthSummary {
   // True when the latest month with data is today's calendar month — only
   // then may the UI call it "este mes".
   isCurrentMonth: boolean
+  // The month summarized (UTC calendar month of the dates; m is 0-based),
+  // for linking to exactly its rows. Undefined when there is no data.
+  y?: number
+  m?: number
 }
 
 export interface CurrencySplitData {
@@ -56,7 +61,9 @@ export function buildCategorySpendingConverted(
 
   transactions.forEach((tx) => {
     if (tx.type !== 'debit' || isExcludedFromTotals(tx)) return
-    const category = tx.category ?? Category.Uncategorized
+    // Same id Categorías and the Transacciones filter use, so a category row
+    // links to exactly the rows it sums.
+    const category = normalizeCategoryId(tx.category)
     const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
     grouped.set(category, (grouped.get(category) ?? 0) + converted)
   })
@@ -159,6 +166,8 @@ export function buildCurrentMonthSummary(
     split,
     monthLabel,
     isCurrentMonth,
+    y,
+    m,
   }
 }
 

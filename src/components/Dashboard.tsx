@@ -11,7 +11,7 @@ import {
   Banknote,
 } from 'lucide-react'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import {
   PieChart,
   Pie,
@@ -66,6 +66,37 @@ import type { CategoryBreakdownRow } from './CategoryBreakdownList'
 
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+// Wraps a number so it opens the transactions behind it. A real button
+// (keyboard + screen reader), visually the content itself; a plain block
+// when there is nowhere to navigate.
+// Id of the synthetic "Otros" row/slice (categories beyond the top 7).
+const OTHER_ROW_ID = '__other__'
+
+function DrillTarget({
+  onOpen,
+  label,
+  children,
+  className = '',
+}: {
+  onOpen?: () => void
+  label: string
+  children: ReactNode
+  className?: string
+}) {
+  if (!onOpen) return <div className={className}>{children}</div>
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={label}
+      title={label}
+      className={`block w-full rounded-md text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className}`}
+    >
+      {children}
+    </button>
+  )
 }
 
 function SectionDivider({ label, sub }: { label: string; sub?: string }) {
@@ -148,6 +179,7 @@ interface AccountExpenseCardProps {
   sublabel: string
   stat: AccountSpend
   homeCurrency: Currency
+  onOpen?: () => void
 }
 
 function AccountExpenseCard({
@@ -156,113 +188,117 @@ function AccountExpenseCard({
   sublabel,
   stat,
   homeCurrency,
+  onOpen,
 }: AccountExpenseCardProps) {
   const mixed = stat.USD > 0 && stat.UYU > 0
   return (
-    <Card
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 14,
-        padding: '20px',
-      }}
-    >
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-        <span
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: 'var(--surface-2)',
-            color: 'var(--brand)',
-            display: 'grid',
-            placeItems: 'center',
-            flexShrink: 0,
-          }}
-        >
-          <Icon size={18} strokeWidth={1.8} />
-        </span>
-        <div style={{ minWidth: 0 }}>
-          <div
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      <DrillTarget
+        onOpen={onOpen}
+        label={`Ver los gastos de ${label}`}
+        className="flex flex-col gap-[14px] p-5"
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+          <span
             style={{
-              fontWeight: 600,
-              fontSize: 14,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              background: 'var(--surface-2)',
+              color: 'var(--brand)',
+              display: 'grid',
+              placeItems: 'center',
+              flexShrink: 0,
             }}
           >
-            {label}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-            {sublabel}
+            <Icon size={18} strokeWidth={1.8} />
+          </span>
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                fontWeight: 600,
+                fontSize: 14,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {label}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+              {sublabel}
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Amount */}
-      <div>
-        <div
-          style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-faint)' }}
-        >
-          Gastos del período
-        </div>
-        <div
-          className="font-mono"
-          style={{ fontSize: 23, marginTop: 4, color: 'var(--text)' }}
-        >
-          {formatCurrency(stat.conv, homeCurrency)}
-        </div>
-        {mixed && (
+        {/* Amount */}
+        <div>
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: 'var(--text-faint)',
+            }}
+          >
+            Gastos del período
+          </div>
           <div
             className="font-mono"
-            style={{ fontSize: 12, marginTop: 3, color: 'var(--text-faint)' }}
+            style={{ fontSize: 23, marginTop: 4, color: 'var(--text)' }}
           >
-            US$ {Math.round(stat.USD).toLocaleString('es-UY')} · $U{' '}
-            {Math.round(stat.UYU).toLocaleString('es-UY')}
+            {formatCurrency(stat.conv, homeCurrency)}
           </div>
-        )}
-      </div>
+          {mixed && (
+            <div
+              className="font-mono"
+              style={{ fontSize: 12, marginTop: 3, color: 'var(--text-faint)' }}
+            >
+              US$ {Math.round(stat.USD).toLocaleString('es-UY')} · $U{' '}
+              {Math.round(stat.UYU).toLocaleString('es-UY')}
+            </div>
+          )}
+        </div>
 
-      {/* Footer */}
-      <div
-        style={{
-          marginTop: 'auto',
-          paddingTop: 10,
-          borderTop: '1px solid var(--border)',
-        }}
-      >
+        {/* Footer */}
         <div
           style={{
-            height: 4,
-            borderRadius: 2,
-            background: 'var(--surface-2)',
-            overflow: 'hidden',
-            marginBottom: 7,
+            marginTop: 'auto',
+            paddingTop: 10,
+            borderTop: '1px solid var(--border)',
           }}
         >
           <div
             style={{
-              height: '100%',
-              width: `${stat.pct}%`,
-              background: 'var(--brand)',
+              height: 4,
               borderRadius: 2,
+              background: 'var(--surface-2)',
+              overflow: 'hidden',
+              marginBottom: 7,
             }}
-          />
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${stat.pct}%`,
+                background: 'var(--brand)',
+                borderRadius: 2,
+              }}
+            />
+          </div>
+          <div
+            style={{
+              fontSize: 11.5,
+              color: 'var(--text-faint)',
+              display: 'flex',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>{stat.count} movimientos</span>
+            <span className="font-mono">{Math.round(stat.pct)}% del gasto</span>
+          </div>
         </div>
-        <div
-          style={{
-            fontSize: 11.5,
-            color: 'var(--text-faint)',
-            display: 'flex',
-            justifyContent: 'space-between',
-          }}
-        >
-          <span>{stat.count} movimientos</span>
-          <span className="font-mono">{Math.round(stat.pct)}% del gasto</span>
-        </div>
-      </div>
+      </DrillTarget>
     </Card>
   )
 }
@@ -349,6 +385,22 @@ export function Dashboard({
     [transactions, homeCurrency, fxRate]
   )
 
+  // Opens exactly the month card's rows (optionally only income/expenses).
+  const openSummaryMonth =
+    onNavigateToTransactions &&
+    monthSummary.y !== undefined &&
+    monthSummary.m !== undefined
+      ? (type?: 'credit' | 'debit') =>
+          onNavigateToTransactions({
+            period: {
+              mode: 'month',
+              y: monthSummary.y as number,
+              m: monthSummary.m as number,
+            },
+            ...(type && { type }),
+          })
+      : undefined
+
   // Category breakdown — all history (for donut)
   const emojiLookup = useMemo(() => {
     const map = new Map<string, string>()
@@ -386,7 +438,7 @@ export function Dashboard({
       return [
         ...top7,
         {
-          categoryId: '__other__',
+          categoryId: OTHER_ROW_ID,
           label: 'Otros',
           color: 'var(--surface-3)',
           emoji: '',
@@ -398,12 +450,39 @@ export function Dashboard({
     return top7
   }, [categoryData, totalExpenses])
 
+  // The list mirrors the donut, including its "Otros" slice, so every slice
+  // has a keyboard-reachable equivalent that opens exactly its rows.
+  const otherCategoryIds = useMemo(
+    () => categoryData.slice(7).map((row) => row.categoryId),
+    [categoryData]
+  )
+  const openCategoryRow = onNavigateToTransactions
+    ? (id: string) =>
+        onNavigateToTransactions({
+          categories: id === OTHER_ROW_ID ? otherCategoryIds : [id],
+          type: 'debit',
+        })
+    : undefined
+  const breakdownRows = useMemo<CategoryBreakdownRow[]>(
+    () =>
+      donutData.map((row) => ({
+        id: row.categoryId,
+        label: row.label,
+        color: row.color,
+        emoji: row.emoji,
+        amount: row.value,
+        pct: row.pct,
+      })),
+    [donutData]
+  )
+
   // Monthly trend — last 12 months
   const monthlyTrend = useMemo(
     () =>
       buildMonthlyTrendsConverted(transactions, homeCurrency, fxRate)
         .slice(-12)
         .map((m) => ({
+          key: m.month,
           month: new Intl.DateTimeFormat('es-UY', {
             year: 'numeric',
             month: 'short',
@@ -415,6 +494,32 @@ export function Dashboard({
         })),
     [transactions, homeCurrency, fxRate]
   )
+
+  // Opens exactly one month's rows (optionally only income or expenses), as
+  // summed by the savings and income/expense charts.
+  const openMonth = onNavigateToTransactions
+    ? (key: string, type?: 'credit' | 'debit') => {
+        const [y, m] = key.split('-').map(Number)
+        onNavigateToTransactions({
+          period: { mode: 'month', y, m: m - 1 },
+          ...(type && { type }),
+        })
+      }
+    : undefined
+
+  // Hovered dot on the income/expense chart: clicking it opens that month's
+  // income (or expenses) — the value the dot plots.
+  function monthDot(fill: string, type: 'credit' | 'debit') {
+    return {
+      r: openMonth ? 6 : 4,
+      fill,
+      cursor: openMonth ? 'pointer' : undefined,
+      onClick: (_event: unknown, dot: unknown) => {
+        const key = (dot as { payload?: { key?: string } }).payload?.key
+        if (key) openMonth?.(key, type)
+      },
+    }
+  }
 
   // Currency split
   const currencySplit = useMemo(
@@ -696,6 +801,14 @@ export function Dashboard({
               sublabel="Santander"
               stat={acctSpend.card}
               homeCurrency={homeCurrency}
+              onOpen={
+                onNavigateToTransactions &&
+                (() =>
+                  onNavigateToTransactions({
+                    accountType: 'credit_card',
+                    type: 'debit',
+                  }))
+              }
             />
             <AccountExpenseCard
               icon={DollarSign}
@@ -703,6 +816,15 @@ export function Dashboard({
               sublabel="Santander USD"
               stat={acctSpend.usd}
               homeCurrency={homeCurrency}
+              onOpen={
+                onNavigateToTransactions &&
+                (() =>
+                  onNavigateToTransactions({
+                    accountType: 'bank_account',
+                    currency: 'USD',
+                    type: 'debit',
+                  }))
+              }
             />
             <AccountExpenseCard
               icon={Banknote}
@@ -710,6 +832,15 @@ export function Dashboard({
               sublabel="Santander $U"
               stat={acctSpend.uyu}
               homeCurrency={homeCurrency}
+              onOpen={
+                onNavigateToTransactions &&
+                (() =>
+                  onNavigateToTransactions({
+                    accountType: 'bank_account',
+                    currency: 'UYU',
+                    type: 'debit',
+                  }))
+              }
             />
           </div>
 
@@ -743,7 +874,10 @@ export function Dashboard({
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              <div>
+              <DrillTarget
+                onOpen={openSummaryMonth && (() => openSummaryMonth('credit'))}
+                label="Ver los ingresos del mes"
+              >
                 <div
                   className="text-muted-foreground"
                   style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
@@ -756,8 +890,11 @@ export function Dashboard({
                 >
                   {formatCurrency(monthSummary.income, homeCurrency)}
                 </div>
-              </div>
-              <div>
+              </DrillTarget>
+              <DrillTarget
+                onOpen={openSummaryMonth && (() => openSummaryMonth('debit'))}
+                label="Ver los gastos del mes"
+              >
                 <div
                   className="text-muted-foreground"
                   style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
@@ -783,8 +920,11 @@ export function Dashboard({
                   $U{' '}
                   {Math.round(monthSummary.split.UYU).toLocaleString('es-UY')}
                 </div>
-              </div>
-              <div>
+              </DrillTarget>
+              <DrillTarget
+                onOpen={openSummaryMonth && (() => openSummaryMonth())}
+                label="Ver los movimientos del mes"
+              >
                 <div
                   className="text-muted-foreground"
                   style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
@@ -807,7 +947,7 @@ export function Dashboard({
                 >
                   {monthSummary.count} transacciones registradas
                 </div>
-              </div>
+              </DrillTarget>
             </div>
           </Card>
 
@@ -819,21 +959,35 @@ export function Dashboard({
 
           {/* KPI tiles — 4-col */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="p-5">
-              <div
-                className="text-muted-foreground"
-                style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              <DrillTarget
+                onOpen={
+                  onNavigateToTransactions && topCategory
+                    ? () =>
+                        onNavigateToTransactions({
+                          categories: [topCategory.categoryId],
+                          type: 'debit',
+                        })
+                    : undefined
+                }
+                label={`Ver la mayor categoría: ${topCategory?.label ?? ''}`}
+                className="h-full p-5"
               >
-                Mayor categoría
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-                {topCategory?.label ?? '—'}
-              </div>
-              <div className="text-muted-foreground" style={{ fontSize: 12 }}>
-                {topCategory
-                  ? `${Math.round(topCategory.pct)}% del gasto`
-                  : 'Sin datos'}
-              </div>
+                <div
+                  className="text-muted-foreground"
+                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
+                >
+                  Mayor categoría
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+                  {topCategory?.label ?? '—'}
+                </div>
+                <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+                  {topCategory
+                    ? `${Math.round(topCategory.pct)}% del gasto`
+                    : 'Sin datos'}
+                </div>
+              </DrillTarget>
             </Card>
             <Card className="p-5" style={{ containerType: 'inline-size' }}>
               <div
@@ -1025,11 +1179,31 @@ export function Dashboard({
                           key={i}
                           fill={entry.neto >= 0 ? 'var(--pos)' : 'var(--neg)'}
                           fillOpacity={0.8}
+                          cursor={openMonth ? 'pointer' : undefined}
+                          onClick={() => openMonth?.(entry.key)}
                         />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+                {/* Keyboard equivalent of clicking a bar; visible when focused. */}
+                {openMonth && (
+                  <nav
+                    aria-label="Movimientos por mes"
+                    className="sr-only focus-within:not-sr-only focus-within:mt-2 focus-within:flex focus-within:flex-wrap focus-within:gap-1"
+                  >
+                    {monthlyTrend.map((m) => (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => openMonth(m.key)}
+                        className="rounded border border-border px-2 py-0.5 text-xs"
+                      >
+                        Ver movimientos de {m.month}
+                      </button>
+                    ))}
+                  </nav>
+                )}
               </div>
             </Card>
           )}
@@ -1069,7 +1243,7 @@ export function Dashboard({
               </div>
               {onNavigateToTransactions && (
                 <button
-                  onClick={() => onNavigateToTransactions({})}
+                  onClick={() => onNavigateToTransactions({ type: 'debit' })}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1109,7 +1283,12 @@ export function Dashboard({
                         endAngle={450}
                       >
                         {donutData.map((entry, i) => (
-                          <Cell key={i} fill={entry.color} />
+                          <Cell
+                            key={i}
+                            fill={entry.color}
+                            cursor={openCategoryRow ? 'pointer' : undefined}
+                            onClick={() => openCategoryRow?.(entry.categoryId)}
+                          />
                         ))}
                       </Pie>
                       <Tooltip content={customTooltip} />
@@ -1145,23 +1324,10 @@ export function Dashboard({
                 </div>
 
                 <CategoryBreakdownList
-                  rows={categoryData
-                    .slice(0, 7)
-                    .map<CategoryBreakdownRow>((row) => ({
-                      id: row.categoryId,
-                      label: row.label,
-                      color: row.color,
-                      emoji: row.emoji,
-                      amount: row.value,
-                      pct: row.pct,
-                    }))}
+                  rows={breakdownRows}
                   currency={homeCurrency}
                   showPercent
-                  onClickRow={
-                    onNavigateToTransactions
-                      ? (id) => onNavigateToTransactions({ category: id })
-                      : undefined
-                  }
+                  onClickRow={openCategoryRow}
                 />
               </div>
             )}
@@ -1388,7 +1554,7 @@ export function Dashboard({
                   fill="url(#gradIngresos)"
                   name="Ingresos"
                   dot={false}
-                  activeDot={{ r: 4, fill: 'var(--pos)' }}
+                  activeDot={monthDot('var(--pos)', 'credit')}
                 />
                 <Area
                   type="monotone"
@@ -1398,7 +1564,7 @@ export function Dashboard({
                   fill="url(#gradGastos)"
                   name="Gastos"
                   dot={false}
-                  activeDot={{ r: 4, fill: 'var(--neg)' }}
+                  activeDot={monthDot('var(--neg)', 'debit')}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -1556,15 +1722,18 @@ export function Dashboard({
                     const display = getCategoryDisplay(m.catId)
                     const emoji = emojiLookup.get(m.catId)
                     return (
-                      <div
+                      <DrillTarget
                         key={i}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 12,
-                          padding: '10px 0',
-                          borderBottom: '1px solid var(--border)',
-                        }}
+                        onOpen={
+                          onNavigateToTransactions &&
+                          (() =>
+                            onNavigateToTransactions({
+                              merchant: m.name,
+                              type: 'debit',
+                            }))
+                        }
+                        label={`Ver los gastos en ${m.name}`}
+                        className="flex items-center gap-3 border-b border-border py-[10px]"
                       >
                         <span
                           className="font-mono text-muted-foreground"
@@ -1608,7 +1777,7 @@ export function Dashboard({
                         <span className="font-mono" style={{ fontSize: 13 }}>
                           {formatCurrency(m.total, homeCurrency)}
                         </span>
-                      </div>
+                      </DrillTarget>
                     )
                   })}
                 </div>

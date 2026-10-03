@@ -11,6 +11,7 @@ describe('url filters', () => {
   it('round-trips every filter field', () => {
     const state: UrlFilterState = {
       search: 'uber eats',
+      merchant: 'Cantina 25',
       categories: ['restaurants', 'custom_cat_123'],
       accounts: ['credit_card'],
       currency: 'UYU',
@@ -61,6 +62,24 @@ describe('url filters', () => {
     expect(parseFilterParams('categoria=mi_categoria').categories).toEqual([
       'mi_categoria',
     ])
+  })
+
+  it('builds exact drill-through links', () => {
+    expect(filterToSearch({ merchant: 'UBER', type: 'debit' })).toBe(
+      'comercio=UBER&tipo=debit&periodo=todo'
+    )
+    expect(
+      filterToSearch({
+        categories: ['travel', 'education'],
+        type: 'debit',
+      })
+    ).toBe('categoria=travel&categoria=education&tipo=debit&periodo=todo')
+    expect(
+      filterToSearch({
+        period: { mode: 'month', y: 2026, m: 2 },
+        type: 'credit',
+      })
+    ).toBe('tipo=credit&periodo=2026-03')
   })
 
   it('builds a deep link from a dashboard filter, defaulting to all time', () => {

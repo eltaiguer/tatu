@@ -352,3 +352,71 @@ describe('useTransactionFiltering — split grouping through the hook', () => {
     expect(new Set(ids).size).toBe(4)
   })
 })
+
+describe('useTransactionFiltering — drill-through links add up', () => {
+  const ids = (txs: Transaction[]) => txs.map((t) => t.id)
+
+  it('matches "Sin categoría" the way Resumen and Categorías count it', () => {
+    const transactions = [
+      makeTransaction('none', { category: undefined }),
+      makeTransaction('blank', { category: '' }),
+      makeTransaction('legacy', { category: 'other' }),
+      makeTransaction('food', { category: 'groceries' }),
+    ]
+    const { result } = renderHook(() =>
+      useTransactionFiltering({
+        transactions,
+        initial: { ...DEFAULT_URL_FILTERS, categories: ['uncategorized'] },
+      })
+    )
+    expect(ids(result.current.filteredTransactions).sort()).toEqual([
+      'blank',
+      'legacy',
+      'none',
+    ])
+  })
+
+  it('never matches a split parent on its own fields, nor counts it', () => {
+    // A 100 Restaurantes purchase split into Restaurantes 60 + Super 40:
+    // Restaurantes on Resumen is 60, so the link must list only the part.
+    const transactions = [
+      makeTransaction('p', { category: 'restaurants', isSplitParent: true }),
+      makeTransaction('p_0', {
+        category: 'restaurants',
+        amount: 60,
+        splitParentId: 'p',
+      }),
+      makeTransaction('p_1', {
+        category: 'groceries',
+        amount: 40,
+        splitParentId: 'p',
+      }),
+    ]
+    const { result } = renderHook(() =>
+      useTransactionFiltering({
+        transactions,
+        initial: { ...DEFAULT_URL_FILTERS, categories: ['restaurants'] },
+      })
+    )
+    expect(ids(result.current.filteredTransactions)).toEqual(['p_0'])
+    // The parent still shows as context above its matching part, and the
+    // paging counts the rows actually on screen.
+    expect(ids(result.current.paginatedTransactions)).toEqual(['p', 'p_0'])
+    expect(result.current.displayedRowCount).toBe(2)
+  })
+
+  it('filters a merchant by exact name, not substring', () => {
+    const transactions = [
+      makeTransaction('a', { description: 'UBER' }),
+      makeTransaction('b', { description: 'UBER EATS' }),
+      makeTransaction('c', { description: 'Taxi', tags: ['uber'] }),
+    ]
+    const { result } = renderHook(() =>
+      useTransactionFiltering({
+        transactions,
+        initial: { ...DEFAULT_URL_FILTERS, merchant: 'UBER' },
+      })
+    )
+    expect(ids(result.current.filteredTransactions)).toEqual(['a'])
+  })
+})

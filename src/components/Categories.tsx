@@ -4,7 +4,7 @@ import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Badge } from './ui/badge'
 import { Checkbox } from './ui/checkbox'
-import type { Transaction } from '../models'
+import type { Transaction, TransactionsFilter } from '../models'
 import { Category, isSplitParentTx } from '../models'
 import {
   getCategoryDefinition,
@@ -28,6 +28,7 @@ import {
 
 interface CategoriesProps {
   transactions: Transaction[]
+  onNavigateToTransactions?: (filter: TransactionsFilter) => void
 }
 
 function getCategoryTransactionCount(
@@ -42,7 +43,10 @@ function getCategoryTransactionCount(
   }).length
 }
 
-export function Categories({ transactions }: CategoriesProps) {
+export function Categories({
+  transactions,
+  onNavigateToTransactions,
+}: CategoriesProps) {
   const [, setCategoriesVersion] = useState(0)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
@@ -519,7 +523,26 @@ export function Categories({ transactions }: CategoriesProps) {
                       marginTop: 1,
                     }}
                   >
-                    {count} {count === 1 ? 'movimiento' : 'movimientos'}
+                    {cat.id === Category.Uncategorized &&
+                    count > 0 &&
+                    onNavigateToTransactions ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onNavigateToTransactions({
+                            categories: [Category.Uncategorized],
+                          })
+                        }
+                        className="font-medium text-[color:var(--brand-text)] underline-offset-2 hover:underline"
+                      >
+                        {count} {count === 1 ? 'movimiento' : 'movimientos'} ·
+                        Revisar
+                      </button>
+                    ) : (
+                      <>
+                        {count} {count === 1 ? 'movimiento' : 'movimientos'}
+                      </>
+                    )}
                   </div>
                 </div>
 
