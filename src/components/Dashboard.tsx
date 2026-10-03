@@ -64,6 +64,10 @@ import type { CategoryBreakdownRow } from './CategoryBreakdownList'
 
 // ── Internal sub-components ──────────────────────────────────────────────────
 
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 function SectionDivider({ label, sub }: { label: string; sub?: string }) {
   return (
     <div
@@ -720,7 +724,10 @@ export function Dashboard({
                   fontFamily: 'var(--font-sans)',
                 }}
               >
-                Este mes, todo en {curWord}
+                {monthSummary.isCurrentMonth
+                  ? 'Este mes'
+                  : capitalize(monthSummary.monthLabel)}
+                , todo en {curWord}
               </h2>
               <p
                 style={{
@@ -730,6 +737,8 @@ export function Dashboard({
                   marginBottom: 0,
                 }}
               >
+                {!monthSummary.isCurrentMonth &&
+                  'Último mes con movimientos · importá tu extracto más reciente para ver este mes. '}
                 Combina tus movimientos en US$ y $U usando el tipo de cambio.
               </p>
             </div>

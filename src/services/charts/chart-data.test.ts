@@ -134,6 +134,26 @@ describe('chart-data multicurrency converting selectors', () => {
   })
 
   describe('buildCurrentMonthSummary', () => {
+    it('flags whether the latest month with data is the calendar month', () => {
+      const txs = [
+        makeTx('sep', {
+          date: new Date('2026-09-25T00:00:00.000Z'),
+          type: 'debit',
+          amount: 10,
+          currency: 'USD',
+        }),
+      ]
+      // Oct 3: data stops in September, so it is not "este mes".
+      expect(
+        buildCurrentMonthSummary(txs, 'USD', RATE, new Date(2026, 9, 3))
+          .isCurrentMonth
+      ).toBe(false)
+      expect(
+        buildCurrentMonthSummary(txs, 'USD', RATE, new Date(2026, 8, 30))
+          .isCurrentMonth
+      ).toBe(true)
+    })
+
     it('returns zeros for empty transactions', () => {
       const result = buildCurrentMonthSummary([], 'USD', RATE)
       expect(result.income).toBe(0)

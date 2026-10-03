@@ -516,4 +516,45 @@ describe('Dashboard', () => {
     expect(screen.getByText(/está inflado por/)).toBeInTheDocument()
     expect(screen.getByText('1 de 4 meses en positivo')).toBeInTheDocument()
   })
+
+  it('names the month instead of saying "Este mes" when data stops last month', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 3, 12))
+
+    render(
+      <Dashboard
+        transactions={[
+          makeTransaction({ date: new Date('2026-09-25T00:00:00.000Z') }),
+        ]}
+      />
+    )
+
+    expect(screen.queryByText(/^Este mes/)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(/Setiembre de 2026|Septiembre de 2026/)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Último mes con movimientos/)).toBeInTheDocument()
+
+    vi.useRealTimers()
+  })
+
+  it('says "Este mes" when the newest data is from the current month', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 8, 30, 12))
+
+    render(
+      <Dashboard
+        transactions={[
+          makeTransaction({ date: new Date('2026-09-25T00:00:00.000Z') }),
+        ]}
+      />
+    )
+
+    expect(screen.getByText(/^Este mes/)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Último mes con movimientos/)
+    ).not.toBeInTheDocument()
+
+    vi.useRealTimers()
+  })
 })

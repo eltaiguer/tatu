@@ -279,7 +279,16 @@ function MonthNav({
           >
             {[
               {
-                label: 'Este mes',
+                // The shortcut jumps to the newest month with data; only call
+                // it "este mes" when that is today's month. Tx dates are
+                // calendar days at UTC midnight (read in UTC, matching
+                // Resumen); today is the local calendar day. The rest of this
+                // picker still reads tx dates in local time — see #58.
+                label:
+                  newest.getUTCFullYear() === new Date().getFullYear() &&
+                  newest.getUTCMonth() === new Date().getMonth()
+                    ? 'Este mes'
+                    : 'Último mes',
                 val: {
                   mode: 'month' as const,
                   y: newest.getFullYear(),
