@@ -453,8 +453,13 @@ export function Settings({
               lineHeight: 1.5,
             }}
           >
-            Tus movimientos se guardan cifrados en tu cuenta y se sincronizan de
-            forma segura. Nunca compartimos tus datos financieros con terceros.
+            Tus movimientos se guardan en tu cuenta y solo vos podés verlos.
+            Tatú no los comparte con nadie por su cuenta; las funciones de IA
+            los envían a Anthropic con tu propia clave: la categorización manda
+            la descripción, el monto y la moneda de cada movimiento que
+            importás, junto con tus reglas y correcciones previas de nombres y
+            categorías; los insights mandan tus totales por categoría y
+            comercio.
           </p>
         </div>
       </SectionCard>

@@ -255,6 +255,10 @@ export function Insights({
               Analizamos todas tus categorías, comercios y cargos recurrentes
               para mostrarte dónde se fue tu dinero.
             </p>
+            <p className="text-muted-foreground max-w-md mx-auto mt-2 text-xs">
+              Se envían a Anthropic tus totales por categoría y comercio, usando
+              tu clave API. El costo de uso corre por tu cuenta.
+            </p>
           </div>
           <Button onClick={() => void handleGenerate()} disabled={generating}>
             <Sparkles size={16} />

@@ -168,11 +168,18 @@ describe('Settings', () => {
       />
     )
 
+    // The copy must not promise data is never shared: the AI features send
+    // it to Anthropic, and the user should know what goes out.
+    expect(screen.queryByText(/Nunca compartimos/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/cifrados/)).not.toBeInTheDocument()
     expect(
-      screen.getByText(/Tus movimientos se guardan cifrados en tu cuenta/)
+      screen.getByText(/las funciones de IA\s+los envían a Anthropic/)
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/Nunca compartimos tus datos financieros/)
+      screen.getByText(/la descripción, el monto y la moneda de cada/)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/tus reglas y correcciones previas/)
     ).toBeInTheDocument()
   })
 
