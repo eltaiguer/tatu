@@ -36,9 +36,11 @@ function getAccountIcon(type: string) {
   return <Wallet size={14} />
 }
 
-function getAccountLabel(type: string) {
-  if (type === 'credit_card') return 'Tarjeta'
-  return 'Cuenta'
+// Which of the three Santander accounts a row came from. A bank account is
+// identified by its currency (USD and $U are separate accounts).
+export function getAccountLabel(source: string, currency: string): string {
+  if (source === 'credit_card') return 'Tarjeta'
+  return currency === 'USD' ? 'Cuenta USD' : 'Cuenta $U'
 }
 
 interface TransactionTableProps {
@@ -458,7 +460,12 @@ export function TransactionTable({
                     <td className="px-3.5 py-3">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         {getAccountIcon(transaction.source)}
-                        <span>{getAccountLabel(transaction.source)}</span>
+                        <span>
+                          {getAccountLabel(
+                            transaction.source,
+                            transaction.currency
+                          )}
+                        </span>
                       </div>
                     </td>
                     <td className="px-3.5 py-3 text-center">
@@ -744,7 +751,7 @@ export function TransactionTable({
                   ))}
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     {getAccountIcon(transaction.source)}
-                    {getAccountLabel(transaction.source)}
+                    {getAccountLabel(transaction.source, transaction.currency)}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 justify-end">

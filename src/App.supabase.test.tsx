@@ -503,7 +503,7 @@ describe('App with supabase enabled', () => {
       screen.getAllByRole('button', { name: 'Editar AUT 998877 DEVOTO' })[0]
     )
     fireEvent.click(
-      screen.getByLabelText('Aplicar a transacciones futuras similares')
+      screen.getByLabelText('Esta y las que importes en el futuro')
     )
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'Devoto' },

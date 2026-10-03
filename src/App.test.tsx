@@ -867,4 +867,38 @@ describe('App', () => {
       await waitFor(() => expect(currentUrl()).toBe('/'))
     })
   })
+
+  it('applies an edit to as many similar transactions as the dialog said', async () => {
+    const row = (id: string, day: string) => ({
+      id,
+      date: new Date(`2026-03-${day}T12:00:00.000Z`),
+      description: 'CANTINA 25',
+      amount: 100,
+      currency: 'UYU' as const,
+      type: 'debit' as const,
+      source: 'credit_card' as const,
+      category: 'restaurants',
+      rawData: {},
+    })
+    loadUserTransactionsMock.mockResolvedValue([
+      row('a', '10'),
+      row('b', '11'),
+      row('c', '12'),
+    ])
+    renderApp()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Transacciones/ })
+    )
+    fireEvent.click(
+      (await screen.findAllByRole('button', { name: /^Editar/ }))[0]
+    )
+    const option = screen.getByLabelText(/se aplica a 3 transacciones/)
+    fireEvent.click(option)
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    expect(
+      await screen.findByText('Cambios aplicados a 3 transacciones')
+    ).toBeInTheDocument()
+  })
 })

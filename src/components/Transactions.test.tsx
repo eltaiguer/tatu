@@ -490,6 +490,53 @@ describe('Transactions', () => {
     ).toBeTruthy()
   })
 
+  it('tells how many transactions an apply-to-similar edit will touch', () => {
+    render(
+      <Transactions
+        transactions={[
+          // Newest first in the table, so the first "Editar" is tx-4.
+          makeTransaction(0, 'Devoto'),
+          // A split part shares the merchant name but is never "similar".
+          { ...makeTransaction(1, 'CANTINA 25'), splitParentId: 'tx-9' },
+          makeTransaction(2, 'CANTINA 25'),
+          makeTransaction(3, 'Cantina 25'),
+          makeTransaction(4, 'CANTINA 25'),
+        ]}
+        onUpdateTransaction={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: /^Editar/ })[0])
+
+    expect(
+      screen.getByLabelText(/se aplica a 3 transacciones/)
+    ).toBeInTheDocument()
+  })
+
+  it('shows which transaction is being edited and explains the future-only scope', () => {
+    render(
+      <Transactions
+        transactions={[
+          makeTransaction(0, 'CANTINA 25'),
+          makeTransaction(1, 'CANTINA 25'),
+        ]}
+        onUpdateTransaction={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: /^Editar/ })[0])
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/-\$U 10[01],00 · Cuenta \$U/)).toBeTruthy()
+
+    fireEvent.click(
+      screen.getByLabelText('Esta y las que importes en el futuro')
+    )
+    expect(
+      screen.getByText(/El nombre visible se comparte con las 2 similares/)
+    ).toBeInTheDocument()
+  })
+
   it('sends matching scope when selected in editor', async () => {
     const onUpdateTransaction = vi.fn().mockResolvedValue({ affected: 1 })
 
@@ -503,9 +550,7 @@ describe('Transactions', () => {
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Editar AUT 998877 DEVOTO' })[0]
     )
-    fireEvent.click(
-      screen.getByLabelText('Aplicar a todas las transacciones similares')
-    )
+    fireEvent.click(screen.getByLabelText(/^Todas las similares/))
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'Devoto' },
     })
@@ -535,7 +580,7 @@ describe('Transactions', () => {
       screen.getAllByRole('button', { name: 'Editar AUT 998877 DEVOTO' })[0]
     )
     fireEvent.click(
-      screen.getByLabelText('Aplicar a transacciones futuras similares')
+      screen.getByLabelText('Esta y las que importes en el futuro')
     )
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'Devoto' },

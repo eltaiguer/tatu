@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { NeedsConfirmationError, userErrorMessage } from '../utils/user-error'
+import { findSimilarTransactions } from '../services/descriptions/similar-transactions'
 import {
   Calendar,
   ChevronLeft,
@@ -1150,6 +1151,15 @@ export function Transactions({
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
+  // Same matching the apply-to-similar write uses, so the number the
+  // dialog shows is the number of rows the save will touch.
+  const similarCount = useMemo(
+    () =>
+      editingTransaction
+        ? findSimilarTransactions(transactions, editingTransaction).length
+        : 0,
+    [transactions, editingTransaction]
+  )
   const [editDescription, setEditDescription] = useState('')
   const [editCategory, setEditCategory] = useState('')
   const [editTagList, setEditTagList] = useState<string[]>([])
@@ -1737,6 +1747,7 @@ export function Transactions({
         filteredCategorySuggestions={filteredCategorySuggestions}
         filteredTagSuggestions={filteredTagSuggestions}
         pendingTransactionIds={pendingTransactionIds}
+        similarCount={similarCount}
         onDescriptionChange={setEditDescription}
         onCategoryChange={setEditCategory}
         onApplyScopeChange={setApplyScope}

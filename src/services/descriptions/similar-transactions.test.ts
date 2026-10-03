@@ -30,4 +30,19 @@ describe('findSimilarTransactions', () => {
     const all = [tx('a', '   '), tx('b', '  ')]
     expect(findSimilarTransactions(all, all[0]).map((t) => t.id)).toEqual(['a'])
   })
+
+  it('never pulls split parents or parts into an apply-to-similar edit', () => {
+    const all = [
+      tx('a', 'CANTINA 25'),
+      { ...tx('p', 'CANTINA 25'), isSplitParent: true },
+      { ...tx('p_split_0', 'CANTINA 25'), splitParentId: 'p' },
+      { ...tx('p_split_1', 'CANTINA 25'), splitParentId: 'p' },
+    ]
+    expect(findSimilarTransactions(all, all[0]).map((t) => t.id)).toEqual(['a'])
+    // Editing a part itself still includes that part.
+    expect(findSimilarTransactions(all, all[2]).map((t) => t.id)).toEqual([
+      'a',
+      'p_split_0',
+    ])
+  })
 })
