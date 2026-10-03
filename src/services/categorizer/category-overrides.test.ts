@@ -62,4 +62,15 @@ describe('Category overrides', () => {
     expect(upsertCategoryOverrideMock).toHaveBeenCalledTimes(1)
     expect(deleteCategoryOverrideMock).toHaveBeenCalledTimes(1)
   })
+
+  it('reports a failed remote save instead of swallowing it', async () => {
+    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
+    upsertCategoryOverrideMock.mockRejectedValue(new Error('timeout'))
+
+    await expect(
+      setMerchantCategoryOverrideWithSync('Devoto', Category.Groceries)
+    ).rejects.toThrow('timeout')
+    // The local rule still applies for this session.
+    expect(getMerchantCategoryOverride('Devoto')).toBe(Category.Groceries)
+  })
 })

@@ -51,21 +51,20 @@ export async function setDescriptionOverrideWithSync(input: {
     return
   }
 
-  try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { upsertDescriptionOverride } =
-        await import('../supabase/description-overrides')
-      await upsertDescriptionOverride(session, {
-        descriptionNormalized: descriptionKey,
-        descriptionOriginal: input.description,
-        friendlyDescription: input.friendlyDescription,
-        category: input.category,
-      })
-    }
-  } catch {
-    // in-memory override remains
+  // Remote failures propagate: the local cache is already updated, but
+  // the caller must know the change didn't reach the server or it
+  // silently disappears on the next reload.
+  const { getActiveSupabaseSession } = await import('../supabase/runtime')
+  const session = getActiveSupabaseSession()
+  if (session) {
+    const { upsertDescriptionOverride } =
+      await import('../supabase/description-overrides')
+    await upsertDescriptionOverride(session, {
+      descriptionNormalized: descriptionKey,
+      descriptionOriginal: input.description,
+      friendlyDescription: input.friendlyDescription,
+      category: input.category,
+    })
   }
 }
 
@@ -89,16 +88,15 @@ export async function clearDescriptionOverrideWithSync(
     return
   }
 
-  try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { deleteDescriptionOverride } =
-        await import('../supabase/description-overrides')
-      await deleteDescriptionOverride(session, descriptionKey)
-    }
-  } catch {
-    // in-memory state already updated
+  // Remote failures propagate: the local cache is already updated, but
+  // the caller must know the change didn't reach the server or it
+  // silently disappears on the next reload.
+  const { getActiveSupabaseSession } = await import('../supabase/runtime')
+  const session = getActiveSupabaseSession()
+  if (session) {
+    const { deleteDescriptionOverride } =
+      await import('../supabase/description-overrides')
+    await deleteDescriptionOverride(session, descriptionKey)
   }
 }
 

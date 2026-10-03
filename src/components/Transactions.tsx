@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { NeedsConfirmationError, userErrorMessage } from '../utils/user-error'
 import {
   Calendar,
   ChevronLeft,
@@ -859,11 +860,22 @@ function BulkBar({
   )
 }
 
-interface TransactionsProps {
+type DeleteResult = { removed: Transaction[]; reversible: boolean }
+
+// "1 transacción eliminada" / "3 transacciones eliminadas" from a stem.
+function txDone(count: number, participleStem: string): string {
+  return count === 1
+    ? `1 transacción ${participleStem}a`
+    : `${count} transacciones ${participleStem}as`
+}
+
+interface BaseTransactionsProps {
   transactions: Transaction[]
   initialFilter?: TransactionsFilter
   homeCurrency?: string
   fxRate?: number
+  // Mutation handlers reject on failure and resolve with what changed; the
+  // component only reports success after they resolve.
   onUpdateTransaction?: (
     transactionId: string,
     updates: {
@@ -872,23 +884,50 @@ interface TransactionsProps {
       tags?: string[]
       applyScope: 'single' | 'matching_past_and_future' | 'future_matching_only'
     }
-  ) => Promise<void> | void
-  onDeleteTransaction?: (transactionId: string) => Promise<void> | void
+  ) => Promise<{ affected: number }>
   onAutoCategorizeTransactions?: (
     transactionIds: string[]
-  ) => Promise<void> | void
+  ) => Promise<{ categorized: number }>
   onBulkCategorize?: (
     transactionIds: string[],
     category: string
-  ) => Promise<void> | void
-  onBulkDelete?: (transactionIds: string[]) => Promise<void> | void
-  onBulkTag?: (transactionIds: string[], tag: string) => Promise<void> | void
+  ) => Promise<{ updated: number }>
+  onBulkTag?: (
+    transactionIds: string[],
+    tag: string
+  ) => Promise<{ updated: number }>
   onSplitTransaction?: (
     transactionId: string,
     parts: Array<{ description: string; amount: number; category?: string }>
-  ) => Promise<void> | void
-  onUnsplitTransaction?: (transactionId: string) => Promise<void> | void
+  ) => Promise<{ parts: number }>
+  onUnsplitTransaction?: (transactionId: string) => Promise<void>
+  // Offered on error toasts so the user can re-sync after a partial write.
+  onReload?: () => void
 }
+
+// Deleting offers "Deshacer", so whoever wires a delete handler must also
+// wire the restore — enforced by the type rather than remembered.
+type DeleteProps =
+  | {
+      onDeleteTransaction?: never
+      onBulkDelete?: never
+      onRestoreTransactions?: never
+    }
+  | {
+      onDeleteTransaction?: (
+        transactionId: string,
+        options?: { allowIrreversible?: boolean }
+      ) => Promise<DeleteResult>
+      onBulkDelete?: (
+        transactionIds: string[],
+        options?: { allowIrreversible?: boolean }
+      ) => Promise<DeleteResult>
+      onRestoreTransactions: (
+        transactions: Transaction[]
+      ) => Promise<{ restored: number }>
+    }
+
+type TransactionsProps = BaseTransactionsProps & DeleteProps
 
 export function Transactions({
   transactions,
@@ -903,6 +942,8 @@ export function Transactions({
   onBulkTag,
   onSplitTransaction,
   onUnsplitTransaction,
+  onRestoreTransactions,
+  onReload,
 }: TransactionsProps) {
   const {
     searchTerm,
@@ -973,9 +1014,69 @@ export function Transactions({
       : new Date())
 
   /* ---- Edit state ---- */
-  const [pendingTransactionId, setPendingTransactionId] = useState<
-    string | null
-  >(null)
+  // Rows with a mutation in flight. A set, not a single id, so two
+  // overlapping deletes don't re-enable each other's buttons.
+  const [pendingTransactionIds, setPendingTransactionIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set())
+  function setPending(transactionId: string, pending: boolean) {
+    setPendingTransactionIds((current) => {
+      const next = new Set(current)
+      if (pending) next.add(transactionId)
+      else next.delete(transactionId)
+      return next
+    })
+  }
+
+  function reportError(error: unknown, fallback: string) {
+    toast.error(
+      userErrorMessage(error, fallback),
+      onReload ? { action: { label: 'Recargar', onClick: onReload } } : {}
+    )
+  }
+
+  // A reversible delete gets an undo action; an irreversible one (already
+  // confirmed) just reports what happened.
+  function reportDeleted(result: DeleteResult) {
+    const message = txDone(result.removed.length, 'eliminad')
+    if (!result.reversible || !onRestoreTransactions) {
+      toast.success(message)
+      return
+    }
+    const restore = onRestoreTransactions
+    toast(message, {
+      duration: 8000,
+      action: {
+        label: 'Deshacer',
+        onClick: () => {
+          toast.promise(restore(result.removed), {
+            loading: 'Restaurando…',
+            success: ({ restored }) => txDone(restored, 'restaurad'),
+            error: (error) =>
+              userErrorMessage(error, 'No se pudo deshacer la eliminación'),
+          })
+        },
+      },
+    })
+  }
+
+  // Tries a delete without confirmation; only when the handler says it
+  // can't be undone does it ask, then retries with permission.
+  async function deleteWithConfirmation(
+    run: (allowIrreversible: boolean) => Promise<DeleteResult>,
+    confirm: { title: string; description: string }
+  ): Promise<DeleteResult | null> {
+    try {
+      return await run(false)
+    } catch (error) {
+      if (!(error instanceof NeedsConfirmationError)) throw error
+    }
+    const confirmed = await confirmDeletion({
+      ...confirm,
+      confirmLabel: 'Eliminar',
+    })
+    return confirmed ? run(true) : null
+  }
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<
     string[]
   >([])
@@ -1121,34 +1222,47 @@ export function Transactions({
       setEditError('La descripción no puede quedar vacía')
       return
     }
-    setPendingTransactionId(editingTransaction.id)
+    const editingId = editingTransaction.id
+    setPending(editingId, true)
     try {
-      await onUpdateTransaction(editingTransaction.id, {
+      const { affected } = await onUpdateTransaction(editingId, {
         displayDescription: trimmedDescription,
         category: editCategory.trim() || undefined,
         tags: editTagList,
         applyScope,
       })
-      toast.success('Cambios guardados')
+      toast.success(
+        affected > 1
+          ? `Cambios aplicados a ${affected} transacciones`
+          : 'Cambios guardados'
+      )
       resetEditState()
+    } catch (error) {
+      // The dialog stays open so the user can retry.
+      reportError(error, 'No se pudieron guardar los cambios')
     } finally {
-      setPendingTransactionId(null)
+      setPending(editingId, false)
     }
   }
 
   async function handleDeleteTransaction(transaction: Transaction) {
     if (!onDeleteTransaction) return
-    const confirmed = await confirmDeletion({
-      title: '¿Eliminar transacción?',
-      description: 'Esta acción no se puede deshacer.',
-      confirmLabel: 'Eliminar',
-    })
-    if (!confirmed) return
-    setPendingTransactionId(transaction.id)
+    setPending(transaction.id, true)
     try {
-      await onDeleteTransaction(transaction.id)
+      const result = await deleteWithConfirmation(
+        (allowIrreversible) =>
+          onDeleteTransaction(transaction.id, { allowIrreversible }),
+        {
+          title: '¿Eliminar transacción dividida?',
+          description:
+            'Las partes divididas se eliminan definitivamente. Esta acción no se puede deshacer.',
+        }
+      )
+      if (result) reportDeleted(result)
+    } catch (error) {
+      reportError(error, 'No se pudo eliminar la transacción')
     } finally {
-      setPendingTransactionId(null)
+      setPending(transaction.id, false)
     }
   }
 
@@ -1158,8 +1272,11 @@ export function Transactions({
     if (!splittingTransaction || !onSplitTransaction) return
     setSplitPending(true)
     try {
-      await onSplitTransaction(splittingTransaction.id, parts)
+      const result = await onSplitTransaction(splittingTransaction.id, parts)
+      toast.success(`Transacción dividida en ${result.parts} partes`)
       setSplittingTransaction(null)
+    } catch (error) {
+      reportError(error, 'No se pudo dividir la transacción')
     } finally {
       setSplitPending(false)
     }
@@ -1174,11 +1291,14 @@ export function Transactions({
       confirmLabel: 'Restaurar',
     })
     if (!confirmed) return
-    setPendingTransactionId(transaction.id)
+    setPending(transaction.id, true)
     try {
       await onUnsplitTransaction(transaction.id)
+      toast.success('División deshecha')
+    } catch (error) {
+      reportError(error, 'No se pudo restaurar la transacción')
     } finally {
-      setPendingTransactionId(null)
+      setPending(transaction.id, false)
     }
   }
 
@@ -1234,16 +1354,40 @@ export function Transactions({
     ) {
       return
     }
-    const count = selectedTransactionIds.length
     setIsAutoCategorizing(true)
     try {
-      await onAutoCategorizeTransactions(selectedTransactionIds)
-      setSelectedTransactionIds([])
-      toast.success(
-        `${count} transacción${count === 1 ? '' : 'es'} categorizad${count === 1 ? 'a' : 'as'}`
+      const { categorized } = await onAutoCategorizeTransactions(
+        selectedTransactionIds
       )
+      if (categorized === 0) {
+        toast.info(
+          'No se encontraron categorías automáticas para las transacciones seleccionadas'
+        )
+        return
+      }
+      setSelectedTransactionIds([])
+      toast.success(txDone(categorized, 'categorizad'))
+    } catch (error) {
+      reportError(error, 'No se pudieron categorizar las transacciones')
     } finally {
       setIsAutoCategorizing(false)
+    }
+  }
+
+  async function handleBulkCategorizeSelected(category: string) {
+    if (!onBulkCategorize || selectedTransactionIds.length === 0) return
+    setIsBulkOperating(true)
+    try {
+      const { updated } = await onBulkCategorize(
+        selectedTransactionIds,
+        category
+      )
+      setSelectedTransactionIds([])
+      toast.success(txDone(updated, 'categorizad'))
+    } catch (error) {
+      reportError(error, 'No se pudieron categorizar las transacciones')
+    } finally {
+      setIsBulkOperating(false)
     }
   }
 
@@ -1254,14 +1398,16 @@ export function Transactions({
       isBulkOperating
     )
       return
-    const count = selectedTransactionIds.length
     setIsBulkOperating(true)
     try {
-      await onBulkCategorize(selectedTransactionIds, 'ignored')
-      setSelectedTransactionIds([])
-      toast.success(
-        `${count} transacción${count === 1 ? '' : 'es'} ignorada${count === 1 ? '' : 's'}`
+      const { updated } = await onBulkCategorize(
+        selectedTransactionIds,
+        'ignored'
       )
+      setSelectedTransactionIds([])
+      toast.success(txDone(updated, 'ignorad'))
+    } catch (error) {
+      reportError(error, 'No se pudieron ignorar las transacciones')
     } finally {
       setIsBulkOperating(false)
     }
@@ -1270,20 +1416,23 @@ export function Transactions({
   async function handleBulkDelete() {
     if (!onBulkDelete || selectedTransactionIds.length === 0 || isBulkOperating)
       return
-    const count = selectedTransactionIds.length
-    const confirmed = await confirmDeletion({
-      title: `¿Eliminar ${count} transacción${count === 1 ? '' : 'es'}?`,
-      description: 'Esta acción no se puede deshacer.',
-      confirmLabel: 'Eliminar',
-    })
-    if (!confirmed) return
+    const ids = selectedTransactionIds
     setIsBulkOperating(true)
     try {
-      await onBulkDelete(selectedTransactionIds)
-      setSelectedTransactionIds([])
-      toast.success(
-        `${count} transacción${count === 1 ? '' : 'es'} eliminada${count === 1 ? '' : 's'}`
+      const result = await deleteWithConfirmation(
+        (allowIrreversible) => onBulkDelete(ids, { allowIrreversible }),
+        {
+          title: `¿Eliminar ${ids.length} transacción${ids.length === 1 ? '' : 'es'}?`,
+          description:
+            'La selección incluye transacciones divididas: sus partes se eliminan definitivamente. Esta acción no se puede deshacer.',
+        }
       )
+      if (result) {
+        setSelectedTransactionIds([])
+        reportDeleted(result)
+      }
+    } catch (error) {
+      reportError(error, 'No se pudieron eliminar las transacciones')
     } finally {
       setIsBulkOperating(false)
     }
@@ -1307,21 +1456,44 @@ export function Transactions({
 
   async function handleBulkEditSave() {
     if (selectedTransactionIds.length === 0 || isBulkOperating) return
-    const count = selectedTransactionIds.length
     setIsBulkOperating(true)
+    // Steps run in sequence; on failure the message says which already
+    // applied, so a retry isn't a blind guess.
+    const applied: string[] = []
+    let updated = 0
     try {
       if (bulkEditCategory && onBulkCategorize) {
-        await onBulkCategorize(selectedTransactionIds, bulkEditCategory)
+        const result = await onBulkCategorize(
+          selectedTransactionIds,
+          bulkEditCategory
+        )
+        applied.push('la categoría')
+        updated = Math.max(updated, result.updated)
       }
       for (const tag of bulkEditTagList) {
         if (onBulkTag) {
-          await onBulkTag(selectedTransactionIds, tag)
+          const result = await onBulkTag(selectedTransactionIds, tag)
+          applied.push(`la etiqueta "${tag}"`)
+          updated = Math.max(updated, result.updated)
         }
       }
       setSelectedTransactionIds([])
       closeBulkEdit()
-      toast.success(
-        `${count} transacción${count === 1 ? '' : 'es'} actualizada${count === 1 ? '' : 's'}`
+      if (updated === 0) {
+        toast.info('Las transacciones ya tenían esos cambios')
+      } else {
+        toast.success(txDone(updated, 'actualizad'))
+      }
+    } catch (error) {
+      const message = userErrorMessage(
+        error,
+        'No se pudieron actualizar las transacciones'
+      )
+      toast.error(
+        applied.length > 0
+          ? `Se aplicó ${applied.join(' y ')}, pero falló el resto: ${message}`
+          : message,
+        onReload ? { action: { label: 'Recargar', onClick: onReload } } : {}
       )
     } finally {
       setIsBulkOperating(false)
@@ -1408,19 +1580,7 @@ export function Transactions({
           onSelectAll={handleSelectAllFiltered}
           onClear={() => setSelectedTransactionIds([])}
           onCategorize={(category) => {
-            if (!onBulkCategorize) return
-            setIsBulkOperating(true)
-            void (async () => {
-              try {
-                await onBulkCategorize(selectedTransactionIds, category)
-                setSelectedTransactionIds([])
-                toast.success(
-                  `${selectionCount} transacción${selectionCount === 1 ? '' : 'es'} categorizada${selectionCount === 1 ? '' : 's'}`
-                )
-              } finally {
-                setIsBulkOperating(false)
-              }
-            })()
+            void handleBulkCategorizeSelected(category)
           }}
           onEdit={openBulkEdit}
           onAuto={() => {
@@ -1472,7 +1632,7 @@ export function Transactions({
         allPageSelected={allPageSelected}
         somePageSelected={somePageSelected}
         isBusy={isBusy}
-        pendingTransactionId={pendingTransactionId}
+        pendingTransactionIds={pendingTransactionIds}
         sortField={sortField}
         sortDirection={sortDirection}
         hasActiveFilters={hasActiveFilters}
@@ -1518,7 +1678,7 @@ export function Transactions({
         newTagInput={newTagInput}
         filteredCategorySuggestions={filteredCategorySuggestions}
         filteredTagSuggestions={filteredTagSuggestions}
-        pendingTransactionId={pendingTransactionId}
+        pendingTransactionIds={pendingTransactionIds}
         onDescriptionChange={setEditDescription}
         onCategoryChange={setEditCategory}
         onApplyScopeChange={setApplyScope}

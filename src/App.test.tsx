@@ -1,12 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import App from './App'
 import { transactionStore } from './stores/transaction-store'
 import { listCustomCategories } from './services/categories/category-store'
@@ -238,7 +231,7 @@ describe('App', () => {
     ).toBeGreaterThan(0)
     expect(screen.getAllByText('Alimentación').length).toBeGreaterThan(0)
     expect(
-      screen.getByText('1 transacción auto-categorizada')
+      await screen.findByText('1 transacción categorizada')
     ).toBeInTheDocument()
   })
 
@@ -500,19 +493,16 @@ describe('App', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0]
     )
 
+    // Reversible, so no confirmation — the toast offers undo instead.
     fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
-
-    await waitFor(() => screen.getByRole('alertdialog'))
-    fireEvent.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Eliminar',
-      })
-    )
 
     await waitFor(() => {
       expect(transactionStore.getState().transactions).toHaveLength(0)
     })
     expect(softDeleteTransactionMock).toHaveBeenCalledTimes(2)
+    expect(
+      await screen.findByText('2 transacciones eliminadas')
+    ).toBeInTheDocument()
   })
 
   it('bulk tags selected transactions and updates the store', async () => {

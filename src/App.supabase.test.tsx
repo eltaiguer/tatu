@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { transactionStore } from './stores/transaction-store'
 
 const {
@@ -20,11 +14,14 @@ const {
   loadUserTransactionsMock,
   persistTransactionsMock,
   softDeleteTransactionMock,
+  restoreTransactionsMock,
   updateTransactionMock,
   listCategoryOverridesMock,
   upsertCategoryOverrideMock,
+  deleteCategoryOverrideMock,
   listDescriptionOverridesMock,
   upsertDescriptionOverrideMock,
+  deleteDescriptionOverrideMock,
   listCustomCategoriesMock,
   upsertCustomCategoryMock,
   listCustomPatternsMock,
@@ -42,11 +39,14 @@ const {
   loadUserTransactionsMock: vi.fn(),
   persistTransactionsMock: vi.fn(),
   softDeleteTransactionMock: vi.fn(),
+  restoreTransactionsMock: vi.fn(),
   updateTransactionMock: vi.fn(),
   listCategoryOverridesMock: vi.fn(),
   upsertCategoryOverrideMock: vi.fn(),
+  deleteCategoryOverrideMock: vi.fn(),
   listDescriptionOverridesMock: vi.fn(),
   upsertDescriptionOverrideMock: vi.fn(),
+  deleteDescriptionOverrideMock: vi.fn(),
   listCustomCategoriesMock: vi.fn(),
   upsertCustomCategoryMock: vi.fn(),
   listCustomPatternsMock: vi.fn(),
@@ -72,17 +72,20 @@ vi.mock('./services/supabase/transactions', () => ({
   loadUserTransactions: loadUserTransactionsMock,
   persistTransactions: persistTransactionsMock,
   softDeleteTransaction: softDeleteTransactionMock,
+  restoreTransactions: restoreTransactionsMock,
   updateTransaction: updateTransactionMock,
 }))
 
 vi.mock('./services/supabase/category-overrides', () => ({
   listCategoryOverrides: listCategoryOverridesMock,
   upsertCategoryOverride: upsertCategoryOverrideMock,
+  deleteCategoryOverride: deleteCategoryOverrideMock,
 }))
 
 vi.mock('./services/supabase/description-overrides', () => ({
   listDescriptionOverrides: listDescriptionOverridesMock,
   upsertDescriptionOverride: upsertDescriptionOverrideMock,
+  deleteDescriptionOverride: deleteDescriptionOverrideMock,
 }))
 
 vi.mock('./services/supabase/custom-categories', () => ({
@@ -117,6 +120,9 @@ describe('App with supabase enabled', () => {
     loadUserTransactionsMock.mockResolvedValue([])
     persistTransactionsMock.mockResolvedValue(undefined)
     softDeleteTransactionMock.mockResolvedValue(undefined)
+    restoreTransactionsMock.mockResolvedValue(undefined)
+    deleteCategoryOverrideMock.mockResolvedValue(undefined)
+    deleteDescriptionOverrideMock.mockResolvedValue(undefined)
     updateTransactionMock.mockResolvedValue(undefined)
     listCategoryOverridesMock.mockResolvedValue([])
     upsertCategoryOverrideMock.mockResolvedValue(undefined)
@@ -384,13 +390,7 @@ describe('App with supabase enabled', () => {
       screen.getAllByRole('button', { name: 'Eliminar New merchant' })[0]
     )
 
-    await waitFor(() => screen.getByRole('alertdialog'))
-    fireEvent.click(
-      within(screen.getByRole('alertdialog')).getByRole('button', {
-        name: 'Eliminar',
-      })
-    )
-
+    // Soft delete: no confirmation, an undo instead.
     await waitFor(() =>
       expect(softDeleteTransactionMock).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -399,9 +399,22 @@ describe('App with supabase enabled', () => {
         'tx-10'
       )
     )
-
     await waitFor(() =>
       expect(screen.queryByText('New merchant')).not.toBeInTheDocument()
+    )
+
+    // The undo is wired through App to the real restore handler.
+    fireEvent.click(await screen.findByRole('button', { name: 'Deshacer' }))
+    await waitFor(() =>
+      expect(restoreTransactionsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user: expect.objectContaining({ id: 'user-1' }),
+        }),
+        ['tx-10']
+      )
+    )
+    expect((await screen.findAllByText('New merchant')).length).toBeGreaterThan(
+      0
     )
   }, 15000)
 

@@ -13,6 +13,10 @@ interface TransactionStoreActions {
     duplicates: Transaction[]
   }
   updateTransaction: (id: string, updates: Partial<Transaction>) => void
+  // Applies `fn` to the store's current rows at write time — not to a
+  // snapshot read before an await — so concurrent mutations don't overwrite
+  // each other's results.
+  mapTransactions: (fn: (tx: Transaction) => Transaction) => void
   removeTransaction: (id: string) => void
   removeTransactions: (ids: string[]) => void
   clearTransactions: () => void
@@ -79,6 +83,10 @@ function createTransactionStoreState(
             tx.id === id ? { ...tx, ...updates } : tx
           )
         ),
+      })),
+    mapTransactions: (fn) =>
+      set((state) => ({
+        transactions: inferInternalTransfers(state.transactions.map(fn)),
       })),
     removeTransaction: (id) =>
       set((state) => ({

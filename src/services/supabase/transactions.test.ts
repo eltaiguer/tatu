@@ -12,6 +12,8 @@ const {
   updateMock,
   eqForUpdateMock,
   eqForUpdateIdMock,
+  inForUpdateMock,
+  selectAfterUpdateMock,
   fromMock,
 } = vi.hoisted(() => ({
   selectMock: vi.fn(),
@@ -24,6 +26,8 @@ const {
   updateMock: vi.fn(),
   eqForUpdateMock: vi.fn(),
   eqForUpdateIdMock: vi.fn(),
+  inForUpdateMock: vi.fn(),
+  selectAfterUpdateMock: vi.fn(),
   fromMock: vi.fn(),
 }))
 
@@ -134,8 +138,18 @@ describe('supabase transactions service', () => {
 
     upsertMock.mockResolvedValue({ error: null })
 
-    eqForUpdateIdMock.mockResolvedValue({ error: null })
-    eqForUpdateMock.mockReturnValue({ eq: eqForUpdateIdMock })
+    // UPDATE ... RETURNING transaction_id: one matched row unless a test
+    // says otherwise.
+    selectAfterUpdateMock.mockResolvedValue({
+      data: [{ transaction_id: 'tx-99' }],
+      error: null,
+    })
+    eqForUpdateIdMock.mockReturnValue({ select: selectAfterUpdateMock })
+    inForUpdateMock.mockReturnValue({ select: selectAfterUpdateMock })
+    eqForUpdateMock.mockReturnValue({
+      eq: eqForUpdateIdMock,
+      in: inForUpdateMock,
+    })
     updateMock.mockReturnValue({ eq: eqForUpdateMock })
 
     fromMock.mockImplementation((table: string) => {
@@ -266,16 +280,45 @@ describe('supabase transactions service', () => {
     expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
   })
 
-  it('restores a soft-deleted transaction', async () => {
-    const { restoreTransaction } = await import('./transactions')
-    await restoreTransaction(session, 'tx-99')
+  it('reports a soft delete that matched no row instead of succeeding', async () => {
+    selectAfterUpdateMock.mockResolvedValue({ data: [], error: null })
+    const { softDeleteTransaction } = await import('./transactions')
 
+    await expect(softDeleteTransaction(session, 'tx-gone')).rejects.toThrow(
+      /ya no existe/
+    )
+  })
+
+  it('restores soft-deleted transactions in one request', async () => {
+    selectAfterUpdateMock.mockResolvedValue({
+      data: [{ transaction_id: 'tx-1' }, { transaction_id: 'tx-2' }],
+      error: null,
+    })
+    const { restoreTransactions } = await import('./transactions')
+    await restoreTransactions(session, ['tx-1', 'tx-2'])
+
+    expect(updateMock).toHaveBeenCalledTimes(1)
     expect(updateMock).toHaveBeenCalledWith({
       is_deleted: false,
       deleted_at: null,
     })
     expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
-    expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
+    expect(inForUpdateMock).toHaveBeenCalledWith('transaction_id', [
+      'tx-1',
+      'tx-2',
+    ])
+  })
+
+  it('fails a restore when not every row came back', async () => {
+    selectAfterUpdateMock.mockResolvedValue({
+      data: [{ transaction_id: 'tx-1' }],
+      error: null,
+    })
+    const { restoreTransactions } = await import('./transactions')
+
+    await expect(
+      restoreTransactions(session, ['tx-1', 'tx-2'])
+    ).rejects.toThrow(/No se pudieron restaurar/)
   })
 
   it('updates editable fields for a transaction', async () => {
@@ -293,6 +336,15 @@ describe('supabase transactions service', () => {
     })
     expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
     expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
+  })
+
+  it('reports an update that matched no row instead of succeeding', async () => {
+    selectAfterUpdateMock.mockResolvedValue({ data: [], error: null })
+    const { updateTransaction } = await import('./transactions')
+
+    await expect(
+      updateTransaction(session, 'tx-gone', { category: 'food' })
+    ).rejects.toThrow(/ya no existe/)
   })
 
   it('does not issue update when no fields are provided', async () => {

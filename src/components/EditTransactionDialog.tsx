@@ -27,7 +27,7 @@ interface EditTransactionDialogProps {
   newTagInput: string
   filteredCategorySuggestions: string[]
   filteredTagSuggestions: string[]
-  pendingTransactionId: string | null
+  pendingTransactionIds: ReadonlySet<string>
 
   onDescriptionChange: (value: string) => void
   onCategoryChange: (value: string) => void
@@ -59,7 +59,7 @@ export function EditTransactionDialog({
   newTagInput,
   filteredCategorySuggestions,
   filteredTagSuggestions,
-  pendingTransactionId,
+  pendingTransactionIds,
   onDescriptionChange,
   onCategoryChange,
   onApplyScopeChange,
@@ -75,8 +75,8 @@ export function EditTransactionDialog({
   onCancel,
 }: EditTransactionDialogProps) {
   const isPending =
-    Boolean(editingTransaction) &&
-    pendingTransactionId === editingTransaction?.id
+    editingTransaction !== null &&
+    pendingTransactionIds.has(editingTransaction.id)
 
   return (
     <Dialog

@@ -49,20 +49,19 @@ export async function setMerchantCategoryOverrideWithSync(
     return
   }
 
-  try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { upsertCategoryOverride } =
-        await import('../supabase/category-overrides')
-      await upsertCategoryOverride(session, {
-        merchantNormalized: normalized,
-        merchantOriginal: merchantName,
-        category,
-      })
-    }
-  } catch {
-    // in-memory override remains
+  // Remote failures propagate: the local cache is already updated, but
+  // the caller must know the change didn't reach the server or it
+  // silently disappears on the next reload.
+  const { getActiveSupabaseSession } = await import('../supabase/runtime')
+  const session = getActiveSupabaseSession()
+  if (session) {
+    const { upsertCategoryOverride } =
+      await import('../supabase/category-overrides')
+    await upsertCategoryOverride(session, {
+      merchantNormalized: normalized,
+      merchantOriginal: merchantName,
+      category,
+    })
   }
 }
 
@@ -87,16 +86,15 @@ export async function clearMerchantCategoryOverrideWithSync(
     return
   }
 
-  try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
-    const session = getActiveSupabaseSession()
-    if (session) {
-      const { deleteCategoryOverride } =
-        await import('../supabase/category-overrides')
-      await deleteCategoryOverride(session, normalized)
-    }
-  } catch {
-    // in-memory state already updated
+  // Remote failures propagate: the local cache is already updated, but
+  // the caller must know the change didn't reach the server or it
+  // silently disappears on the next reload.
+  const { getActiveSupabaseSession } = await import('../supabase/runtime')
+  const session = getActiveSupabaseSession()
+  if (session) {
+    const { deleteCategoryOverride } =
+      await import('../supabase/category-overrides')
+    await deleteCategoryOverride(session, normalized)
   }
 }
 
