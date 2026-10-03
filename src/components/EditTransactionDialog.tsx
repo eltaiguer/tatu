@@ -12,7 +12,9 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { CategoryBadge } from './CategoryBadge'
 import { Category } from '../models'
-import type { Transaction } from '../models'
+import type { Currency, Transaction } from '../models'
+import { formatCurrency, formatDate } from '../utils/formatting'
+import { getAccountLabel } from './TransactionTable'
 
 interface EditTransactionDialogProps {
   editingTransaction: Transaction | null
@@ -28,6 +30,9 @@ interface EditTransactionDialogProps {
   filteredCategorySuggestions: string[]
   filteredTagSuggestions: string[]
   pendingTransactionIds: ReadonlySet<string>
+  // Rows an apply-to-similar edit would visibly change
+  // (countSimilarEditReach).
+  similarCount: number
 
   onDescriptionChange: (value: string) => void
   onCategoryChange: (value: string) => void
@@ -60,6 +65,7 @@ export function EditTransactionDialog({
   filteredCategorySuggestions,
   filteredTagSuggestions,
   pendingTransactionIds,
+  similarCount,
   onDescriptionChange,
   onCategoryChange,
   onApplyScopeChange,
@@ -87,7 +93,17 @@ export function EditTransactionDialog({
         <DialogHeader>
           <DialogTitle>Editar transacción</DialogTitle>
           <DialogDescription>
-            Actualizá descripción visible, categoría y etiquetas.
+            {editingTransaction
+              ? `${formatDate(editingTransaction.date)} · ${
+                  editingTransaction.type === 'credit' ? '+' : '-'
+                }${formatCurrency(
+                  editingTransaction.amount,
+                  editingTransaction.currency as Currency
+                )} · ${getAccountLabel(
+                  editingTransaction.source,
+                  editingTransaction.currency
+                )}`
+              : 'Actualizá descripción visible, categoría y etiquetas.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -104,48 +120,6 @@ export function EditTransactionDialog({
                 Original: {editingTransaction.description}
               </p>
             )}
-          </div>
-
-          <div>
-            <label className="text-sm font-medium">
-              Aplicar cambios de descripción/categoría
-            </label>
-            <div className="mt-2 space-y-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="apply-scope"
-                  value="single"
-                  checked={applyScope === 'single'}
-                  onChange={() => onApplyScopeChange('single')}
-                />
-                Solo esta transacción
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="apply-scope"
-                  value="matching_past_and_future"
-                  aria-label="Aplicar a todas las transacciones similares"
-                  checked={applyScope === 'matching_past_and_future'}
-                  onChange={() =>
-                    onApplyScopeChange('matching_past_and_future')
-                  }
-                />
-                Todas las similares (pasadas y futuras)
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="apply-scope"
-                  value="future_matching_only"
-                  aria-label="Aplicar a transacciones futuras similares"
-                  checked={applyScope === 'future_matching_only'}
-                  onChange={() => onApplyScopeChange('future_matching_only')}
-                />
-                Esta y futuras similares
-              </label>
-            </div>
           </div>
 
           <div>
@@ -230,8 +204,61 @@ export function EditTransactionDialog({
             </Popover>
           </div>
 
+          <fieldset>
+            <legend className="text-sm font-medium">
+              Aplicar nombre y categoría a
+            </legend>
+            <div className="mt-2 space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="apply-scope"
+                  value="single"
+                  checked={applyScope === 'single'}
+                  onChange={() => onApplyScopeChange('single')}
+                />
+                Solo esta transacción
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="apply-scope"
+                  value="matching_past_and_future"
+                  checked={applyScope === 'matching_past_and_future'}
+                  onChange={() =>
+                    onApplyScopeChange('matching_past_and_future')
+                  }
+                />
+                {similarCount > 1
+                  ? `Todas las similares · se aplica a ${similarCount} transacciones (y a las futuras)`
+                  : 'Todas las similares · solo esta por ahora (y las futuras)'}
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  name="apply-scope"
+                  value="future_matching_only"
+                  checked={applyScope === 'future_matching_only'}
+                  onChange={() => onApplyScopeChange('future_matching_only')}
+                />
+                Esta y las que importes en el futuro
+              </label>
+              {applyScope === 'future_matching_only' && similarCount > 1 && (
+                <p className="pl-6 text-xs text-muted-foreground">
+                  La categoría cambia solo en esta. El nombre visible se
+                  comparte con todas las similares.
+                </p>
+              )}
+            </div>
+          </fieldset>
+
           <div>
-            <label className="text-sm font-medium">Etiquetas</label>
+            <label className="text-sm font-medium">
+              Etiquetas{' '}
+              <span className="font-normal text-muted-foreground">
+                · solo en esta transacción
+              </span>
+            </label>
             <Popover open={tagPickerOpen} onOpenChange={onTagPickerOpenChange}>
               <PopoverTrigger asChild>
                 <button

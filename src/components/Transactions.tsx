@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { NeedsConfirmationError, userErrorMessage } from '../utils/user-error'
+import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import {
   Calendar,
   ChevronLeft,
@@ -1157,6 +1158,16 @@ export function Transactions({
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const [newCategoryInput, setNewCategoryInput] = useState('')
   const [newTagInput, setNewTagInput] = useState('')
+
+  // Same matching the apply-to-similar write uses, so the number the
+  // dialog shows is the number of rows the save will touch.
+  const similarCount = useMemo(() => {
+    if (!editingTransaction) return 0
+    // "Renamed" exactly as the save decides it.
+    const name = editDescription.trim()
+    const renamed = !!name && name !== editingTransaction.description
+    return countSimilarEditReach(transactions, editingTransaction, renamed)
+  }, [transactions, editingTransaction, editDescription])
   const [applyScope, setApplyScope] = useState<
     'single' | 'matching_past_and_future' | 'future_matching_only'
   >('single')
@@ -1737,6 +1748,7 @@ export function Transactions({
         filteredCategorySuggestions={filteredCategorySuggestions}
         filteredTagSuggestions={filteredTagSuggestions}
         pendingTransactionIds={pendingTransactionIds}
+        similarCount={similarCount}
         onDescriptionChange={setEditDescription}
         onCategoryChange={setEditCategory}
         onApplyScopeChange={setApplyScope}
