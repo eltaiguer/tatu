@@ -118,6 +118,10 @@ describe('Insights', () => {
         screen.getByText('Generá tus primeros insights')
       ).toBeInTheDocument()
     )
+    // Before the first paid call, say what leaves the browser and who pays.
+    expect(
+      screen.getByText(/Se envían a Anthropic tus totales por categoría/)
+    ).toBeInTheDocument()
   })
 
   it('fetches cached insights exactly once on mount', async () => {
