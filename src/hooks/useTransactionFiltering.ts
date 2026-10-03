@@ -319,6 +319,9 @@ export function useTransactionFiltering({
     safeTotalPages,
     startIndex,
     paginatedTransactions,
+    // Rows on screen across all pages: matching rows plus the split parents
+    // shown above their parts as context. Paging counts these.
+    displayedRowCount: groupedTransactions.length,
     paginatedTransactionIds,
     filteredTransactionIds,
     clearAllFilters,

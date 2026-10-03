@@ -399,8 +399,10 @@ describe('useTransactionFiltering — drill-through links add up', () => {
       })
     )
     expect(ids(result.current.filteredTransactions)).toEqual(['p_0'])
-    // The parent still shows as context above its matching part.
+    // The parent still shows as context above its matching part, and the
+    // paging counts the rows actually on screen.
     expect(ids(result.current.paginatedTransactions)).toEqual(['p', 'p_0'])
+    expect(result.current.displayedRowCount).toBe(2)
   })
 
   it('filters a merchant by exact name, not substring', () => {

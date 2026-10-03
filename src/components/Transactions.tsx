@@ -995,6 +995,7 @@ export function Transactions({
     safeTotalPages,
     startIndex,
     paginatedTransactions,
+    displayedRowCount,
     paginatedTransactionIds,
     filteredTransactionIds,
     clearAllFilters,
@@ -1814,7 +1815,7 @@ export function Transactions({
         <div className="text-sm text-muted-foreground">
           {filteredTransactions.length === 0
             ? 'Mostrando 0 de 0'
-            : `Mostrando ${startIndex + 1}-${startIndex + paginatedTransactions.length} de ${filteredTransactions.length}`}
+            : `Mostrando ${startIndex + 1}-${startIndex + paginatedTransactions.length} de ${displayedRowCount}`}
         </div>
         <div className="flex gap-2">
           <Button
