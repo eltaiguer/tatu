@@ -5,6 +5,8 @@ import {
   buildCurrentMonthSummary,
   buildCurrencySplit,
   spendByAccount,
+  summarizeSavings,
+  niceTicks,
 } from './chart-data'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
@@ -446,5 +448,108 @@ describe('chart-data multicurrency converting selectors', () => {
       expect(result.expense).toBe(0)
       expect(result.monthLabel).toBe('')
     })
+  })
+})
+
+describe('summarizeSavings', () => {
+  const month = (m: string, net: number) => ({ month: m, net })
+
+  it('uses the median so one large inflow does not make a losing year look positive', () => {
+    // Shape of a real account: 6 losing months, 3 positive, one of them a
+    // ~US$ 35k one-off that drags the mean far above zero.
+    const summary = summarizeSavings([
+      month('ene', -3000),
+      month('feb', -2600),
+      month('mar', 35000),
+      month('abr', -200),
+      month('may', -1500),
+      month('jun', 800),
+      month('jul', 100),
+      month('ago', -300),
+      month('sep', -1468),
+    ])
+
+    expect(summary.meanNet).toBeGreaterThan(0)
+    expect(summary.typicalNet).toBe(-300)
+    expect(summary.positiveMonths).toBe(3)
+    expect(summary.totalMonths).toBe(9)
+    expect(summary.outlier).toEqual({ month: 'mar', net: 35000 })
+  })
+
+  it('names a month in the direction the mean was pulled, not the largest by magnitude', () => {
+    // Median −10, mean +156: the −1000 month is the biggest by magnitude but
+    // it pulls the mean down, so it cannot be what "inflated" it.
+    const summary = summarizeSavings([
+      month('ene', -1000),
+      month('feb', -10),
+      month('mar', -10),
+      month('abr', 900),
+      month('may', 910),
+    ])
+
+    expect(summary.meanNet).toBeGreaterThan(0)
+    expect(summary.outlier).toEqual({ month: 'may', net: 910 })
+  })
+
+  it('picks the most negative month when a loss drags a positive year below zero', () => {
+    const summary = summarizeSavings([
+      month('ene', 100),
+      month('feb', 120),
+      month('mar', 110),
+      month('abr', -2000),
+      month('may', 1500),
+    ])
+
+    expect(summary.typicalNet).toBe(110)
+    expect(summary.meanNet).toBeLessThan(0)
+    expect(summary.outlier).toEqual({ month: 'abr', net: -2000 })
+  })
+
+  it('reports no outlier when mean and median agree', () => {
+    const summary = summarizeSavings([
+      month('ene', 100),
+      month('feb', 300),
+      month('mar', 200),
+    ])
+
+    expect(summary.typicalNet).toBe(200)
+    expect(summary.outlier).toBeNull()
+  })
+
+  it('averages the two middle months for an even count', () => {
+    expect(
+      summarizeSavings([month('a', -100), month('b', 300)]).typicalNet
+    ).toBe(100)
+  })
+
+  it('handles no data', () => {
+    expect(summarizeSavings([])).toEqual({
+      typicalNet: 0,
+      meanNet: 0,
+      positiveMonths: 0,
+      totalMonths: 0,
+      outlier: null,
+    })
+  })
+})
+
+describe('niceTicks', () => {
+  it('produces round, evenly spaced ticks that include zero', () => {
+    // Real savings range: a -2.6k month and a +35k month.
+    expect(niceTicks(-2600, 35000)).toEqual([
+      -10000, 0, 10000, 20000, 30000, 40000,
+    ])
+  })
+
+  it('includes zero for all-positive data', () => {
+    expect(niceTicks(1200, 4800)).toEqual([0, 2000, 4000, 6000])
+  })
+
+  it('handles all-negative data', () => {
+    expect(niceTicks(-900, -100)).toEqual([-1000, -750, -500, -250, 0])
+  })
+
+  it('returns just zero when there is no range', () => {
+    expect(niceTicks(0, 0)).toEqual([0])
   })
 })
