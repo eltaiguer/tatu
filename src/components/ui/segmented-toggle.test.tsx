@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { SegmentedToggle } from './segmented-toggle'
 
 const OPTIONS = [
@@ -19,13 +19,43 @@ describe('SegmentedToggle', () => {
     expect(screen.getByText('Oscuro')).toBeInTheDocument()
   })
 
-  it('marks the active option as selected', () => {
+  it('is a radio group whose checked radio is the active option', () => {
     render(
-      <SegmentedToggle options={OPTIONS} value="auto" onChange={vi.fn()} />
+      <SegmentedToggle
+        options={OPTIONS}
+        value="auto"
+        onChange={vi.fn()}
+        aria-label="Elegir tema"
+      />
     )
-    const autoBtn = screen.getByText('Auto')
-    expect(autoBtn).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText('Claro')).toHaveAttribute('aria-pressed', 'false')
+    const group = screen.getByRole('radiogroup', { name: 'Elegir tema' })
+    expect(within(group).getByRole('radio', { name: 'Auto' })).toBeChecked()
+    expect(
+      within(group).getByRole('radio', { name: 'Claro' })
+    ).not.toBeChecked()
+    // Filters and settings, not tabs: no tab or toggle-button state mixed in.
+    expect(screen.queryByRole('tab')).toBeNull()
+    for (const radio of within(group).getAllByRole('radio')) {
+      expect(radio).not.toHaveAttribute('aria-pressed')
+      expect(radio).not.toHaveAttribute('aria-selected')
+    }
+  })
+
+  it('keeps only the active option in the tab order and moves with arrows', () => {
+    const onChange = vi.fn()
+    render(
+      <SegmentedToggle options={OPTIONS} value="light" onChange={onChange} />
+    )
+    const light = screen.getByRole('radio', { name: 'Claro' })
+    expect(light).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('radio', { name: 'Auto' })).toHaveAttribute(
+      'tabindex',
+      '-1'
+    )
+
+    fireEvent.keyDown(light, { key: 'ArrowLeft' })
+    expect(onChange).toHaveBeenCalledWith('dark')
+    expect(screen.getByRole('radio', { name: 'Oscuro' })).toHaveFocus()
   })
 
   it('calls onChange when a different option is clicked', () => {
@@ -67,7 +97,7 @@ describe('SegmentedToggle', () => {
       />
     )
     expect(
-      screen.getByRole('tablist', { name: 'Elegir tema' })
+      screen.getByRole('radiogroup', { name: 'Elegir tema' })
     ).toBeInTheDocument()
   })
 

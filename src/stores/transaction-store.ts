@@ -21,7 +21,6 @@ interface TransactionStoreActions {
   removeTransactions: (ids: string[]) => void
   clearTransactions: () => void
   setTransactions: (transactions: Transaction[]) => void
-  findDuplicateIds: (transactions: Transaction[]) => string[]
 }
 
 export type TransactionStore = TransactionStoreState & TransactionStoreActions
@@ -41,8 +40,7 @@ export function normalizeTransactions(
 }
 
 function createTransactionStoreState(
-  set: (fn: (state: TransactionStoreState) => TransactionStoreState) => void,
-  get: () => TransactionStoreState
+  set: (fn: (state: TransactionStoreState) => TransactionStoreState) => void
 ): TransactionStore {
   return {
     transactions: [],
@@ -108,24 +106,12 @@ function createTransactionStoreState(
       set(() => ({
         transactions: normalizeTransactions(transactions),
       })),
-    findDuplicateIds: (transactions) => {
-      const existingIds = new Set(get().transactions.map((tx) => tx.id))
-      const duplicates = new Set<string>()
-
-      transactions.forEach((tx) => {
-        if (existingIds.has(tx.id)) {
-          duplicates.add(tx.id)
-        }
-      })
-
-      return Array.from(duplicates)
-    },
   }
 }
 
 export function createTransactionStore() {
-  return createStore<TransactionStore>()((set, get) =>
-    createTransactionStoreState(set, get)
+  return createStore<TransactionStore>()((set) =>
+    createTransactionStoreState(set)
   )
 }
 

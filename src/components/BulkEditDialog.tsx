@@ -1,3 +1,4 @@
+import { useId, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -10,7 +11,12 @@ import {
   DialogTitle,
 } from './ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
+import { focusFirstOption, handleOptionListKeyDown } from './ui/option-list'
 import { CategoryBadge } from './CategoryBadge'
+import {
+  filterCategorySuggestions,
+  filterTagSuggestions,
+} from '../services/suggestions/suggestions'
 
 interface BulkEditDialogProps {
   open: boolean
@@ -21,8 +27,7 @@ interface BulkEditDialogProps {
   bulkTagPickerOpen: boolean
   bulkCategorySearch: string
   bulkTagSearch: string
-  bulkFilteredCategories: string[]
-  bulkFilteredTags: string[]
+  categorySuggestions: string[]
   tagSuggestions: string[]
   isBulkOperating: boolean
   showCategorySection: boolean
@@ -47,8 +52,7 @@ export function BulkEditDialog({
   bulkTagPickerOpen,
   bulkCategorySearch,
   bulkTagSearch,
-  bulkFilteredCategories,
-  bulkFilteredTags,
+  categorySuggestions,
   tagSuggestions,
   isBulkOperating,
   showCategorySection,
@@ -62,6 +66,40 @@ export function BulkEditDialog({
   onSave,
   onCancel,
 }: BulkEditDialogProps) {
+  const filteredCategories = filterCategorySuggestions(
+    categorySuggestions,
+    bulkCategorySearch
+  )
+  const filteredTags = filterTagSuggestions(tagSuggestions, bulkTagSearch)
+  // Each picker is named by its visible label plus its current value.
+  const id = useId()
+  const categoryLabelId = `${id}-category-label`
+  const categoryTriggerId = `${id}-category-trigger`
+  const tagLabelId = `${id}-tag-label`
+  const tagTriggerId = `${id}-tag-trigger`
+  const categoryListRef = useRef<HTMLDivElement>(null)
+  const tagListRef = useRef<HTMLDivElement>(null)
+
+  function pickCategory(category: string) {
+    onBulkEditCategoryChange(category)
+    onBulkCategoryPickerOpenChange(false)
+  }
+
+  function addTag(raw: string) {
+    const typed = raw.trim()
+    if (!typed) return
+    // A tag that already exists (in any case) is reused, so a differently
+    // cased query never adds a near-duplicate to every selected row.
+    const key = typed.toLocaleLowerCase('es')
+    const sameTag = (t: string) => t.toLocaleLowerCase('es') === key
+    const tag =
+      bulkEditTagList.find(sameTag) ?? tagSuggestions.find(sameTag) ?? typed
+    if (!bulkEditTagList.includes(tag)) {
+      onBulkEditTagListChange([...bulkEditTagList, tag])
+    }
+    onBulkTagSearchChange('')
+  }
+
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
       <DialogContent>
@@ -78,7 +116,9 @@ export function BulkEditDialog({
         <div className="space-y-3">
           {showCategorySection && (
             <div>
-              <label className="text-sm font-medium">Categoría</label>
+              <label id={categoryLabelId} className="text-sm font-medium">
+                Categoría
+              </label>
               <Popover
                 open={bulkCategoryPickerOpen}
                 onOpenChange={onBulkCategoryPickerOpenChange}
@@ -86,7 +126,8 @@ export function BulkEditDialog({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    aria-label="Categoría bulk dropdown"
+                    id={categoryTriggerId}
+                    aria-labelledby={`${categoryLabelId} ${categoryTriggerId}`}
                     className="mt-1 w-full min-h-9 rounded-md border border-input bg-input-background px-2 py-1 text-left hover:bg-muted/50"
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -111,34 +152,41 @@ export function BulkEditDialog({
                       onChange={(event) =>
                         onBulkCategorySearchChange(event.target.value)
                       }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          if (filteredCategories[0]) {
+                            pickCategory(filteredCategories[0])
+                          }
+                        } else if (event.key === 'ArrowDown') {
+                          event.preventDefault()
+                          focusFirstOption(categoryListRef.current)
+                        }
+                      }}
                       placeholder="Buscar categoría..."
                     />
                     <div
+                      ref={categoryListRef}
                       className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2 [-webkit-overflow-scrolling:touch]"
                       onWheel={(event) => event.stopPropagation()}
                       onTouchMove={(event) => event.stopPropagation()}
+                      onKeyDown={handleOptionListKeyDown}
                     >
                       <button
                         type="button"
                         className="w-full text-left rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                        onClick={() => {
-                          onBulkEditCategoryChange('')
-                          onBulkCategoryPickerOpenChange(false)
-                        }}
+                        onClick={() => pickCategory('')}
                       >
                         <span className="text-muted-foreground">
                           Sin cambios
                         </span>
                       </button>
-                      {bulkFilteredCategories.map((category) => (
+                      {filteredCategories.map((category) => (
                         <button
                           key={category}
                           type="button"
                           className="w-full text-left rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
-                          onClick={() => {
-                            onBulkEditCategoryChange(category)
-                            onBulkCategoryPickerOpenChange(false)
-                          }}
+                          onClick={() => pickCategory(category)}
                         >
                           <CategoryBadge categoryId={category} size="sm" />
                         </button>
@@ -152,7 +200,9 @@ export function BulkEditDialog({
 
           {showTagSection && (
             <div>
-              <label className="text-sm font-medium">Etiquetas</label>
+              <label id={tagLabelId} className="text-sm font-medium">
+                Etiquetas
+              </label>
               <Popover
                 open={bulkTagPickerOpen}
                 onOpenChange={onBulkTagPickerOpenChange}
@@ -160,7 +210,8 @@ export function BulkEditDialog({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    aria-label="Etiquetas bulk dropdown"
+                    id={tagTriggerId}
+                    aria-labelledby={`${tagLabelId} ${tagTriggerId}`}
                     className="mt-1 w-full h-9 rounded-md border border-input bg-input-background px-3 text-sm text-left hover:bg-muted/50"
                   >
                     {bulkEditTagList.length > 0
@@ -176,14 +227,25 @@ export function BulkEditDialog({
                       onChange={(event) =>
                         onBulkTagSearchChange(event.target.value)
                       }
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          addTag(bulkTagSearch)
+                        } else if (event.key === 'ArrowDown') {
+                          event.preventDefault()
+                          focusFirstOption(tagListRef.current)
+                        }
+                      }}
                       placeholder="Buscar o crear etiqueta..."
                     />
                     <div
+                      ref={tagListRef}
                       className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2 [-webkit-overflow-scrolling:touch]"
                       onWheel={(event) => event.stopPropagation()}
                       onTouchMove={(event) => event.stopPropagation()}
+                      onKeyDown={handleOptionListKeyDown}
                     >
-                      {bulkFilteredTags.map((tag) => (
+                      {filteredTags.map((tag) => (
                         <button
                           key={tag}
                           type="button"
@@ -207,15 +269,7 @@ export function BulkEditDialog({
                           type="button"
                           variant="outline"
                           className="w-full"
-                          onClick={() => {
-                            const newTag = bulkTagSearch.trim()
-                            onBulkEditTagListChange(
-                              bulkEditTagList.includes(newTag)
-                                ? bulkEditTagList
-                                : [...bulkEditTagList, newTag]
-                            )
-                            onBulkTagSearchChange('')
-                          }}
+                          onClick={() => addTag(bulkTagSearch)}
                         >
                           Crear etiqueta &quot;{bulkTagSearch.trim()}&quot;
                         </Button>

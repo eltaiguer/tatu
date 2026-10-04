@@ -9,14 +9,12 @@ import {
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { pathForView, titleForView, viewFromPath } from './routes'
 import { normalizeCategoryId } from './services/categories/category-aliases'
+import { countsAsRow } from './services/spending/spending-rules'
 import {
   filterToSearch,
   parseFilterParams,
 } from './services/filters/url-filters'
-import {
-  DashboardSkeleton,
-  TransactionTableSkeleton,
-} from './components/StateSkeletons'
+import { ViewSkeleton } from './components/StateSkeletons'
 import { ConnectionLostState } from './components/ConnectionLostState'
 import { Onboarding } from './components/Onboarding'
 import { toast } from 'sonner'
@@ -53,16 +51,16 @@ import { Button } from './components/ui/button'
 import { useStore } from 'zustand'
 import { transactionStore } from './stores/transaction-store'
 import { signOut } from './services/supabase/auth'
-import { clearAllCategoryOverrides } from './services/categorizer/category-overrides'
-import { clearAllDescriptionOverrides } from './services/descriptions/description-overrides'
-import { replaceCustomCategories } from './services/categories/category-store'
-import { replaceCustomPatterns } from './services/categorizer/custom-patterns'
 import { resetUserSupabaseData } from './services/supabase/reset'
-import { useUserPreferences } from './hooks/useUserPreferences'
-import { setAiConfig } from './services/ai/ai-config'
+import {
+  flushPreferenceSaves,
+  startEmptyWorkspace,
+  teardownWorkspace,
+} from './stores/workspace-store'
+import { useUserWorkspace } from './hooks/useUserWorkspace'
 import { useAuthSession } from './hooks/useAuthSession'
-import { useTransactionSync } from './hooks/useTransactionSync'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
+import { createSupabaseRepository } from './services/repository/supabase-repository'
 import { getFriendlyName } from './utils/user-display'
 import { UserFacingError } from './utils/user-error'
 
@@ -108,14 +106,6 @@ function App() {
     window.scrollTo(0, 0)
     document.title = titleForView(currentView)
   }, [currentView])
-  const [syncStatus, setSyncStatus] = useState<'loading' | 'ready' | 'error'>(
-    'loading'
-  )
-  const [syncKey, setSyncKey] = useState(0)
-
-  function refetch() {
-    setSyncKey((k) => k + 1)
-  }
   const {
     session,
     setSession,
@@ -153,13 +143,15 @@ function App() {
     () =>
       transactions.filter(
         (tx) =>
-          !tx.isSplitParent &&
+          countsAsRow(tx) &&
           normalizeCategoryId(tx.category) === 'uncategorized'
       ).length,
     [transactions]
   )
 
   const {
+    status: syncStatus,
+    refetch,
     theme,
     setTheme,
     preferredCurrency,
@@ -172,50 +164,31 @@ function App() {
     setAiEnabled,
     aiModel,
     setAiModel,
-    markPrefsLoaded,
-    resetPrefsLoaded,
-  } = useUserPreferences(session)
-
-  useTransactionSync({
+  } = useUserWorkspace({
     session,
     authMode,
-    syncKey,
-    markPrefsLoaded,
-    setError: setAuthError,
-    setNotice: setAuthNotice,
-    setSyncStatus,
-    setTheme,
-    setPreferredCurrency,
-    setFxRate,
-    setClaudeApiKey,
-    setAiEnabled,
-    setAiModel,
+    onHydrateStart: () => {
+      setAuthError('')
+      setAuthNotice('')
+    },
   })
 
   async function handleSignOut() {
     setAuthSubmitting(true)
     try {
+      // Let the last preference edit reach the server while the token is
+      // still valid.
+      await flushPreferenceSaves()
       await signOut(session)
       clearPasswordResetModeFromUrl()
       setSession(null)
+      teardownWorkspace()
       setAuthMode('signin')
       toast('Sesión cerrada')
-      transactionStore.getState().clearTransactions()
-      clearAllCategoryOverrides()
-      clearAllDescriptionOverrides()
-      replaceCustomPatterns([])
-      replaceCustomCategories([])
-      setAiConfig(null)
-      setTheme('auto')
-      setPreferredCurrency('USD')
-      setFxRate(40.5)
-      resetPrefsLoaded()
       navigate('/', { replace: true })
       setImportOpen(false)
       setAuthError('')
       setAuthNotice('')
-      setSyncStatus('loading')
-      setSyncKey(0)
     } catch (error) {
       setAuthError(
         error instanceof Error ? error.message : 'No se pudo cerrar sesión'
@@ -231,6 +204,9 @@ function App() {
   async function handleResetAllData() {
     if (session) {
       try {
+        // A save still in flight could recreate the preferences row after
+        // the delete.
+        await flushPreferenceSaves()
         await resetUserSupabaseData(session)
       } catch (error) {
         console.error('reset failed:', error)
@@ -241,16 +217,10 @@ function App() {
       }
     }
 
-    transactionStore.getState().clearTransactions()
-    clearAllCategoryOverrides()
-    clearAllDescriptionOverrides()
-    replaceCustomPatterns([])
-    replaceCustomCategories([])
-    setAiConfig(null)
-    setTheme('auto')
-    setPreferredCurrency('USD')
-    setFxRate(40.5)
-    resetPrefsLoaded()
+    // The server now holds nothing for this user: start them over empty,
+    // with default preferences (no key, AI off), still signed in.
+    if (session) startEmptyWorkspace(session)
+    else teardownWorkspace()
   }
 
   function navigateToTransactions(
@@ -258,6 +228,12 @@ function App() {
   ) {
     go('transactions', filterToSearch(filter))
   }
+
+  // The signed-in user's repository (#119): every write goes through it.
+  const repository = useMemo(
+    () => (session ? createSupabaseRepository(session) : null),
+    [session]
+  )
 
   const {
     handleTransactionsImported,
@@ -272,24 +248,25 @@ function App() {
     handleAutoCategorizeTransactions,
     handleApplyPatternToPast,
   } = useTransactionHandlers({
-    session,
+    repository,
     setError: setAuthError,
   })
 
   if (!session || authMode === 'reset') {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+      <main className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 space-y-4">
           <div>
             <TatuLogo size="md" />
-            <h2 className="mt-4 mb-1">
+            {/* The page's h1, kept at the h2 size it always had. */}
+            <h1 className="mt-4 mb-1 text-[length:var(--text-2xl)] leading-[1.3] tracking-[-0.01em]">
               {authMode === 'reset'
                 ? 'Elegí una nueva contraseña'
                 : 'Ingresar a Tatú'}
-            </h2>
+            </h1>
             <p className="text-sm text-muted-foreground">
               {authMode === 'reset'
-                ? 'Este cambio se aplica a tu cuenta de Supabase.'
+                ? 'Este cambio se aplica a tu cuenta de Tatú.'
                 : 'Tu información se guarda de forma segura en tu cuenta.'}
             </p>
           </div>
@@ -322,16 +299,29 @@ function App() {
               clearPasswordResetModeFromUrl()
               void signOut(session)
               setSession(null)
-              transactionStore.getState().clearTransactions()
+              teardownWorkspace()
             }}
           />
         </div>
-      </div>
+      </main>
     )
   }
 
   return (
     <div className="flex min-h-[100vh] bg-[var(--bg)]">
+      {/* Skip link: the first Tab stop, so keyboard users can jump past the
+          sidebar. Focus moves by hand — a "#main" href would put a hash in
+          the URL, which the password-recovery flow reads. */}
+      <a
+        href="#main"
+        onClick={(event) => {
+          event.preventDefault()
+          document.getElementById('main')?.focus()
+        }}
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] focus:rounded-[var(--radius-md)] focus:bg-[var(--surface)] focus:px-4 focus:py-2 focus:text-[14px] focus:font-semibold focus:text-[var(--text)] focus:shadow-[var(--shadow-lg)] focus:outline-2 focus:outline-[var(--brand)]"
+      >
+        Saltar al contenido
+      </a>
       {/* Sidebar (desktop only — hidden on mobile via CSS) */}
       <AppSidebar
         view={currentView}
@@ -377,7 +367,11 @@ function App() {
       </Sheet>
 
       {/* Main content */}
-      <main className="ml-[var(--sidebar-w,252px)] min-w-0 flex-1">
+      <main
+        id="main"
+        tabIndex={-1}
+        className="ml-[var(--sidebar-w,252px)] min-w-0 flex-1 outline-none"
+      >
         {/* Mobile sticky header */}
         <header className="md:hidden sticky top-0 z-40 flex items-center gap-3 h-[56px] px-[16px] py-0 bg-[var(--surface)] border-b border-b-[var(--border)]">
           <button
@@ -406,11 +400,7 @@ function App() {
           )}
 
           {syncStatus === 'loading' ? (
-            currentView === 'transactions' ? (
-              <TransactionTableSkeleton />
-            ) : (
-              <DashboardSkeleton />
-            )
+            <ViewSkeleton view={currentView} />
           ) : syncStatus === 'error' ? (
             <ConnectionLostState onRetry={refetch} />
           ) : (
@@ -418,15 +408,7 @@ function App() {
               resetKey={currentView}
               onReset={resetFailedViews}
             >
-              <Suspense
-                fallback={
-                  currentView === 'transactions' ? (
-                    <TransactionTableSkeleton />
-                  ) : (
-                    <DashboardSkeleton />
-                  )
-                }
-              >
+              <Suspense fallback={<ViewSkeleton view={currentView} />}>
                 {currentView === 'overview' && transactions.length === 0 && (
                   <Onboarding
                     onImport={() => setImportOpen(true)}
@@ -473,6 +455,7 @@ function App() {
                     onFiltersChange={handleTransactionFiltersChange}
                     homeCurrency={preferredCurrency}
                     fxRate={fxRate}
+                    repository={repository}
                     onUpdateTransaction={handleUpdateTransaction}
                     onDeleteTransaction={handleDeleteTransaction}
                     onRestoreTransactions={handleRestoreTransactions}
@@ -507,6 +490,7 @@ function App() {
                     fxRate={fxRate}
                     onNavigateToTransactions={navigateToTransactions}
                     onApplyPatternToPast={handleApplyPatternToPast}
+                    repository={repository}
                   />
                 )}
                 {currentView === 'settings' && (
@@ -545,7 +529,7 @@ function App() {
           if (!open) setImportOpen(false)
         }}
       >
-        <DialogContent className="max-w-[680px]! overflow-x-hidden rounded-[var(--radius-lg)]! p-0">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[680px]! overflow-x-hidden overflow-y-auto rounded-[var(--radius-lg)]!">
           <DialogTitle className="sr-only">Importar archivo CSV</DialogTitle>
           <DialogDescription className="sr-only">
             Arrastrá o seleccioná un archivo CSV de Santander Uruguay para

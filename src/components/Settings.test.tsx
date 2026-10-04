@@ -13,6 +13,8 @@ import { UserFacingError } from '../utils/user-error'
 import { CATEGORIZATION_MODELS } from '../services/ai/models'
 import type { Transaction } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
+import { captureCsvDownload } from '../test/csv-download'
+import { capturePrintFrame } from '../test/print-frame'
 
 vi.mock('../services/supabase/client', () => ({
   isSupabaseConfigured: () => false,
@@ -69,9 +71,9 @@ describe('Settings', () => {
       screen.getByRole('heading', { name: 'Configuración' })
     ).toBeInTheDocument()
     expect(screen.getByText('Apariencia')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Claro' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Auto' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Oscuro' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Claro' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Auto' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Oscuro' })).toBeInTheDocument()
   })
 
   it('calls onSetTheme with the selected value when clicking a theme button', () => {
@@ -90,10 +92,10 @@ describe('Settings', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Oscuro' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Oscuro' }))
     expect(onSetTheme).toHaveBeenCalledWith('dark')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Auto' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Auto' }))
     expect(onSetTheme).toHaveBeenCalledWith('auto')
   })
 
@@ -113,7 +115,7 @@ describe('Settings', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Dólares US$' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Dólares US$' }))
     expect(onSetCurrency).toHaveBeenCalledWith('USD')
   })
 
@@ -271,8 +273,8 @@ describe('Settings', () => {
       />
     )
 
-    const picker = screen.getByRole('tablist', { name: 'Modelo de IA' })
-    const tabs = within(picker).getAllByRole('tab')
+    const picker = screen.getByRole('radiogroup', { name: 'Modelo de IA' })
+    const tabs = within(picker).getAllByRole('radio')
     expect(tabs.map((t) => t.textContent)).toEqual(
       CATEGORIZATION_MODELS.map((m) => m.label)
     )
@@ -286,5 +288,147 @@ describe('Settings', () => {
       'claude-haiku-4-5',
       'claude-sonnet-4-6',
     ])
+  })
+
+  it('gives every Configuración control a Spanish accessible name', () => {
+    render(
+      <Settings
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
+        session={null}
+        supabaseEnabled={false}
+        onSignOut={() => {}}
+        transactions={[]}
+        {...defaultAiProps}
+        aiEnabled
+      />
+    )
+
+    expect(
+      screen.getByRole('switch', { name: 'Categorización con IA' })
+    ).toBeChecked()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Tipo de cambio' })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Clave API de Anthropic')).toHaveAttribute(
+      'type',
+      'password'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar clave' }))
+
+    expect(screen.getByLabelText('Clave API de Anthropic')).toHaveAttribute(
+      'type',
+      'text'
+    )
+    expect(
+      screen.getByRole('button', { name: 'Ocultar clave' })
+    ).toBeInTheDocument()
+  })
+
+  function renderForPdfExport() {
+    render(
+      <>
+        <Settings
+          theme="light"
+          onSetTheme={() => {}}
+          preferredCurrency="UYU"
+          onSetCurrency={() => {}}
+          session={null}
+          supabaseEnabled={false}
+          onSignOut={() => {}}
+          transactions={[makeTx({ description: 'Devoto Pocitos' })]}
+          {...defaultAiProps}
+        />
+        <Toaster />
+      </>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Exportar PDF/ }))
+  }
+
+  it('prints the PDF report and only then says it was generated (#179)', async () => {
+    const frame = capturePrintFrame()
+    try {
+      renderForPdfExport()
+
+      // In the document, not toBeVisible: sonner fades a toast in (opacity 0
+      // until its mount frame runs), so visibility right after it appears
+      // depends on timing and flaked.
+      expect(
+        await screen.findByText('Reporte PDF generado')
+      ).toBeInTheDocument()
+      expect(frame.printed()).toHaveLength(1)
+      expect(frame.printed()[0]).toContain('Devoto Pocitos')
+    } finally {
+      frame.restore()
+    }
+  })
+
+  it('shows an error instead of a success toast when the PDF cannot open (#179)', async () => {
+    const frame = capturePrintFrame({ failing: true })
+    try {
+      renderForPdfExport()
+
+      expect(
+        await screen.findByText(
+          'No se pudo abrir el reporte PDF. Recargá la página e intentá de nuevo.'
+        )
+      ).toBeInTheDocument()
+      expect(screen.queryByText('Reporte PDF generado')).not.toBeInTheDocument()
+    } finally {
+      frame.restore()
+    }
+  })
+
+  it('exports every row as a backup, flags what counts, and toasts the rows written', async () => {
+    const csv = captureCsvDownload()
+    try {
+      render(
+        <>
+          <Settings
+            theme="light"
+            onSetTheme={() => {}}
+            preferredCurrency="UYU"
+            onSetCurrency={() => {}}
+            session={null}
+            supabaseEnabled={false}
+            onSignOut={() => {}}
+            transactions={[
+              makeTx({ id: 'parent', amount: 1000, isSplitParent: true }),
+              makeTx({ id: 'p1', amount: 600, splitParentId: 'parent' }),
+              makeTx({ id: 'p2', amount: 400, splitParentId: 'parent' }),
+              makeTx({ id: 'trf', amount: 50, category: 'internal_transfer' }),
+            ]}
+            {...defaultAiProps}
+          />
+          <Toaster />
+        </>
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: /Exportar CSV/ }))
+
+      expect(
+        await screen.findByText('CSV exportado: 4 transacciones')
+      ).toBeInTheDocument()
+
+      const [header, ...rows] = await csv.rows()
+      const flag = header.indexOf('cuenta_en_totales')
+      expect(flag).toBeGreaterThan(-1)
+      expect(rows.map((r) => [r[2], r[flag]])).toEqual([
+        ['1000.00', '0'],
+        ['600.00', '1'],
+        ['400.00', '1'],
+        ['50.00', '0'],
+      ])
+      // #124: summing only the rows that count gives the real 1,000.
+      const counted = rows
+        .filter((r) => r[flag] === '1')
+        .reduce((sum, r) => sum + Number(r[2]), 0)
+      expect(counted).toBe(1000)
+    } finally {
+      csv.restore()
+    }
   })
 })

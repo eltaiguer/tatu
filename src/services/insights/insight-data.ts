@@ -1,6 +1,5 @@
 import type { Currency, Transaction } from '../../models'
-import { isSplitParentTx } from '../../models'
-import { isCategoryIgnored } from '../categories/category-registry'
+import { isCountedExpense } from '../spending/spending-rules'
 import { convert } from '../currency/convert'
 import {
   buildCategorySpendingConverted,
@@ -59,14 +58,6 @@ const TOP_MERCHANTS_LIMIT = 8
 const RECURRING_MIN_MONTHS_SEEN = 3
 const RECURRING_AMOUNT_VARIANCE = 0.15
 
-function isEligibleDebit(tx: Transaction): boolean {
-  return (
-    tx.type === 'debit' &&
-    !isCategoryIgnored(tx.category) &&
-    !isSplitParentTx(tx)
-  )
-}
-
 /**
  * Rounds to cents. Every number handed to the model goes through this: the
  * prompt asks it to echo amounts back exactly and insight-generator validates
@@ -115,7 +106,7 @@ function buildTopMerchants(
   const byMerchant = new Map<string, MerchantTotal>()
 
   transactions.forEach((tx) => {
-    if (!isEligibleDebit(tx)) return
+    if (!isCountedExpense(tx)) return
     const merchant = merchantOf(tx)
     const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
     const entry = byMerchant.get(merchant) ?? { merchant, amount: 0, count: 0 }
@@ -162,7 +153,7 @@ function detectRecurringCharges(
   fxRate: number,
   historyEndMonthKey: string
 ): RecurringCharge[] {
-  const relevant = allTransactions.filter(isEligibleDebit)
+  const relevant = allTransactions.filter(isCountedExpense)
 
   const byMerchant = new Map<string, Transaction[]>()
   relevant.forEach((tx) => {
