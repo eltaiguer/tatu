@@ -1,5 +1,4 @@
 import type { Transaction } from '../../models'
-import { isSplitChildTx } from '../../models'
 import { getUserRename } from '../../utils/transaction-display'
 
 // THE merchant key (#120): what Resumen's "Mayores comercios", its
@@ -55,13 +54,33 @@ const GENERIC_KEYS = new Set([
 ])
 
 // A lone word this short after dropping codes ("AB 1234") is too thin to
-// tell merchants apart.
+// tell merchants apart — unless it is a known short merchant.
 const MIN_SINGLE_WORD_KEY = 4
+
+// Short names that are a merchant on their own (Uruguayan utilities and
+// agencies, chains), so "UTE 20251106" and "UTE 20251206" are one merchant.
+const KNOWN_SHORT_MERCHANTS = new Set([
+  'ute',
+  'ose',
+  'bps',
+  'dgi',
+  'bse',
+  'bhu',
+  'imm',
+  'stm',
+  'kfc',
+  'tcc',
+  'cot',
+  'cut',
+])
 
 // Uruguayan places a statement appends as ", PLACE" without a card mask
 // (folded). Elsewhere a comma segment may be part of a name — a transfer's
 // "SURNAME, FIRST NAME" — so it is only stripped for these or in the
-// debit-card shape ("…, CITY TARJ: ####1234").
+// debit-card shape ("…, CITY TARJ: ####1234"). Places that are also common
+// first names or surnames (Mercedes, Dolores, Florida, Rocha, Rivera,
+// Artigas, Melo, Young, Trinidad) are left out: only the card shape strips
+// them.
 const KNOWN_PLACES = new Set([
   'montevideo',
   'punta del este',
@@ -77,21 +96,12 @@ const KNOWN_PLACES = new Set([
   'nueva helvecia',
   'salto',
   'paysandu',
-  'rivera',
-  'artigas',
   'tacuarembo',
-  'melo',
-  'mercedes',
-  'dolores',
   'fray bentos',
-  'young',
   'minas',
-  'rocha',
   'la paloma',
   'chuy',
-  'florida',
   'durazno',
-  'trinidad',
   'san jose',
   'san jose de mayo',
   'treinta y tres',
@@ -106,13 +116,21 @@ const KNOWN_PLACES = new Set([
 const TRAILING_PLACE = /,\s*([a-z][a-z .'-]*)?$/
 const MAX_PLACE_WORDS = 3
 
-function stripTrailingPlace(text: string, cardPurchase: boolean): string {
+// Transfers and Supernet operations end in a person's name, never a city.
+const TRANSFER_SHAPE =
+  /^(?:transf|transferencia|credito por operacion|debito operacion|cr\. pago)\b/
+
+function stripTrailingPlace(
+  text: string,
+  cardPurchase: boolean,
+  transfer: boolean
+): string {
   const match = TRAILING_PLACE.exec(text)
   if (!match) return text
   const place = (match[1] ?? '').trim()
   const strip =
     place === '' ||
-    KNOWN_PLACES.has(place) ||
+    (!transfer && KNOWN_PLACES.has(place)) ||
     (cardPurchase && place.split(' ').length <= MAX_PLACE_WORDS)
   return strip ? text.slice(0, match.index) : text
 }
@@ -138,7 +156,8 @@ function denoise(folded: string, dropDigits: boolean): string {
     })
   return stripTrailingPlace(
     tokens.join(' ').replace(/ ,/g, ',').replace(EDGE_PUNCTUATION, ''),
-    cardPurchase
+    cardPurchase,
+    TRANSFER_SHAPE.test(folded)
   )
     .replace(EDGE_PUNCTUATION, '')
     .replace(/\s+/g, ' ')
@@ -150,7 +169,9 @@ function tooGeneric(key: string): boolean {
   return (
     key === '' ||
     GENERIC_KEYS.has(key) ||
-    (!key.includes(' ') && key.length < MIN_SINGLE_WORD_KEY)
+    (!key.includes(' ') &&
+      key.length < MIN_SINGLE_WORD_KEY &&
+      !KNOWN_SHORT_MERCHANTS.has(key))
   )
 }
 
@@ -170,8 +191,9 @@ export function rawMerchantKey(description: string): string {
 export function merchantKeyOf(tx: Transaction): string {
   const rename = getUserRename(tx)
   if (rename) return fold(rename)
-  // A split part's description was typed by the user, not the bank.
-  if (isSplitChildTx(tx)) return fold(tx.description)
+  // A split part is prefilled with the parent's bank description, so it goes
+  // through the same stripping as its unsplit siblings; a user-typed part
+  // rarely has codes to strip.
   return rawMerchantKey(tx.description)
 }
 
