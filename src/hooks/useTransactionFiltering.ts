@@ -6,6 +6,7 @@ import {
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
+import { merchantKeyOf } from '../services/merchants/merchant-key'
 import type { Transaction } from '../models'
 import {
   DEFAULT_URL_FILTERS,
@@ -95,10 +96,8 @@ export function useTransactionFiltering({
         !categorySet.has(normalizeCategoryId(transaction.category))
       )
         return false
-      if (
-        merchantFilter &&
-        getDisplayDescription(transaction) !== merchantFilter
-      )
+      // The merchant key Resumen's "Mayores comercios" groups by (#120).
+      if (merchantFilter && merchantKeyOf(transaction) !== merchantFilter)
         return false
       if (
         accountFilters.length > 0 &&

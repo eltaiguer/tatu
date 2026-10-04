@@ -41,6 +41,7 @@ import {
 } from '../services/categories/category-registry'
 import {
   buildCurrentMonthSummary,
+  buildMerchantSpendingConverted,
   buildCategorySpendingConverted,
   buildMonthlyTrendsConverted,
   buildCurrencySplit,
@@ -489,30 +490,16 @@ export function Dashboard({
     Math.max(0, ...monthlyTrend.map((m) => m.neto))
   )
 
-  // Top merchants — all history in home currency
-  const topMerchants = useMemo(() => {
-    const map = new Map<
-      string,
-      { name: string; total: number; count: number; catId: string }
-    >()
-    countedTransactions
-      .filter((tx) => tx.type === 'debit')
-      .forEach((tx) => {
-        const key = getDisplayDescription(tx)
-        const prev = map.get(key) ?? {
-          name: key,
-          total: 0,
-          count: 0,
-          catId: tx.category ?? 'uncategorized',
-        }
-        prev.total += convert(tx.amount, tx.currency, homeCurrency, fxRate)
-        prev.count++
-        map.set(key, prev)
-      })
-    return Array.from(map.values())
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 6)
-  }, [countedTransactions, homeCurrency, fxRate])
+  // Top merchants — all history in home currency, grouped by the merchant
+  // key the Transacciones merchant filter matches on.
+  const topMerchants = useMemo(
+    () =>
+      buildMerchantSpendingConverted(transactions, homeCurrency, fxRate).slice(
+        0,
+        6
+      ),
+    [transactions, homeCurrency, fxRate]
+  )
 
   // Recent transactions
   const recentTransactions = useMemo(
@@ -1348,20 +1335,20 @@ export function Dashboard({
                 </div>
                 <div className="flex flex-col">
                   {topMerchants.map((m, i) => {
-                    const display = getCategoryDisplay(m.catId)
-                    const emoji = emojiLookup.get(m.catId)
+                    const display = getCategoryDisplay(m.categoryId)
+                    const emoji = emojiLookup.get(m.categoryId)
                     return (
                       <DrillTarget
-                        key={i}
+                        key={m.key}
                         onOpen={
                           onNavigateToTransactions &&
                           (() =>
                             onNavigateToTransactions({
-                              merchant: m.name,
+                              merchant: m.key,
                               type: 'debit',
                             }))
                         }
-                        label={`Ver los gastos en ${m.name}`}
+                        label={`Ver los gastos en ${m.label}`}
                         className="flex items-center gap-3 border-b border-border py-[10px]"
                       >
                         <span className="font-mono w-[16px] text-[12px] text-muted-foreground">
@@ -1377,7 +1364,7 @@ export function Dashboard({
                         </IconTile>
                         <div className="min-w-0 flex-1">
                           <div className="overflow-hidden text-[14px] font-medium text-ellipsis whitespace-nowrap">
-                            {m.name}
+                            {m.label}
                           </div>
                           <div className="text-[12px] text-muted-foreground">
                             {m.count}{' '}

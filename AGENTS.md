@@ -99,7 +99,8 @@ src/
     filters/               # url-filters.ts: Transacciones filters <-> URL query (the filtering itself is useTransactionFiltering)
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
-    charts/                # Chart data transformations; category-changes.ts feeds CategoryChangesCard
+    merchants/             # merchant-key.ts: THE merchant key + label (Mayores comercios, its drill-through, Insights, recurring) — never group by description
+    charts/                # Home-currency aggregation (chart-data.ts: totals, categories, merchants); category-changes.ts feeds CategoryChangesCard
     currency/              # convert(amount, from, to, rate) + Currency type
     suggestions/           # suggestions.ts: category/tag suggestion lists + search filters shared by the edit dialogs
     descriptions/          # Description override management

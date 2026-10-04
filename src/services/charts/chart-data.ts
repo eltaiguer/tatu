@@ -2,7 +2,9 @@ import type { Currency, Transaction } from '../../models'
 import {
   countsTowardTotals,
   isCountedExpense,
+  sumCountedTotals,
 } from '../spending/spending-rules'
+import { groupByMerchant } from '../merchants/merchant-key'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { convert } from '../currency/convert'
 import { toMonthKey } from '../../utils/date-utils'
@@ -78,28 +80,19 @@ export function buildMonthlyTrendsConverted(
   homeCurrency: Currency,
   fxRate: number
 ): MonthlyTrendDatum[] {
-  const grouped = new Map<string, MonthlyTrendDatum>()
-
-  transactions.forEach((tx) => {
-    if (!countsTowardTotals(tx)) return
+  const byMonth = new Map<string, Transaction[]>()
+  for (const tx of transactions) {
+    if (!countsTowardTotals(tx)) continue
     const month = toMonthKey(tx.date)
-    if (!grouped.has(month)) {
-      grouped.set(month, { month, income: 0, expense: 0, net: 0 })
-    }
-    const entry = grouped.get(month)!
-    const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    if (tx.type === 'credit') {
-      entry.income += converted
-      entry.net += converted
-    } else if (tx.type === 'debit') {
-      entry.expense += converted
-      entry.net -= converted
-    }
-  })
+    const rows = byMonth.get(month)
+    if (rows) rows.push(tx)
+    else byMonth.set(month, [tx])
+  }
 
-  return Array.from(grouped.values()).sort((a, b) =>
-    a.month.localeCompare(b.month)
-  )
+  return Array.from(byMonth, ([month, rows]) => ({
+    month,
+    ...sumCountedTotals(rows, homeCurrency, fxRate),
+  })).sort((a, b) => a.month.localeCompare(b.month))
 }
 
 export function buildCurrentMonthSummary(
@@ -134,19 +127,16 @@ export function buildCurrentMonthSummary(
     (tx) => tx.date.getUTCFullYear() === y && tx.date.getUTCMonth() === m
   )
 
-  let income = 0
-  let expense = 0
+  const { income, expense, net } = sumCountedTotals(
+    monthTxs,
+    homeCurrency,
+    fxRate
+  )
+  // Native (unconverted) expense per currency.
   const split: { USD: number; UYU: number } = { USD: 0, UYU: 0 }
-
-  monthTxs.forEach((tx) => {
-    const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    if (tx.type === 'credit') {
-      income += converted
-    } else if (tx.type === 'debit') {
-      expense += converted
-      split[tx.currency] += tx.amount
-    }
-  })
+  for (const tx of monthTxs) {
+    if (tx.type === 'debit') split[tx.currency] += tx.amount
+  }
 
   // Transaction dates are calendar days stored at UTC midnight; "now" is the
   // user's local calendar day.
@@ -161,7 +151,7 @@ export function buildCurrentMonthSummary(
   return {
     income,
     expense,
-    net: income - expense,
+    net,
     count: monthTxs.length,
     split,
     monthLabel,
@@ -305,6 +295,43 @@ export function summarizeSavings(
     totalMonths,
     outlier: outlier ? { month: outlier.month, net: outlier.net } : null,
   }
+}
+
+export interface MerchantSpendDatum {
+  key: string
+  label: string
+  total: number
+  count: number
+  categoryId: string
+}
+
+// Spend per merchant over counted expenses, in the home currency, grouped by
+// THE merchant key (services/merchants/merchant-key.ts) — the same key the
+// Transacciones merchant filter matches on, so a row opens exactly what it
+// sums. Sorted by total, largest first; ties by key, so the order (which
+// feeds InsightInput and its hash) never depends on the input order.
+export function buildMerchantSpendingConverted(
+  transactions: Transaction[],
+  homeCurrency: Currency,
+  fxRate: number
+): MerchantSpendDatum[] {
+  return groupByMerchant(transactions.filter(isCountedExpense))
+    .map(({ key, label, transactions: rows }) => {
+      let total = 0
+      let latest = rows[0]
+      for (const tx of rows) {
+        total += convert(tx.amount, tx.currency, homeCurrency, fxRate)
+        if (tx.date > latest.date) latest = tx
+      }
+      return {
+        key,
+        label,
+        total,
+        count: rows.length,
+        categoryId: latest.category ?? 'uncategorized',
+      }
+    })
+    .sort((a, b) => b.total - a.total || a.key.localeCompare(b.key))
 }
 
 // Round, evenly spaced axis ticks (steps of 1/2/2.5/5 × 10^n) that always

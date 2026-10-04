@@ -52,7 +52,14 @@ import {
   buildCategorySuggestions,
   buildTagSuggestions,
 } from '../services/suggestions/suggestions'
-import { sumCountedTotals } from '../services/spending/spending-rules'
+import {
+  isCountedExpense,
+  sumCountedTotals,
+} from '../services/spending/spending-rules'
+import {
+  merchantKeyOf,
+  merchantLabelFor,
+} from '../services/merchants/merchant-key'
 import {
   DEFAULT_URL_FILTERS,
   serializeFilterParams,
@@ -834,6 +841,17 @@ export function Transactions({
     initialDateRange: periodRange(period),
   })
 
+  // The merchant filter holds a merchant key (#120); the chip shows the same
+  // label Resumen's "Mayores comercios" row did.
+  const merchantLabel = useMemo(() => {
+    if (!merchantFilter) return ''
+    const rows = transactions.filter(
+      (tx) => merchantKeyOf(tx) === merchantFilter
+    )
+    const expenses = rows.filter(isCountedExpense)
+    return merchantLabelFor(expenses.length ? expenses : rows) || merchantFilter
+  }, [transactions, merchantFilter])
+
   // Clearing filters also clears the period: it is part of what the URL
   // records, and the table already shows every date once the dates clear.
   function clearFiltersAndPeriod() {
@@ -1380,10 +1398,10 @@ export function Transactions({
           <button
             type="button"
             onClick={() => setMerchantFilter('')}
-            aria-label={`Quitar filtro de comercio ${merchantFilter}`}
+            aria-label={`Quitar filtro de comercio ${merchantLabel}`}
             className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs"
           >
-            Comercio: <strong>{merchantFilter}</strong>
+            Comercio: <strong>{merchantLabel}</strong>
             <X size={12} aria-hidden />
           </button>
         )}

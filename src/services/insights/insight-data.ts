@@ -3,8 +3,10 @@ import { isCountedExpense } from '../spending/spending-rules'
 import { convert } from '../currency/convert'
 import {
   buildCategorySpendingConverted,
+  buildMerchantSpendingConverted,
   buildMonthlyTrendsConverted,
 } from '../charts/chart-data'
+import { groupByMerchant } from '../merchants/merchant-key'
 import { toDateKey, toMonthKey } from '../../utils/date-utils'
 
 export interface CategoryInsightTotal {
@@ -69,10 +71,6 @@ function round2(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-function merchantOf(tx: Transaction): string {
-  return (tx.displayDescription ?? tx.description).trim()
-}
-
 function monthKeyDiff(fromMonthKey: string, toMonthKeyStr: string): number {
   const [fromYear, fromMonth] = fromMonthKey.split('-').map(Number)
   const [toYear, toMonth] = toMonthKeyStr.split('-').map(Number)
@@ -98,27 +96,20 @@ function buildCategoryTotals(
   }))
 }
 
+// Same aggregation and merchant key as Resumen's "Mayores comercios"; the
+// label is what the model may echo back as `merchant`.
 function buildTopMerchants(
   transactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number
 ): MerchantTotal[] {
-  const byMerchant = new Map<string, MerchantTotal>()
-
-  transactions.forEach((tx) => {
-    if (!isCountedExpense(tx)) return
-    const merchant = merchantOf(tx)
-    const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    const entry = byMerchant.get(merchant) ?? { merchant, amount: 0, count: 0 }
-    entry.amount += converted
-    entry.count += 1
-    byMerchant.set(merchant, entry)
-  })
-
-  return Array.from(byMerchant.values())
-    .sort((a, b) => b.amount - a.amount)
+  return buildMerchantSpendingConverted(transactions, homeCurrency, fxRate)
     .slice(0, TOP_MERCHANTS_LIMIT)
-    .map((m) => ({ ...m, amount: round2(m.amount) }))
+    .map((m) => ({
+      merchant: m.label,
+      amount: round2(m.total),
+      count: m.count,
+    }))
 }
 
 function median(values: number[]): number {
@@ -155,45 +146,41 @@ function detectRecurringCharges(
 ): RecurringCharge[] {
   const relevant = allTransactions.filter(isCountedExpense)
 
-  const byMerchant = new Map<string, Transaction[]>()
-  relevant.forEach((tx) => {
-    const merchant = merchantOf(tx)
-    const list = byMerchant.get(merchant) ?? []
-    list.push(tx)
-    byMerchant.set(merchant, list)
-  })
-
   const charges: RecurringCharge[] = []
 
-  byMerchant.forEach((txs, merchant) => {
-    const monthsSeen = new Set(txs.map((tx) => toMonthKey(tx.date))).size
-    if (monthsSeen < RECURRING_MIN_MONTHS_SEEN) return
+  // Grouped by the merchant key, reported by its label (#120).
+  groupByMerchant(relevant).forEach(
+    ({ label: merchant, transactions: txs }) => {
+      const monthsSeen = new Set(txs.map((tx) => toMonthKey(tx.date))).size
+      if (monthsSeen < RECURRING_MIN_MONTHS_SEEN) return
 
-    const amounts = txs.map((tx) =>
-      convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    )
-    const approxAmount = median(amounts)
-    const withinVariance = amounts.every((a) =>
-      approxAmount === 0
-        ? a === 0
-        : Math.abs(a - approxAmount) / approxAmount <= RECURRING_AMOUNT_VARIANCE
-    )
-    if (!withinVariance) return
+      const amounts = txs.map((tx) =>
+        convert(tx.amount, tx.currency, homeCurrency, fxRate)
+      )
+      const approxAmount = median(amounts)
+      const withinVariance = amounts.every((a) =>
+        approxAmount === 0
+          ? a === 0
+          : Math.abs(a - approxAmount) / approxAmount <=
+            RECURRING_AMOUNT_VARIANCE
+      )
+      if (!withinVariance) return
 
-    const sortedDates = txs
-      .map((tx) => tx.date)
-      .sort((a, b) => a.getTime() - b.getTime())
-    const lastSeenMonth = toMonthKey(sortedDates[sortedDates.length - 1])
+      const sortedDates = txs
+        .map((tx) => tx.date)
+        .sort((a, b) => a.getTime() - b.getTime())
+      const lastSeenMonth = toMonthKey(sortedDates[sortedDates.length - 1])
 
-    charges.push({
-      merchant,
-      approxAmount: round2(approxAmount),
-      cadence: cadenceFromGap(averageGapDays(sortedDates)),
-      monthsSeen,
-      lastSeenMonth,
-      monthsSinceLastSeen: monthKeyDiff(lastSeenMonth, historyEndMonthKey),
-    })
-  })
+      charges.push({
+        merchant,
+        approxAmount: round2(approxAmount),
+        cadence: cadenceFromGap(averageGapDays(sortedDates)),
+        monthsSeen,
+        lastSeenMonth,
+        monthsSinceLastSeen: monthKeyDiff(lastSeenMonth, historyEndMonthKey),
+      })
+    }
+  )
 
   return charges.sort((a, b) => b.approxAmount - a.approxAmount)
 }
