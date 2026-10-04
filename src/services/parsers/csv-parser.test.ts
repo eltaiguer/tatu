@@ -90,11 +90,16 @@ describe('CSV Parser - File Type Detection', () => {
       expect(fileType).toBe('bank_account_uyu')
     })
 
-    it('should throw error for unrecognized CSV format', () => {
+    it('says in Spanish that an unrecognized CSV is not a Santander export', () => {
       const unknownCSV = 'Random,Data,Here\n1,2,3\n'
       expect(() => detectFileType(unknownCSV)).toThrow(
-        'Unable to detect CSV file type'
+        'No reconocemos este archivo. Tatú importa extractos CSV de Santander Uruguay (tarjeta de crédito o caja de ahorro).'
       )
+    })
+
+    it('says an empty file is empty', () => {
+      expect(() => detectFileType('')).toThrow('El archivo está vacío.')
+      expect(() => detectFileType(' \n\r\n ')).toThrow('El archivo está vacío.')
     })
   })
 
