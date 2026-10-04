@@ -510,3 +510,189 @@ describe('buildInsightInput — amounts are rounded for the model', () => {
     }
   })
 })
+
+describe('buildInsightInput — recurring-charge tolerance (#59)', () => {
+  // One charge per entry, on the 10th of consecutive months from 2026-01.
+  function monthly(
+    prefix: string,
+    description: string,
+    amounts: number[],
+    overrides: Partial<Transaction> = {}
+  ): Transaction[] {
+    return amounts.map((amount, i) =>
+      makeTransaction(`${prefix}${i}`, {
+        date: new Date(Date.UTC(2026, i, 10)),
+        amount,
+        description,
+        ...overrides,
+      })
+    )
+  }
+
+  function recurringMerchants(transactions: Transaction[]): string[] {
+    return buildInsightInput(transactions, 'UYU', 40.5).recurringCharges.map(
+      (c) => c.merchant
+    )
+  }
+
+  it('detects a gym billed 1,200 UYU monthly despite one 1,600 annual-fee outlier', () => {
+    const transactions = [
+      ...monthly(
+        'gym',
+        'GIMNASIO SPORT CLUB',
+        [1200, 1200, 1200, 1200, 1200, 1200],
+        { currency: 'UYU' }
+      ),
+      makeTransaction('gym-fee', {
+        date: new Date(Date.UTC(2026, 2, 20)),
+        amount: 1600,
+        currency: 'UYU',
+        description: 'GIMNASIO SPORT CLUB',
+      }),
+    ]
+
+    const result = buildInsightInput(transactions, 'UYU', 40.5)
+
+    expect(result.recurringCharges).toEqual([
+      {
+        merchant: 'GIMNASIO SPORT CLUB',
+        // Median of the in-band charges; the annual fee is left out.
+        approxAmount: 1200,
+        cadence: 'monthly',
+        monthsSeen: 6,
+        lastSeenMonth: '2026-06',
+        monthsSinceLastSeen: 0,
+      },
+    ])
+  })
+
+  it('detects Netflix across reference-code variants and one price change', () => {
+    const transactions = [
+      ...[
+        'NETFLIX.COM 1234TT56',
+        'NETFLIX.COM 7890TT12',
+        'NETFLIX.COM, MONTEVIDEO',
+        'NETFLIX.COM 5555TT00',
+      ].map((description, i) =>
+        makeTransaction(`nf${i}`, {
+          date: new Date(Date.UTC(2026, i, 10)),
+          amount: 12,
+          description,
+        })
+      ),
+      makeTransaction('nf-up', {
+        date: new Date(Date.UTC(2026, 4, 10)),
+        amount: 16,
+        description: 'NETFLIX.COM 9999TT99',
+      }),
+    ]
+
+    const result = buildInsightInput(transactions, 'USD', 40.5)
+
+    expect(result.recurringCharges).toEqual([
+      expect.objectContaining({ approxAmount: 12, monthsSeen: 4 }),
+    ])
+  })
+
+  it('keeps a subscription active after a price rise: lastSeenMonth counts every charge', () => {
+    // 12 for four months, then 16 (out of band) in the latest month.
+    const transactions = [12, 12, 12, 12, 16].map((amount, i) =>
+      makeTransaction(`p${i}`, {
+        date: new Date(Date.UTC(2026, i, 10)),
+        amount,
+        description: 'NETFLIX.COM',
+      })
+    )
+
+    const [charge] = buildInsightInput(
+      transactions,
+      'USD',
+      40.5
+    ).recurringCharges
+
+    expect(charge).toEqual(
+      expect.objectContaining({
+        approxAmount: 12,
+        lastSeenMonth: '2026-05',
+        monthsSinceLastSeen: 0,
+      })
+    )
+  })
+
+  it('detects a monthly utility bill that varies a little, with one winter spike', () => {
+    expect(
+      recurringMerchants(monthly('ute', 'UTE', [3200, 3400, 3100, 4800, 3300]))
+    ).toEqual(['UTE'])
+  })
+
+  it('does not flag a restaurant with varying monthly bills', () => {
+    expect(
+      recurringMerchants(
+        monthly('rest', 'LA PASIVA', [800, 1500, 2300, 1100, 3000, 650])
+      )
+    ).toEqual([])
+  })
+
+  it('detects a merchant with exactly 75% of its charges in band', () => {
+    // median 100; 95, 100 and 100 are within ±15%, 300 is not: 3 of 4.
+    expect(
+      recurringMerchants(monthly('b', 'CLUB', [95, 100, 100, 300]))
+    ).toEqual(['CLUB'])
+  })
+
+  it('does not flag a merchant just under 75% in band', () => {
+    // median 100; 5 of 7 in band (71%).
+    expect(
+      recurringMerchants(
+        monthly('u', 'CLUB', [100, 100, 100, 100, 100, 300, 400])
+      )
+    ).toEqual([])
+  })
+
+  describe('distinct in-band months', () => {
+    // Three in-band charges in January, one in February, and a March charge.
+    function cafe(marchAmount: number): Transaction[] {
+      return [
+        ...[0, 1, 2].map((week) =>
+          makeTransaction(`jan${week}`, {
+            date: new Date(Date.UTC(2026, 0, 5 + week * 7)),
+            amount: 50,
+            description: 'CAFE',
+          })
+        ),
+        makeTransaction('feb', {
+          date: new Date(Date.UTC(2026, 1, 5)),
+          amount: 50,
+          description: 'CAFE',
+        }),
+        makeTransaction('mar', {
+          date: new Date(Date.UTC(2026, 2, 5)),
+          amount: marchAmount,
+          description: 'CAFE',
+        }),
+      ]
+    }
+
+    it('qualifies with 3 in-band months', () => {
+      expect(recurringMerchants(cafe(51))).toEqual(['CAFE'])
+    })
+
+    it('does not count several charges in one month twice', () => {
+      // 4 of 5 charges in band (80%), but only January and February.
+      expect(recurringMerchants(cafe(200))).toEqual([])
+    })
+  })
+
+  it('excludes installment purchases ("Cuota N M"), which are not cancellable subscriptions', () => {
+    const transactions = ['01', '02', '03', '04'].map((n, i) =>
+      makeTransaction(`cuota${i}`, {
+        date: new Date(Date.UTC(2026, i, 10)),
+        amount: 2510.56,
+        currency: 'UYU',
+        description: `Merpago Seguros Cuota ${n} 10`,
+      })
+    )
+
+    expect(recurringMerchants(transactions)).toEqual([])
+  })
+})

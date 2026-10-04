@@ -309,6 +309,19 @@ rows. Never group by `description` or `getDisplayDescription` directly.
 - `npx vite-node scripts/merchant-groups.ts [paths…]` prints, for Santander
   CSVs or Tatu's own CSV export, every key that merges several variants.
 
+**Recurring charges** (Insights' `recurringCharges`, `detectRecurringCharges`
+in `insight-data.ts`, #59): per merchant key, over counted expenses minus
+installment rows (`Cuota N M` — a purchase being paid off, not a cancellable
+subscription), a charge is _in band_ when it is within ±15% of the median of
+all the merchant's charges. The merchant is recurring when ≥ 75% of its
+charges are in band and the in-band charges fall in ≥ 3 distinct months.
+`approxAmount` is the median of the in-band charges and `monthsSeen`/`cadence`
+come from them; `lastSeenMonth` is the latest charge of any amount, so a price
+rise doesn't read as a lapse. `npx vite-node scripts/recurring-diff.ts
+[--home UYU|USD] [--fx 40.5] [paths…]` prints, per merchant key, what the old
+rules (main; #120) and the current one detect on a Santander CSV or Tatu export
+(`scripts/fixtures/recurring-12mo.csv` is a synthetic 12-month example).
+
 **Export** (`services/export/export.ts`) writes exactly the rows it is given
 and returns how many it wrote. Configuración exports every row (a full
 backup, split parents and ignored rows included); Transacciones exports the
