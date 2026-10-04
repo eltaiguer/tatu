@@ -491,3 +491,4 @@ for all
 to authenticated
 using (auth.uid() = user_id)
 with check (auth.uid() = user_id);
+-- test: schema-change flag (#138), do not merge
