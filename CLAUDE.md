@@ -106,7 +106,7 @@ src/
     fonts.css              # Google Fonts: Spectral, Hanken Grotesk, JetBrains Mono
     tailwind.css           # Tailwind 4 import + sources
     theme.css              # CSS custom properties — light + dark tokens
-                           # Other files here (incl. styles/index.css) are NOT imported — editing them does nothing
+                           # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
   utils/                   # date-utils, formatting, category-display, memo, transaction-display, user-display, user-error, auth-errors
   test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test)
 supabase/
