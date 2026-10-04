@@ -1,0 +1,89 @@
+# Flags PRs that change supabase/schema.sql. That file is never applied
+# automatically (see supabase/README.md), so a schema PR can merge green while
+# the live database is still on the old schema. This workflow labels such PRs
+# `schema-change` and keeps one sticky comment with the manual apply checklist.
+# PRs that don't touch the file get neither (a stale label is removed if the
+# change is reverted).
+name: Schema change flag
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: schema-change-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  flag:
+    # Fork PRs get a read-only token; skip rather than fail.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      SCHEMA_FILE: supabase/schema.sql
+      LABEL: schema-change
+      MARKER: '<!-- schema-change-flag -->'
+    steps:
+      - name: Detect schema change
+        id: detect
+        run: |
+          if gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' \
+            | grep -Fxq "$SCHEMA_FILE"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Add label
+        if: steps.detect.outputs.changed == 'true'
+        run: |
+          if ! gh api "repos/$REPO/labels/$LABEL" --silent 2>/dev/null; then
+            gh api "repos/$REPO/labels" --silent \
+              -f name="$LABEL" -f color="b60205" \
+              -f description="Changes supabase/schema.sql - apply manually before deploy"
+          fi
+          gh api "repos/$REPO/issues/$PR/labels" --silent -f "labels[]=$LABEL"
+
+      - name: Post or update sticky comment
+        if: steps.detect.outputs.changed == 'true'
+        run: |
+          body_file="$RUNNER_TEMP/schema-comment.md"
+          cat > "$body_file" <<EOF
+          $MARKER
+          ### ⚠️ This PR changes \`$SCHEMA_FILE\` — manual apply required
+
+          Nothing in the app or CI applies the schema. Until it is applied, the
+          live app can fail with \`Could not find the '<column>' column ... in the schema cache\`.
+
+          **Before deploying this PR:**
+
+          - [ ] Supabase Dashboard → project → **SQL Editor** → **New query**
+          - [ ] Paste the **entire** \`$SCHEMA_FILE\` and **Run** (it is idempotent)
+          - [ ] Run \`notify pgrst, 'reload schema';\`
+          - [ ] Only then merge/deploy the code that depends on the change
+
+          See \`supabase/README.md\` for details. Schema PRs must not be merged unattended.
+          EOF
+
+          comment_id=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id" \
+            | head -n 1)
+
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$comment_id" --silent -F body=@"$body_file"
+          else
+            gh api "repos/$REPO/issues/$PR/comments" --silent -F body=@"$body_file"
+          fi
+
+      - name: Remove stale label
+        if: steps.detect.outputs.changed == 'false'
+        run: |
+          if gh api "repos/$REPO/issues/$PR/labels" --jq '.[].name' | grep -Fxq "$LABEL"; then
+            gh api -X DELETE "repos/$REPO/issues/$PR/labels/$LABEL" --silent
+          fi
