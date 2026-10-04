@@ -919,9 +919,8 @@ export function Transactions({
 
   // Same matching the apply-to-similar write uses, so the number the
   // dialog shows is the number of rows the save will touch.
-  function countSimilar(renamed: boolean) {
-    if (!editingTransaction) return 0
-    return countSimilarEditReach(transactions, editingTransaction, renamed)
+  function countSimilar(transaction: Transaction, renamed: boolean) {
+    return countSimilarEditReach(transactions, transaction, renamed)
   }
 
   async function handleCreateCategory(label: string) {

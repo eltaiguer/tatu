@@ -26,7 +26,7 @@ function baseProps(overrides: Partial<DialogProps> = {}): DialogProps {
   return {
     transaction,
     // Fake reach: 4 similar rows, 2 once the name changes.
-    countSimilar: (renamed) => (renamed ? 2 : 4),
+    countSimilar: (_transaction, renamed) => (renamed ? 2 : 4),
     knownTags: ['super', 'viaje', 'trabajo'],
     isSaving: false,
     onCreateCategory: vi.fn(async () => undefined),
@@ -249,17 +249,19 @@ describe('EditTransactionDialog', () => {
   })
 
   it('counts the similar reach as a rename only when the name differs from the original', () => {
-    const countSimilar = vi.fn((renamed: boolean) => (renamed ? 2 : 1))
+    const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
+      renamed ? 2 : 1
+    )
     render(<EditTransactionDialog {...baseProps({ countSimilar })} />)
 
     // "Disco" differs from the raw "POS COMPRA DISCO 123".
-    expect(countSimilar).toHaveBeenLastCalledWith(true)
+    expect(countSimilar).toHaveBeenLastCalledWith(transaction, true)
 
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'POS COMPRA DISCO 123' },
     })
 
-    expect(countSimilar).toHaveBeenLastCalledWith(false)
+    expect(countSimilar).toHaveBeenLastCalledWith(transaction, false)
     expect(
       screen.getByLabelText(
         'Todas las similares · solo esta por ahora (y las futuras)'

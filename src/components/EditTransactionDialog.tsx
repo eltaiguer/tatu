@@ -43,9 +43,10 @@ interface EditTransactionDialogProps {
   // The row being edited; null closes the dialog. Each transaction starts a
   // fresh draft.
   transaction: Transaction | null
-  // Rows an apply-to-similar edit would visibly change
-  // (countSimilarEditReach), given whether the draft renames the row.
-  countSimilar: (renamed: boolean) => number
+  // Rows an apply-to-similar edit of `transaction` would visibly change
+  // (countSimilarEditReach), given whether the draft renames it. Takes the
+  // row so the count holds while the dialog animates closed.
+  countSimilar: (transaction: Transaction, renamed: boolean) => number
   // Tags already in use, offered as suggestions.
   knownTags: string[]
   isSaving: boolean
@@ -132,8 +133,8 @@ function EditTransactionForm({
   const name = description.trim()
   const renamed = !!name && name !== transaction.description
   const similarCount = useMemo(
-    () => countSimilar(renamed),
-    [countSimilar, renamed]
+    () => countSimilar(transaction, renamed),
+    [countSimilar, transaction, renamed]
   )
 
   const categorySuggestions = useMemo(
