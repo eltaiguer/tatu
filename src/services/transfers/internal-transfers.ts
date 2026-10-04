@@ -1,5 +1,6 @@
 import type { Transaction } from '../../models'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
+import { calendarDaysBetween, utcDayNumber } from '../../utils/date-utils'
 
 const TRANSFER_DESCRIPTION_KEYWORDS = [
   'transfer',
@@ -102,10 +103,10 @@ function markExternalTransfer(
   }
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000
-
+// Whole calendar days (#58): a row stored at UTC midnight and one stored
+// before #58 at 03:00Z are a whole number of days apart.
 function dayDistance(left: Date, right: Date): number {
-  return Math.abs(left.getTime() - right.getTime()) / DAY_MS
+  return calendarDaysBetween(left, right)
 }
 
 export function isTransferCategory(category: string | undefined): boolean {
@@ -162,7 +163,7 @@ export function inferInternalTransfers(
     meta.set(candidate.id, {
       refToken: extractReferenceToken(candidate),
       isTransfer: isTransferDescription(candidate.description),
-      day: Math.floor(candidate.date.getTime() / DAY_MS),
+      day: utcDayNumber(candidate.date),
     })
   }
 
@@ -191,11 +192,8 @@ export function inferInternalTransfers(
 
     const leftMeta = meta.get(left.id)!
     const windowIndexes: number[] = []
-    // ±2 is provably sufficient, not merely generous: if |a-b| <= 2*DAY_MS
-    // then |floor(a/DAY_MS) - floor(b/DAY_MS)| <= 2. (A difference of 3 would
-    // need floor(b/D) >= floor(a/D)+3, which forces b-a > 2*DAY_MS.) So no
-    // pair the exact dayDistance check would accept can fall outside this
-    // window. Narrowing it would start dropping real pairs.
+    // The buckets are UTC calendar days and dayDistance counts calendar days,
+    // so ±2 buckets is exactly the window the distance check below accepts.
     for (let offset = -2; offset <= 2; offset++) {
       const bucket = creditIndexByDay.get(leftMeta.day + offset)
       if (bucket) windowIndexes.push(...bucket)
@@ -208,8 +206,7 @@ export function inferInternalTransfers(
         continue
       }
 
-      // Day bucketing is a coarse filter (whole-day boundaries); the exact
-      // distance check below is still authoritative.
+      // Already implied by the bucket window; kept as the explicit rule.
       const distance = dayDistance(left.date, right.date)
       if (distance > 2) {
         continue

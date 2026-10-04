@@ -144,3 +144,25 @@ describe('Export helpers', () => {
     window.open = originalOpen
   })
 })
+
+// #58: the exported date is the row's calendar day, for rows stored at UTC
+// midnight and for rows stored before #58 at 03:00Z.
+describe('exported dates', () => {
+  it('writes each row on its own calendar day', () => {
+    const csv = buildCsv([
+      makeTransaction('new', { date: new Date('2026-03-01T00:00:00.000Z') }),
+      makeTransaction('pre-58', {
+        date: new Date('2026-03-31T03:00:00.000Z'),
+      }),
+    ])
+    const dates = csv
+      .split('\n')
+      .slice(1)
+      .map((line) => line.split(',')[0].replace(/"/g, ''))
+    expect(dates).toEqual(['2026-03-01', '2026-03-31'])
+    const html = buildPdfReportHtml([
+      makeTransaction('new', { date: new Date('2026-03-01T00:00:00.000Z') }),
+    ])
+    expect(html).toContain('<td>2026-03-01</td>')
+  })
+})

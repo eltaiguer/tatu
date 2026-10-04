@@ -65,13 +65,15 @@ export function useTransactionFiltering({
     const query = searchTerm.toLowerCase()
     const invalidDateRange =
       dateFromFilter && dateToFilter && dateToFilter < dateFromFilter
+    // The filter days are calendar days, like transaction dates (#58): bound
+    // them in UTC. A row stored before #58 at 03:00Z is inside its own day.
     const dateFrom =
       !invalidDateRange && dateFromFilter
-        ? new Date(`${dateFromFilter}T00:00:00`)
+        ? new Date(`${dateFromFilter}T00:00:00.000Z`)
         : null
     const dateTo =
       !invalidDateRange && dateToFilter
-        ? new Date(`${dateToFilter}T23:59:59.999`)
+        ? new Date(`${dateToFilter}T23:59:59.999Z`)
         : null
 
     // Cheap field comparisons run before the search-string build, and the

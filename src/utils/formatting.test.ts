@@ -4,6 +4,7 @@ import {
   formatCurrency,
   formatCurrencyShort,
   formatDate,
+  formatDateCompact,
   fitMonoFontSize,
 } from './formatting'
 
@@ -108,5 +109,23 @@ describe('fitMonoFontSize', () => {
     const cqi = Number(/([\d.]+)cqi/.exec(fitMonoFontSize(value, 22))![1])
     // width used = chars × 0.6em, with em = cqi% of the container
     expect(value.length * 0.6 * cqi).toBeLessThanOrEqual(100)
+  })
+})
+
+// #58: transaction dates are calendar days stored at UTC midnight; rows
+// imported before #58 from Uruguay sit at 03:00Z. Both show their own day in
+// any browser zone.
+describe('transaction date display', () => {
+  const NEW_ROW = new Date('2026-03-01T00:00:00.000Z')
+  const PRE_58_ROW = new Date('2026-03-01T03:00:00.000Z')
+
+  it('formatDate shows the stored calendar day', () => {
+    expect(formatDate(NEW_ROW)).toBe('01/03/2026')
+    expect(formatDate(PRE_58_ROW)).toBe('01/03/2026')
+  })
+
+  it('formatDateCompact shows the stored calendar day', () => {
+    expect(formatDateCompact(NEW_ROW)).toBe(formatDateCompact(PRE_58_ROW))
+    expect(formatDateCompact(NEW_ROW)).toMatch(/^1 mar/)
   })
 })

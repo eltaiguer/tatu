@@ -11,6 +11,7 @@ import { categorizeTransaction } from '../../services/categorizer/transaction-ca
 import { getDescriptionOverride } from '../../services/descriptions/description-overrides'
 import { getMerchantCategoryOverride } from '../../services/categorizer/category-overrides'
 import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
+import { formatDate } from '../../utils/formatting'
 
 interface Props {
   transactions: Transaction[]
@@ -34,14 +35,6 @@ interface PreviewRow {
 }
 
 type RunState = 'idle' | 'running' | 'done' | 'error'
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('es-UY', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-  })
-}
 
 function getLastMonthRange(): { year: number; month: number; label: string } {
   const now = new Date()
@@ -81,8 +74,10 @@ export function AiCategorizationPreview({
   const sample = useMemo(
     () =>
       transactions.filter((tx) => {
+        // Tx dates are calendar days at UTC midnight (#58); last month is
+        // the local calendar's.
         const d = tx.date
-        return d.getFullYear() === year && d.getMonth() === month
+        return d.getUTCFullYear() === year && d.getUTCMonth() === month
       }),
     [transactions, year, month]
   )

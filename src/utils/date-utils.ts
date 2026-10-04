@@ -1,20 +1,10 @@
-// Date utility functions for period filtering
-
-import {
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  startOfQuarter,
-  endOfQuarter,
-  startOfYear,
-  endOfYear,
-  isWithinInterval,
-  getQuarter,
-  subMonths,
-  format,
-} from 'date-fns'
-import { es } from 'date-fns/locale'
+// Date helpers. The convention (#58, docs/architecture.md "Dates"): a
+// transaction's `date` is a calendar day, held as that day's UTC midnight, and
+// is only ever read with UTC accessors or `timeZone: 'UTC'`. Rows stored
+// before #58 sit at the importing browser's local midnight (03:00Z from
+// Uruguay); they are snapped to UTC midnight when loaded (`toCalendarDay`),
+// and read the same either way. "Today" is the user's local calendar day,
+// expressed the same way (`todayAsUtcDate`).
 
 export type Period = 'week' | 'month' | 'quarter' | 'year' | 'all'
 
@@ -30,37 +20,86 @@ export interface DateRange {
   end: Date
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** The local calendar day of `now`, as a UTC-midnight calendar date. */
+export function todayAsUtcDate(now: Date = new Date()): Date {
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+}
+
 /**
- * Get the date range for a given period
+ * The calendar day a stored date stands for, at UTC midnight. A row written
+ * at local midnight by a browser anywhere from UTC-11 to UTC+12 rounds to its
+ * own day.
+ */
+export function toCalendarDay(date: Date): Date {
+  return new Date(Math.round(date.getTime() / DAY_MS) * DAY_MS)
+}
+
+/** Days since the epoch of a transaction date's UTC calendar day. */
+export function utcDayNumber(date: Date): number {
+  return Math.floor(date.getTime() / DAY_MS)
+}
+
+/** Whole calendar days between two transaction dates (read in UTC). */
+export function calendarDaysBetween(a: Date, b: Date): number {
+  return Math.abs(utcDayNumber(a) - utcDayNumber(b))
+}
+
+const MONTHS_ES_SHORT = [
+  'ene',
+  'feb',
+  'mar',
+  'abr',
+  'may',
+  'jun',
+  'jul',
+  'ago',
+  'sep',
+  'oct',
+  'nov',
+  'dic',
+]
+
+function utcDate(y: number, m: number, d = 1): Date {
+  return new Date(Date.UTC(y, m, d))
+}
+
+function monthLabel(date: Date): string {
+  return `${MONTHS_ES_SHORT[date.getUTCMonth()]} ${date.getUTCFullYear()}`
+}
+
+/**
+ * The UTC calendar range of a period around a reference calendar date.
  * @param period - The period type (week, month, quarter, year)
- * @param referenceDate - The reference date (defaults to today)
- * @returns Object with start and end dates
+ * @param referenceDate - A UTC calendar date (defaults to today)
+ * @returns Start (UTC midnight) and end (last millisecond of the last day)
  */
 export function getDateRangeForPeriod(
   period: Period,
-  referenceDate: Date = new Date()
+  referenceDate: Date = todayAsUtcDate()
 ): DateRange {
+  const y = referenceDate.getUTCFullYear()
+  const m = referenceDate.getUTCMonth()
+  const d = referenceDate.getUTCDate()
+  const until = (next: Date) => new Date(next.getTime() - 1)
   switch (period) {
-    case 'week':
+    case 'week': {
+      // Weeks start on Monday
+      const sinceMonday = (referenceDate.getUTCDay() + 6) % 7
       return {
-        start: startOfWeek(referenceDate, { weekStartsOn: 1 }), // Monday
-        end: endOfWeek(referenceDate, { weekStartsOn: 1 }),
+        start: utcDate(y, m, d - sinceMonday),
+        end: until(utcDate(y, m, d - sinceMonday + 7)),
       }
+    }
     case 'month':
-      return {
-        start: startOfMonth(referenceDate),
-        end: endOfMonth(referenceDate),
-      }
-    case 'quarter':
-      return {
-        start: startOfQuarter(referenceDate),
-        end: endOfQuarter(referenceDate),
-      }
+      return { start: utcDate(y, m), end: until(utcDate(y, m + 1)) }
+    case 'quarter': {
+      const first = m - (m % 3)
+      return { start: utcDate(y, first), end: until(utcDate(y, first + 3)) }
+    }
     case 'year':
-      return {
-        start: startOfYear(referenceDate),
-        end: endOfYear(referenceDate),
-      }
+      return { start: utcDate(y, 0), end: until(utcDate(y + 1, 0)) }
     case 'all':
       return {
         start: new Date(0),
@@ -71,20 +110,23 @@ export function getDateRangeForPeriod(
   }
 }
 
+function isWithin(date: Date, range: DateRange): boolean {
+  return date >= range.start && date <= range.end
+}
+
 /**
  * Check if a date is within a given period
  * @param date - The date to check
  * @param period - The period type
- * @param referenceDate - The reference date (defaults to today)
+ * @param referenceDate - A UTC calendar date (defaults to today)
  * @returns True if the date is within the period
  */
 export function isDateInPeriod(
   date: Date,
   period: Period,
-  referenceDate: Date = new Date()
+  referenceDate: Date = todayAsUtcDate()
 ): boolean {
-  const range = getDateRangeForPeriod(period, referenceDate)
-  return isWithinInterval(date, { start: range.start, end: range.end })
+  return isWithin(date, getDateRangeForPeriod(period, referenceDate))
 }
 
 /**
@@ -92,14 +134,14 @@ export function isDateInPeriod(
  * @param items - Array of items to filter
  * @param dateKey - The key of the date property
  * @param period - The period type
- * @param referenceDate - The reference date (defaults to today)
+ * @param referenceDate - A UTC calendar date (defaults to today)
  * @returns Filtered array of items
  */
 export function filterByPeriod<T>(
   items: T[],
   dateKey: keyof T,
   period: Period,
-  referenceDate: Date = new Date()
+  referenceDate: Date = todayAsUtcDate()
 ): T[] {
   if (period === 'all') {
     return items
@@ -112,20 +154,24 @@ export function filterByPeriod<T>(
     if (!(itemDate instanceof Date)) {
       return false
     }
-    return isWithinInterval(itemDate, { start: range.start, end: range.end })
+    return isWithin(itemDate, range)
   })
 }
 
 /**
  * Generate dynamic period options based on transaction dates
- * @param transactionDates - Array of transaction dates
- * @param today - Reference date for "current" periods (defaults to now)
- * @returns Array of period options with labels
+ * @param transactionDates - Transaction dates (UTC calendar dates)
+ * @param now - The current instant; its local calendar day is "today"
+ * @returns Period options whose referenceDate is a UTC calendar date
  */
 export function generatePeriodOptions(
   transactionDates: Date[],
-  today: Date = new Date()
+  now: Date = new Date()
 ): PeriodOption[] {
+  const today = todayAsUtcDate(now)
+  const currentYear = today.getUTCFullYear()
+  const currentMonth = today.getUTCMonth()
+  const quarterOf = (date: Date) => Math.floor(date.getUTCMonth() / 3) + 1
   const options: PeriodOption[] = []
 
   // Always show "All" option
@@ -144,27 +190,24 @@ export function generatePeriodOptions(
   })
 
   // Current month
-  const currentMonthLabel = format(today, 'MMM yyyy', { locale: es })
   options.push({
     id: 'this-month',
-    label: `Este mes (${currentMonthLabel})`,
+    label: `Este mes (${monthLabel(today)})`,
     period: 'month',
     referenceDate: today,
   })
 
   // Previous month
-  const prevMonth = subMonths(today, 1)
-  const prevMonthLabel = format(prevMonth, 'MMM yyyy', { locale: es })
+  const prevMonth = utcDate(currentYear, currentMonth - 1)
   options.push({
     id: 'prev-month',
-    label: `Mes anterior (${prevMonthLabel})`,
+    label: `Mes anterior (${monthLabel(prevMonth)})`,
     period: 'month',
     referenceDate: prevMonth,
   })
 
   // Current quarter
-  const currentQuarter = getQuarter(today)
-  const currentYear = today.getFullYear()
+  const currentQuarter = quarterOf(today)
   options.push({
     id: `q${currentQuarter}-${currentYear}`,
     label: `Q${currentQuarter} ${currentYear}`,
@@ -173,9 +216,9 @@ export function generatePeriodOptions(
   })
 
   // Previous quarter (if different from current)
-  const prevQuarterDate = subMonths(today, 3)
-  const prevQuarter = getQuarter(prevQuarterDate)
-  const prevQuarterYear = prevQuarterDate.getFullYear()
+  const prevQuarterDate = utcDate(currentYear, currentMonth - 3)
+  const prevQuarter = quarterOf(prevQuarterDate)
+  const prevQuarterYear = prevQuarterDate.getUTCFullYear()
   if (prevQuarter !== currentQuarter || prevQuarterYear !== currentYear) {
     options.push({
       id: `q${prevQuarter}-${prevQuarterYear}`,
@@ -196,14 +239,14 @@ export function generatePeriodOptions(
   // Previous year (if transactions exist from that year)
   const prevYear = currentYear - 1
   const hasTransactionsFromPrevYear = transactionDates.some(
-    (d) => d.getFullYear() === prevYear
+    (d) => d.getUTCFullYear() === prevYear
   )
   if (hasTransactionsFromPrevYear) {
     options.push({
       id: `year-${prevYear}`,
       label: `${prevYear}`,
       period: 'year',
-      referenceDate: new Date(prevYear, 6, 1), // Mid-year as reference
+      referenceDate: utcDate(prevYear, 6), // Mid-year as reference
     })
   }
 
