@@ -51,8 +51,7 @@ describe('Transactions', () => {
     // Tx dates are calendar days stored at UTC midnight; read in local time
     // in Uruguay, Oct 1 00:00Z is still Sep 30 and the label would disagree
     // with Resumen.
-    const originalTz = process.env.TZ
-    process.env.TZ = 'America/Montevideo'
+    // (The suite runs in America/Montevideo by default — see vite.config.ts.)
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-03T15:00:00.000Z'))
     try {
@@ -72,10 +71,6 @@ describe('Transactions', () => {
       expect(screen.queryByRole('button', { name: 'Último mes' })).toBeNull()
     } finally {
       vi.useRealTimers()
-      // Assigning undefined would set the string "undefined" and leak an
-      // invalid zone into later files in this worker.
-      if (originalTz === undefined) delete process.env.TZ
-      else process.env.TZ = originalTz
     }
   })
 
