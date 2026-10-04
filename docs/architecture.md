@@ -9,16 +9,19 @@ terms are defined in [`CONTEXT.md`](CONTEXT.md).
 ## Import
 
 A statement goes from file to screen in one pass in the browser.
-`ImportCSV.tsx` parses, then hands the rows to `handleTransactionsImported`
-(`useTransactionHandlers.ts`).
+`ImportCSV.tsx` parses, categorizes the parsed rows
+(`categorizeParsedData` in `src/services/categorizer/import-categorization.ts`),
+then hands them to `handleTransactionsImported` (`useTransactionHandlers.ts`).
+The parsers are pure: they map columns, dates, amounts, currency and IDs and
+never call the categorizer.
 
 ```mermaid
 flowchart TD
     A["CSV file dropped in ImportCSV"] --> B["detectFileType: credit_card, bank_account_usd or bank_account_uyu"]
     B --> C["parseCreditCardCSV or parseBankAccountCSV"]
-    C --> D["Per row: categorizeTransaction(description, type), no context"]
-    D --> E["Per row: generateTransactionId(date, description, amount text, row index)"]
-    E --> F["findExistingTransactionIds on Supabase + findDuplicateIds in the store"]
+    C --> E["Per row: generateTransactionId(date, description, amount text, row index)"]
+    E --> D["categorizeParsedData, per row: categorizeTransaction(description, type), no context"]
+    D --> F["findExistingTransactionIds on Supabase + findDuplicateIds in the store"]
     F --> G{"ID already stored?"}
     G -- "yes, live" --> H["Skipped as duplicate"]
     G -- "yes, soft-deleted" --> I["Skipped so it stays deleted"]
@@ -33,9 +36,12 @@ flowchart TD
 Details that matter:
 
 - **Categorization at import uses only the first 8 sources** in the
-  [precedence table](#categorizer-precedence). The parsers call
+  [precedence table](#categorizer-precedence). `categorizeParsedData` calls
   `categorizeTransaction` without a `CategorizationContext`, so temporal,
-  similar-merchant and amount hints never run at import.
+  similar-merchant and amount hints never run at import. Passing context there
+  would change future imports' categories — a separate decision (#64 step 2).
+  The golden fixture in `import-categorization.equivalence.test.ts` pins the
+  sample CSVs' import categories.
 - **AI enrichment replaces the rule-based result** (category, confidence and
   display name) for every new row that has no description override and no
   merchant override. That includes rows a custom pattern or merchant pattern

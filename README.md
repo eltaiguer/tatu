@@ -42,13 +42,26 @@ npm install
 If you want authentication + cloud persistence enabled:
 
 1. Copy `.env.example` to `.env`
-2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
 3. Set `VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL` to your hosted app URL
    (example: `https://tatu-fdba8.web.app`)
 4. Run the SQL in `supabase/schema.sql` inside your Supabase project
 
 When these variables are present, the app enables login and stores
 transactions in Supabase.
+
+### Local Supabase (Docker)
+
+To run against a throwaway local backend instead of a real project:
+
+```bash
+npm run dev:backend   # starts Supabase in Docker, applies schema, seeds samples/
+npm run dev           # log in as dev@tatu.local / tatu-dev-password
+npx supabase stop     # when done
+```
+
+`dev:backend` writes `.env.local` (which overrides `.env`); delete it to point
+the app back at your remote project.
 
 Auth flow includes:
 

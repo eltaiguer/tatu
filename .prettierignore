@@ -10,9 +10,6 @@ coverage/
 # Lockfiles
 package-lock.json
 
-# Design handoff prototype (frozen reference, not app code)
-handoff/prototype/
-
 # Playwright MCP scratch + agent worktrees
 .playwright-mcp/
 .claude/worktrees/

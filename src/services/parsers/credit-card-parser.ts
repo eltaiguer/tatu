@@ -10,14 +10,15 @@ import {
   parseSantanderDate,
   generateTransactionId,
 } from './utils'
-import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 
 /**
  * Parse a Santander credit card CSV file
  *
  * @param csvContent - Raw CSV content as string
  * @param fileName - Name of the CSV file
- * @returns ParsedData with transactions and metadata
+ * @returns ParsedData with transactions and metadata. Rows come back
+ * uncategorized: the import pipeline categorizes them
+ * (`categorizeParsedData`).
  */
 export function parseCreditCardCSV(
   csvContent: string,
@@ -183,16 +184,6 @@ function parseRow(
       (currency === 'USD' && dolaresAmount < 0) ||
       (currency === 'UYU' && pesosAmount < 0)
 
-    // Auto-categorize based on transaction details
-    const {
-      category,
-      confidence,
-      description: patternDescription,
-    } = categorizeTransaction(
-      rawTransaction.descripcion,
-      isCredit ? 'credit' : 'debit'
-    )
-
     const transaction: Transaction = {
       id: generateTransactionId(
         rawTransaction.fecha,
@@ -202,13 +193,10 @@ function parseRow(
       ),
       date: parseSantanderDate(rawTransaction.fecha),
       description: rawTransaction.descripcion,
-      displayDescription: patternDescription,
       amount,
       currency,
       type: isCredit ? 'credit' : 'debit',
       source: 'credit_card',
-      category,
-      categoryConfidence: confidence,
       rawData: rawTransaction,
     }
 

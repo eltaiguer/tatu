@@ -10,6 +10,8 @@ The app is fully online — authentication and data persistence require Supabase
 
 **Read next:** [`docs/CONTEXT.md`](docs/CONTEXT.md) (glossary Spanish UI ↔ English code, UI copy/voseo guide) · [`docs/architecture.md`](docs/architecture.md) (import/sync flow, categorizer precedence, money conversion, persistence) · [`docs/decisions/`](docs/decisions/README.md) (ADR index + template).
 
+Historical design material (e.g. the 2026-06 redesign handoff, deleted in #129) survives only in git history and is not a source of truth — the code and the docs above are.
+
 ## Tech stack
 
 - **Frontend**: React 18 + TypeScript (strict mode) + Vite
@@ -37,6 +39,7 @@ npm run lint             # ESLint (zero warnings enforced)
 npm run format           # Prettier --write over the whole repo
 npm run format:check     # Prettier --check over the whole repo (Markdown too)
 npm run deploy:firebase  # Build + deploy to Firebase
+npm run dev:backend      # Local Supabase in Docker: schema + seeded dev user, writes .env.local
 npx vitest run <path>    # Run one test file (or a directory)
 ```
 
@@ -84,7 +87,7 @@ src/
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
-    categorizer/           # Merchant pattern matching + auto-categorization
+    categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored)
     filters/               # filters.ts: filtering for export (views use useTransactionFiltering); url-filters.ts: Transacciones filters <-> URL query
     export/                # CSV/PDF export
@@ -205,9 +208,12 @@ Behavior testing — tests verify what the system does, not how it does it.
 
 Requires `.env` with Supabase vars (see `.env.example`):
 
-- `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` — required for auth + all data
+- `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` — required for auth + all data
 - `VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL` — for password reset emails
 - `VITE_FIREBASE_*` — Firebase Hosting + analytics (optional for local dev)
+
+**Running the app locally** (no production data): `npm run dev:backend` then `npm run dev`, log in as `dev@tatu.local` / `tatu-dev-password`.
+Full recipe, screenshots and teardown: `.claude/skills/run/SKILL.md`.
 
 ## Current status
 
