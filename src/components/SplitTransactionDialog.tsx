@@ -11,6 +11,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog'
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
+import { handleOptionListKeyDown } from './ui/option-list'
 import { CategoryBadge } from './CategoryBadge'
 import type { Transaction } from '../models'
 import { formatCurrency } from '../utils/formatting'
@@ -105,10 +107,7 @@ export function SplitTransactionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent
-        className="max-w-[560px]!"
-        onClick={() => setCategoryPickerIdx(null)}
-      >
+      <DialogContent className="max-w-[560px]!">
         <DialogHeader>
           <DialogTitle>Dividir transacción</DialogTitle>
           {/* The subtitle names the transaction being split, so it is the
@@ -142,66 +141,71 @@ export function SplitTransactionDialog({
                   disabled={pending}
                   className="text-[13px]!"
                 />
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setCategoryPickerIdx((prev) =>
-                        prev === idx ? null : idx
-                      )
-                    }}
-                    disabled={pending}
-                    className={cn(
-                      'flex w-full cursor-pointer items-center gap-[6px] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-[8px] py-[4px] text-left text-[12px]',
-                      part.category
-                        ? 'text-[var(--text)]'
-                        : 'text-[var(--text-muted)]'
-                    )}
-                  >
-                    {part.category ? (
-                      <CategoryBadge categoryId={part.category} />
-                    ) : (
-                      'Categoría (opcional)'
-                    )}
-                  </button>
-
-                  {categoryPickerIdx === idx && (
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute top-full left-0 z-50 mt-[2px] max-h-[200px] min-w-[200px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+                {/* A Radix Popover, so Escape and outside clicks close only
+                    the picker, never the dialog with the typed parts. */}
+                <Popover
+                  open={categoryPickerIdx === idx}
+                  onOpenChange={(isOpen) =>
+                    setCategoryPickerIdx(isOpen ? idx : null)
+                  }
+                >
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      className={cn(
+                        'flex w-full cursor-pointer items-center gap-[6px] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-[8px] py-[4px] text-left text-[12px]',
+                        part.category
+                          ? 'text-[var(--text)]'
+                          : 'text-[var(--text-muted)]'
+                      )}
                     >
+                      {part.category ? (
+                        <CategoryBadge categoryId={part.category} />
+                      ) : (
+                        'Categoría (opcional)'
+                      )}
+                    </button>
+                  </PopoverTrigger>
+
+                  <PopoverContent
+                    align="start"
+                    sideOffset={2}
+                    className="w-auto max-h-[200px] min-w-[200px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+                    onKeyDown={handleOptionListKeyDown}
+                    onWheel={(event) => event.stopPropagation()}
+                    onTouchMove={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updatePart(idx, { category: undefined })
+                        setCategoryPickerIdx(null)
+                      }}
+                      className="block w-full cursor-pointer border-none bg-transparent px-[10px] py-[6px] text-left text-[12px] text-[var(--text-muted)]"
+                    >
+                      Sin categoría
+                    </button>
+                    {categoryOptions.map((cat) => (
                       <button
+                        key={cat.id}
                         type="button"
                         onClick={() => {
-                          updatePart(idx, { category: undefined })
+                          updatePart(idx, { category: cat.id })
                           setCategoryPickerIdx(null)
                         }}
-                        className="block w-full cursor-pointer border-none bg-transparent px-[10px] py-[6px] text-left text-[12px] text-[var(--text-muted)]"
+                        className={cn(
+                          'flex w-full cursor-pointer items-center gap-[6px] border-none px-[10px] py-[5px] text-left text-[12px] text-[var(--text)]',
+                          part.category === cat.id
+                            ? 'bg-[var(--surface-hover)]'
+                            : 'bg-transparent'
+                        )}
                       >
-                        Sin categoría
+                        <CategoryBadge categoryId={cat.id} />
                       </button>
-                      {categoryOptions.map((cat) => (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => {
-                            updatePart(idx, { category: cat.id })
-                            setCategoryPickerIdx(null)
-                          }}
-                          className={cn(
-                            'flex w-full cursor-pointer items-center gap-[6px] border-none px-[10px] py-[5px] text-left text-[12px] text-[var(--text)]',
-                            part.category === cat.id
-                              ? 'bg-[var(--surface-hover)]'
-                              : 'bg-transparent'
-                          )}
-                        >
-                          <CategoryBadge categoryId={cat.id} />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                    ))}
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <Input

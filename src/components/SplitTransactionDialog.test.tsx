@@ -1,5 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import type { Transaction } from '../models'
 import type { SplitPart } from '../services/mutations/transaction-mutations'
@@ -8,6 +9,7 @@ import {
   replaceCustomCategories,
   upsertBuiltinOverride,
 } from '../services/categories/category-store'
+import { getCategoryDefinitions } from '../services/categories/category-registry'
 
 function makeTransaction(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -86,6 +88,61 @@ describe('SplitTransactionDialog', () => {
     expect(
       screen.getByRole('spinbutton', { name: 'Monto parte 2' })
     ).toBeInTheDocument()
+  })
+
+  it('closes only the category picker on Escape, keeping the typed parts', async () => {
+    const user = userEvent.setup()
+    const { onCancel } = renderDialog({})
+    const amount = await screen.findByRole('spinbutton', {
+      name: 'Monto parte 1',
+    })
+    await user.type(amount, '10.5')
+
+    await user.click(screen.getAllByText('Categoría (opcional)')[0])
+    // The picker's first option clears the category.
+    expect(screen.getAllByText('Sin categoría').length).toBeGreaterThan(0)
+    await user.keyboard('{Escape}')
+
+    await waitFor(() =>
+      expect(screen.queryAllByText('Sin categoría')).toHaveLength(0)
+    )
+    expect(onCancel).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Monto parte 1' })
+    ).toHaveValue(10.5)
+  })
+
+  it('opens the category picker and picks a category with the keyboard alone', async () => {
+    const user = userEvent.setup()
+    renderDialog({})
+    const firstCategory = getCategoryDefinitions().filter(
+      (c) => !c.isIgnored
+    )[0]
+    const trigger = (
+      await screen.findAllByRole('button', { name: 'Categoría (opcional)' })
+    )[0]
+
+    trigger.focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('button', { name: 'Sin categoría' })[0]
+      ).toHaveFocus()
+    )
+    await user.keyboard('{ArrowDown}')
+    expect(
+      screen.getByRole('button', { name: firstCategory.label })
+    ).toHaveFocus()
+    await user.keyboard('{Enter}')
+
+    await waitFor(() =>
+      expect(screen.queryAllByText('Sin categoría')).toHaveLength(0)
+    )
+    expect(
+      screen.getAllByRole('button', { name: 'Categoría (opcional)' })
+    ).toHaveLength(1)
+    expect(screen.getByText(firstCategory.label)).toBeInTheDocument()
   })
 
   it('describes the dialog with the transaction being split', async () => {
