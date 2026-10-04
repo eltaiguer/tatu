@@ -46,28 +46,13 @@ function SettingRow({
   control: React.ReactNode
 }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 24,
-        padding: '16px 24px',
-        borderBottom: '1px solid var(--border)',
-      }}
-    >
+    <div className="flex items-center justify-between gap-[24px] border-b border-[var(--border)] px-[24px] py-[16px]">
       <div>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+        <div className="text-body font-semibold text-[var(--text)]">
           {label}
         </div>
         {description && (
-          <div
-            style={{
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              marginTop: 2,
-            }}
-          >
+          <div className="mt-[2px] text-label text-[var(--text-muted)]">
             {description}
           </div>
         )}
@@ -177,14 +162,8 @@ export function Settings({
           label="Tipo de cambio"
           description="Usado para convertir entre USD y UYU en resúmenes y análisis"
           control={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span
-                style={{
-                  fontSize: 13,
-                  color: 'var(--text-muted)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
+            <div className="flex items-center gap-[8px]">
+              <span className="text-small whitespace-nowrap text-[var(--text-muted)]">
                 1 US$ =
               </span>
               <input
@@ -196,22 +175,9 @@ export function Settings({
                   const n = parseFloat(e.target.value)
                   if (Number.isFinite(n) && n > 0) onSetFxRate?.(n)
                 }}
-                style={{
-                  width: 72,
-                  fontSize: 13,
-                  fontFamily: 'var(--font-mono)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 6,
-                  padding: '5px 8px',
-                  background: 'var(--surface)',
-                  color: 'var(--text)',
-                  outline: 'none',
-                  textAlign: 'right',
-                }}
+                className="w-[72px] rounded-[6px] border border-[var(--border)] bg-[var(--surface)] px-[8px] py-[5px] text-right font-[family-name:var(--font-mono)] text-small text-[var(--text)] outline-none"
               />
-              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                $U
-              </span>
+              <span className="text-small text-[var(--text-muted)]">$U</span>
             </div>
           }
         />
@@ -227,30 +193,14 @@ export function Settings({
               role="switch"
               aria-checked={aiEnabled}
               onClick={() => onSetAiEnabled(!aiEnabled)}
-              style={{
-                width: 44,
-                height: 24,
-                borderRadius: 12,
-                border: 'none',
-                cursor: 'pointer',
-                background: aiEnabled ? 'var(--accent)' : 'var(--border)',
-                position: 'relative',
-                transition: 'background 0.2s',
-                flexShrink: 0,
-              }}
+              className={`relative h-[24px] w-[44px] shrink-0 cursor-pointer rounded-[12px] border-none [transition:background_0.2s] ${
+                aiEnabled ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'
+              }`}
             >
               <span
-                style={{
-                  position: 'absolute',
-                  top: 2,
-                  left: aiEnabled ? 22 : 2,
-                  width: 20,
-                  height: 20,
-                  borderRadius: '50%',
-                  background: 'white',
-                  transition: 'left 0.2s',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }}
+                className={`absolute top-[2px] h-[20px] w-[20px] rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.2)] [transition:left_0.2s] ${
+                  aiEnabled ? 'left-[22px]' : 'left-[2px]'
+                }`}
               />
             </button>
           }
@@ -264,7 +214,7 @@ export function Settings({
                 href="https://console.anthropic.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: 'var(--brand)', textDecoration: 'underline' }}
+                className="text-[var(--brand)] underline"
               >
                 console.anthropic.com
               </a>{' '}
@@ -272,36 +222,25 @@ export function Settings({
             </>
           }
           control={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div className="flex items-center gap-[6px]">
               <input
                 type={showKey ? 'text' : 'password'}
                 value={claudeApiKey}
                 onChange={(e) => onSetClaudeApiKey(e.target.value)}
                 placeholder="sk-ant-..."
                 disabled={!aiEnabled}
-                style={{
-                  fontSize: 13,
-                  padding: '4px 8px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border)',
-                  background: aiEnabled ? 'var(--input)' : 'var(--muted)',
-                  color: aiEnabled ? 'var(--foreground)' : 'var(--text-muted)',
-                  width: 180,
-                  fontFamily: 'var(--font-mono)',
-                }}
+                className={`w-[180px] rounded-[6px] border border-[var(--border)] px-[8px] py-[4px] font-[family-name:var(--font-mono)] text-small ${
+                  aiEnabled
+                    ? 'bg-[var(--input)] text-[var(--foreground)]'
+                    : 'bg-[var(--muted)] text-[var(--text-muted)]'
+                }`}
               />
               <button
                 onClick={() => setShowKey((v) => !v)}
                 disabled={!aiEnabled}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: aiEnabled ? 'pointer' : 'default',
-                  color: 'var(--text-muted)',
-                  padding: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
+                className={`flex items-center border-none bg-transparent p-[4px] text-[var(--text-muted)] ${
+                  aiEnabled ? 'cursor-pointer' : 'cursor-default'
+                }`}
               >
                 {showKey ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
@@ -313,10 +252,11 @@ export function Settings({
           description="Haiku es más rápido y económico; Sonnet es más preciso"
           control={
             <div
-              style={{
-                opacity: aiEnabled ? 1 : 0.5,
-                pointerEvents: aiEnabled ? 'auto' : 'none',
-              }}
+              className={
+                aiEnabled
+                  ? 'pointer-events-auto'
+                  : 'pointer-events-none opacity-50'
+              }
             >
               <SegmentedToggle
                 options={[
@@ -331,18 +271,8 @@ export function Settings({
           }
         />
         {aiEnabled && claudeApiKey && (
-          <div
-            style={{
-              padding: '8px 16px',
-              borderTop: '1px solid var(--border)',
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <span style={{ color: 'var(--pos)' }}>✓</span>
+          <div className="flex items-center gap-[6px] border-t border-[var(--border)] px-[16px] py-[8px] text-label text-[var(--text-muted)]">
+            <span className="text-[var(--pos)]">✓</span>
             IA activa · se aplicará en tu próxima importación
           </div>
         )}
@@ -352,16 +282,8 @@ export function Settings({
       <SectionCard title="Cuenta">
         {supabaseEnabled && session ? (
           <>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '16px 24px',
-                borderBottom: '1px solid var(--border)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-[24px] py-[16px]">
+              <div className="flex items-center gap-[12px]">
                 <IconTile
                   size="lg"
                   bg="var(--accent-soft)"
@@ -371,42 +293,14 @@ export function Settings({
                   {avatarInitial}
                 </IconTile>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>
-                    {userName}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: 'var(--text-muted)',
-                      marginTop: 1,
-                    }}
-                  >
+                  <div className="text-body font-semibold">{userName}</div>
+                  <div className="mt-[1px] text-label text-[var(--text-muted)]">
                     {userEmail} · sincronizado en la nube
                   </div>
                 </div>
               </div>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '3px 10px',
-                  borderRadius: 999,
-                  background: 'var(--pos-soft)',
-                  color: 'var(--pos)',
-                  fontSize: 12,
-                  fontWeight: 600,
-                }}
-              >
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: 'var(--pos)',
-                    display: 'inline-block',
-                  }}
-                />
+              <span className="inline-flex items-center gap-[5px] rounded-[999px] bg-[var(--pos-soft)] px-[10px] py-[3px] text-label font-semibold text-[var(--pos)]">
+                <span className="inline-block h-[6px] w-[6px] rounded-full bg-[var(--pos)]" />
                 Conectado
               </span>
             </div>
@@ -417,7 +311,7 @@ export function Settings({
                 <Button
                   variant="outline"
                   onClick={onSignOut}
-                  style={{ fontSize: 13 }}
+                  className="text-small leading-[1.428571]"
                 >
                   Salir
                 </Button>
@@ -425,28 +319,16 @@ export function Settings({
             />
           </>
         ) : (
-          <div style={{ padding: '16px 24px' }}>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+          <div className="px-[24px] py-[16px]">
+            <p className="text-small text-[var(--text-muted)]">
               Usás Tatú sin cuenta. Tus datos se guardan en este navegador.
             </p>
           </div>
         )}
 
         {/* Privacy copy */}
-        <div
-          style={{
-            padding: '14px 24px',
-            background: 'var(--brand-soft)',
-            borderTop: '1px solid var(--border)',
-          }}
-        >
-          <p
-            style={{
-              fontSize: 12,
-              color: 'var(--brand-text)',
-              lineHeight: 1.5,
-            }}
-          >
+        <div className="border-t border-[var(--border)] bg-[var(--brand-soft)] px-[24px] py-[14px]">
+          <p className="text-label leading-[1.5] text-[var(--brand-text)]">
             Tus movimientos se guardan en tu cuenta y solo vos podés verlos.
             Tatú no los comparte con nadie por su cuenta; las funciones de IA
             los envían a Anthropic con tu propia clave: la categorización manda
@@ -467,12 +349,7 @@ export function Settings({
             <Button
               variant="outline"
               onClick={() => handleExport('csv')}
-              style={{
-                fontSize: 13,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
+              className="flex items-center gap-[6px] text-small leading-[1.428571]"
             >
               <Download size={14} />
               Exportar CSV
@@ -486,34 +363,19 @@ export function Settings({
             <Button
               variant="outline"
               onClick={() => handleExport('pdf')}
-              style={{
-                fontSize: 13,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
+              className="flex items-center gap-[6px] text-small leading-[1.428571]"
             >
               <Download size={14} />
               Exportar PDF
             </Button>
           }
         />
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 24,
-            padding: '16px 24px',
-          }}
-        >
+        <div className="flex items-center justify-between gap-[24px] px-[24px] py-[16px]">
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--neg)' }}>
+            <div className="text-body font-semibold text-[var(--neg)]">
               Eliminar todos los datos
             </div>
-            <div
-              style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}
-            >
+            <div className="mt-[2px] text-label text-[var(--text-muted)]">
               Borra todas las transacciones, categorías y reglas guardadas
             </div>
           </div>
@@ -521,7 +383,7 @@ export function Settings({
             variant="destructive"
             onClick={() => void handleResetAllData()}
             disabled={!onResetAllData}
-            style={{ fontSize: 13 }}
+            className="text-small leading-[1.428571]"
           >
             Resetear
           </Button>
