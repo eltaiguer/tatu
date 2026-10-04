@@ -8,6 +8,8 @@ Tatu is a personal finance web app for managing Santander Uruguay bank statement
 
 The app is fully online — authentication and data persistence require Supabase. There is no offline/localStorage fallback. Deployed on Firebase Hosting.
 
+**Read next:** [`docs/CONTEXT.md`](docs/CONTEXT.md) (glossary Spanish UI ↔ English code, UI copy/voseo guide) · [`docs/architecture.md`](docs/architecture.md) (import/sync flow, categorizer precedence, money conversion, persistence) · [`docs/decisions/`](docs/decisions/README.md) (ADR index + template).
+
 ## Tech stack
 
 - **Frontend**: React 18 + TypeScript (strict mode) + Vite
@@ -195,7 +197,7 @@ Behavior testing — tests verify what the system does, not how it does it.
 - **Transaction sources**: Credit Card, USD Bank Account, UYU Bank Account (3 distinct CSV formats from Santander Uruguay)
 - **Categorization**: Pattern-based merchant matching (`merchant-patterns.ts`) with confidence scores (0–1). System learns from user overrides stored in Supabase. Optional AI enrichment on import (see Current status).
 - **Deduplication**: Hash-based transaction IDs prevent duplicate imports
-- **Internal transfers**: Auto-detected between accounts on same date/amount
+- **Internal transfers**: inferred in the store (`inferInternalTransfers`) by keyword + scored debit/credit pairing within ±2 days, recomputed on load — see `docs/architecture.md`
 - **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `handleUpdateTransaction` in `useTransactionHandlers`
 
 ## Environment

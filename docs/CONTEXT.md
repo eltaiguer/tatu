@@ -4,6 +4,8 @@ Tatu's UI is Spanish (Rioplatense) and its code is English. This page maps one
 to the other and defines the project-specific terms, so new code and new copy
 use the names that already exist. Definitions describe current behaviour; if
 the code changes, update this page in the same PR.
+How the pieces fit together (data flow, categorizer precedence) is in
+[`architecture.md`](architecture.md).
 
 The brand is written **Tatú** in UI strings (page titles are
 `Resumen · Tatú`) and **Tatu** in the repo.
