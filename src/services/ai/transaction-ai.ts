@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { Category, CATEGORY_LABELS } from '../../models'
 import type { Transaction } from '../../models'
 import type { CustomCategory } from '../categories/category-store'
@@ -287,6 +286,8 @@ export async function enrichTransactionsWithAi(
   config: AiConfig,
   context: AiCorrectionContext
 ): Promise<AiEnrichmentOutcome> {
+  // Loaded on demand so the SDK stays out of the startup bundle (#62).
+  const { default: Anthropic } = await import('@anthropic-ai/sdk')
   const client = new Anthropic({
     apiKey: config.apiKey,
     dangerouslyAllowBrowser: true,

@@ -63,6 +63,12 @@ export function aiErrorMessage(raw: string): string {
   if (/529|overloaded|50[0-9]|unavailable/.test(text)) {
     return 'el servicio de IA no está disponible en este momento'
   }
+  // The SDK loads on demand; after a deploy its old chunk is gone (#62).
+  if (
+    /dynamically imported module|importing a module script failed/.test(text)
+  ) {
+    return 'la app se actualizó; recargá la página'
+  }
   if (/failed to fetch|network|connection/.test(text)) {
     return 'sin conexión con Anthropic'
   }

@@ -42,6 +42,21 @@ describe('aiErrorMessage', () => {
     )
   })
 
+  it('asks for a reload when the on-demand SDK chunk is gone after a deploy', () => {
+    // Chrome / Firefox and Safari wordings
+    expect(
+      aiErrorMessage(
+        'Failed to fetch dynamically imported module: https://x/assets/index-abc.js'
+      )
+    ).toBe('la app se actualizó; recargá la página')
+    expect(aiErrorMessage('Importing a module script failed.')).toBe(
+      'la app se actualizó; recargá la página'
+    )
+    expect(aiErrorMessage('TypeError: Failed to fetch')).toBe(
+      'sin conexión con Anthropic'
+    )
+  })
+
   it('keeps how many batches failed, so partial never reads as total', () => {
     expect(aiErrorMessage('1 de 12 lotes fallaron: 529 Overloaded')).toBe(
       '1 de 12 lotes fallaron (el servicio de IA no está disponible en este momento)'

@@ -1,5 +1,10 @@
 import { normalizeMerchantName } from './merchant-patterns'
 import { invalidateLearnedPatternsCache } from './learned-patterns'
+import {
+  deleteCategoryOverride,
+  upsertCategoryOverride,
+} from '../supabase/category-overrides'
+import { getActiveSupabaseSession } from '../supabase/runtime'
 
 export interface CategoryOverride {
   merchantName?: string
@@ -64,11 +69,8 @@ export async function setMerchantCategoryOverrideWithSync(
   // Remote failures propagate (after rolling back the local entry) so the
   // caller can tell the user the rule wasn't saved.
   try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { upsertCategoryOverride } =
-        await import('../supabase/category-overrides')
       await upsertCategoryOverride(session, {
         merchantNormalized: normalized,
         merchantOriginal: merchantName,
@@ -104,11 +106,8 @@ export async function clearMerchantCategoryOverrideWithSync(
   }
 
   try {
-    const { getActiveSupabaseSession } = await import('../supabase/runtime')
     const session = getActiveSupabaseSession()
     if (session) {
-      const { deleteCategoryOverride } =
-        await import('../supabase/category-overrides')
       await deleteCategoryOverride(session, normalized)
     }
   } catch (error) {

@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { Transaction } from '../../models'
 import type { AiConfig } from './ai-config'
 
@@ -44,6 +43,8 @@ export async function analyzeTransactionPatterns(
   transactions: Transaction[],
   config: AiConfig
 ): Promise<string> {
+  // Loaded on demand so the SDK stays out of the startup bundle (#62).
+  const { default: Anthropic } = await import('@anthropic-ai/sdk')
   const client = new Anthropic({
     apiKey: config.apiKey,
     dangerouslyAllowBrowser: true,
