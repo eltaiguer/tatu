@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
+import { ROUTER_FUTURE } from './router-future'
 import './services/firebase'
 import './index.css'
 
@@ -23,7 +24,7 @@ window.addEventListener('vite:preloadError', (event) => {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter future={{ v7_startTransition: true }}>
+    <BrowserRouter future={ROUTER_FUTURE}>
       <App />
     </BrowserRouter>
   </React.StrictMode>
