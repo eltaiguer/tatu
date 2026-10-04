@@ -65,7 +65,7 @@ function rowFor(
 ): HTMLElement {
   const row = table
     .getAllByRole('row')
-    .find((r) => within(r).queryByText(description))
+    .find((r: HTMLElement) => within(r).queryByText(description))
   if (!row) throw new Error(`No row for ${description}`)
   return row
 }
