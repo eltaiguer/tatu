@@ -177,6 +177,7 @@ export function Settings({
               </span>
               <input
                 type="number"
+                aria-label="Tipo de cambio"
                 min="0.01"
                 step="0.5"
                 value={fxRate}
@@ -199,8 +200,10 @@ export function Settings({
           description="Usa Claude para categorizar y limpiar los nombres de transacciones al importar"
           control={
             <button
+              type="button"
               role="switch"
               aria-checked={aiEnabled}
+              aria-label="Categorización con IA"
               onClick={() => onSetAiEnabled(!aiEnabled)}
               className={`relative h-[24px] w-[44px] shrink-0 cursor-pointer rounded-[12px] border-none [transition:background_0.2s] ${
                 aiEnabled ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'
@@ -234,6 +237,7 @@ export function Settings({
             <div className="flex items-center gap-[6px]">
               <input
                 type={showKey ? 'text' : 'password'}
+                aria-label="Clave API de Anthropic"
                 value={claudeApiKey}
                 onChange={(e) => onSetClaudeApiKey(e.target.value)}
                 placeholder="sk-ant-..."
@@ -245,6 +249,8 @@ export function Settings({
                 }`}
               />
               <button
+                type="button"
+                aria-label={showKey ? 'Ocultar clave' : 'Mostrar clave'}
                 onClick={() => setShowKey((v) => !v)}
                 disabled={!aiEnabled}
                 className={`flex items-center border-none bg-transparent p-[4px] text-[var(--text-muted)] ${

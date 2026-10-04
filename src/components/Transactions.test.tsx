@@ -866,7 +866,7 @@ describe('Transactions', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
 
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
@@ -1043,13 +1043,13 @@ describe('Transactions', () => {
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
     const options = screen.getAllByText('Entretenimiento')
     fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'viaje' },
     })
@@ -1092,13 +1092,13 @@ describe('Transactions', () => {
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
     const options = screen.getAllByText('Entretenimiento')
     fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'viaje' },
     })
@@ -1142,13 +1142,13 @@ describe('Transactions', () => {
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
     const options = screen.getAllByText('Entretenimiento')
     fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'viaje' },
     })
@@ -1226,7 +1226,7 @@ describe('Transactions', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
 
     const tagButtons = screen.getAllByText('#monthly')
     fireEvent.click(tagButtons[tagButtons.length - 1])
@@ -1254,7 +1254,7 @@ describe('Transactions', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
 
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'new-tag' },
@@ -1307,6 +1307,52 @@ describe('Transactions', () => {
 
     it('leaves out the ignored rows hidden from the list', async () => {
       expect(await exportedDescriptions(false)).toEqual(['super'])
+    })
+  })
+
+  // #194: the floating selection bar was a single 864px row centred on the
+  // screen, so on a 390px phone Ignorar/Eliminar/× sat off-screen, and its
+  // z-[70] put it above the dialog overlay (z-50). jsdom has no layout, so
+  // this pins the responsive classes; the PR carries the Playwright check.
+  describe('selection bar layout (#194)', () => {
+    function selectOne() {
+      render(<Transactions transactions={[makeTransaction(1, 'Devoto')]} />)
+      fireEvent.click(
+        screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+      )
+      return screen.getByRole('region', { name: 'Acciones de selección' })
+    }
+
+    it('sits under dialog overlays (z-50) instead of above them', () => {
+      const bar = selectOne()
+      expect(bar).toHaveClass('z-40')
+      expect(bar).not.toHaveClass('z-[70]')
+    })
+
+    it('spans the screen and wraps its actions below md', () => {
+      const bar = selectOne()
+      expect(bar).toHaveClass('inset-x-4', 'md:inset-x-auto')
+      expect(within(bar).getByRole('group', { name: 'Acciones' })).toHaveClass(
+        'max-md:flex-wrap'
+      )
+    })
+
+    it('never wraps an action label mid-word', () => {
+      const bar = selectOne()
+      for (const name of [
+        'Categorizar',
+        'Editar seleccionadas',
+        'Auto-categorizar',
+        'Ignorar',
+        'Eliminar',
+      ]) {
+        expect(within(bar).getByRole('button', { name })).toHaveClass(
+          'whitespace-nowrap'
+        )
+      }
+      expect(
+        within(bar).getByRole('button', { name: 'Deseleccionar' })
+      ).toBeInTheDocument()
     })
   })
 })

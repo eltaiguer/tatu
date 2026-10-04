@@ -71,9 +71,9 @@ describe('Settings', () => {
       screen.getByRole('heading', { name: 'Configuración' })
     ).toBeInTheDocument()
     expect(screen.getByText('Apariencia')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Claro' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Auto' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Oscuro' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Claro' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Auto' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Oscuro' })).toBeInTheDocument()
   })
 
   it('calls onSetTheme with the selected value when clicking a theme button', () => {
@@ -92,10 +92,10 @@ describe('Settings', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Oscuro' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Oscuro' }))
     expect(onSetTheme).toHaveBeenCalledWith('dark')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Auto' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Auto' }))
     expect(onSetTheme).toHaveBeenCalledWith('auto')
   })
 
@@ -115,7 +115,7 @@ describe('Settings', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Dólares US$' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Dólares US$' }))
     expect(onSetCurrency).toHaveBeenCalledWith('USD')
   })
 
@@ -273,8 +273,8 @@ describe('Settings', () => {
       />
     )
 
-    const picker = screen.getByRole('tablist', { name: 'Modelo de IA' })
-    const tabs = within(picker).getAllByRole('tab')
+    const picker = screen.getByRole('radiogroup', { name: 'Modelo de IA' })
+    const tabs = within(picker).getAllByRole('radio')
     expect(tabs.map((t) => t.textContent)).toEqual(
       CATEGORIZATION_MODELS.map((m) => m.label)
     )
@@ -288,6 +288,44 @@ describe('Settings', () => {
       'claude-haiku-4-5',
       'claude-sonnet-4-6',
     ])
+  })
+
+  it('gives every Configuración control a Spanish accessible name', () => {
+    render(
+      <Settings
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
+        session={null}
+        supabaseEnabled={false}
+        onSignOut={() => {}}
+        transactions={[]}
+        {...defaultAiProps}
+        aiEnabled
+      />
+    )
+
+    expect(
+      screen.getByRole('switch', { name: 'Categorización con IA' })
+    ).toBeChecked()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Tipo de cambio' })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Clave API de Anthropic')).toHaveAttribute(
+      'type',
+      'password'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar clave' }))
+
+    expect(screen.getByLabelText('Clave API de Anthropic')).toHaveAttribute(
+      'type',
+      'text'
+    )
+    expect(
+      screen.getByRole('button', { name: 'Ocultar clave' })
+    ).toBeInTheDocument()
   })
 
   function renderForPdfExport() {
