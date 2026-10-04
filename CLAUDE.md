@@ -10,6 +10,8 @@ The app is fully online — authentication and data persistence require Supabase
 
 **Read next:** [`docs/CONTEXT.md`](docs/CONTEXT.md) (glossary Spanish UI ↔ English code, UI copy/voseo guide) · [`docs/architecture.md`](docs/architecture.md) (import/sync flow, categorizer precedence, money conversion, persistence) · [`docs/decisions/`](docs/decisions/README.md) (ADR index + template).
 
+Historical design material (e.g. the 2026-06 redesign handoff, deleted in #129) survives only in git history and is not a source of truth — the code and the docs above are.
+
 ## Tech stack
 
 - **Frontend**: React 18 + TypeScript (strict mode) + Vite
