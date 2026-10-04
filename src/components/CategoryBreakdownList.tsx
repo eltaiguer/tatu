@@ -24,78 +24,37 @@ export function CategoryBreakdownList({
   onClickRow,
 }: CategoryBreakdownListProps) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div className="flex flex-col gap-[14px]">
       {rows.map((row) => {
         const content = (
           <>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-                marginBottom: 5,
-              }}
-            >
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontSize: 14,
-                  fontWeight: 500,
-                }}
-              >
+            <div className="mb-[5px] flex items-baseline justify-between">
+              <span className="inline-flex items-center gap-[8px] text-[14px] font-medium">
                 {row.emoji ? (
-                  <span style={{ fontSize: 14 }}>{row.emoji}</span>
+                  <span className="text-[14px]">{row.emoji}</span>
                 ) : (
                   <span
-                    style={{
-                      width: 9,
-                      height: 9,
-                      borderRadius: 3,
-                      background: row.color,
-                      display: 'inline-block',
-                      flexShrink: 0,
-                    }}
+                    className="inline-block h-[9px] w-[9px] shrink-0 rounded-[3px]"
+                    style={{ background: row.color }}
                   />
                 )}
                 {row.label}
               </span>
-              <span
-                style={{
-                  display: 'inline-flex',
-                  gap: 10,
-                  alignItems: 'baseline',
-                }}
-              >
-                <span className="font-mono" style={{ fontSize: 13 }}>
+              <span className="inline-flex items-baseline gap-[10px]">
+                <span className="font-mono text-[13px]">
                   {formatCurrency(row.amount, currency)}
                 </span>
                 {showPercent && (
-                  <span
-                    className="font-mono text-muted-foreground"
-                    style={{ fontSize: 12, width: 38, textAlign: 'right' }}
-                  >
+                  <span className="font-mono text-muted-foreground w-[38px] text-right text-[12px]">
                     {row.pct.toFixed(1)}%
                   </span>
                 )}
               </span>
             </div>
-            <div
-              style={{
-                height: 4,
-                borderRadius: 2,
-                background: 'var(--surface-2)',
-                overflow: 'hidden',
-              }}
-            >
+            <div className="h-[4px] overflow-hidden rounded-[2px] bg-[var(--surface-2)]">
               <div
-                style={{
-                  height: '100%',
-                  width: `${row.pct}%`,
-                  background: row.color,
-                  borderRadius: 2,
-                }}
+                className="h-full rounded-[2px]"
+                style={{ width: `${row.pct}%`, background: row.color }}
               />
             </div>
           </>
