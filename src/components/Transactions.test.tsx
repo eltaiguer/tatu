@@ -1312,4 +1312,50 @@ describe('Transactions', () => {
       expect(await exportedDescriptions(false)).toEqual(['super'])
     })
   })
+
+  // #194: the floating selection bar was a single 864px row centred on the
+  // screen, so on a 390px phone Ignorar/Eliminar/× sat off-screen, and its
+  // z-[70] put it above the dialog overlay (z-50). jsdom has no layout, so
+  // this pins the responsive classes; the PR carries the Playwright check.
+  describe('selection bar layout (#194)', () => {
+    function selectOne() {
+      render(<Transactions transactions={[makeTransaction(1, 'Devoto')]} />)
+      fireEvent.click(
+        screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+      )
+      return screen.getByRole('region', { name: 'Acciones de selección' })
+    }
+
+    it('sits under dialog overlays (z-50) instead of above them', () => {
+      const bar = selectOne()
+      expect(bar).toHaveClass('z-40')
+      expect(bar).not.toHaveClass('z-[70]')
+    })
+
+    it('spans the screen and wraps its actions below md', () => {
+      const bar = selectOne()
+      expect(bar).toHaveClass('inset-x-4', 'md:inset-x-auto')
+      expect(within(bar).getByRole('group', { name: 'Acciones' })).toHaveClass(
+        'max-md:flex-wrap'
+      )
+    })
+
+    it('never wraps an action label mid-word', () => {
+      const bar = selectOne()
+      for (const name of [
+        'Categorizar',
+        'Editar seleccionadas',
+        'Auto-categorizar',
+        'Ignorar',
+        'Eliminar',
+      ]) {
+        expect(within(bar).getByRole('button', { name })).toHaveClass(
+          'whitespace-nowrap'
+        )
+      }
+      expect(
+        within(bar).getByRole('button', { name: 'Deseleccionar' })
+      ).toBeInTheDocument()
+    })
+  })
 })
