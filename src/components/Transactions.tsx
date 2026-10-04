@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
 import { NeedsConfirmationError, userErrorMessage } from '../utils/user-error'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
@@ -218,7 +219,7 @@ function MonthNav({
           }}
         >
           <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ fontWeight: 600, fontSize: 13.5 }}>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>
             {getPeriodLabel(period)}
           </span>
           <svg
@@ -487,7 +488,7 @@ function TotalTile({
         {value}
       </div>
       {sub && (
-        <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{sub}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{sub}</div>
       )}
     </div>
   )
@@ -624,7 +625,7 @@ function BulkBar({
         <span
           role="status"
           aria-live="polite"
-          style={{ fontWeight: 600, fontSize: 13.5, whiteSpace: 'nowrap' }}
+          style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}
         >
           {count} seleccionada{count !== 1 ? 's' : ''}
         </span>
@@ -638,7 +639,7 @@ function BulkBar({
               border: 'none',
               cursor: 'pointer',
               color: 'var(--brand)',
-              fontSize: 12.5,
+              fontSize: 13,
               padding: 0,
               whiteSpace: 'nowrap',
             }}
@@ -1603,56 +1604,48 @@ export function Transactions({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4 }}>
-            Transacciones
-          </h1>
-          <p className="text-muted-foreground" style={{ fontSize: 14 }}>
+      <PageHeader
+        title="Transacciones"
+        subtitle={
+          <>
             {filteredTransactions.length} movimiento
             {filteredTransactions.length !== 1 ? 's' : ''}
             {hasActiveFilters ? ' · filtrado' : ''} · {periodLabelText}
-          </p>
-          {merchantFilter && (
-            <button
-              type="button"
-              onClick={() => setMerchantFilter('')}
-              aria-label={`Quitar filtro de comercio ${merchantFilter}`}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs"
+          </>
+        }
+        actions={
+          <>
+            <MonthNav
+              period={period}
+              setPeriod={setPeriod}
+              newest={newestForNav}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                exportTransactions(filteredTransactions, { format: 'csv' })
+              }
+              style={{ gap: 6 }}
             >
-              Comercio: <strong>{merchantFilter}</strong>
-              <X size={12} aria-hidden />
-            </button>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <MonthNav
-            period={period}
-            setPeriod={setPeriod}
-            newest={newestForNav}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              exportTransactions(filteredTransactions, { format: 'csv' })
-            }
-            style={{ gap: 6 }}
+              <Download size={15} />
+              Exportar
+            </Button>
+          </>
+        }
+      >
+        {merchantFilter && (
+          <button
+            type="button"
+            onClick={() => setMerchantFilter('')}
+            aria-label={`Quitar filtro de comercio ${merchantFilter}`}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs"
           >
-            <Download size={15} />
-            Exportar
-          </Button>
-        </div>
-      </div>
+            Comercio: <strong>{merchantFilter}</strong>
+            <X size={12} aria-hidden />
+          </button>
+        )}
+      </PageHeader>
 
       {/* Totals strip */}
       <TotalsStrip

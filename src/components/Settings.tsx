@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PageHeader } from './ui/page-header'
 import { Download, Eye, EyeOff } from 'lucide-react'
 import { getFriendlyName } from '../utils/user-display'
 import { Button } from './ui/button'
@@ -129,24 +130,11 @@ export function Settings({
 
   return (
     <div>
-      {/* Page header */}
-      <div style={{ marginBottom: 28 }}>
-        <h1
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 32,
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.15,
-            marginBottom: 6,
-          }}
-        >
-          Configuración
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-          Apariencia, cuenta y tus datos
-        </p>
-      </div>
+      <PageHeader
+        className="mb-7"
+        title="Configuración"
+        subtitle="Apariencia, cuenta y tus datos"
+      />
 
       {/* Apariencia */}
       <SectionCard title="Apariencia">

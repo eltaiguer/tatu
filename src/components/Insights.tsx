@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { PageHeader } from './ui/page-header'
 import {
   Sparkles,
   TrendingDown,
@@ -173,33 +174,17 @@ export function Insights({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div>
-        <h1
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 26,
-            fontWeight: 600,
-            margin: 0,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-          }}
-        >
+      <PageHeader
+        icon={
           <Sparkles
             size={22}
             style={{ color: 'var(--accent)' }}
             aria-hidden="true"
           />
-          Insights
-        </h1>
-        <p
-          className="text-muted-foreground"
-          style={{ fontSize: 14, marginTop: 4 }}
-        >
-          ¿Dónde se fue tu dinero? ¿Cómo podés gastar menos? — toda tu historia,
-          de un vistazo.
-        </p>
-      </div>
+        }
+        title="Insights"
+        subtitle="¿Dónde se fue tu dinero? ¿Cómo podés gastar menos? — toda tu historia, de un vistazo."
+      />
 
       {error && (
         <p role="alert" style={{ fontSize: 13, color: 'var(--neg)' }}>

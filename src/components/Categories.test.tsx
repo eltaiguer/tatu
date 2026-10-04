@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { vi } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { Toaster } from 'sonner'
 import { Categories } from './Categories'
 import type { Transaction } from '../models'
@@ -12,6 +18,7 @@ import {
 import {
   addCustomPattern,
   clearAllCustomPatterns,
+  listCustomPatterns,
 } from '../services/categorizer/custom-patterns'
 
 // Category and rule changes are saved to Supabase before they count; give
@@ -286,7 +293,7 @@ describe('Categories', () => {
     fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
       target: { value: 'farmashop' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Pasadas y futuras' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Pasadas y futuras' }))
     fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
 
     expect(
@@ -311,7 +318,7 @@ describe('Categories', () => {
     fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
       target: { value: 'farmashop' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Pasadas y futuras' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Pasadas y futuras' }))
     fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
 
     expect(
@@ -353,5 +360,44 @@ describe('Categories', () => {
     expect(onNavigateToTransactions).toHaveBeenCalledWith({
       categories: ['uncategorized'],
     })
+  })
+
+  it('saves the type and category chosen in the rule form', async () => {
+    render(<Categories transactions={[]} />)
+
+    fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
+      target: { value: 'uber' },
+    })
+    fireEvent.change(screen.getByLabelText('Tipo'), {
+      target: { value: 'starts_with' },
+    })
+    fireEvent.change(screen.getByLabelText('Categoría'), {
+      target: { value: 'transport' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Agregar regla/ }))
+
+    await waitFor(() =>
+      expect(listCustomPatterns()).toEqual([
+        expect.objectContaining({
+          matchType: 'starts_with',
+          category: 'transport',
+        }),
+      ])
+    )
+  })
+
+  it('exposes which scope is selected to assistive tech', () => {
+    render(<Categories transactions={[]} />)
+
+    const group = screen.getByRole('group', { name: 'Aplicar a' })
+    expect(
+      within(group).getByRole('radio', { name: 'Solo futuras' })
+    ).toBeChecked()
+    fireEvent.click(
+      within(group).getByRole('radio', { name: 'Pasadas y futuras' })
+    )
+    expect(
+      within(group).getByRole('radio', { name: 'Pasadas y futuras' })
+    ).toBeChecked()
   })
 })
