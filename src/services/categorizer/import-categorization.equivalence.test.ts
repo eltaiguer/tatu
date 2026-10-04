@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { parseCSV } from '../parsers/csv-parser'
+import { categorizeParsedData } from './import-categorization'
 
 /**
  * Golden fixture: the category, confidence and display description every row
@@ -34,13 +35,15 @@ function importSample(fileName: string) {
     join(process.cwd(), 'samples', fileName),
     'utf-8'
   )
-  return parseCSV(csvContent, fileName).transactions.map((tx) => ({
-    description: tx.description,
-    type: tx.type,
-    category: tx.category ?? null,
-    categoryConfidence: tx.categoryConfidence ?? null,
-    displayDescription: tx.displayDescription ?? null,
-  }))
+  return categorizeParsedData(parseCSV(csvContent, fileName)).transactions.map(
+    (tx) => ({
+      description: tx.description,
+      type: tx.type,
+      category: tx.category ?? null,
+      categoryConfidence: tx.categoryConfidence ?? null,
+      displayDescription: tx.displayDescription ?? null,
+    })
+  )
 }
 
 describe('import categorization of the Santander samples', () => {

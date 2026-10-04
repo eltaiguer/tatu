@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { aiErrorMessage, userErrorMessage } from '../utils/user-error'
 import { parseCSV } from '../services/parsers/csv-parser'
+import { categorizeParsedData } from '../services/categorizer/import-categorization'
 import { transactionStore } from '../stores/transaction-store'
 import type { ParsedData, Transaction } from '../models'
 
@@ -103,7 +104,9 @@ export function ImportCSV({
     let parsed = false
     try {
       const csvContent = await readFileAsText(file)
-      const result = parseCSV(csvContent, file.name)
+      // Parsers return uncategorized rows; categorize before anything else
+      // sees them (dedup, AI enrichment, the store).
+      const result = categorizeParsedData(parseCSV(csvContent, file.name))
       parsed = true
 
       if (result.fileType === 'credit_card') {

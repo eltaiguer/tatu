@@ -11,14 +11,15 @@ import {
   parseSantanderDate,
   generateTransactionId,
 } from './utils'
-import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 
 /**
  * Parse a Santander bank account CSV file (USD or UYU)
  *
  * @param csvContent - Raw CSV content as string
  * @param fileName - Name of the CSV file
- * @returns ParsedData with transactions and metadata
+ * @returns ParsedData with transactions and metadata. Rows come back
+ * uncategorized: the import pipeline categorizes them
+ * (`categorizeParsedData`).
  */
 export function parseBankAccountCSV(
   csvContent: string,
@@ -185,13 +186,6 @@ function parseRow(
       .join(' ')
       .trim()
 
-    // Auto-categorize based on transaction details
-    const {
-      category,
-      confidence,
-      description: patternDescription,
-    } = categorizeTransaction(description, type)
-
     const transaction: Transaction = {
       id: generateTransactionId(
         rawTransaction.fecha,
@@ -201,14 +195,11 @@ function parseRow(
       ),
       date: parseSantanderDate(rawTransaction.fecha),
       description,
-      displayDescription: patternDescription,
       amount,
       currency,
       type,
       source: 'bank_account',
       balance,
-      category,
-      categoryConfidence: confidence,
       rawData: rawTransaction,
     }
 

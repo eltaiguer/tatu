@@ -85,7 +85,7 @@ src/
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
-    categorizer/           # Merchant pattern matching + auto-categorization
+    categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored)
     filters/               # filters.ts: filtering for export (views use useTransactionFiltering); url-filters.ts: Transacciones filters <-> URL query
     export/                # CSV/PDF export

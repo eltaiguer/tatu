@@ -239,4 +239,30 @@ describe('CSV Parser - Integration Tests with All Sample Files', () => {
       expect(() => parseCSV(wrongFormatCSV, 'wrong.csv')).toThrow()
     })
   })
+
+  // Parsers are pure (#64): categorization is the import pipeline's job
+  // (categorizeParsedData), so parsed rows carry no category of any kind.
+  describe('Parsers return uncategorized rows', () => {
+    it.each([
+      'CreditCardsMovementsDetail.csv',
+      'USDmovements.csv',
+      'UYUmovements.csv',
+    ])(
+      'leaves category, confidence and display description unset in %s',
+      (fileName) => {
+        const csvContent = readFileSync(
+          join(process.cwd(), 'samples', fileName),
+          'utf-8'
+        )
+        const result = parseCSV(csvContent, fileName)
+
+        expect(result.transactions.length).toBeGreaterThan(0)
+        result.transactions.forEach((tx) => {
+          expect(tx).not.toHaveProperty('category')
+          expect(tx).not.toHaveProperty('categoryConfidence')
+          expect(tx).not.toHaveProperty('displayDescription')
+        })
+      }
+    )
+  })
 })
