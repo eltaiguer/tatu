@@ -92,7 +92,7 @@ src/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored)
-    filters/               # filters.ts: filter/sort helpers with no app caller since #118 (views use useTransactionFiltering); url-filters.ts: Transacciones filters <-> URL query
+    filters/               # url-filters.ts: Transacciones filters <-> URL query (the filtering itself is useTransactionFiltering)
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     charts/                # Chart data transformations; category-changes.ts feeds CategoryChangesCard
@@ -117,7 +117,7 @@ src/
     theme.css              # CSS custom properties — light + dark tokens
                            # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
   utils/                   # date-utils, formatting, category-display, memo, transaction-display, user-display, user-error, auth-errors
-  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test)
+  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test); csv-download.ts captures an exported CSV
 supabase/
   schema.sql               # PostgreSQL schema (tables, RLS policies)
 samples/                   # Example Santander CSV files for testing
