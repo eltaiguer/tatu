@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { ImportCSV } from './ImportCSV'
 import { UserFacingError } from '../utils/user-error'
 import type { ParsedData, Transaction } from '../models'
@@ -99,6 +100,40 @@ describe('ImportCSV', () => {
 
   afterEach(() => {
     globalThis.FileReader = OriginalFileReader
+  })
+
+  describe('choosing a file by keyboard (#193)', () => {
+    it('Tab reaches "Seleccionar archivo" and Enter opens the file chooser', async () => {
+      const user = userEvent.setup()
+      render(<ImportCSV />)
+      const input = screen.getByLabelText('Seleccionar archivo')
+      const click = vi.spyOn(input, 'click').mockImplementation(() => {})
+      const button = screen.getByText('Seleccionar archivo')
+
+      await user.tab()
+      expect(button).toHaveFocus()
+
+      await user.keyboard('{Enter}')
+      expect(click).toHaveBeenCalledTimes(1)
+    })
+
+    it('Space on the focused button opens the file chooser too', async () => {
+      const user = userEvent.setup()
+      render(<ImportCSV />)
+      const input = screen.getByLabelText('Seleccionar archivo')
+      const click = vi.spyOn(input, 'click').mockImplementation(() => {})
+
+      await user.tab()
+      await user.keyboard(' ')
+      expect(click).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not promise a clickable drop zone', () => {
+      render(<ImportCSV />)
+      expect(
+        screen.queryByText('o hacé clic para seleccionar')
+      ).not.toBeInTheDocument()
+    })
   })
 
   it('rejects non-csv files before parsing', () => {

@@ -3,7 +3,7 @@
 import { Card } from './ui/card'
 import { Button } from './ui/button'
 import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   aiErrorMessage,
@@ -71,6 +71,9 @@ export function ImportCSV({
     duplicates: number
   } | null>(null)
   const [errorMessage, setErrorMessage] = useState<string>('')
+  // The real file input stays hidden; a real button opens it, so the picker
+  // is reachable by Tab and Enter/Space (a <label> is not focusable, #193).
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -244,20 +247,23 @@ export function ImportCSV({
               <div>
                 <p className="font-medium mb-1">Arrastrá tu archivo CSV aquí</p>
                 <p className="text-sm text-muted-foreground">
-                  o hacé clic para seleccionar
+                  o seleccioná un archivo
                 </p>
               </div>
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".csv"
                 onChange={handleFileInput}
                 className="hidden"
-                id="file-upload"
+                tabIndex={-1}
+                aria-label="Seleccionar archivo"
               />
-              <Button asChild>
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  Seleccionar archivo
-                </label>
+              <Button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Seleccionar archivo
               </Button>
             </div>
           </div>
