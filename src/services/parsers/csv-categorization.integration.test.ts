@@ -3,11 +3,12 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { Category } from '../../models'
 import { parseCSV } from './csv-parser'
+import { categorizeParsedData } from '../categorizer/import-categorization'
 
 function parseSample(fileName: string) {
   const samplePath = join(process.cwd(), 'samples', fileName)
   const csvContent = readFileSync(samplePath, 'utf-8')
-  return parseCSV(csvContent, fileName)
+  return categorizeParsedData(parseCSV(csvContent, fileName))
 }
 
 function categorizationRate(categories: string[]): number {
