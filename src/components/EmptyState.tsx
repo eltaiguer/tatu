@@ -40,27 +40,23 @@ export function EmptyState({
       }`}
     >
       <span
-        className={`relative grid place-items-center rounded-[18px] ${toneClasses[tone]}`}
-        style={{ width: 62, height: 62 }}
+        className={`relative grid h-[62px] w-[62px] place-items-center rounded-[18px] ${toneClasses[tone]}`}
       >
         <span
           aria-hidden="true"
-          className="absolute rounded-[24px] border border-dashed border-current opacity-30"
-          style={{ inset: -8 }}
+          className="absolute inset-[-8px] rounded-[24px] border border-dashed border-current opacity-30"
         />
         <Icon size={27} strokeWidth={1.7} />
       </span>
       <h3
-        className="font-display font-semibold tracking-tight mt-5"
-        style={{ fontSize: compact ? 17 : 20 }}
+        className={`font-display font-semibold tracking-tight mt-5 ${
+          compact ? 'text-[17px]' : 'text-[20px]'
+        }`}
       >
         {title}
       </h3>
       {description && (
-        <p
-          className="text-muted-foreground text-sm mt-2 leading-relaxed text-pretty"
-          style={{ maxWidth: 360 }}
-        >
+        <p className="text-muted-foreground text-sm mt-2 leading-relaxed text-pretty max-w-[360px]">
           {description}
         </p>
       )}
