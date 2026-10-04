@@ -7,6 +7,7 @@ import {
   softDeleteTransaction,
   restoreTransactions,
   findExistingTransactionIds,
+  findImportCandidates,
   updateTransaction as updateRemoteTransaction,
   splitTransaction as remoteSplitTransaction,
   unsplitTransaction as remoteUnsplitTransaction,
@@ -28,6 +29,10 @@ import {
   countSimilarEditReach,
   findSimilarTransactions,
 } from '../services/descriptions/similar-transactions'
+import {
+  classifyImport,
+  type ImportClassification,
+} from '../services/dedup/import-dedup'
 import {
   completeImportRun,
   createImportRun,
@@ -61,6 +66,35 @@ const MISSING_TRANSACTION = new UserFacingError(
 // a soft-deleted part would collide with a later re-split's deterministic ids.
 function isSplitRow(tx: Transaction): boolean {
   return Boolean(tx.isSplitParent || tx.splitParentId)
+}
+
+// A salted id (`${id}_cN`) for a row dated outside the candidate window is
+// not in the candidates, so salted ids are checked once more; a hit is salted
+// past. Bounded: the insert fails rather than overwrite if one still slips by.
+const SALT_CHECK_ROUNDS = 3
+
+async function classifyAgainstServer(
+  session: SupabaseSession,
+  incoming: Transaction[]
+): Promise<ImportClassification> {
+  const existing = await findImportCandidates(session, incoming)
+  const taken = new Set(
+    transactionStore.getState().transactions.map((tx) => tx.id)
+  )
+  const incomingIds = new Set(incoming.map((tx) => tx.id))
+  let classification = classifyImport(incoming, existing, taken)
+  for (let round = 0; round < SALT_CHECK_ROUNDS; round++) {
+    const salted = classification.added
+      .map((tx) => tx.id)
+      .filter((id) => !incomingIds.has(id))
+    if (salted.length === 0) break
+    const found = await findExistingTransactionIds(session, salted)
+    const hits = [...found.active, ...found.deleted]
+    if (hits.length === 0) break
+    hits.forEach((id) => taken.add(id))
+    classification = classifyImport(incoming, existing, taken)
+  }
+  return classification
 }
 
 export interface DeleteResult {
@@ -112,16 +146,25 @@ export function useTransactionHandlers({
     aiPartial?: string
   }> {
     if (!session) {
-      return transactionStore.getState().addTransactions(transactionsToImport)
+      const local = classifyImport(
+        transactionsToImport,
+        transactionStore
+          .getState()
+          .transactions.map((tx) => ({ tx, deleted: false }))
+      )
+      transactionStore.getState().addTransactions(local.added)
+      return local
     }
 
-    // Classify against the server before writing anything (the in-memory
-    // store never holds deleted rows and can lag other devices): deleted rows
-    // are skipped so they stay deleted, existing ones are duplicates — and
-    // never upserted over the user's edits.
-    const remote = await findExistingTransactionIds(
+    // Classify against the server before writing anything — by content, not
+    // id (#57, services/dedup/import-dedup.ts). The server, not the in-memory
+    // store, is the record of what exists: the store never holds deleted rows
+    // and can lag other devices. Deleted rows are skipped so they stay
+    // deleted; existing ones are duplicates and never written over. Store ids
+    // only stay off-limits for salted ids.
+    const classification = await classifyAgainstServer(
       session,
-      transactionsToImport.map((tx) => tx.id)
+      transactionsToImport
     )
 
     let importRunId: string | null = null
@@ -135,19 +178,7 @@ export function useTransactionHandlers({
     }
 
     const state = transactionStore.getState()
-    const duplicateIds = new Set([
-      ...state.findDuplicateIds(transactionsToImport),
-      ...remote.active,
-    ])
-    const previouslyDeleted = transactionsToImport.filter((tx) =>
-      remote.deleted.has(tx.id)
-    )
-    const added = transactionsToImport.filter(
-      (tx) => !duplicateIds.has(tx.id) && !remote.deleted.has(tx.id)
-    )
-    const duplicates = transactionsToImport.filter(
-      (tx) => duplicateIds.has(tx.id) && !remote.deleted.has(tx.id)
-    )
+    const { added, duplicates, previouslyDeleted } = classification
 
     const aiConfig = getAiConfig()
     let toStore = added
