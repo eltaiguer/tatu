@@ -36,7 +36,7 @@ describe('Export helpers', () => {
       '"Date","Description","Amount","Currency","Type","Category","cuenta_en_totales"'
     )
     expect(csv).toContain(
-      '"2025-01-01","Netflix","12.50","USD","debit","Entretenimiento","sí"'
+      '"2025-01-01","Netflix","12.50","USD","debit","Entretenimiento","1"'
     )
   })
 
@@ -101,7 +101,7 @@ describe('Export helpers', () => {
       const amount = header.indexOf('Amount')
       const flag = header.indexOf('cuenta_en_totales')
       const counted = rows
-        .filter((row) => row[flag] === 'sí')
+        .filter((row) => row[flag] === '1')
         .reduce((sum, row) => sum + Number(row[amount]), 0)
       expect(counted).toBe(1000)
     } finally {

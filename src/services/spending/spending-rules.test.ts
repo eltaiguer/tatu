@@ -5,7 +5,7 @@ import {
   countsTowardTotals,
   isCountedExpense,
   isCountedIncome,
-  isMovementRow,
+  countsAsRow,
   sumCountedTotals,
 } from './spending-rules'
 
@@ -29,7 +29,7 @@ afterEach(() => {
 })
 
 describe('spending rules', () => {
-  // [name, row, movement row, counts toward totals, expense, income]
+  // [name, row, counts as row, counts toward totals, expense, income]
   const table: [string, Transaction, boolean, boolean, boolean, boolean][] = [
     ['plain debit', tx(), true, true, true, false],
     ['plain credit', tx({ type: 'credit' }), true, true, false, true],
@@ -78,7 +78,7 @@ describe('spending rules', () => {
   ]
 
   it.each(table)('%s', (_name, row, movement, counted, expense, income) => {
-    expect(isMovementRow(row)).toBe(movement)
+    expect(countsAsRow(row)).toBe(movement)
     expect(countsTowardTotals(row)).toBe(counted)
     expect(isCountedExpense(row)).toBe(expense)
     expect(isCountedIncome(row)).toBe(income)
@@ -96,7 +96,7 @@ describe('spending rules', () => {
     ])
 
     expect(countsTowardTotals(tx({ category: 'groceries' }))).toBe(false)
-    expect(isMovementRow(tx({ category: 'groceries' }))).toBe(true)
+    expect(countsAsRow(tx({ category: 'groceries' }))).toBe(true)
     expect(countsTowardTotals(tx({ category: 'internal_transfer' }))).toBe(true)
   })
 

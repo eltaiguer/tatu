@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   countsTowardTotals,
-  isMovementRow,
+  countsAsRow,
 } from '../services/spending/spending-rules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { getCategoryDisplay } from '../utils/category-display'
@@ -87,7 +87,7 @@ export function useTransactionFiltering({
       // A split parent stands for its parts and is excluded from every total;
       // it never matches on its own fields (it is shown above matching parts
       // as context instead), so a drill-through adds up to the number clicked.
-      if (!isMovementRow(transaction)) return false
+      if (!countsAsRow(transaction)) return false
       if (dateFrom && transaction.date < dateFrom) return false
       if (dateTo && transaction.date > dateTo) return false
       if (
@@ -158,7 +158,8 @@ export function useTransactionFiltering({
 
   const filteredTransactions = useMemo(() => {
     if (showIgnored) return allFilteredTransactions
-    // Rows here are movement rows already, so "doesn't count" = ignored.
+    // Split parents are already out, so the rows that don't count are the
+    // ignored ones; "show ignored" reveals them.
     return allFilteredTransactions.filter(countsTowardTotals)
   }, [allFilteredTransactions, showIgnored])
 
@@ -173,7 +174,7 @@ export function useTransactionFiltering({
       Array.from(
         new Set(
           transactions
-            .filter(isMovementRow)
+            .filter(countsAsRow)
             .map((tx) => normalizeCategoryId(tx.category))
         )
       ).sort((a, b) =>

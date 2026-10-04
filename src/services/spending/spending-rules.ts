@@ -7,20 +7,25 @@ import { convert } from '../currency/convert'
 // total in the app goes through these, so a number the user clicks equals
 // the sum of the rows it opens. A new exclusion (e.g. card payments) is added
 // here, not at the call sites.
+//
+// Not pure in `tx` alone: whether a category is ignored is read from the
+// user's category settings (category-registry). Memoize on those too, not
+// only on the transactions — see Categorías' categoriesVersion.
 
-// A row that stands for itself in lists and counts: every row except a split
-// parent, which is an inert container its parts stand for. Rows in an
-// ignored category are still movement rows (listed, counted per category,
-// shown with "show ignored") — they just don't add to money totals.
-export function isMovementRow(tx: Transaction): boolean {
+// Counts as a row of its own in lists and row counts: every row except a
+// split parent, an inert container its parts stand for. Rows in an ignored
+// category still count as rows (listed, counted per category, shown with
+// "show ignored") — they just don't add to money totals.
+export function countsAsRow(tx: Transaction): boolean {
   return !isSplitParentTx(tx)
 }
 
-// Counted in every income, expense and net total: a movement row whose
-// category is not ignored (transfers, the legacy 'ignored' id, or any
-// category the user flagged "Ignorar en totales").
+// Counted in every income, expense and net total: a row whose category is
+// not ignored (transfers, the legacy 'ignored' id, or any category the user
+// flagged "Ignorar en totales"). Transacciones hides the rows that fail this
+// unless "show ignored" is on, so a future exclusion lands there too.
 export function countsTowardTotals(tx: Transaction): boolean {
-  return isMovementRow(tx) && !isCategoryIgnored(tx.category)
+  return countsAsRow(tx) && !isCategoryIgnored(tx.category)
 }
 
 export function isCountedExpense(tx: Transaction): boolean {
@@ -38,6 +43,7 @@ export interface CountedTotals {
 }
 
 // Income, expense and net of the rows that count, in the home currency.
+// `type` is 'debit' | 'credit', so every counted row lands in one of the two.
 export function sumCountedTotals(
   rows: Transaction[],
   homeCurrency: Currency,

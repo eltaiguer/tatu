@@ -1,7 +1,7 @@
 import type { Currency, Transaction } from '../../models'
 import { convert } from '../currency/convert'
 import { normalizeCategoryId } from '../categories/category-aliases'
-import { isCountedExpense, isMovementRow } from '../spending/spending-rules'
+import { isCountedExpense, countsAsRow } from '../spending/spending-rules'
 import { toMonthKey } from '../../utils/date-utils'
 
 // "What changed": each category's spend in the latest complete month vs the
@@ -87,7 +87,7 @@ export function categoryChanges(
   const coverage = new Map<AccountKey, { first: string; last: string }>()
   for (const tx of transactions) {
     // Ignored rows (transfers) still prove the account has data that day.
-    if (!isMovementRow(tx)) continue
+    if (!countsAsRow(tx)) continue
     const day = isoDay(tx.date)
     const key = accountOf(tx)
     const entry = coverage.get(key) ?? {

@@ -92,8 +92,9 @@ src/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored)
-    filters/               # filters.ts: filtering for export (views use useTransactionFiltering); url-filters.ts: Transacciones filters <-> URL query
-    export/                # CSV/PDF export
+    filters/               # filters.ts: filter/sort helpers with no app caller since #118 (views use useTransactionFiltering); url-filters.ts: Transacciones filters <-> URL query
+    export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
+    spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     charts/                # Chart data transformations; category-changes.ts feeds CategoryChangesCard
     currency/              # convert(amount, from, to, rate) + Currency type
     descriptions/          # Description override management

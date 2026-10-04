@@ -29,6 +29,7 @@ import {
 } from '../utils/transaction-display'
 import { formatCurrency, formatDate } from '../utils/formatting'
 import { convert } from '../services/currency/convert'
+import { countsTowardTotals } from '../services/spending/spending-rules'
 import type { Currency } from '../models'
 import type { SortField, SortDirection } from '../hooks/useTransactionFiltering'
 
@@ -277,6 +278,8 @@ export function TransactionTable({
                   displayDescription !== transaction.description
                 const isIgnored = isCategoryIgnored(transaction.category)
                 const isSplitParent = isSplitParentTx(transaction)
+                // Muted when the row adds nothing to the totals.
+                const muted = !countsTowardTotals(transaction)
                 const isSplitChild = isSplitChildTx(transaction)
                 const showConverted =
                   homeCurrency &&
@@ -297,7 +300,7 @@ export function TransactionTable({
                     // Ignored and split-parent rows read as secondary through
                     // muted text, not opacity, so their pills keep AA contrast.
                     className={`group border-b border-border hover:bg-muted/30 transition-colors${
-                      isIgnored || isSplitParent ? ' text-muted-foreground' : ''
+                      muted ? ' text-muted-foreground' : ''
                     }`}
                   >
                     <td className="px-3.5 py-1.5 align-middle">
@@ -411,7 +414,7 @@ export function TransactionTable({
                     <td className="px-3.5 py-1.5 text-right whitespace-nowrap">
                       <div
                         className={`font-mono leading-snug${isIgnored ? ' line-through' : ''} ${
-                          isIgnored || isSplitParent
+                          muted
                             ? 'text-[color:var(--text-muted)]'
                             : transaction.type === 'credit'
                               ? 'text-[color:var(--pos)]'
@@ -536,6 +539,7 @@ export function TransactionTable({
               displayDescription !== transaction.description
             const isIgnored = isCategoryIgnored(transaction.category)
             const isSplitParentM = isSplitParentTx(transaction)
+            const mutedM = !countsTowardTotals(transaction)
             const isSplitChildM = isSplitChildTx(transaction)
 
             return (
@@ -546,11 +550,7 @@ export function TransactionTable({
                   isSplitChildM
                     ? 'border-l-[2px] border-l-[var(--border)] py-4 pr-4 pl-[20px]'
                     : 'p-4'
-                }${
-                  isIgnored || isSplitParentM
-                    ? ' text-[color:var(--text-muted)]'
-                    : ''
-                }`}
+                }${mutedM ? ' text-[color:var(--text-muted)]' : ''}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <Checkbox
@@ -591,7 +591,7 @@ export function TransactionTable({
                   <div className="text-right">
                     <div
                       className={`font-mono${isIgnored ? ' line-through' : ''} ${
-                        isIgnored || isSplitParentM
+                        mutedM
                           ? 'text-[color:var(--text-muted)]'
                           : transaction.type === 'credit'
                             ? 'text-[color:var(--pos)]'

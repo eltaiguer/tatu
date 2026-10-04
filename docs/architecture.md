@@ -203,8 +203,28 @@ All conversion happens in the browser, at render or aggregation time, with
 
 The home currency (`preferredCurrency` from `useUserWorkspace`, passed down as
 `homeCurrency`) and `fxRate` (default 40.5) come from `user_preferences`.
-Totals leave out ignored categories (`isCategoryIgnored`) and split parents;
-`isExcludedFromTotals` combines the two checks.
+Which rows the totals add up is decided in one place, described next.
+
+## What counts toward totals
+
+`src/services/spending/spending-rules.ts` owns the rule, so a number the user
+clicks equals the sum of the rows it opens. Callers never re-derive it from
+`isSplitParent` or `isCategoryIgnored`; a new exclusion is added there.
+
+| Predicate                              | True for                                                                                                                                | Used by                                                                                                                                                              |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `countsAsRow`                          | Every row except a split parent (an inert container its parts stand for). Ignored-category rows still count as rows.                    | Lists and row counts: `useTransactionFiltering`, Categorías counts and rule matches, the "Sin categoría" badge, `needsCategoryReview`, "Qué cambió" account coverage |
+| `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`isCategoryIgnored`: transfers, the legacy `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                             |
+| `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                          | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                                 |
+| `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                      | The Transacciones totals strip                                                                                                                                       |
+
+**Export** (`services/export/export.ts`) writes exactly the rows it is given
+and returns how many it wrote. Configuración exports every row (a full
+backup, split parents and ignored rows included); Transacciones exports the
+rows on screen (`filteredTransactions`, so ignored rows only with "show
+ignored" on). Both CSV and PDF end with a `cuenta_en_totales` column (`1` /
+`0`, from `countsTowardTotals`): summing the `1` rows gives the app's totals,
+because a split parent is `0` and its parts are `1`.
 
 ## Persistence boundaries
 

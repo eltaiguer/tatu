@@ -11,7 +11,7 @@ import { Badge } from './ui/badge'
 import { Checkbox } from './ui/checkbox'
 import type { Currency, Transaction, TransactionsFilter } from '../models'
 import { Category } from '../models'
-import { isMovementRow } from '../services/spending/spending-rules'
+import { countsAsRow } from '../services/spending/spending-rules'
 import {
   getCategoryDefinition,
   getCategoryDefinitions,
@@ -53,7 +53,7 @@ function getCategoryTransactionCount(
   categoryId: string
 ): number {
   return transactions.filter((tx) => {
-    if (!isMovementRow(tx)) return false
+    if (!countsAsRow(tx)) return false
     const txCat = getCategoryDisplay(tx.category).id
     const defCat = getCategoryDisplay(categoryId).id
     return txCat === defCat
@@ -252,7 +252,7 @@ export function Categories({
         customPatterns.map((rule) => [
           rule.id,
           transactions.filter(
-            (tx) => isMovementRow(tx) && testPattern(tx.description, rule)
+            (tx) => countsAsRow(tx) && testPattern(tx.description, rule)
           ).length,
         ])
       ),

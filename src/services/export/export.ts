@@ -18,13 +18,14 @@ function getExportCategoryLabel(category: string | undefined): string {
   return getCategoryDisplay(category).label
 }
 
-// Whether the row counts toward totals, so summing the "sí" rows in a
-// spreadsheet gives the app's totals (a split parent and its parts are both
-// in the file; only the parts count).
+// Whether the row counts toward totals (1) or not (0), so summing the 1 rows
+// in a spreadsheet gives the app's totals: a split parent and its parts are
+// both in the file, only the parts count. 1/0 rather than sí/no survives any
+// encoding and locale, and multiplies straight into SUMPRODUCT.
 export const COUNTS_TOWARD_TOTALS_HEADER = 'cuenta_en_totales'
 
 function countsLabel(tx: Transaction): string {
-  return countsTowardTotals(tx) ? 'sí' : 'no'
+  return countsTowardTotals(tx) ? '1' : '0'
 }
 
 function csvEscape(value: string): string {
@@ -144,7 +145,7 @@ function openPrintWindow(html: string) {
 
 // Writes exactly the rows it is given — callers decide which (Configuración
 // exports every row as a backup, Transacciones the rows on screen). Returns
-// how many rows were written.
+// how many rows it wrote (for PDF, how many it handed to the print window).
 export function exportTransactions(
   transactions: Transaction[],
   options: ExportOptions

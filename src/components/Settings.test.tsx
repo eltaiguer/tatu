@@ -324,11 +324,16 @@ describe('Settings', () => {
       const flag = header.indexOf('cuenta_en_totales')
       expect(flag).toBeGreaterThan(-1)
       expect(rows.map((r) => [r[2], r[flag]])).toEqual([
-        ['1000.00', 'no'],
-        ['600.00', 'sí'],
-        ['400.00', 'sí'],
-        ['50.00', 'no'],
+        ['1000.00', '0'],
+        ['600.00', '1'],
+        ['400.00', '1'],
+        ['50.00', '0'],
       ])
+      // #124: summing only the rows that count gives the real 1,000.
+      const counted = rows
+        .filter((r) => r[flag] === '1')
+        .reduce((sum, r) => sum + Number(r[2]), 0)
+      expect(counted).toBe(1000)
     } finally {
       csv.restore()
     }

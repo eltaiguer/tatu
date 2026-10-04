@@ -1,7 +1,7 @@
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { getDescriptionOverride } from '../services/descriptions/description-overrides'
 import type { Transaction } from '../models'
-import { isMovementRow } from '../services/spending/spending-rules'
+import { countsAsRow } from '../services/spending/spending-rules'
 
 export function getDisplayDescription(transaction: Transaction): string {
   if (transaction.displayDescription?.trim()) {
@@ -25,7 +25,7 @@ const LOW_CONFIDENCE = 0.55
 // categorized (confidence 1) and legacy rows with no recorded confidence are
 // not flagged; split parents carry no category of their own.
 export function needsCategoryReview(transaction: Transaction): boolean {
-  if (!isMovementRow(transaction)) return false
+  if (!countsAsRow(transaction)) return false
   if (normalizeCategoryId(transaction.category) === 'uncategorized') {
     return true
   }
