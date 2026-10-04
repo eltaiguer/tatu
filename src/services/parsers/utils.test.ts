@@ -59,44 +59,55 @@ describe('Parser Utilities', () => {
   })
 
   describe('parseSantanderDate', () => {
+    // #58: a transaction date is a calendar day, stored at UTC midnight — the
+    // same instant whatever zone the browser that imported it is in.
+    it('returns the calendar day at UTC midnight, in any browser zone', () => {
+      expect(parseSantanderDate('01/03/2026').toISOString()).toBe(
+        '2026-03-01T00:00:00.000Z'
+      )
+      expect(parseSantanderDate('31/12/2025').toISOString()).toBe(
+        '2025-12-31T00:00:00.000Z'
+      )
+    })
+
     it('should parse date in DD/MM/YYYY format', () => {
       const result = parseSantanderDate('04/11/2025')
       expect(result).toBeInstanceOf(Date)
-      expect(result.getFullYear()).toBe(2025)
-      expect(result.getMonth()).toBe(10) // November (0-indexed)
-      expect(result.getDate()).toBe(4)
+      expect(result.getUTCFullYear()).toBe(2025)
+      expect(result.getUTCMonth()).toBe(10) // November (0-indexed)
+      expect(result.getUTCDate()).toBe(4)
     })
 
     it('should parse date with single digit day', () => {
       const result = parseSantanderDate('7/11/2025')
-      expect(result.getDate()).toBe(7)
-      expect(result.getMonth()).toBe(10)
+      expect(result.getUTCDate()).toBe(7)
+      expect(result.getUTCMonth()).toBe(10)
     })
 
     it('should parse date with single digit month', () => {
       const result = parseSantanderDate('17/3/2025')
-      expect(result.getDate()).toBe(17)
-      expect(result.getMonth()).toBe(2) // March
+      expect(result.getUTCDate()).toBe(17)
+      expect(result.getUTCMonth()).toBe(2) // March
     })
 
     it('should parse date at start of year', () => {
       const result = parseSantanderDate('01/01/2025')
-      expect(result.getMonth()).toBe(0) // January
-      expect(result.getDate()).toBe(1)
+      expect(result.getUTCMonth()).toBe(0) // January
+      expect(result.getUTCDate()).toBe(1)
     })
 
     it('should parse date at end of year', () => {
       const result = parseSantanderDate('31/12/2025')
-      expect(result.getMonth()).toBe(11) // December
-      expect(result.getDate()).toBe(31)
+      expect(result.getUTCMonth()).toBe(11) // December
+      expect(result.getUTCDate()).toBe(31)
     })
 
     it('should set time to midnight', () => {
       const result = parseSantanderDate('04/11/2025')
-      expect(result.getHours()).toBe(0)
-      expect(result.getMinutes()).toBe(0)
-      expect(result.getSeconds()).toBe(0)
-      expect(result.getMilliseconds()).toBe(0)
+      expect(result.getUTCHours()).toBe(0)
+      expect(result.getUTCMinutes()).toBe(0)
+      expect(result.getUTCSeconds()).toBe(0)
+      expect(result.getUTCMilliseconds()).toBe(0)
     })
   })
 

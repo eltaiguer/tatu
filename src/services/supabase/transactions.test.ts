@@ -179,6 +179,25 @@ describe('supabase transactions service', () => {
     expect(transactions[0].id).toBe('tx-1')
   })
 
+  // #58: dates are calendar days at UTC midnight. Rows stored before #58 sit
+  // at the importing browser's local midnight (03:00Z from Uruguay); they
+  // load as their own calendar day.
+  it('loads each date as its calendar day at UTC midnight', async () => {
+    table.rows = [
+      { ...makeRow(1), date: '2026-03-01T03:00:00+00:00' },
+      { ...makeRow(2), date: '2026-03-01T00:00:00+00:00' },
+      { ...makeRow(3), date: '2026-02-28T23:00:00+00:00' },
+    ]
+    const { loadUserTransactions } = await import('./transactions')
+    const transactions = await loadUserTransactions(session)
+
+    expect(transactions.map((tx) => tx.date.toISOString())).toEqual([
+      '2026-03-01T00:00:00.000Z',
+      '2026-03-01T00:00:00.000Z',
+      '2026-03-01T00:00:00.000Z',
+    ])
+  })
+
   it('loads every transaction when the account exceeds the server row cap', async () => {
     // PostgREST caps each response at max-rows (1000 by default) without
     // erroring, so a single unpaged select silently drops the rest.

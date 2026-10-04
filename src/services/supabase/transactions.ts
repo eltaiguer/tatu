@@ -1,6 +1,7 @@
 import type { Transaction } from '../../models'
 import { getSupabaseClient, type SupabaseSession } from './client'
 import { UserFacingError } from '../../utils/user-error'
+import { toCalendarDay } from '../../utils/date-utils'
 import type { ExistingTransaction } from '../dedup/import-dedup'
 
 interface TransactionRow {
@@ -49,7 +50,9 @@ function transactionToRow(userId: string, tx: Transaction): TransactionRow {
 function rowToTransaction(row: TransactionRow): Transaction {
   return {
     id: row.transaction_id,
-    date: new Date(row.date),
+    // Rows stored before #58 sit at the importing browser's local midnight
+    // (03:00Z from Uruguay); load every row as its calendar day.
+    date: toCalendarDay(new Date(row.date)),
     description: row.description,
     displayDescription: row.display_description ?? undefined,
     amount: Number(row.amount),
