@@ -1,58 +1,59 @@
 # Tatu - Expense Tracker
 
-Web-based expense tracker for Santander Uruguay bank statements and credit card transactions.
+Tatu is a personal spending-analysis web app for Santander Uruguay bank statements and credit card transactions. Import the CSV exports, let Tatu categorize every movement, and answer two questions: **where has my money gone?** and **how can I spend less?**
 
-Built with **React + TypeScript + Vite** following strict **TDD** principles.
+Built with React + TypeScript + Vite, backed by Supabase, hosted on Firebase Hosting, and developed with strict red-green TDD.
+
+> Working on the code (human or agent)? The project rules — commands, structure, conventions, testing, definition of done and commit conventions — live in [AGENTS.md](AGENTS.md).
 
 ## Features
 
-- Multi-currency support (USD + UYU)
-- Automatic category inference from merchant names
-- CSV import for 3 file types (Credit Card, USD Account, UYU Account)
-- Dashboard with visualizations
-- Advanced filtering and debounced search with highlights
-- Export capabilities (CSV + PDF)
-- Custom categories, colors, and merchant rules
+- CSV import for the 3 Santander Uruguay exports (Credit Card, USD account, UYU account), with automatic format detection and duplicate protection
+- Automatic categorization by Uruguayan merchant patterns, learning from your corrections; opt-in AI categorization with your own Claude API key
+- Multi-currency (USD + UYU): totals combined into a home currency with an editable exchange rate
+- **Resumen**: account cards, month summary, category breakdown, KPIs, charts and top merchants
+- **Transacciones**: filtering (search, category, account, type, currency, date, amount), bulk edits, splits, CSV + PDF export
+- **Insights**: AI-generated spending insights over your whole history (requires a Claude API key)
+- **Categorías**: custom categories, colors and auto-categorization rules
+- **Configuración**: theme, home currency, FX rate, AI settings, data management
 
-## Tech Stack
+## Tech stack
 
-- **Frontend**: React 18 + TypeScript
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS
-- **Testing**: Vitest + React Testing Library
-- **CSV Parsing**: PapaParse
-- **State Management**: Zustand
+- **Frontend**: React 18 + TypeScript + Vite
+- **Styling**: Tailwind CSS 4 + Radix UI
+- **State**: Zustand (in-memory; all data lives in Supabase)
 - **Charts**: Recharts
-- **Backend (optional)**: Supabase / Firebase
+- **CSV parsing**: PapaParse
+- **Backend**: Supabase (auth + PostgreSQL) — **required**
+- **Hosting**: Firebase Hosting
+- **Testing**: Vitest + React Testing Library
 
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
 - Node.js 20 (pinned in `.nvmrc` — run `nvm use`) and npm
+- A Supabase project. Tatu has no offline or local-only mode: without Supabase you can't sign in and no data is stored.
 
-### Installation
+### 1. Install
 
 ```bash
 npm install
 ```
 
-### Supabase (Optional)
+### 2. Set up Supabase
 
-If you want authentication + cloud persistence enabled:
+1. Create a Supabase project.
+2. In its SQL Editor, run the whole of `supabase/schema.sql` (tables + row-level security). The schema is never applied automatically — see [supabase/README.md](supabase/README.md), and re-run it whenever the file changes.
+3. Copy `.env.example` to `.env` and set:
+   - `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` (Project Settings → API; the publishable or legacy anon key)
+   - `VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL` — the URL password-reset emails send users back to (e.g. `http://localhost:5173` locally, or your hosted app URL)
 
-1. Copy `.env.example` to `.env`
-2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY`
-3. Set `VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL` to your hosted app URL
-   (example: `https://tatu-fdba8.web.app`)
-4. Run the SQL in `supabase/schema.sql` inside your Supabase project
+Sign-in is email + password (sign up and password reset included).
 
-When these variables are present, the app enables login and stores
-transactions in Supabase.
+### Or: local Supabase (Docker)
 
-### Local Supabase (Docker)
-
-To run against a throwaway local backend instead of a real project:
+To run against a throwaway local backend instead of a real project (Docker must be running):
 
 ```bash
 npm run dev:backend   # starts Supabase in Docker, applies schema, seeds samples/
@@ -60,123 +61,52 @@ npm run dev           # log in as dev@tatu.local / tatu-dev-password
 npx supabase stop     # when done
 ```
 
-`dev:backend` writes `.env.local` (which overrides `.env`); delete it to point
-the app back at your remote project.
+`dev:backend` writes `.env.local` (which overrides `.env`); delete it to point the app back at your remote project.
 
-Auth flow includes:
-
-- Email/password sign in and sign up
-- Password reset email request
-- Automatic migration of existing local transactions after first login
-- Automatic migration of local category overrides and custom categories
-- Import run tracking (`import_runs`) for upload observability
-
-### Firebase (Optional)
-
-If you want Firebase enabled, copy `.env.example` to `.env` and fill in the
-`VITE_FIREBASE_*` values. The app will only initialize Firebase when required
-variables are present.
-
-### Development
+### 3. Run
 
 ```bash
-# Start dev server
 npm run dev
-
-# Run tests (watch mode)
-npm test
-
-# Run tests (single run)
-npm test -- --run
-# or
-npm run test:run
-
-# Run tests with UI
-npm run test:ui
-
-# Run tests with coverage
-npm run test:coverage
-
-# Lint code
-npm run lint
-
-# TDD verification (tests + lint)
-npm run tdd:verify
-
-# Format code
-npm run format
 ```
 
-### Build
+Open the printed URL, create an account and import a CSV (the `samples/` folder has example files).
+
+### Firebase (hosting and analytics only)
+
+The `VITE_FIREBASE_*` variables in `.env.example` are only needed for analytics and deploys; the app runs locally without them and only initializes Firebase when they're set. Hosting config lives in `.firebaserc` and `firebase.json`.
 
 ```bash
-npm run build
-npm run preview
+npm run deploy:firebase   # build + deploy to Firebase Hosting
 ```
 
-### Deploy (Firebase Hosting)
+## Common commands
 
 ```bash
-# Build production assets
-npm run build
-
-# Deploy to Firebase Hosting
-npx firebase-tools deploy
+npm run dev           # dev server
+npm run test          # Vitest in watch mode
+npm run test:run      # single test run
+npm run tdd:verify    # Prettier check + docs path check + tests + lint
+npm run ci:check      # tdd:verify + production build (what CI runs)
+npm run build         # type-check + production build
+npm run preview       # serve the production build
 ```
 
-Firebase config lives in `.firebaserc` and `firebase.json`.
+The full list, the project structure and the development workflow are in [AGENTS.md](AGENTS.md).
 
-## Project Structure
+## Contributing
 
-```
-tatu/
-├── samples/                     # Sample CSV files
-├── src/
-│   ├── components/             # React UI components (sidebar, views, dialogs)
-│   ├── hooks/                  # Custom React hooks (auth, preferences, handlers)
-│   ├── services/               # Business logic (parsers, categorizer, export, currency, supabase)
-│   ├── models/                 # TypeScript interfaces + Category enum
-│   ├── stores/                 # Zustand store (in-memory, Supabase-backed)
-│   ├── styles/                 # CSS tokens, fonts, theme (light + dark)
-│   ├── utils/                  # Helpers (dates, formatting, category display)
-│   ├── App.tsx
-│   └── main.tsx
-├── supabase/
-│   └── schema.sql              # PostgreSQL schema + RLS policies
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
-```
+Development follows strict red-green TDD: write a failing test first, make it pass, then refactor; bug fixes start from a failing regression test. Run `npm run tdd:verify` before committing. Commit message format, the definition of done and the rest of the rules are in [AGENTS.md](AGENTS.md).
 
-## Development Workflow
+## CSV file formats
 
-Behavior testing — tests verify what the system does, not how it does it. Write tests alongside implementation; bug fixes require a regression test. Run `npm run tdd:verify` before committing.
+### Credit card transactions
 
-### Commit Convention
-
-- `feat:` for new features
-- `fix:` for bug fixes
-- `refactor:` for code improvements
-- `test:` for test-only commits
-
-All commits must have passing tests.
-
-## Current Status
-
-**Fully shipped.** Sidebar navigation with 5 views (Resumen, Transacciones, Análisis, Categorías, Configuración). Multicurrency support (USD + UYU, combined into home currency via editable FX rate). Auth + cloud persistence via Supabase. Deployed to Firebase Hosting.
-
-**Next**: AI-powered categorization.
-
-## CSV File Formats
-
-### Credit Card Transactions
-
-- Metadata: Client info, card details, balances
+- Metadata: client info, card details, balances
 - Columns: Fecha, Número de tarjeta, Número de autorización, Descripción, Importe original, Pesos, Dólares
 
-### Bank Accounts (USD/UYU)
+### Bank accounts (USD/UYU)
 
-- Metadata: Account info
+- Metadata: account info
 - Columns: Fecha, Referencia, Concepto, Descripción, Débito, Crédito, Saldos
 
 ## License
