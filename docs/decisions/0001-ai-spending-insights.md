@@ -17,7 +17,7 @@ described code that does not exist, independent of the ADR-0002
 supersession:
 
 - Insights builds on `src/services/charts/chart-data.ts` only.
-  `src/services/aggregator/aggregation.ts`, named below, was never wired up
+  `src/services/aggregator/aggregation.ts`, named below, was never wired up <!-- historical -->
   and has been deleted — extending it would have been wasted work.
 - The Insights UI does **not** reuse `DateRangePicker`; that component had no
   importer at all and has been deleted. (Under ADR-0002 there is no date
@@ -78,7 +78,7 @@ live in the client bundle. This is recorded as an accepted risk rather than
 an oversight. Revisit it if Tatu ever gains a backend, or moves off
 bring-your-own-key — either would need its own ADR.
 
-There is no serverless layer in this repo (no `supabase/functions`) — all
+There is no serverless layer in this repo (no Supabase Edge Functions) — all
 backend logic is client + Supabase Postgres/RLS.
 
 ## Decision
@@ -100,7 +100,7 @@ other.
 **The model never computes dollar figures. It only ranks and narrates
 figures that were already computed deterministically.** Every number in an
 insight (amounts, percentages, deltas) is pulled from existing aggregator/
-chart selectors (`src/services/aggregator/aggregation.ts`,
+chart selectors (`src/services/aggregator/aggregation.ts`, <!-- historical -->
 `src/services/charts/chart-data.ts`) _before_ the prompt is built, and echoed
 back into the insight's structured fields verbatim. The model's job is
 narrative and prioritization: which of the pre-computed facts matter most,

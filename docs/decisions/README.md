@@ -19,7 +19,7 @@ stand.
 
 ## Adding an ADR
 
-1. Copy [`template.md`](template.md) to `NNNN-short-kebab-title.md`, using the
+1. Copy [`template.md`](template.md) to `<NNNN>-<short-kebab-title>.md`, using the
    next free number with four digits (the next one is `0003`).
 2. Fill in every section. Start with status `Proposed` and change it to
    `Accepted` when the change merges.
