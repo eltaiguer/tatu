@@ -11,7 +11,9 @@ terms are defined in [`CONTEXT.md`](CONTEXT.md).
 A statement goes from file to screen in one pass in the browser.
 `ImportCSV.tsx` parses, categorizes the parsed rows
 (`categorizeParsedData` in `src/services/categorizer/import-categorization.ts`),
-then hands them to `handleTransactionsImported` (`useTransactionHandlers.ts`).
+then hands them to `importTransactions`
+(`src/services/mutations/transaction-mutations.ts`, through
+`useTransactionHandlers`).
 The parsers are pure: they map columns, dates, amounts, currency and IDs and
 never call the categorizer.
 
@@ -28,10 +30,12 @@ flowchart TD
     G -- "no" --> S["New row; id salted to id_cN if taken"]
     S --> J{"AI enabled with an API key?"}
     J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a description or merchant override"]
-    J -- "no" --> L["persistTransactions: insert into transactions, tagged with the import run"]
+    J -- "no" --> L["insertTransactions: sequential 500-row INSERT chunks, tagged with the import run; stops at the first failed chunk"]
     K --> L
-    L --> M["store.addTransactions, which runs inferInternalTransfers"]
-    M --> N["completeImportRun with row counts"]
+    L --> M["store.addTransactions(exactly the saved rows), which runs inferInternalTransfers"]
+    M --> N{"every chunk saved?"}
+    N -- "yes" --> O["completeImportRun with row counts"]
+    N -- "no" --> P["failImportRun: N de M guardadas; error tells the user to import the file again"]
 ```
 
 Details that matter:
@@ -90,22 +94,31 @@ Details that matter:
   record, not part of the ID.
 
 - **Internal-transfer inference is not persisted at import.**
-  `persistTransactions` writes the rows before the store adds them, and the
+  The rows are inserted before the store adds them, and the
   store runs `inferInternalTransfers` on every write (`addTransactions`,
   `updateTransaction`, `mapTransactions`, `removeTransactions`,
   `setTransactions`). Inferred transfer categories are therefore recomputed on
-  every load and not written back by the import. Only operations that upsert a
-  whole row from the store (splitting) can carry one to the database.
+  every load and not written back. No write sends a whole row from the store
+  any more: edits send only the patched columns, and a split sends only its
+  new parts and the parent's `is_split_parent` flag.
 - An import run row (`createImportRun`) is opened before writing and closed
   with `completeImportRun` or `failImportRun`. A failure to close it doesn't
   fail the import.
+- **Partial imports (#61).** An import is written in sequential 500-row
+  INSERT chunks (`insertTransactions`, `batching.ts`) and stops at the first
+  chunk that fails. Chunks already written stay, the store receives exactly
+  those rows, the run is marked `failed` with "N de M guardadas: <reason>"
+  (there is no `partial` status), and the user is told to import the file
+  again: content dedup skips what was saved and inserts the rest. If the
+  account changes mid-import, it stops before the next chunk.
 
 ## Sync on sign-in
 
 There is no local copy of user data. `src/stores/workspace-store.ts` owns
 everything a signed-in user has in memory. On sign-in (and on refetch),
-`useUserWorkspace` calls `hydrateWorkspace`, which loads everything from
-Supabase and replaces the in-memory state in one synchronous step.
+`useUserWorkspace` calls `hydrateWorkspace`, which loads everything through
+the repository port (`repository.loadWorkspace()`, Supabase in production)
+and replaces the in-memory state in one synchronous step.
 
 ```mermaid
 flowchart LR
@@ -141,7 +154,7 @@ Ordering guarantees:
 
 ## Editing a category: apply-scope
 
-`handleUpdateTransaction` takes one of three scopes from the edit dialog
+`editTransaction` (`transaction-mutations.ts`) takes one of three scopes from the edit dialog
 ("Aplicar nombre y categoría a"). The two override kinds are keyed
 differently: the description override uses `buildDescriptionOverrideKey`
 (dates, references and long numbers removed), the merchant override uses
@@ -149,7 +162,7 @@ differently: the description override uses `buildDescriptionOverrideKey`
 
 ```mermaid
 flowchart TD
-    E["handleUpdateTransaction"] --> S{"applyScope"}
+    E["editTransaction"] --> S{"applyScope"}
     S -- "single" --> S1["Update this row only: name, category, confidence 1, tags"]
     S -- "future_matching_only" --> W1["writeOverrides"]
     W1 --> F1["Update this row only"]
@@ -161,8 +174,22 @@ flowchart TD
 `writeOverrides` saves a description override (friendly name plus category)
 when the name changed and clears it otherwise. It then saves a merchant
 override for the category, or clears it when no category was chosen. `single`
-writes no overrides, so future imports are not affected. Each write goes to
-Supabase first and then to the store, keyed by the same row IDs.
+writes no overrides, so future imports are not affected.
+
+The two overrides are one unit (rollback policy): both go to the server
+first, and the in-memory overrides change only once both saved. If the
+merchant override fails, the description override is taken back on the
+server (the previous one re-saved, or deleted if there was none) and nothing
+changed anywhere. If taking it back fails too, the in-memory overrides show
+what the server now holds (the new name) and the error says the category was
+not saved. Rows are written after the overrides; if some row chunks fail, the
+error says the rule was saved and how many rows were updated, and its retry
+re-sends only those rows (never the overrides).
+
+The category in an edit: a category sets it at confidence 1; "Sin categoría"
+(`null`) clears category and confidence on this row (`single`,
+`future_matching_only`); with `matching_past_and_future`, no category leaves
+the similar rows' categories alone.
 
 Rows given a category by hand get confidence 1, so `inferInternalTransfers`
 never reclassifies them afterwards.
@@ -191,7 +218,7 @@ real money lands in, so keep this table and the function in sync.
 | 12  | Fallback             | 0                                                                                                                           | (inline)                                       | `uncategorized`.                                                                                                                           |
 
 Steps 9–11 only run when a `CategorizationContext` is passed. In the app that
-happens only in `handleAutoCategorizeTransactions` (the "Auto-categorizar"
+happens only in `autoCategorize` (the "Auto-categorizar"
 bulk action in Transacciones) and in the developer `CoverageAnalysis` tool.
 
 Tests in `transaction-categorizer.test.ts` that pin the order:
@@ -214,13 +241,13 @@ holding a category, 6 before 7, and 7 before 8 come from the code order only.
 
 ### What can change a category after the categorizer
 
-| Step                        | Where                                                         | Effect                                                                                                                                                                                                                                                                                                                        |
-| --------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AI enrichment (import only) | `applyAiEnrichment`                                           | Replaces category, confidence (model value, clamped 0–1, default 0.7) and display name on new rows without a description or merchant override.                                                                                                                                                                                |
-| Internal-transfer inference | `inferInternalTransfers` (store)                              | Bank rows only. Debits with transfer wording become `internal_transfer` (or `external_transfer` with a named beneficiary) at 0.9. A debit paired with a matching credit within 2 days gets 0.92, 0.95 or 0.98, depending on the match score. Skips rows at confidence 1, split rows, and rows already in a transfer category. |
-| User edit / bulk categorize | `handleUpdateTransaction`, `handleBulkCategorizeTransactions` | Sets the category at confidence 1.                                                                                                                                                                                                                                                                                            |
-| Rule applied to past rows   | `handleApplyPatternToPast`                                    | Sets the rule's category at 0.95 on matching rows, except split parts.                                                                                                                                                                                                                                                        |
-| Auto-categorizar            | `handleAutoCategorizeTransactions`                            | Re-runs the categorizer with context on the selected rows; writes only results that are not `uncategorized`.                                                                                                                                                                                                                  |
+| Step                        | Where                               | Effect                                                                                                                                                                                                                                                                                                                        |
+| --------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI enrichment (import only) | `applyAiEnrichment`                 | Replaces category, confidence (model value, clamped 0–1, default 0.7) and display name on new rows without a description or merchant override.                                                                                                                                                                                |
+| Internal-transfer inference | `inferInternalTransfers` (store)    | Bank rows only. Debits with transfer wording become `internal_transfer` (or `external_transfer` with a named beneficiary) at 0.9. A debit paired with a matching credit within 2 days gets 0.92, 0.95 or 0.98, depending on the match score. Skips rows at confidence 1, split rows, and rows already in a transfer category. |
+| User edit / bulk categorize | `editTransaction`, `bulkCategorize` | Sets the category at confidence 1.                                                                                                                                                                                                                                                                                            |
+| Rule applied to past rows   | `applyPatternToPast`                | Sets the rule's category at 0.95 on matching rows, except split parts.                                                                                                                                                                                                                                                        |
+| Auto-categorizar            | `autoCategorize`                    | Re-runs the categorizer with context on the selected rows; writes only results that are not `uncategorized`.                                                                                                                                                                                                                  |
 
 ## Money conversion
 
@@ -266,6 +293,45 @@ report (every interpolated string HTML-escaped) from a hidden same-origin
 iframe, not a popup — `window.open` with `noopener` returns `null` (#179). If
 the frame can't be written or printed, the export throws a `UserFacingError`
 and Configuración shows it instead of a success toast.
+
+## Writes: the repository port
+
+Every write goes through a `Repository` bound to one signed-in user
+(`src/services/repository/repository.ts`, #119). There is no ambient session:
+App builds `createSupabaseRepository(session)` and hands it to
+`useTransactionHandlers` and to the views that save rules; tests use
+`createInMemoryRepository` (same chunking, plus fault injection and `hold`
+for races). `hydrateWorkspace` loads, and preferences save, through the
+same port.
+
+Transaction writes live in `src/services/mutations/transaction-mutations.ts`.
+Each one works out one `TransactionPatch` per row — a key that is absent
+leaves the column alone, `null` clears it — sends it through the repository,
+then applies the same patch to the store for exactly the rows the server
+confirmed. The rule is **screen mirrors database**:
+
+| Write                                                                                      | Requests                                                                                             | When some fail                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Edits, bulk categorize / tag, apply-scope rows, auto-categorize, rule applied to past rows | Rows with identical patches grouped; one `update(...).in('transaction_id', ≤100 ids)` each (atomic)  | Chunks settle independently (at most 4 in flight). Saved chunks are applied; `PartialWriteError` "Se actualizaron N de M — reintentar"; retry re-sends only the rest. |
+| Delete                                                                                     | Soft delete (chunked as above), then hard delete of split parts                                      | Same; "Se eliminaron N de M". The removed rows keep their undo; leftover parts stay visible and the retry deletes them.                                               |
+| Undo delete                                                                                | Restore, chunked                                                                                     | Same; "Se restauraron N de M". Bound to the user who deleted.                                                                                                         |
+| Import                                                                                     | Sequential 500-row INSERT chunks                                                                     | Stops at the first failure — see [Import](#import).                                                                                                                   |
+| Split                                                                                      | Upsert the parts, then set only the parent's `is_split_parent` (if live and not split yet)           | Mark fails: parts deleted, flag cleared. That fails too: parent and parts both shown (never a split parent without parts, which no list could show).                  |
+| Unsplit                                                                                    | Clear the parent's flag, then delete every part pointing at it (not just the ones this device knows) | Delete fails: parent marked again (if parts remain). That fails too: parent and parts both shown.                                                                     |
+
+A row a successful chunk did not return (gone from the server) is
+`missing`, not `failed`: it is never retried, and the message says to
+reload.
+
+**Account switches.** After every await, before touching anything in
+memory, a write checks `isWorkspaceOwner(repository.userId)`
+(`stores/workspace-state.ts`). If another user signed in meanwhile, nothing
+lands in their store and the write ends with a `WorkspaceChangedError`; the
+server change stays with the user who made it. Undo and retry closures keep
+the repository that did the write and refuse before sending anything once
+it is no longer the signed-in user's. The rule stores (custom patterns,
+custom categories) refuse to start for a repository whose user isn't loaded
+and skip their rollback after a switch.
 
 ## Persistence boundaries
 
