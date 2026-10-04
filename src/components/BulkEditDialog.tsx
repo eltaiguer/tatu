@@ -86,8 +86,14 @@ export function BulkEditDialog({
   }
 
   function addTag(raw: string) {
-    const tag = raw.trim()
-    if (!tag) return
+    const typed = raw.trim()
+    if (!typed) return
+    // A tag that already exists (in any case) is reused, so a differently
+    // cased query never adds a near-duplicate to every selected row.
+    const key = typed.toLocaleLowerCase('es')
+    const sameTag = (t: string) => t.toLocaleLowerCase('es') === key
+    const tag =
+      bulkEditTagList.find(sameTag) ?? tagSuggestions.find(sameTag) ?? typed
     if (!bulkEditTagList.includes(tag)) {
       onBulkEditTagListChange([...bulkEditTagList, tag])
     }

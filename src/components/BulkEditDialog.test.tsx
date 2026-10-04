@@ -271,6 +271,21 @@ describe('BulkEditDialog', () => {
       })
     })
 
+    it('adds the existing tag, not a near-duplicate, when the typed case differs', async () => {
+      const user = userEvent.setup()
+      const onSave = vi.fn()
+      render(<StatefulDialog onSave={onSave} />)
+
+      await user.click(screen.getByRole('button', { name: /^Etiquetas/ }))
+      await user.type(
+        screen.getByLabelText('Buscar o crear etiqueta'),
+        ' VIAJE {Enter}'
+      )
+      await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+      expect(onSave).toHaveBeenCalledWith({ category: '', tags: ['viaje'] })
+    })
+
     it('adds an existing tag typed in the search with Enter, once', async () => {
       const user = userEvent.setup()
       render(<StatefulDialog onSave={vi.fn()} />)
