@@ -296,12 +296,10 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole('heading', { name: 'Transacciones' })
-      ).toBeInTheDocument()
-    )
-    expect(screen.getByText(/movimiento.*·/)).toBeInTheDocument()
+    expect(await screen.findByText(/movimiento.*·/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Transacciones' })
+    ).toBeInTheDocument()
   })
 
   it('auto-categorizes selected transactions from the transactions view', async () => {
@@ -325,12 +323,11 @@ describe('App', () => {
       ).toBeInTheDocument()
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+    const checkbox = (
+      await screen.findAllByLabelText('Seleccionar Devoto Supermercado')
+    )[0]
     await act(async () => {
-      fireEvent.click(
-        screen.getAllByRole('checkbox', {
-          name: 'Seleccionar Devoto Supermercado',
-        })[0]
-      )
+      fireEvent.click(checkbox)
     })
 
     const autoCategorizeButton = screen.getByRole('button', {
@@ -378,12 +375,11 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
+    const checkbox = (
+      await screen.findAllByLabelText('Seleccionar Comercio Inventado XYZ')
+    )[0]
     await act(async () => {
-      fireEvent.click(
-        screen.getAllByRole('checkbox', {
-          name: 'Seleccionar Comercio Inventado XYZ',
-        })[0]
-      )
+      fireEvent.click(checkbox)
     })
 
     const autoCategorizeButton = screen.getByRole('button', {
@@ -547,7 +543,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     fireEvent.click(
-      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0]
+      (await screen.findAllByLabelText('Seleccionar Comercio A'))[0]
     )
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0]
@@ -614,7 +610,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     fireEvent.click(
-      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0]
+      (await screen.findAllByLabelText('Seleccionar Comercio A'))[0]
     )
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0]
@@ -660,7 +656,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     fireEvent.click(
-      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0]
+      (await screen.findAllByLabelText('Seleccionar Comercio A'))[0]
     )
 
     await act(async () => {
