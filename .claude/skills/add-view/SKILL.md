@@ -5,7 +5,7 @@ description: Checklist for adding, renaming or removing a top-level Tatu view or
 
 # Add a view / route
 
-The URL is the source of truth for the current view. A view touches five
+The URL is the source of truth for the current view. A view touches six
 places, and TypeScript only catches the ones keyed by `View`.
 
 ## Steps
@@ -24,6 +24,9 @@ places, and TypeScript only catches the ones keyed by `View`.
      `preloadViews` in `src/lazy-views.tsx`.
    - The `currentView === '…'` render branch in `src/App.tsx`, inside the
      existing `ViewErrorBoundary` + `Suspense`.
+   - A loading shape in `SHAPES` in `src/components/StateSkeletons.tsx`
+     (`ViewSkeleton`, the `Suspense` fallback; keyed by `View`, so `tsc`
+     flags a missing one).
 3. **Copy.** UI text is rioplatense Spanish with voseo — see the UI copy guide
    in `docs/CONTEXT.md`. Page header via `src/components/ui/page-header.tsx`.
 4. **Docs.** Same PR: the Views table in `docs/CONTEXT.md`, and "Navigation &

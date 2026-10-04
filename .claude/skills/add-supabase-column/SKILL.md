@@ -26,18 +26,33 @@ its checklist is the source of truth for the apply steps.
      `set_updated_at_timestamp` trigger if it has `updated_at`. Copy the shape
      of `custom_patterns`.
    - Keep every statement idempotent: the whole file is re-run on every apply.
-3. **Green: row mapping.** Every service reads with `.select('*')`, so there
-   is no column list to edit. Update the table's own service in
-   `src/services/supabase/` — for transactions, `TransactionRow`,
+3. **Green: row mapping.** Each table's row mapping lives in its own service
+   in `src/services/supabase/` — for transactions, `TransactionRow`,
    `transactionToRow` and `rowToTransaction` in
    `src/services/supabase/transactions.ts`. Map `null` from older rows to the
-   model's default.
-4. **Types.** Add the field to the model in `src/models/` (exported through
+   model's default. Loads use `.select('*')`, but some reads name their
+   columns: the import-dedup candidate lookup (`CANDIDATE_COLUMNS` in
+   `transactions.ts`, feeding `src/services/dedup/import-dedup.ts`) needs the
+   column only if dedup must see it.
+4. **Green: the repository port.** Every read and write goes through
+   `Repository` (`src/services/repository/repository.ts`):
+   `src/services/repository/supabase-repository.ts` composes the
+   `services/supabase/` functions, and
+   `src/services/repository/in-memory-repository.ts` is the test adapter — a
+   new table or operation goes into the interface and **both** adapters. A
+   transaction field the user can edit after import also needs a key in
+   `TransactionPatch` / `PATCH_KEYS` (`repository.ts`, the store side) and in
+   `TransactionColumnsPatch` / `patchToColumns` (`transactions.ts`, the column
+   side); the writes themselves live in
+   `src/services/mutations/transaction-mutations.ts`. Loaded data reaches the
+   store through `hydrateWorkspace` (`src/stores/workspace-store.ts`).
+5. **Types.** Add the field to the model in `src/models/` (exported through
    `src/models/index.ts`).
-5. **Locally.** `npm run dev:backend` re-applies `schema.sql` to the Docker
+6. **Locally.** `npm run dev:backend` re-applies `schema.sql` to the Docker
    stack (see the `run` skill) — check the feature end to end there.
-6. **Docs.** If the table is new or its role changed, update the persistence
-   table in `docs/architecture.md`.
+7. **Docs.** If the table is new or its role changed, update the persistence
+   table in `docs/architecture.md` (and the repository section if the port
+   changed).
 
 ## The PR
 

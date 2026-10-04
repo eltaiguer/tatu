@@ -50,13 +50,23 @@ one.
 
 ## Gotchas
 
-- Import categorization runs without a `CategorizationContext`: temporal,
-  similar-merchant and amount heuristics (steps 9–11) never run at import.
+- Import categorization (`categorizeImportedTransactions` in
+  `src/services/categorizer/import-categorization.ts`) runs without a
+  `CategorizationContext`: temporal, similar-merchant and amount heuristics
+  (steps 9–11) never run at import.
 - With AI enabled, `applyAiEnrichment` replaces the rule result for new rows
   without a user override, so a pattern change may not show in a test import
   with AI on.
-- Rows at confidence 1 (user edits) are never recategorized. Existing rows
-  only change through "Auto-categorizar" or a rule applied to past rows.
+- A rule change never rewrites stored rows. They change only through
+  Auto-categorizar (`autoCategorize`: the selected rows, whatever their
+  confidence — user edits at 1 included), a rule applied to past rows
+  (`applyPatternToPast`: 0.95, split parts skipped), or a user edit
+  (confidence 1). Both live in
+  `src/services/mutations/transaction-mutations.ts`.
+- Re-importing a CSV doesn't recategorize either: import dedup
+  (`src/services/dedup/import-dedup.ts`) matches stored rows by content and
+  skips them. The fingerprint ignores `category`, so a pattern change can't
+  create duplicates.
 - The local seed only inserts rows the stack doesn't have yet, so to see a
   pattern change in the running app wipe it first:
   `npx supabase stop --no-backup`, then `npm run dev:backend`.
