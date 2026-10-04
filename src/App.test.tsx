@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ROUTER_FUTURE } from './router-future'
+import userEvent from '@testing-library/user-event'
 import App from './App'
 import { preloadViews } from './lazy-views'
 import { transactionStore } from './stores/transaction-store'
@@ -213,6 +214,24 @@ describe('App', () => {
       screen.getByRole('heading', { name: 'Importar Transacciones' })
     ).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
+  })
+
+  it('returns focus to the sidebar Importar button when the import dialog closes', async () => {
+    renderApp()
+    const opener = await screen.findByRole('button', { name: 'Importar' })
+    const user = userEvent.setup()
+
+    opener.focus()
+    await user.keyboard('{Enter}')
+    await screen.findByRole('heading', { name: 'Importar Transacciones' })
+    await user.keyboard('{Escape}')
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Importar Transacciones' })
+      ).toBeNull()
+    )
+    await waitFor(() => expect(opener).toHaveFocus())
   })
 
   it('shows supported file types on import view', async () => {
