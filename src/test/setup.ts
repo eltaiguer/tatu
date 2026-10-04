@@ -8,6 +8,10 @@ import { installConsoleGuard } from './console-guard'
 // load an App-level view can take longer than that to render after
 // hydration, so the App suites failed with "Unable to find ..." (#191). A
 // broken wait still fails well inside testTimeout. Don't add retries instead.
+// In App-level tests, also poll with cheap queries (ByLabelText, ByText):
+// waitFor reruns its query on every DOM mutation, and a ByRole query over the
+// whole App takes ~1s under load, starving the very render it waits for. Use
+// a synchronous getByRole after the wait to keep the accessibility check.
 configure({ asyncUtilTimeout: 5_000 })
 
 // Cleanup after each test
