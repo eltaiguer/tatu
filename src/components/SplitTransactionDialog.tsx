@@ -80,6 +80,8 @@ export function SplitTransactionDialog({
   const remainingAmount = remainingCents / 100
   const isBalanced = remainingCents === 0
   const hasAllAmounts = parts.every((p) => p.amount.trim() !== '')
+  // Nothing typed yet is not an error: stay neutral until the first amount.
+  const hasAnyAmount = parts.some((p) => p.amount.trim() !== '')
   const canConfirm = isBalanced && hasAllAmounts && !pending
 
   function updatePart(idx: number, patch: Partial<SplitPartDraft>) {
@@ -251,7 +253,9 @@ export function SplitTransactionDialog({
         <div
           className={cn(
             'flex items-center justify-between rounded-[var(--radius)] border bg-[var(--surface)] px-[12px] py-[10px] text-[13px]',
-            isBalanced ? 'border-[var(--border)]' : 'border-[var(--neg)]'
+            isBalanced || !hasAnyAmount
+              ? 'border-[var(--border)]'
+              : 'border-[var(--neg)]'
           )}
         >
           <span className="text-[var(--text-muted)]">Restante</span>
