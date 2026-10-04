@@ -177,7 +177,7 @@ describe('Categories', () => {
     expect(screen.getByLabelText('Icono de categoría')).toBeInTheDocument()
   })
 
-  it('creates a new custom category', () => {
+  it('creates a new custom category', async () => {
     render(<Categories transactions={[]} />)
     fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
 
@@ -188,6 +188,12 @@ describe('Categories', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar categoría' }))
 
     expect(listCustomCategories()[0].label).toBe('Mascotas')
+    // The form closes once the save is confirmed by the server.
+    await waitFor(() =>
+      expect(
+        screen.queryByLabelText('Nombre de categoría')
+      ).not.toBeInTheDocument()
+    )
   })
 
   it('edits custom category color and icon', async () => {
@@ -214,6 +220,11 @@ describe('Categories', () => {
 
     expect(listCustomCategories()[0].color).toBe('#00ff00')
     expect(listCustomCategories()[0].icon).toBe('🫖')
+    await waitFor(() =>
+      expect(
+        screen.queryByLabelText('Nombre de categoría')
+      ).not.toBeInTheDocument()
+    )
   })
 
   it('deletes a custom category', async () => {
@@ -231,6 +242,13 @@ describe('Categories', () => {
     )
 
     expect(listCustomCategories()).toHaveLength(0)
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', {
+          name: `Eliminar categoría ${custom.label}`,
+        })
+      ).not.toBeInTheDocument()
+    )
   })
 
   it('adds and removes a pattern rule', async () => {

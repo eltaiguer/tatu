@@ -164,6 +164,7 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     mocks.enrichTransactionsWithAi.mockRejectedValue(
       new Error('401 invalid x-api-key')
     )
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { handlers } = setup()
 
     const outcome = await handlers.handleTransactionsImported(
@@ -179,12 +180,17 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     )
     expect(mocks.persistTransactions).toHaveBeenCalledTimes(1)
     expect(mocks.completeImportRun).toHaveBeenCalledTimes(1)
+    expect(errorSpy).toHaveBeenCalledWith(
+      'AI enrichment failed during import:',
+      expect.any(Error)
+    )
   })
 
   it('reports the AI failure reason to the caller instead of swallowing it', async () => {
     mocks.enrichTransactionsWithAi.mockRejectedValue(
       new Error('401 invalid x-api-key')
     )
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { handlers } = setup()
 
     const outcome = await handlers.handleTransactionsImported(
@@ -193,6 +199,10 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     )
 
     expect(outcome.aiError).toContain('401 invalid x-api-key')
+    expect(errorSpy).toHaveBeenCalledWith(
+      'AI enrichment failed during import:',
+      expect.any(Error)
+    )
   })
 
   it('does not report an AI failure when AI is disabled', async () => {

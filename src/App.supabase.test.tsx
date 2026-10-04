@@ -1,4 +1,5 @@
 import { MemoryRouter } from 'react-router-dom'
+import { ROUTER_FUTURE } from './router-future'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { preloadViews } from './lazy-views'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -158,7 +159,7 @@ describe('App with supabase enabled', () => {
   it('renders authentication form when no session exists', async () => {
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )
@@ -176,7 +177,7 @@ describe('App with supabase enabled', () => {
 
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )
@@ -208,7 +209,7 @@ describe('App with supabase enabled', () => {
 
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )
@@ -238,7 +239,7 @@ describe('App with supabase enabled', () => {
   it('triggers password reset request', async () => {
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )
@@ -260,7 +261,7 @@ describe('App with supabase enabled', () => {
 
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )
@@ -298,7 +299,7 @@ describe('App with supabase enabled', () => {
 
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )
@@ -325,7 +326,7 @@ describe('App with supabase enabled', () => {
 
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )
@@ -347,7 +348,7 @@ describe('App with supabase enabled', () => {
 
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )
@@ -382,7 +383,7 @@ describe('App with supabase enabled', () => {
 
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )
@@ -498,7 +499,7 @@ describe('App with supabase enabled', () => {
 
     const { default: App } = await import('./App')
     render(
-      <MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>
         <App />
       </MemoryRouter>
     )

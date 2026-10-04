@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { ROUTER_FUTURE } from './router-future'
 import App from './App'
 import { preloadViews } from './lazy-views'
 import { transactionStore } from './stores/transaction-store'
@@ -113,7 +114,7 @@ function RouterProbe() {
 
 function renderApp(path = '/') {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter initialEntries={[path]} future={ROUTER_FUTURE}>
       <App />
       <RouterProbe />
     </MemoryRouter>
@@ -764,7 +765,9 @@ describe('App', () => {
       fireEvent.click(
         await screen.findByRole('button', { name: 'Configuración' })
       )
-      expect(currentUrl()).toBe('/configuracion')
+      // Navigation runs in a transition (v7_startTransition): the URL commits
+      // once the lazily loaded view is ready, as in the app.
+      await waitFor(() => expect(currentUrl()).toBe('/configuracion'))
 
       fireEvent.click(screen.getByRole('button', { name: 'test-back' }))
       await waitFor(() => expect(currentUrl()).toBe('/'))

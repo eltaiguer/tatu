@@ -1,10 +1,32 @@
 import { afterEach, vi } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
+import { installConsoleGuard } from './console-guard'
 
 // Cleanup after each test
 afterEach(() => {
   cleanup()
+})
+
+// A passing run prints nothing: any console.error / console.warn during a test
+// fails that test (React act() and prop warnings, Radix a11y warnings, stray
+// logs). When a test exercises code that is *expected* to log, spy on the
+// console in that test and assert the call, which also keeps it quiet:
+//
+//   const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+//   ...
+//   expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+//
+// The spy only lasts for that test; the guard is reinstalled after each one.
+const consoleGuard = installConsoleGuard()
+afterEach(() => {
+  const unexpected = consoleGuard.takeUnexpected()
+  if (unexpected.length > 0) {
+    throw new Error(
+      `Unexpected console output during this test (spy on console and ` +
+        `assert it if it is expected):\n\n${unexpected.join('\n\n')}`
+    )
+  }
 })
 
 class ResizeObserverMock {
