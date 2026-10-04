@@ -446,8 +446,15 @@ function BulkBar({
   useClickOutside(catRef, () => setCatOpen(false))
 
   return (
-    <div className="fixed bottom-[26px] left-[calc(50%+var(--sidebar-w,252px)/2)] z-[70] [transform:translateX(-50%)] [animation:fadeUp_0.2s_both]">
-      <div className="flex items-center gap-[10px] rounded-[999px] border border-[var(--border)] bg-[var(--surface)] py-[10px] pr-[12px] pl-[16px] shadow-[var(--shadow-lg)]">
+    <div
+      role="region"
+      aria-label="Acciones de selección"
+      // Below md the bar spans the screen and wraps: count, "select all" and
+      // × on the first row, the actions on the rows under it (#194). z-40
+      // keeps it under dialog overlays (z-50).
+      className="fixed inset-x-4 bottom-4 z-40 [animation:fadeUp_0.2s_both] md:inset-x-auto md:bottom-[26px] md:left-[calc(50%+var(--sidebar-w,252px)/2)] md:[transform:translateX(-50%)]"
+    >
+      <div className="flex items-center gap-[10px] rounded-[999px] border border-[var(--border)] bg-[var(--surface)] py-[10px] pr-[12px] pl-[16px] shadow-[var(--shadow-lg)] max-md:flex-wrap max-md:rounded-[16px]">
         <span
           role="status"
           aria-live="polite"
@@ -466,14 +473,19 @@ function BulkBar({
           </button>
         )}
 
-        <span className="h-[22px] w-[1px] bg-[var(--border)]" />
+        <span className="h-[22px] w-[1px] bg-[var(--border)] max-md:hidden" />
 
-        <div className="relative flex gap-[4px]" ref={catRef}>
+        <div
+          role="group"
+          aria-label="Acciones"
+          className="relative flex gap-[4px] max-md:order-last max-md:w-full max-md:flex-wrap"
+          ref={catRef}
+        >
           {/* Quick categorize */}
           <button
             onClick={() => setCatOpen((o) => !o)}
             disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]!"
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
           >
             <Tag size={13} />
             Categorizar
@@ -515,7 +527,7 @@ function BulkBar({
           <button
             onClick={onEdit}
             disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]!"
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
             aria-label="Editar seleccionadas"
           >
             <Pencil size={13} />
@@ -525,7 +537,7 @@ function BulkBar({
           <button
             onClick={onAuto}
             disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]!"
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
           >
             {isAutoCategorizing ? (
               <Loader2 size={13} className="animate-spin" />
@@ -538,7 +550,7 @@ function BulkBar({
           <button
             onClick={onIgnore}
             disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]!"
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
           >
             <Slash size={13} />
             Ignorar
@@ -547,20 +559,20 @@ function BulkBar({
           <button
             onClick={onDelete}
             disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! text-[var(--neg)]"
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap text-[var(--neg)]"
           >
             <Trash2 size={13} />
             Eliminar
           </button>
         </div>
 
-        <span className="h-[22px] w-[1px] bg-[var(--border)]" />
+        <span className="h-[22px] w-[1px] bg-[var(--border)] max-md:hidden" />
 
         <button
           onClick={onClear}
           title="Deseleccionar"
           disabled={isBusy}
-          className="grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-[999px] border-none bg-transparent text-[var(--text-muted)]"
+          className="grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-[999px] border-none bg-transparent text-[var(--text-muted)] max-md:ml-auto"
         >
           <svg
             width="16"

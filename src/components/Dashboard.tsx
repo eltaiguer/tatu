@@ -1061,9 +1061,15 @@ export function Dashboard({
               </p>
             ) : (
               <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[240px_1fr] sm:gap-9">
-                <div className="relative mx-auto h-[220px] w-[220px] sm:mx-0">
+                {/* Decorative for assistive tech: the category list beside
+                    it has the same numbers and actions (#203). */}
+                <div
+                  aria-hidden="true"
+                  className="relative mx-auto h-[220px] w-[220px] sm:mx-0"
+                >
                   <PieChart width={220} height={220}>
                     <Pie
+                      rootTabIndex={-1}
                       data={donutData}
                       cx="50%"
                       cy="50%"

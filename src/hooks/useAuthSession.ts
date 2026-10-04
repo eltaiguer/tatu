@@ -123,8 +123,12 @@ export function useAuthSession() {
   }
 
   async function handlePasswordReset() {
-    setAuthSubmitting(true)
     setAuthError('')
+    if (!email.trim()) {
+      setAuthNotice('Ingresá tu email para restablecer la contraseña')
+      return
+    }
+    setAuthSubmitting(true)
     setAuthNotice('')
 
     try {
