@@ -75,7 +75,7 @@ src/
     ConfidenceBadge.tsx    # 3-bar confidence meter
     Onboarding.tsx         # First-run empty state (no transactions yet)
     EmptyState.tsx         # Generic empty state
-    StateSkeletons.tsx     # Loading skeletons for dashboard + transaction table
+    StateSkeletons.tsx     # ViewSkeleton: per-view loading shape (mobile + desktop), announced as a busy role=status
     ConnectionLostState.tsx    # Supabase unreachable — retry affordance
     AuthCard.tsx           # Login / signup / password-reset form
     TatuLogo.tsx           # Armadillo-shell SVG brand mark
