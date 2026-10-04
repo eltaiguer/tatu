@@ -63,6 +63,7 @@ import {
 import { useUserWorkspace } from './hooks/useUserWorkspace'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
+import { createSupabaseRepository } from './services/repository/supabase-repository'
 import { getFriendlyName } from './utils/user-display'
 import { UserFacingError } from './utils/user-error'
 
@@ -231,6 +232,12 @@ function App() {
     go('transactions', filterToSearch(filter))
   }
 
+  // The signed-in user's repository (#119): every write goes through it.
+  const repository = useMemo(
+    () => (session ? createSupabaseRepository(session) : null),
+    [session]
+  )
+
   const {
     handleTransactionsImported,
     handleUpdateTransaction,
@@ -244,7 +251,7 @@ function App() {
     handleAutoCategorizeTransactions,
     handleApplyPatternToPast,
   } = useTransactionHandlers({
-    session,
+    repository,
     setError: setAuthError,
   })
 
@@ -445,6 +452,7 @@ function App() {
                     onFiltersChange={handleTransactionFiltersChange}
                     homeCurrency={preferredCurrency}
                     fxRate={fxRate}
+                    repository={repository}
                     onUpdateTransaction={handleUpdateTransaction}
                     onDeleteTransaction={handleDeleteTransaction}
                     onRestoreTransactions={handleRestoreTransactions}
@@ -479,6 +487,7 @@ function App() {
                     fxRate={fxRate}
                     onNavigateToTransactions={navigateToTransactions}
                     onApplyPatternToPast={handleApplyPatternToPast}
+                    repository={repository}
                   />
                 )}
                 {currentView === 'settings' && (

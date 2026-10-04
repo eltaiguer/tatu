@@ -80,26 +80,6 @@ describe('Transaction Store - CRUD', () => {
   })
 })
 
-describe('Transaction Store - Duplicates', () => {
-  let store: ReturnType<typeof createTransactionStore>
-
-  beforeEach(() => {
-    store = createTransactionStore()
-  })
-
-  it('detects duplicate ids against existing transactions', () => {
-    store
-      .getState()
-      .setTransactions([makeTransaction('tx-1'), makeTransaction('tx-2')])
-
-    const duplicates = store
-      .getState()
-      .findDuplicateIds([makeTransaction('tx-2'), makeTransaction('tx-3')])
-
-    expect(duplicates).toEqual(['tx-2'])
-  })
-})
-
 describe('Transaction Store - addTransactions', () => {
   let store: ReturnType<typeof createTransactionStore>
 

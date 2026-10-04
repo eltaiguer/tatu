@@ -60,6 +60,7 @@ src/
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
     Categories.tsx         # Categorías view — category grid + auto-categorization rules
+    categories/            # Categorías sub-components: CategoryForm, CategoryCard, PatternRulesCard (rules form + list, owns its state)
     Settings.tsx           # Configuración view — theme, currency, account, data management
     ImportCSV.tsx          # CSV import flow (wrapped in Radix Dialog, not a view)
     CategoryBreakdownList.tsx  # Ranked category list with progress bars
@@ -67,7 +68,7 @@ src/
     CurrencyToggle.tsx     # Home-currency switch
     TransactionFilters.tsx # Unified filter bar (search, category, account, type, currency, date, amount)
     TransactionTable.tsx   # Transaction rows, selection, confidence meter, row actions
-    EditTransactionDialog.tsx  # Edit modal: description, category, apply-scope
+    EditTransactionDialog.tsx  # Edit modal: owns the draft (description, category, tags, apply-scope) + validation; emits it via one onSave
     BulkEditDialog.tsx     # Bulk categorization modal
     SplitTransactionDialog.tsx # Split one transaction into parts (see is_split_parent / split_parent_id)
     ConfirmDialog.tsx      # Shared confirmation modal
@@ -86,31 +87,35 @@ src/
   hooks/                   # Custom React hooks (extracted from App.tsx)
     useAuthSession.ts      # Supabase auth session management
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
-    useTransactionHandlers.ts  # All transaction mutation handlers
+    useTransactionHandlers.ts  # The transaction mutations bound to the signed-in user's repository (thin; one contract without one)
     useTransactionFiltering.ts # Filter + sort + paginate transactions
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
-    categories/            # Category registry + user custom categories (source of isCategoryIgnored)
+    dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57)
+    repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
+    mutations/             # transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
+    categories/            # Category registry + user custom categories (source of isCategoryIgnored); category-counts.ts: rows per category
     filters/               # url-filters.ts: Transacciones filters <-> URL query (the filtering itself is useTransactionFiltering)
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     charts/                # Chart data transformations; category-changes.ts feeds CategoryChangesCard
     currency/              # convert(amount, from, to, rate) + Currency type
+    suggestions/           # suggestions.ts: category/tag suggestion lists + search filters shared by the edit dialogs
     descriptions/          # Description override management
     transfers/             # Internal transfer detection
     ai/                    # Client-side Claude (BYO API key): categorization/enrichment; models.ts is the only place model IDs live
     preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
     insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
-    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data), runtime (active session)
+    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapter composes. No ambient session: callers pass a session or a repository
     firebase.ts            # Firebase config
   App.tsx / main.tsx       # Shell (auth, sync, view switch) / BrowserRouter mount
   routes.ts                # View <-> URL path + document title
   lazy-views.tsx           # The five views as lazy chunks (retryable, preloadViews)
   router-future.ts         # React Router v7 future flags (app + test routers)
   models/                  # TypeScript interfaces + Category enum
-  stores/                  # Zustand stores, in-memory only: transaction-store; workspace-store = the ONE owner of per-user state (hydrateWorkspace / teardownWorkspace / setPreference)
+  stores/                  # Zustand stores, in-memory only: transaction-store; workspace-store = the ONE owner of per-user state (hydrateWorkspace / teardownWorkspace / setPreference), loaded through the repository port; workspace-state = whose workspace is loaded (isWorkspaceOwner, checked by every write after an await)
   index.css                # CSS entry (imported by main.tsx): fonts → tailwind → theme
   styles/
     fonts.css              # Google Fonts: Spectral, Hanken Grotesk, JetBrains Mono
@@ -165,6 +170,7 @@ Users earn in USD and spend in both USD and UYU. The app converts and combines b
 - **Zustand store**: holds in-memory state only — no persist middleware. Populated from Supabase on login by `hydrateWorkspace` (`stores/workspace-store.ts`)
 - No offline fallback. Unauthenticated users see the `AuthCard` login screen.
 - **Per-user lifecycle** (#117): `stores/workspace-store.ts` is the only place that fills (`hydrateWorkspace`) or empties (`teardownWorkspace`) a user's in-memory state — transactions, overrides, custom patterns/categories, preferences, AI config. Every path that ends a session calls `teardownWorkspace`; new per-user state must be added there. Preferences are saved only by `setPreference`, only for the user whose workspace is loaded and ready.
+- **Writes** (#119): every transaction write is a function in `services/mutations/transaction-mutations.ts` that takes the signed-in user's `Repository` (`services/repository/`) — never an ambient session. Each change is one `TransactionPatch` per row applied to the repository and then, for exactly the rows the server confirmed, to the store ("screen mirrors database"); a partial write throws `PartialWriteError` (toast "Se actualizaron N de M — reintentar", retry = only the failed remainder). After every await a write checks `isWorkspaceOwner` and drops its local changes if another user signed in. Rule stores (custom patterns, custom categories) take the repository explicitly too. Test writes against `createInMemoryRepository` and assert on the store and the repository, not on request payloads.
 
 ## Testing approach: strict red-green TDD
 
@@ -221,9 +227,9 @@ A task is done only when:
 - **Transaction sources**: Credit Card, USD Bank Account, UYU Bank Account (3 distinct CSV formats from Santander Uruguay)
 - **Categorization**: Pattern-based merchant matching (`merchant-patterns.ts`) with confidence scores (0–1). System learns from user overrides stored in Supabase. Optional AI enrichment on import (see Current status).
 - **Dates**: a transaction's `date` is a calendar day at UTC midnight — read it only with UTC accessors or `timeZone: 'UTC'`; "today" is `todayAsUtcDate()`. See "Dates" in `docs/architecture.md` (#58)
-- **Deduplication**: Hash-based transaction IDs prevent duplicate imports
+- **Deduplication**: by content, not ID — imports match rows by fingerprint (source, raw date, raw description, signed amount, currency) as a multiset, deleted rows included; a taken ID gets a salted `_cN` suffix (`services/dedup/import-dedup.ts`, #57). IDs (hash incl. row position) are unchanged
 - **Internal transfers**: inferred in the store (`inferInternalTransfers`) by keyword + scored debit/credit pairing within ±2 days, recomputed on load — see `docs/architecture.md`
-- **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `handleUpdateTransaction` in `useTransactionHandlers`
+- **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `editTransaction` in `services/mutations/transaction-mutations.ts`
 
 ## Environment
 
@@ -239,9 +245,9 @@ Requires `.env` with Supabase vars (see `.env.example`):
 
 Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip. Hooks extracted from App.tsx; store simplified. Deployed to Firebase Hosting. Test counts and line counts are deliberately not recorded here — they go stale within a PR.
 
-**Known shape of the code:** `Transactions.tsx` and `Dashboard.tsx` are very large — the refactor extracted hooks, not view components, so both define their sub-components inline at the top of the file.
+**Known shape of the code:** `Transactions.tsx` and `Dashboard.tsx` are very large — the refactor extracted hooks, not view components, so both define their sub-components inline at the top of the file. #140 moves them out one view per PR into `src/components/<view>/`; Categorías is done (`components/categories/`).
 
-**AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, `handleTransactionsImported` (`useTransactionHandlers`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
+**AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, `importTransactions` (`services/mutations/transaction-mutations.ts`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
 
 **AI Insights (shipped**, ADR-0001 + ADR-0002, `docs/decisions/000{1,2}-*.md`): Claude-generated spending insights over the user's **entire transaction history** (no period navigation — ADR-0002), using the stronger `INSIGHTS_MODEL`, cached in Supabase (`ai_insights`, one row per user — requires a manual `schema.sql` apply, see `supabase/README.md`).
 

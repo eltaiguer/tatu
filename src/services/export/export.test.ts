@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import type { Transaction } from '../../models'
 import { buildCsv, buildPdfReportHtml, exportTransactions } from './export'
 import { captureCsvDownload } from '../../test/csv-download'
+import { capturePrintFrame } from '../../test/print-frame'
+import { UserFacingError } from '../../utils/user-error'
 
 function makeTransaction(
   id: string,
@@ -121,27 +123,57 @@ describe('Export helpers', () => {
     expect(html).toContain('Export Report')
   })
 
-  it('opens a print window for PDF exports', () => {
-    const openSpy = vi.fn(() => ({
-      document: {
-        write: vi.fn(),
-        close: vi.fn(),
-      },
-      focus: vi.fn(),
-      print: vi.fn(),
-    })) as unknown as typeof window.open
+  it('prints the PDF report from a hidden frame instead of a popup (#179)', () => {
+    const frame = capturePrintFrame()
+    try {
+      const written = exportTransactions(
+        [makeTransaction('tx-1', { description: 'Devoto Pocitos' })],
+        { format: 'pdf', fileName: 'report' }
+      )
 
-    const originalOpen = window.open
-    window.open = openSpy
+      expect(written).toBe(1)
+      // window.open with noopener returns null per spec — never the path.
+      expect(frame.openSpy).not.toHaveBeenCalled()
+      expect(frame.printed()).toHaveLength(1)
+      expect(frame.printed()[0]).toContain('Devoto Pocitos')
+    } finally {
+      frame.restore()
+    }
+  })
 
-    exportTransactions([makeTransaction('tx-1')], {
-      format: 'pdf',
-      fileName: 'report',
-    })
+  it('reports a user-facing error when the PDF report cannot open (#179)', () => {
+    const frame = capturePrintFrame({ failing: true })
+    try {
+      expect(() =>
+        exportTransactions([makeTransaction('tx-1')], { format: 'pdf' })
+      ).toThrow(UserFacingError)
+      expect(frame.printed()).toHaveLength(0)
+    } finally {
+      frame.restore()
+    }
+  })
 
-    expect(openSpy).toHaveBeenCalled()
+  it('renders descriptions and the title as text, not HTML (#179)', () => {
+    const description = `<script>alert(1)</script> Pan & Co "x" 'y'`
+    const html = buildPdfReportHtml(
+      [makeTransaction('tx-1', { description })],
+      {
+        title: 'Gastos <b>2026</b> & más',
+      }
+    )
 
-    window.open = originalOpen
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    expect(doc.querySelector('script')).toBeNull()
+    expect(doc.querySelector('b')).toBeNull()
+    expect(doc.title).toBe('Gastos <b>2026</b> & más')
+    expect(doc.querySelector('h1')?.textContent).toBe(
+      'Gastos <b>2026</b> & más'
+    )
+    const cells = [...doc.querySelectorAll('tbody td')].map(
+      (td) => td.textContent
+    )
+    expect(cells).toContain(description)
+    expect(html).toContain('Pan &amp; Co')
   })
 })
 
