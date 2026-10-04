@@ -1,15 +1,12 @@
 import type { Transaction } from '../../models'
-import { applyFilters } from '../filters/filters'
 import { getCategoryDisplay } from '../../utils/category-display'
-import { isCategoryIgnored } from '../categories/category-registry'
+import { countsTowardTotals } from '../spending/spending-rules'
 
 export type ExportFormat = 'csv' | 'pdf'
 
 export interface ExportOptions {
   format: ExportFormat
   fileName?: string
-  dateFrom?: Date
-  dateTo?: Date
 }
 
 export interface PdfReportOptions {
@@ -19,6 +16,16 @@ export interface PdfReportOptions {
 
 function getExportCategoryLabel(category: string | undefined): string {
   return getCategoryDisplay(category).label
+}
+
+// Whether the row counts toward totals (1) or not (0), so summing the 1 rows
+// in a spreadsheet gives the app's totals: a split parent and its parts are
+// both in the file, only the parts count. 1/0 rather than sí/no survives any
+// encoding and locale, and multiplies straight into SUMPRODUCT.
+export const COUNTS_TOWARD_TOTALS_HEADER = 'cuenta_en_totales'
+
+function countsLabel(tx: Transaction): string {
+  return countsTowardTotals(tx) ? '1' : '0'
 }
 
 function csvEscape(value: string): string {
@@ -33,6 +40,7 @@ export function buildCsv(transactions: Transaction[]): string {
     'Currency',
     'Type',
     'Category',
+    COUNTS_TOWARD_TOTALS_HEADER,
   ]
   const rows = transactions.map((tx) => [
     tx.date.toISOString().slice(0, 10),
@@ -41,19 +49,10 @@ export function buildCsv(transactions: Transaction[]): string {
     tx.currency,
     tx.type,
     getExportCategoryLabel(tx.category),
+    countsLabel(tx),
   ])
 
   return [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n')
-}
-
-export function filterTransactionsForExport(
-  transactions: Transaction[],
-  options: { dateFrom?: Date; dateTo?: Date }
-): Transaction[] {
-  return applyFilters(transactions, {
-    dateFrom: options.dateFrom,
-    dateTo: options.dateTo,
-  }).filter((tx) => !isCategoryIgnored(tx.category))
 }
 
 export function buildPdfReportHtml(
@@ -73,6 +72,7 @@ export function buildPdfReportHtml(
           <td>${tx.currency}</td>
           <td>${tx.type}</td>
           <td>${getExportCategoryLabel(tx.category)}</td>
+          <td>${countsLabel(tx)}</td>
         </tr>
       `
     )
@@ -105,6 +105,7 @@ export function buildPdfReportHtml(
               <th>Currency</th>
               <th>Type</th>
               <th>Category</th>
+              <th>${COUNTS_TOWARD_TOTALS_HEADER}</th>
             </tr>
           </thead>
           <tbody>
@@ -142,23 +143,19 @@ function openPrintWindow(html: string) {
   printWindow.print()
 }
 
+// Writes exactly the rows it is given — callers decide which (Configuración
+// exports every row as a backup, Transacciones the rows on screen). Returns
+// how many rows it wrote (for PDF, how many it handed to the print window).
 export function exportTransactions(
   transactions: Transaction[],
   options: ExportOptions
-) {
-  const filtered = filterTransactionsForExport(transactions, {
-    dateFrom: options.dateFrom,
-    dateTo: options.dateTo,
-  })
-
+): number {
   const fileName = options.fileName ?? 'tatu-export'
 
   if (options.format === 'csv') {
-    const csv = buildCsv(filtered)
-    downloadCsv(csv, fileName)
-    return
+    downloadCsv(buildCsv(transactions), fileName)
+  } else {
+    openPrintWindow(buildPdfReportHtml(transactions, { title: fileName }))
   }
-
-  const html = buildPdfReportHtml(filtered, { title: fileName })
-  openPrintWindow(html)
+  return transactions.length
 }

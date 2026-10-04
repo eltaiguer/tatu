@@ -88,11 +88,13 @@ export function Settings({
   const [showKey, setShowKey] = useState(false)
   const { confirm: confirmReset, dialog: confirmDialog } = useConfirm()
 
+  // A full backup: every row, split parents and ignored rows included; the
+  // file's cuenta_en_totales column says which ones count.
   function handleExport(format: 'csv' | 'pdf') {
-    exportTransactions(transactions, { format })
+    const written = exportTransactions(transactions, { format })
     toast.success(
       format === 'csv'
-        ? `CSV exportado: ${transactions.length} transacciones`
+        ? `CSV exportado: ${written} transacciones`
         : 'Reporte PDF generado'
     )
   }

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from './ui/utils'
-import { Category, isSplitParentTx } from '../models'
+import { Category } from '../models'
 import type { Transaction } from '../models'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
@@ -33,7 +33,6 @@ import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
 import { fitMonoFontSize, formatCurrency } from '../utils/formatting'
-import { convert } from '../services/currency/convert'
 import type { Currency } from '../models'
 import { exportTransactions } from '../services/export/export'
 import { useConfirm } from './ConfirmDialog'
@@ -42,7 +41,7 @@ import {
   listCustomCategories,
   DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
-import { isCategoryIgnored } from '../services/categories/category-registry'
+import { sumCountedTotals } from '../services/spending/spending-rules'
 import {
   DEFAULT_URL_FILTERS,
   serializeFilterParams,
@@ -383,22 +382,10 @@ function TotalsStrip({
   fxRate: number
   ignoredCount: number
 }) {
-  const totals = useMemo(() => {
-    let income = 0
-    let expense = 0
-    rows.forEach((tx) => {
-      if (isCategoryIgnored(tx.category) || isSplitParentTx(tx)) return
-      const v = convert(
-        tx.amount,
-        tx.currency as Currency,
-        homeCurrency as Currency,
-        fxRate
-      )
-      if (tx.type === 'credit') income += v
-      else expense += v
-    })
-    return { income, expense, net: income - expense }
-  }, [rows, homeCurrency, fxRate])
+  const totals = useMemo(
+    () => sumCountedTotals(rows, homeCurrency as Currency, fxRate),
+    [rows, homeCurrency, fxRate]
+  )
 
   const cur = homeCurrency as Currency
   const net = totals.net

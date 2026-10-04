@@ -1,7 +1,7 @@
 import type { Currency, Transaction } from '../../models'
 import { convert } from '../currency/convert'
 import { normalizeCategoryId } from '../categories/category-aliases'
-import { isExcludedFromTotals } from './chart-data'
+import { isCountedExpense, countsAsRow } from '../spending/spending-rules'
 import { toMonthKey } from '../../utils/date-utils'
 
 // "What changed": each category's spend in the latest complete month vs the
@@ -86,7 +86,8 @@ export function categoryChanges(
   // Coverage: the first and last day each account has data for.
   const coverage = new Map<AccountKey, { first: string; last: string }>()
   for (const tx of transactions) {
-    if (tx.isSplitParent) continue
+    // Ignored rows (transfers) still prove the account has data that day.
+    if (!countsAsRow(tx)) continue
     const day = isoDay(tx.date)
     const key = accountOf(tx)
     const entry = coverage.get(key) ?? {
@@ -156,7 +157,7 @@ export function categoryChanges(
   const wanted = new Set([reference, ...baseline])
   const spend = new Map<string, Map<string, number>>()
   for (const tx of transactions) {
-    if (tx.type !== 'debit' || isExcludedFromTotals(tx)) continue
+    if (!isCountedExpense(tx)) continue
     const month = toMonthKey(tx.date)
     if (!wanted.has(month)) continue
     const category = normalizeCategoryId(tx.category)

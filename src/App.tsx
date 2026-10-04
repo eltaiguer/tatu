@@ -9,6 +9,7 @@ import {
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { pathForView, titleForView, viewFromPath } from './routes'
 import { normalizeCategoryId } from './services/categories/category-aliases'
+import { countsAsRow } from './services/spending/spending-rules'
 import {
   filterToSearch,
   parseFilterParams,
@@ -144,7 +145,7 @@ function App() {
     () =>
       transactions.filter(
         (tx) =>
-          !tx.isSplitParent &&
+          countsAsRow(tx) &&
           normalizeCategoryId(tx.category) === 'uncategorized'
       ).length,
     [transactions]

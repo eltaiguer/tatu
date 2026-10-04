@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { isCategoryIgnored } from '../services/categories/category-registry'
+import {
+  countsTowardTotals,
+  countsAsRow,
+} from '../services/spending/spending-rules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { getCategoryDisplay } from '../utils/category-display'
 import { getDisplayDescription } from '../utils/transaction-display'
@@ -84,7 +87,7 @@ export function useTransactionFiltering({
       // A split parent stands for its parts and is excluded from every total;
       // it never matches on its own fields (it is shown above matching parts
       // as context instead), so a drill-through adds up to the number clicked.
-      if (transaction.isSplitParent) return false
+      if (!countsAsRow(transaction)) return false
       if (dateFrom && transaction.date < dateFrom) return false
       if (dateTo && transaction.date > dateTo) return false
       if (
@@ -155,15 +158,14 @@ export function useTransactionFiltering({
 
   const filteredTransactions = useMemo(() => {
     if (showIgnored) return allFilteredTransactions
-    return allFilteredTransactions.filter(
-      (tx) => !isCategoryIgnored(tx.category)
-    )
+    // Split parents are already out, so the rows that don't count are the
+    // ignored ones; "show ignored" reveals them.
+    return allFilteredTransactions.filter(countsTowardTotals)
   }, [allFilteredTransactions, showIgnored])
 
   const ignoredCount = useMemo(
     () =>
-      allFilteredTransactions.filter((tx) => isCategoryIgnored(tx.category))
-        .length,
+      allFilteredTransactions.filter((tx) => !countsTowardTotals(tx)).length,
     [allFilteredTransactions]
   )
 
@@ -172,7 +174,7 @@ export function useTransactionFiltering({
       Array.from(
         new Set(
           transactions
-            .filter((tx) => !tx.isSplitParent)
+            .filter(countsAsRow)
             .map((tx) => normalizeCategoryId(tx.category))
         )
       ).sort((a, b) =>
