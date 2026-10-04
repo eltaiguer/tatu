@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
+import { Description as DialogDescriptionPrimitive } from '@radix-ui/react-dialog'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { cn } from './ui/utils'
@@ -110,12 +111,18 @@ export function SplitTransactionDialog({
       >
         <DialogHeader>
           <DialogTitle>Dividir transacción</DialogTitle>
-          <div className="mt-[2px] text-[13px] text-[var(--text-muted)]">
-            {transaction.description} &mdash;{' '}
-            <span className="font-mono">
-              {formatCurrency(parentAmount, currency)}
-            </span>
-          </div>
+          {/* The subtitle names the transaction being split, so it is the
+              dialog's accessible description. asChild keeps the element and
+              its classes exactly as they were (no default description
+              styles merged in). */}
+          <DialogDescriptionPrimitive asChild>
+            <div className="mt-[2px] text-[13px] text-[var(--text-muted)]">
+              {transaction.description} &mdash;{' '}
+              <span className="font-mono">
+                {formatCurrency(parentAmount, currency)}
+              </span>
+            </div>
+          </DialogDescriptionPrimitive>
         </DialogHeader>
 
         <div className="mx-0 my-[8px] flex flex-col gap-[8px]">

@@ -71,6 +71,13 @@ describe('SplitTransactionDialog', () => {
     expect(screen.getByText('Super y almacén')).toBeInTheDocument()
   })
 
+  it('describes the dialog with the transaction being split', async () => {
+    renderDialog({})
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveAccessibleDescription(/SUPERMERCADO ABC/)
+  })
+
   it('renders title when open with a transaction', async () => {
     renderDialog({})
     await waitFor(() => {

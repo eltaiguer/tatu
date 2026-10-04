@@ -1060,30 +1060,28 @@ export function Dashboard({
             ) : (
               <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[240px_1fr] sm:gap-9">
                 <div className="relative mx-auto h-[220px] w-[220px] sm:mx-0">
-                  <ResponsiveContainer width={220} height={220}>
-                    <PieChart>
-                      <Pie
-                        data={donutData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={72}
-                        outerRadius={100}
-                        dataKey="value"
-                        startAngle={90}
-                        endAngle={450}
-                      >
-                        {donutData.map((entry, i) => (
-                          <Cell
-                            key={i}
-                            fill={entry.color}
-                            cursor={openCategoryRow ? 'pointer' : undefined}
-                            onClick={() => openCategoryRow?.(entry.categoryId)}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip content={customTooltip} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <PieChart width={220} height={220}>
+                    <Pie
+                      data={donutData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={72}
+                      outerRadius={100}
+                      dataKey="value"
+                      startAngle={90}
+                      endAngle={450}
+                    >
+                      {donutData.map((entry, i) => (
+                        <Cell
+                          key={i}
+                          fill={entry.color}
+                          cursor={openCategoryRow ? 'pointer' : undefined}
+                          onClick={() => openCategoryRow?.(entry.categoryId)}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip content={customTooltip} />
+                  </PieChart>
                   <div className="pointer-events-none absolute top-[50%] left-[50%] [transform:translate(-50%,-50%)] text-center">
                     <div className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground">
                       TOTAL

@@ -161,6 +161,7 @@ Behavior testing — tests verify what the system does, not how it does it.
 - Test user-visible outcomes, not internal state
 - Write tests alongside implementation (not strictly test-first)
 - For bug fixes: a regression test covering the fixed behavior is expected
+- Any `console.error` / `console.warn` during a test fails it (`src/test/setup.ts`). When a test expects a log, spy on it and assert it: `vi.spyOn(console, 'error').mockImplementation(() => {})` + `expect(spy).toHaveBeenCalledWith(...)`. Test routers use `future={ROUTER_FUTURE}` (`src/router-future.ts`), same as the app
 - Run `npm run tdd:verify` (Prettier check + tests + lint) before considering work done
 - `App.test.tsx` and `App.supabase.test.tsx` are the slow integration suites (full-app render, several seconds per test); run single files while iterating. `testTimeout` is 20s on purpose (#78) — don't add retries. Vitest excludes `.claude/**` (agent worktrees).
 

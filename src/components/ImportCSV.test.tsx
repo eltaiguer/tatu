@@ -122,6 +122,7 @@ describe('ImportCSV', () => {
     parseCSVMock.mockImplementation(() => {
       throw new Error('CSV malformado')
     })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const onImportComplete = vi.fn()
     render(<ImportCSV onImportComplete={onImportComplete} />)
 
@@ -138,11 +139,13 @@ describe('ImportCSV', () => {
     expect(screen.getByText('CSV malformado')).toBeInTheDocument()
     expect(addTransactionsMock).not.toHaveBeenCalled()
     expect(onImportComplete).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
   })
 
   it('shows file read errors and does not persist', async () => {
     globalThis.FileReader =
       FailingFileReaderMock as unknown as typeof FileReader
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(<ImportCSV />)
 
     const input = screen.getByLabelText('Seleccionar archivo')
@@ -158,6 +161,7 @@ describe('ImportCSV', () => {
     expect(screen.getByText('Error al leer el archivo')).toBeInTheDocument()
     expect(parseCSVMock).not.toHaveBeenCalled()
     expect(addTransactionsMock).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
   })
 
   it('shows validating state while file is being processed', async () => {
