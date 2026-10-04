@@ -1,7 +1,14 @@
 import { afterEach, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { installConsoleGuard } from './console-guard'
+
+// findBy* / waitFor give up after `asyncUtilTimeout`, which is separate from
+// Vitest's testTimeout (20s, #78) and defaults to 1s. Under full-suite CPU
+// load an App-level view can take longer than that to render after
+// hydration, so the App suites failed with "Unable to find ..." (#191). A
+// broken wait still fails well inside testTimeout. Don't add retries instead.
+configure({ asyncUtilTimeout: 5_000 })
 
 // Cleanup after each test
 afterEach(() => {

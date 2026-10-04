@@ -539,7 +539,11 @@ describe('App with supabase enabled', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
     fireEvent.click(
-      screen.getAllByRole('button', { name: 'Editar AUT 998877 DEVOTO' })[0]
+      (
+        await screen.findAllByRole('button', {
+          name: 'Editar AUT 998877 DEVOTO',
+        })
+      )[0]
     )
     fireEvent.click(
       screen.getByLabelText('Esta y las que importes en el futuro')
