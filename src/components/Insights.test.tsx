@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Insights } from './Insights'
 import type { Transaction } from '../models'
 import { Category } from '../models'
@@ -162,14 +161,13 @@ describe('Insights', () => {
       isStale: false,
     })
     const onNavigateToTransactions = vi.fn()
-    const user = userEvent.setup()
 
     renderInsights({ onNavigateToTransactions })
 
     await waitFor(() =>
       expect(screen.getByText('Ver transacciones →')).toBeInTheDocument()
     )
-    await user.click(screen.getByText('Ver transacciones →'))
+    fireEvent.click(screen.getByText('Ver transacciones →'))
 
     expect(onNavigateToTransactions).toHaveBeenCalledWith({
       category: Category.Restaurants,
@@ -195,14 +193,13 @@ describe('Insights', () => {
     getCachedInsightsMock.mockResolvedValue(null)
     generateInsightsMock.mockResolvedValue(sampleResult)
     saveCachedInsightsMock.mockResolvedValue(undefined)
-    const user = userEvent.setup()
 
     renderInsights()
 
     await waitFor(() =>
       expect(screen.getByText('Generar insights')).toBeInTheDocument()
     )
-    await user.click(screen.getByText('Generar insights'))
+    fireEvent.click(screen.getByText('Generar insights'))
 
     await waitFor(() =>
       expect(
