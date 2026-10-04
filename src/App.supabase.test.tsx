@@ -455,7 +455,7 @@ describe('App with supabase enabled', () => {
     expect((await screen.findAllByText('New merchant')).length).toBeGreaterThan(
       0
     )
-  }, 15000)
+  })
 
   it('applies edit to future matching transactions only', async () => {
     getCurrentSessionMock.mockReturnValue({
