@@ -88,7 +88,7 @@ src/
     useAuthSession.ts      # Supabase auth session management
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
     useTransactionHandlers.ts  # The transaction mutations bound to the signed-in user's repository (thin; one contract without one)
-    useTransactionFiltering.ts # Filter + sort + paginate transactions
+    useTransactionFiltering.ts # React state (URL filter shape, period included) + sort + pagination around filterTransactions
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
@@ -97,7 +97,7 @@ src/
     repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
     mutations/             # transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored); category-counts.ts: rows per category
-    filters/               # url-filters.ts: Transacciones filters <-> URL query (the filtering itself is useTransactionFiltering)
+    filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; url-filters.ts: that state <-> URL query
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     charts/                # Chart data transformations; category-changes.ts feeds CategoryChangesCard
