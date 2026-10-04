@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from './ui/button'
+import { cn } from './ui/utils'
 import { Category, isSplitParentTx } from '../models'
 import type { Transaction } from '../models'
 import { getCategoryDisplay } from '../utils/category-display'
@@ -166,31 +167,12 @@ function MonthNav({
     period.m >= newest.getMonth()
 
   return (
-    <div style={{ position: 'relative', display: 'inline-flex' }} ref={ref}>
-      <div
-        style={{
-          display: 'inline-flex',
-          alignItems: 'stretch',
-          border: '1px solid var(--border)',
-          borderRadius: 8,
-          background: 'var(--surface)',
-          boxShadow: 'var(--shadow-sm)',
-          overflow: 'hidden',
-        }}
-      >
+    <div className="relative inline-flex" ref={ref}>
+      <div className="inline-flex items-stretch overflow-hidden rounded-[8px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
         <button
           onClick={() => shift(-1)}
           title="Mes anterior"
-          style={{
-            width: 36,
-            padding: 0,
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            color: 'var(--text-muted)',
-            display: 'grid',
-            placeItems: 'center',
-          }}
+          className="grid w-[36px] cursor-pointer place-items-center border-none bg-transparent p-0 text-[var(--text-muted)]"
           onMouseEnter={(e) =>
             ((e.currentTarget as HTMLElement).style.background = 'var(--muted)')
           }
@@ -202,24 +184,13 @@ function MonthNav({
         </button>
         <button
           onClick={() => setOpen((o) => !o)}
-          style={{
-            border: 'none',
-            borderLeft: '1px solid var(--border)',
-            borderRight: '1px solid var(--border)',
-            background: open ? 'var(--muted)' : 'transparent',
-            color: 'var(--text)',
-            font: 'inherit',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 9,
-            padding: '0 14px',
-            minWidth: 168,
-            justifyContent: 'center',
-          }}
+          className={cn(
+            'flex min-w-[168px] cursor-pointer items-center justify-center gap-[9px] border-r border-l border-[var(--border)] px-[14px] py-0 text-[var(--text)] [font:inherit]',
+            open ? 'bg-[var(--muted)]' : 'bg-transparent'
+          )}
         >
-          <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
-          <span style={{ fontWeight: 600, fontSize: 14 }}>
+          <Calendar size={14} className="text-[var(--text-muted)]" />
+          <span className="text-[14px] font-semibold">
             {getPeriodLabel(period)}
           </span>
           <svg
@@ -229,7 +200,7 @@ function MonthNav({
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
-            style={{ color: 'var(--text-muted)' }}
+            className="text-[var(--text-muted)]"
           >
             <path d="m6 9 6 6 6-6" />
           </svg>
@@ -238,17 +209,10 @@ function MonthNav({
           onClick={() => shift(1)}
           title="Mes siguiente"
           disabled={nextDisabled}
-          style={{
-            width: 36,
-            padding: 0,
-            border: 'none',
-            background: 'transparent',
-            cursor: nextDisabled ? 'not-allowed' : 'pointer',
-            color: 'var(--text-muted)',
-            display: 'grid',
-            placeItems: 'center',
-            opacity: nextDisabled ? 0.4 : 1,
-          }}
+          className={cn(
+            'grid w-[36px] place-items-center border-none bg-transparent p-0 text-[var(--text-muted)]',
+            nextDisabled ? 'cursor-not-allowed opacity-[0.4]' : 'cursor-pointer'
+          )}
           onMouseEnter={(e) => {
             if (!nextDisabled)
               (e.currentTarget as HTMLElement).style.background = 'var(--muted)'
@@ -262,29 +226,9 @@ function MonthNav({
       </div>
 
       {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 8px)',
-            left: 0,
-            zIndex: 40,
-            width: 300,
-            padding: 14,
-            boxShadow: 'var(--shadow-lg)',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-          }}
-        >
+        <div className="absolute top-[calc(100%+8px)] left-0 z-[40] w-[300px] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[14px] shadow-[var(--shadow-lg)]">
           {/* Quick options */}
-          <div
-            style={{
-              display: 'flex',
-              gap: 6,
-              flexWrap: 'wrap',
-              marginBottom: 12,
-            }}
-          >
+          <div className="mb-[12px] flex flex-wrap gap-[6px]">
             {[
               {
                 // The shortcut jumps to the newest month with data; only call
@@ -330,43 +274,24 @@ function MonthNav({
               </Button>
             ))}
           </div>
-          <hr
-            style={{
-              margin: '0 -14px 12px',
-              border: 'none',
-              borderTop: '1px solid var(--border)',
-            }}
-          />
+          <hr className="mx-[-14px] mt-0 mb-[12px] border-t border-[var(--border)]" />
           {/* Year nav */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 10,
-            }}
-          >
+          <div className="mb-[10px] flex items-center justify-between">
             <Button
               variant="ghost"
               size="sm"
-              style={{ width: 28, height: 28, padding: 0 }}
+              className="h-[28px] w-[28px] p-0!"
               onClick={() => setGridYear((y) => y - 1)}
             >
               <ChevronLeft size={15} />
             </Button>
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontWeight: 600,
-                fontSize: 14,
-              }}
-            >
+            <span className="font-[family-name:var(--font-mono)] text-[14px] font-semibold">
               {gridYear}
             </span>
             <Button
               variant="ghost"
               size="sm"
-              style={{ width: 28, height: 28, padding: 0 }}
+              className="h-[28px] w-[28px] p-0!"
               disabled={gridYear >= newest.getFullYear()}
               onClick={() => setGridYear((y) => y + 1)}
             >
@@ -374,13 +299,7 @@ function MonthNav({
             </Button>
           </div>
           {/* Month grid */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 6,
-            }}
-          >
+          <div className="grid grid-cols-[repeat(3,1fr)] gap-[6px]">
             {MONTHS_ES_SHORT.map((mo, i) => {
               const isFuture =
                 gridYear > newest.getFullYear() ||
@@ -395,10 +314,7 @@ function MonthNav({
                   variant={isSel ? 'default' : 'outline'}
                   size="sm"
                   disabled={isFuture}
-                  style={{
-                    padding: '7px 0',
-                    opacity: isFuture ? 0.35 : 1,
-                  }}
+                  className="px-0 py-[7px] disabled:opacity-[0.35]"
                   onClick={() => {
                     setPeriod({ mode: 'month', y: gridYear, m: i })
                     setOpen(false)
@@ -434,62 +350,24 @@ function TotalTile({
   icon: React.ReactNode
 }) {
   return (
-    <div
-      style={{
-        padding: '14px 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 3,
-        minWidth: 0,
-        containerType: 'inline-size',
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          minWidth: 0,
-        }}
-      >
-        <span
-          style={{ color: 'var(--text-muted)', display: 'grid', flexShrink: 0 }}
-        >
-          {icon}
-        </span>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            color: 'var(--text-muted)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
+    <div className="@container flex min-w-0 flex-col gap-[3px] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-[16px] py-[14px]">
+      <div className="flex min-w-0 items-center gap-[6px]">
+        <span className="grid shrink-0 text-[var(--text-muted)]">{icon}</span>
+        <span className="overflow-hidden text-[11px] font-semibold tracking-[0.05em] text-ellipsis whitespace-nowrap text-[var(--text-muted)] uppercase">
           {label}
         </span>
       </div>
       <div
-        className="font-mono"
+        className="font-mono font-semibold tracking-[-0.02em] whitespace-nowrap"
         style={{
+          // Data-driven: sized to the row's longest value; color per tile.
           fontSize: fitMonoFontSize(fitTo, 22),
-          fontWeight: 600,
           color: accent ?? 'var(--text)',
-          letterSpacing: '-0.02em',
-          whiteSpace: 'nowrap',
         }}
       >
         {value}
       </div>
-      {sub && (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{sub}</div>
-      )}
+      {sub && <div className="text-[12px] text-[var(--text-muted)]">{sub}</div>}
     </div>
   )
 }
@@ -600,32 +478,12 @@ function BulkBar({
   useClickOutside(catRef, () => setCatOpen(false))
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 26,
-        left: 'calc(50% + var(--sidebar-w, 252px) / 2)',
-        transform: 'translateX(-50%)',
-        zIndex: 70,
-        animation: 'fadeUp 0.2s both',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: '10px 12px 10px 16px',
-          borderRadius: 999,
-          boxShadow: 'var(--shadow-lg)',
-          border: '1px solid var(--border)',
-          background: 'var(--surface)',
-        }}
-      >
+    <div className="fixed bottom-[26px] left-[calc(50%+var(--sidebar-w,252px)/2)] z-[70] [transform:translateX(-50%)] [animation:fadeUp_0.2s_both]">
+      <div className="flex items-center gap-[10px] rounded-[999px] border border-[var(--border)] bg-[var(--surface)] py-[10px] pr-[12px] pl-[16px] shadow-[var(--shadow-lg)]">
         <span
           role="status"
           aria-live="polite"
-          style={{ fontWeight: 600, fontSize: 14, whiteSpace: 'nowrap' }}
+          className="text-[14px] font-semibold whitespace-nowrap"
         >
           {count} seleccionada{count !== 1 ? 's' : ''}
         </span>
@@ -634,65 +492,27 @@ function BulkBar({
           <button
             onClick={onSelectAll}
             disabled={isBusy}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--brand)',
-              fontSize: 13,
-              padding: 0,
-              whiteSpace: 'nowrap',
-            }}
+            className="cursor-pointer border-none bg-transparent bg-none p-0 text-[13px] whitespace-nowrap text-[var(--brand)]"
           >
             Seleccionar las {total} transacciones
           </button>
         )}
 
-        <span style={{ width: 1, height: 22, background: 'var(--border)' }} />
+        <span className="h-[22px] w-[1px] bg-[var(--border)]" />
 
-        <div
-          style={{ display: 'flex', gap: 4, position: 'relative' }}
-          ref={catRef}
-        >
+        <div className="relative flex gap-[4px]" ref={catRef}>
           {/* Quick categorize */}
           <button
             onClick={() => setCatOpen((o) => !o)}
             disabled={isBusy}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              height: 32,
-              padding: '0 10px',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              background: 'transparent',
-              cursor: 'pointer',
-              font: 'inherit',
-              fontSize: 13,
-            }}
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]!"
           >
             <Tag size={13} />
             Categorizar
           </button>
 
           {catOpen && (
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 'calc(100% + 10px)',
-                left: 0,
-                zIndex: 80,
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                padding: 6,
-                width: 220,
-                maxHeight: 280,
-                overflowY: 'auto',
-                boxShadow: 'var(--shadow-lg)',
-              }}
-            >
+            <div className="absolute bottom-[calc(100%+10px)] left-0 z-[80] max-h-[280px] w-[220px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[6px] shadow-[var(--shadow-lg)]">
               {categorySuggestions.map((cat) => {
                 const { label, color } = getCategoryDisplay(cat)
                 return (
@@ -702,20 +522,7 @@ function BulkBar({
                       onCategorize(cat)
                       setCatOpen(false)
                     }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 9,
-                      width: '100%',
-                      padding: '7px 9px',
-                      border: 'none',
-                      background: 'transparent',
-                      borderRadius: 7,
-                      cursor: 'pointer',
-                      font: 'inherit',
-                      fontSize: 13,
-                      color: 'var(--text)',
-                    }}
+                    className="flex w-full cursor-pointer items-center gap-[9px] rounded-[7px] border-none bg-transparent px-[9px] py-[7px] [font:inherit] text-[13px]! text-[var(--text)]"
                     onMouseEnter={(e) =>
                       ((e.currentTarget as HTMLElement).style.background =
                         'var(--muted)')
@@ -726,13 +533,8 @@ function BulkBar({
                     }
                   >
                     <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 3,
-                        background: color,
-                        flexShrink: 0,
-                      }}
+                      className="h-[8px] w-[8px] shrink-0 rounded-[3px]"
+                      style={{ background: color }}
                     />
                     {label}
                   </button>
@@ -745,19 +547,7 @@ function BulkBar({
           <button
             onClick={onEdit}
             disabled={isBusy}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              height: 32,
-              padding: '0 10px',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              background: 'transparent',
-              cursor: 'pointer',
-              font: 'inherit',
-              fontSize: 13,
-            }}
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]!"
             aria-label="Editar seleccionadas"
           >
             <Pencil size={13} />
@@ -767,19 +557,7 @@ function BulkBar({
           <button
             onClick={onAuto}
             disabled={isBusy}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              height: 32,
-              padding: '0 10px',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              background: 'transparent',
-              cursor: 'pointer',
-              font: 'inherit',
-              fontSize: 13,
-            }}
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]!"
           >
             {isAutoCategorizing ? (
               <Loader2 size={13} className="animate-spin" />
@@ -792,19 +570,7 @@ function BulkBar({
           <button
             onClick={onIgnore}
             disabled={isBusy}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              height: 32,
-              padding: '0 10px',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              background: 'transparent',
-              cursor: 'pointer',
-              font: 'inherit',
-              fontSize: 13,
-            }}
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]!"
           >
             <Slash size={13} />
             Ignorar
@@ -813,43 +579,20 @@ function BulkBar({
           <button
             onClick={onDelete}
             disabled={isBusy}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              height: 32,
-              padding: '0 10px',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              background: 'transparent',
-              color: 'var(--neg)',
-              cursor: 'pointer',
-              font: 'inherit',
-              fontSize: 13,
-            }}
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! text-[var(--neg)]"
           >
             <Trash2 size={13} />
             Eliminar
           </button>
         </div>
 
-        <span style={{ width: 1, height: 22, background: 'var(--border)' }} />
+        <span className="h-[22px] w-[1px] bg-[var(--border)]" />
 
         <button
           onClick={onClear}
           title="Deseleccionar"
           disabled={isBusy}
-          style={{
-            width: 30,
-            height: 30,
-            border: 'none',
-            background: 'transparent',
-            cursor: 'pointer',
-            color: 'var(--text-muted)',
-            display: 'grid',
-            placeItems: 'center',
-            borderRadius: 999,
-          }}
+          className="grid h-[30px] w-[30px] cursor-pointer place-items-center rounded-[999px] border-none bg-transparent text-[var(--text-muted)]"
         >
           <svg
             width="16"
@@ -1630,7 +1373,7 @@ export function Transactions({
               onClick={() =>
                 exportTransactions(filteredTransactions, { format: 'csv' })
               }
-              style={{ gap: 6 }}
+              className="gap-[6px]"
             >
               <Download size={15} />
               Exportar
