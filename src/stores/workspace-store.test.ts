@@ -28,6 +28,13 @@ function loadFor(session: SupabaseSession): Promise<Loaded> {
   return loads.get(id)!
 }
 
+// The pending load for `id`, created on demand: a hydrate only starts
+// loading after pending saves have flushed, a microtask later.
+function deferred(id: string) {
+  loadFor({ user: { id } } as SupabaseSession)
+  return pending.get(id)!
+}
+
 const saveUserPreferences = vi.fn<
   [SupabaseSession, UserPreferences],
   Promise<void>
@@ -85,6 +92,7 @@ import {
   DEFAULT_PREFERENCES,
   flushPreferenceSaves,
   hydrateWorkspace,
+  PREFERENCE_FLUSH_TIMEOUT_MS,
   setPreference,
   startEmptyWorkspace,
   teardownWorkspace,
@@ -157,7 +165,7 @@ const EMPTY = {
 
 async function signIn(id: string, preferences: UserPreferences | null) {
   const hydration = hydrateWorkspace(session(id))
-  pending.get(id)!.resolve(dataOf(id, preferences))
+  deferred(id).resolve(dataOf(id, preferences))
   await hydration.done
 }
 
@@ -206,7 +214,7 @@ describe('workspace store', () => {
     const hydration = hydrateWorkspace(session('a'))
     teardownWorkspace()
 
-    pending.get('a')!.resolve(dataOf('a', A_PREFS))
+    deferred('a').resolve(dataOf('a', A_PREFS))
     await hydration.done
 
     expect(snapshot()).toEqual(EMPTY)
@@ -216,9 +224,9 @@ describe('workspace store', () => {
     const forA = hydrateWorkspace(session('a'))
     const forB = hydrateWorkspace(session('b'))
 
-    pending.get('b')!.resolve(dataOf('b', null))
+    deferred('b').resolve(dataOf('b', null))
     await forB.done
-    pending.get('a')!.resolve(dataOf('a', A_PREFS))
+    deferred('a').resolve(dataOf('a', A_PREFS))
     await forA.done
 
     expect(snapshot()).toMatchObject({
@@ -237,7 +245,7 @@ describe('workspace store', () => {
     const hydration = hydrateWorkspace(session('a'))
     hydration.abandon()
 
-    pending.get('a')!.resolve(dataOf('a', A_PREFS))
+    deferred('a').resolve(dataOf('a', A_PREFS))
     await hydration.done
 
     expect(snapshot().transactions).toEqual([])
@@ -246,7 +254,7 @@ describe('workspace store', () => {
 
   it('reports a failed load without applying anything', async () => {
     const hydration = hydrateWorkspace(session('a'))
-    pending.get('a')!.reject(new Error('offline'))
+    deferred('a').reject(new Error('offline'))
     await hydration.done
 
     expect(snapshot()).toEqual({ ...EMPTY, userId: 'a', status: 'error' })
@@ -304,6 +312,52 @@ describe('workspace store', () => {
 
       const keys = saveUserPreferences.mock.calls.map(([, p]) => p.claudeApiKey)
       expect(keys).toEqual(['sk', 'sk-an'])
+    })
+
+    it('a reload waits for a pending save, so it reads the saved values instead of reverting them', async () => {
+      await signIn('a', A_PREFS)
+      let release: () => void = () => {}
+      saveUserPreferences.mockImplementationOnce(
+        () => new Promise<void>((resolve) => (release = resolve))
+      )
+      setPreference(session('a'), 'fxRate', 43)
+
+      // Refetch (e.g. Transacciones' reload) while the save is in flight.
+      loads.delete('a')
+      pending.delete('a')
+      const reload = hydrateWorkspace(session('a'))
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(pending.has('a')).toBe(false)
+
+      release()
+      await vi.waitFor(() => expect(pending.has('a')).toBe(true))
+      // The server row now has the saved value.
+      deferred('a').resolve(dataOf('a', { ...A_PREFS, fxRate: 43 }))
+      await reload.done
+
+      expect(workspaceStore.getState().preferences.fxRate).toBe(43)
+      expect(workspaceStore.getState().status).toBe('ready')
+    })
+
+    it('stops waiting for a hung save after a bounded time', async () => {
+      vi.useFakeTimers()
+      try {
+        await signIn('a', A_PREFS)
+        saveUserPreferences.mockImplementationOnce(
+          () => new Promise<void>(() => {})
+        )
+        setPreference(session('a'), 'fxRate', 43)
+
+        let flushed = false
+        void flushPreferenceSaves().then(() => (flushed = true))
+        await vi.advanceTimersByTimeAsync(PREFERENCE_FLUSH_TIMEOUT_MS - 1)
+        expect(flushed).toBe(false)
+        await vi.advanceTimersByTimeAsync(1)
+        expect(flushed).toBe(true)
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
     it('drops a not-yet-sent save of a user who signs out', async () => {

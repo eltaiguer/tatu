@@ -17,7 +17,10 @@ import {
 import type { SupabaseSession } from './services/supabase/client'
 import type { UserPreferences } from './services/supabase/user-preferences'
 import { getAiConfig } from './services/ai/ai-config'
-import { teardownWorkspace } from './stores/workspace-store'
+import {
+  PREFERENCE_FLUSH_TIMEOUT_MS,
+  teardownWorkspace,
+} from './stores/workspace-store'
 
 const {
   getCurrentSessionMock,
@@ -229,6 +232,68 @@ describe('switching users on the same tab (#117, #123)', () => {
     await showSignInScreen()
 
     await expectUserBIsClean()
+  })
+
+  describe('when a preference save hangs', () => {
+    // A's last keystroke is saved by a request that never answers.
+    async function userAHasAHungSave() {
+      await userASetsKey()
+      saveUserPreferencesMock.mockImplementationOnce(
+        () => new Promise(() => {})
+      )
+      fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), {
+        target: { value: `${A_KEY}-2` },
+      })
+      await waitFor(() =>
+        expect(savesFor('user-a')).toContainEqual(
+          expect.objectContaining({ claudeApiKey: `${A_KEY}-2` })
+        )
+      )
+    }
+
+    it('signing out still completes and tears down', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        await userAHasAHungSave()
+
+        fireEvent.click(
+          screen.getAllByRole('button', { name: 'Cerrar sesión' })[0]
+        )
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(PREFERENCE_FLUSH_TIMEOUT_MS)
+        })
+        await showSignInScreen()
+        expect(signOutMock).toHaveBeenCalled()
+        expect(getAiConfig()).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+      await expectUserBIsClean()
+    })
+
+    it('resetting all data still completes and clears the key', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      try {
+        await userAHasAHungSave()
+
+        fireEvent.click(screen.getByRole('button', { name: 'Resetear' }))
+        fireEvent.click(
+          await screen.findByRole('button', { name: 'Eliminar todo' })
+        )
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(PREFERENCE_FLUSH_TIMEOUT_MS)
+        })
+        await waitFor(() =>
+          expect(resetUserSupabaseDataMock).toHaveBeenCalledTimes(1)
+        )
+        await waitFor(() =>
+          expect(screen.getByPlaceholderText('sk-ant-...')).toHaveValue('')
+        )
+        expect(getAiConfig()).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 
   it('a SIGNED_OUT event from Supabase leaves nothing of A for B', async () => {

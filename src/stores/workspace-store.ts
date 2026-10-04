@@ -92,9 +92,10 @@ export function teardownWorkspace(): void {
   replaceCustomPatterns([])
   replaceCustomCategories([])
   applyPreferences({ ...DEFAULT_PREFERENCES })
-  // A save not yet sent belongs to the user who is leaving; one already in
-  // flight finishes against that user's own row.
-  queuedSave = null
+  // A save not yet sent belongs to the user who is leaving: drop it. One
+  // already in flight finishes against that user's own row, but nothing
+  // waits on it any more (a hung request can't block the next user's saves).
+  detachSaves()
   workspaceStore.setState({ userId: null, status: 'idle' })
 }
 
@@ -132,17 +133,21 @@ export function hydrateWorkspace(session: SupabaseSession): Hydration {
   const isCurrent = () => generation === myGeneration
   workspaceStore.setState({ userId, status: 'loading' })
 
-  const done = loadEverything(session).then(
-    (loaded) => {
-      if (!isCurrent()) return
-      applyLoaded(loaded)
-      workspaceStore.setState({ status: 'ready' })
-    },
-    () => {
-      if (!isCurrent()) return
-      workspaceStore.setState({ status: 'error' })
-    }
-  )
+  // A reload while an edit is still being saved would read the old row and
+  // revert the edit in memory: let pending saves land first.
+  const done = flushPreferenceSaves()
+    .then(() => (isCurrent() ? loadEverything(session) : null))
+    .then(
+      (loaded) => {
+        if (!loaded || !isCurrent()) return
+        applyLoaded(loaded)
+        workspaceStore.setState({ status: 'ready' })
+      },
+      () => {
+        if (!isCurrent()) return
+        workspaceStore.setState({ status: 'error' })
+      }
+    )
 
   return {
     done,
@@ -251,6 +256,13 @@ let queuedSave: {
   preferences: UserPreferences
 } | null = null
 let saving: Promise<void> | null = null
+let saveEpoch = 0
+
+function detachSaves(): void {
+  saveEpoch += 1
+  queuedSave = null
+  saving = null
+}
 
 function enqueueSave(
   session: SupabaseSession,
@@ -258,14 +270,15 @@ function enqueueSave(
 ): void {
   queuedSave = { session, preferences }
   if (!saving) {
-    saving = drainSaves().finally(() => {
-      saving = null
+    const drain: Promise<void> = drainSaves(saveEpoch).finally(() => {
+      if (saving === drain) saving = null
     })
+    saving = drain
   }
 }
 
-async function drainSaves(): Promise<void> {
-  while (queuedSave) {
+async function drainSaves(epoch: number): Promise<void> {
+  while (queuedSave && epoch === saveEpoch) {
     const { session, preferences } = queuedSave
     queuedSave = null
     try {
@@ -277,11 +290,24 @@ async function drainSaves(): Promise<void> {
   }
 }
 
+/** How long sign-out, reset and reloads wait for a pending preference save. */
+export const PREFERENCE_FLUSH_TIMEOUT_MS = 3000
+
 /**
- * Settles once every pending preference save has finished. Await it before
- * signing out or deleting the user's data, so a late save can't recreate a
- * row that was just deleted.
+ * Settles once every pending preference save has finished, or after
+ * `timeoutMs` — a hung request must never block sign-out or reset. Await it
+ * before signing out or deleting the user's data, so a late save can't
+ * recreate a row that was just deleted. Never rejects.
  */
-export function flushPreferenceSaves(): Promise<void> {
-  return saving ?? Promise.resolve()
+export function flushPreferenceSaves(
+  timeoutMs = PREFERENCE_FLUSH_TIMEOUT_MS
+): Promise<void> {
+  if (!saving) return Promise.resolve()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    saving,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, timeoutMs)
+    }),
+  ]).finally(() => clearTimeout(timer))
 }
