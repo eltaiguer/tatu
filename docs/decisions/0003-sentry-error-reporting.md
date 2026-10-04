@@ -30,7 +30,8 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
 
 - **Off unless configured.** `initErrorReporting()` (called from `main.tsx`)
   does nothing without `VITE_SENTRY_DSN`, so local dev and tests never send
-  anything. A build without the DSN also tree-shakes the SDK out.
+  anything. A build without the DSN drops `Sentry.init`
+  and the integrations, leaving a stub chunk of about 4 KB gzipped.
 - **Collect as little as possible.** `dataCollection` disables user info,
   cookies, headers, bodies, query params, AI inputs/outputs and stack-frame
   variables. Console, fetch/XHR and click breadcrumbs are disabled. Click breadcrumbs

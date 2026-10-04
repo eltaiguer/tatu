@@ -57,7 +57,11 @@ import {
   applyAiEnrichment,
 } from '../services/ai'
 import { buildCorrectionContext } from '../services/ai/correction-context'
-import { NeedsConfirmationError, UserFacingError } from '../utils/user-error'
+import {
+  NeedsConfirmationError,
+  UserFacingError,
+  isUnexpectedAiError,
+} from '../utils/user-error'
 
 const MISSING_TRANSACTION = new UserFacingError(
   'La transacción ya no existe. Recargá para ver el estado actual.'
@@ -220,7 +224,7 @@ export function useTransactionHandlers({
           aiError =
             error instanceof Error ? error.message : 'Error desconocido de IA'
           console.error('AI enrichment failed during import:', error)
-          captureError(error, 'ai')
+          if (isUnexpectedAiError(aiError)) captureError(error, 'ai')
         }
       }
     }

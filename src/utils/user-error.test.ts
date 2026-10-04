@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureError } from '../services/monitoring/error-reporting'
-import { UserFacingError, aiErrorMessage, userErrorMessage } from './user-error'
+import {
+  UserFacingError,
+  aiErrorMessage,
+  isUnexpectedAiError,
+  userErrorMessage,
+} from './user-error'
 
 vi.mock('../services/monitoring/error-reporting', () => ({
   captureError: vi.fn(),
@@ -84,5 +89,24 @@ describe('aiErrorMessage', () => {
     const msg =
       'La respuesta del modelo quedó truncada (límite de tokens alcanzado).'
     expect(aiErrorMessage(msg)).toBe(msg)
+  })
+})
+
+describe('isUnexpectedAiError', () => {
+  it('is false for problems with the key, quota, credit or service', () => {
+    expect(isUnexpectedAiError('401 invalid x-api-key')).toBe(false)
+    expect(isUnexpectedAiError('429 rate_limit_error')).toBe(false)
+    expect(isUnexpectedAiError('400 credit balance is too low')).toBe(false)
+    expect(isUnexpectedAiError('529 overloaded')).toBe(false)
+    expect(isUnexpectedAiError('Failed to fetch')).toBe(false)
+  })
+
+  it("is true for unknown failures and the app's own errors", () => {
+    expect(isUnexpectedAiError('Cannot read properties of undefined')).toBe(
+      true
+    )
+    expect(
+      isUnexpectedAiError('Respuesta inesperada del modelo (tipo: tool_use)')
+    ).toBe(true)
   })
 })
