@@ -685,4 +685,111 @@ describe('Dashboard', () => {
       })
     })
   })
+
+  describe('what changed', () => {
+    // Card data on the first and last days of Jun–Sep makes each month
+    // complete; restaurants jump in September.
+    const months = ['2026-06', '2026-07', '2026-08', '2026-09']
+    const transactions: Transaction[] = months.flatMap((m, i) => [
+      makeTransaction({
+        id: `edge-a-${i}`,
+        date: new Date(`${m}-01T12:00:00.000Z`),
+        amount: 1,
+        currency: 'USD',
+        source: 'credit_card',
+        category: Category.Fees,
+      }),
+      makeTransaction({
+        id: `edge-b-${i}`,
+        date: new Date(`${m}-28T12:00:00.000Z`),
+        amount: 1,
+        currency: 'USD',
+        source: 'credit_card',
+        category: Category.Fees,
+      }),
+      makeTransaction({
+        id: `rest-${i}`,
+        date: new Date(`${m}-10T12:00:00.000Z`),
+        amount: m === '2026-09' ? 400 : 300,
+        currency: 'USD',
+        source: 'credit_card',
+        category: Category.Restaurants,
+      }),
+      makeTransaction({
+        id: `none-${i}`,
+        date: new Date(`${m}-12T12:00:00.000Z`),
+        amount: 20,
+        currency: 'USD',
+        source: 'credit_card',
+        category: undefined,
+      }),
+    ])
+
+    function setup() {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-03T12:00:00.000Z'))
+      const go = vi.fn()
+      render(
+        <Dashboard
+          transactions={transactions}
+          homeCurrency="USD"
+          fxRate={40}
+          onNavigateToTransactions={go}
+        />
+      )
+      vi.useRealTimers()
+      return go
+    }
+
+    it("leads with the month's biggest change and links to both sides of it", () => {
+      const go = setup()
+
+      expect(
+        screen.getByText(/Qué cambió en setiembre|Qué cambió en septiembre/)
+      ).toBeInTheDocument()
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: /Ver los gastos en Restaurantes de (setiembre|septiembre)/,
+        })
+      )
+      expect(go).toHaveBeenLastCalledWith({
+        categories: ['restaurants'],
+        type: 'debit',
+        period: { mode: 'month', y: 2026, m: 8 },
+      })
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: /Ver los gastos en Restaurantes de jun/,
+        })
+      )
+      expect(go).toHaveBeenLastCalledWith({
+        categories: ['restaurants'],
+        type: 'debit',
+        period: { mode: 'range', from: '2026-06-01', to: '2026-08-31' },
+      })
+    })
+
+    it('replaces the vanity tile with uncategorized spend that links to its rows', () => {
+      const go = setup()
+
+      expect(screen.queryByText('Categorías activas')).not.toBeInTheDocument()
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Ver los gastos sin categoría' })
+      )
+      expect(go).toHaveBeenLastCalledWith({
+        categories: ['uncategorized'],
+        type: 'debit',
+      })
+      expect(
+        screen.getByText(/4 gastos · todo el historial/)
+      ).toBeInTheDocument()
+    })
+
+    it('labels each account card with the period of its own expenses', () => {
+      setup()
+      expect(
+        screen.getAllByText(/jun\.? 2026 – sep|jun\.? 2026 – set/).length
+      ).toBeGreaterThan(0)
+    })
+  })
 })

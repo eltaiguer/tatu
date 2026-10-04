@@ -209,6 +209,10 @@ export interface AccountSpend {
   UYU: number
   count: number
   pct: number
+  // Dates of the first and last expense summed, so a card can say which
+  // period its own number covers (accounts are imported separately).
+  first?: Date
+  last?: Date
 }
 
 export type SpendByAccount = Record<AccountBucket, AccountSpend>
@@ -241,6 +245,8 @@ export function spendByAccount(
       a.conv += convert(tx.amount, tx.currency, homeCurrency, fxRate)
       a[tx.currency] += tx.amount
       a.count++
+      if (!a.first || tx.date < a.first) a.first = tx.date
+      if (!a.last || tx.date > a.last) a.last = tx.date
     })
 
   const total = map.card.conv + map.usd.conv + map.uyu.conv || 1
