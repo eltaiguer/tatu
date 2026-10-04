@@ -39,6 +39,7 @@ import { replaceCustomCategories } from '../services/categories/category-store'
 import { setAiConfig } from '../services/ai/ai-config'
 import { DEFAULT_PREFERENCES } from '../services/preferences/defaults'
 import { transactionStore } from './transaction-store'
+import { captureError } from '../services/monitoring/error-reporting'
 
 export type { UserPreferences }
 export { DEFAULT_PREFERENCES }
@@ -285,6 +286,7 @@ async function drainSaves(epoch: number): Promise<void> {
       await saveUserPreferences(session, preferences)
     } catch (err) {
       console.error('preferences save failed:', err)
+      captureError(err, 'preferences')
       toast.error('No se pudieron guardar las preferencias. Intentá de nuevo.')
     }
   }

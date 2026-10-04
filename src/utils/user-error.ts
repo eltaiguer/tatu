@@ -1,3 +1,5 @@
+import { captureError } from '../services/monitoring/error-reporting'
+
 // Errors whose message is already written for the user (Spanish, no jargon).
 // Anything else — Supabase/PostgREST text, fetch failures — is translated by
 // `userErrorMessage` so raw English never reaches a toast.
@@ -32,6 +34,7 @@ export function userErrorMessage(error: unknown, fallback: string): string {
     return error.message
   }
   console.error(error)
+  captureError(error)
   if (isNetworkError(error)) {
     return 'Sin conexión con el servidor. Revisá tu conexión e intentá de nuevo.'
   }

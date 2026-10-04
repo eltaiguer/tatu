@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import type { SupabaseSession } from '../services/supabase/client'
 import type { Transaction } from '../models'
 import { transactionStore } from '../stores/transaction-store'
+import { captureError } from '../services/monitoring/error-reporting'
 import {
   persistTransactions,
   softDeleteTransaction,
@@ -219,6 +220,7 @@ export function useTransactionHandlers({
           aiError =
             error instanceof Error ? error.message : 'Error desconocido de IA'
           console.error('AI enrichment failed during import:', error)
+          captureError(error, 'ai')
         }
       }
     }
@@ -252,6 +254,7 @@ export function useTransactionHandlers({
         })
       } catch (error) {
         console.error('Could not complete import run record:', error)
+        captureError(error, 'import')
       }
     }
 

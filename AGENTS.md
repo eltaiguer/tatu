@@ -104,6 +104,7 @@ src/
     ai/                    # Client-side Claude (BYO API key): categorization/enrichment; models.ts is the only place model IDs live
     preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
     insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
+    monitoring/            # error-reporting.ts: Sentry init, captureError, scrubbers (ADR-0003)
     supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data), runtime (active session)
     firebase.ts            # Firebase config
   App.tsx / main.tsx       # Shell (auth, sync, view switch) / BrowserRouter mount
@@ -212,6 +213,7 @@ A task is done only when:
 - **Tests**: Colocated with source files as `.test.ts` / `.test.tsx`
 - **State**: Zustand with `createStore` (vanilla, SSR-ready), no persist middleware
 - **Language**: UI copy is Spanish (rioplatense); code, comments and identifiers are English. User-facing errors go through `utils/user-error.ts` (`UserFacingError`, `userErrorMessage`) so raw Supabase/English text never reaches a toast.
+- **Error reporting**: `userErrorMessage` reports unexpected errors to Sentry. An error you log but don't pass to it needs `captureError(error, area)` (`services/monitoring/error-reporting.ts`). Quote user data in error messages (`"${value}"`) so the scrubber redacts it.
 - **Categories**: `Category` enum with Spanish labels, emoji icons, and hex colors
 - **Typography**: Spectral (display/greeting only), Hanken Grotesk (all UI), JetBrains Mono (all amounts). Defined once in `src/styles/fonts.css` + `theme.css` — do not add other font sources.
 - **Amounts/numbers**: always use `.amt` CSS class or `font-mono` Tailwind class + `tabular-nums`
@@ -231,6 +233,7 @@ Requires `.env` with Supabase vars (see `.env.example`):
 - `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` — required for auth + all data
 - `VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL` — for password reset emails
 - `VITE_FIREBASE_*` — Firebase Hosting + analytics (optional for local dev)
+- `VITE_SENTRY_DSN` — Sentry error reporting (optional; unset = off). Exporting `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` in the shell at deploy time uploads source maps. See ADR-0003
 
 **Running the app locally** (no production data): `npm run dev:backend` (needs Docker) then `npm run dev`, log in as `dev@tatu.local` / `tatu-dev-password`. `dev:backend` writes `.env.local`, which overrides `.env`; delete it to point the app back at the remote project. `npx supabase stop` tears the stack down.
 

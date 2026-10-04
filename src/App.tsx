@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { pathForView, titleForView, viewFromPath } from './routes'
+import { captureError } from './services/monitoring/error-reporting'
 import { normalizeCategoryId } from './services/categories/category-aliases'
 import { countsAsRow } from './services/spending/spending-rules'
 import {
@@ -212,6 +213,7 @@ function App() {
         await resetUserSupabaseData(session)
       } catch (error) {
         console.error('reset failed:', error)
+        captureError(error, 'reset')
         refetch()
         throw new UserFacingError(
           'No se pudieron borrar todos los datos. Recargamos lo que quedó guardado; intentá de nuevo.'
