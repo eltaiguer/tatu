@@ -173,6 +173,7 @@ Behavior testing — tests verify what the system does, not how it does it.
 ## Environment
 
 Requires `.env` with Supabase vars (see `.env.example`):
+
 - `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` — required for auth + all data
 - `VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL` — for password reset emails
 - `VITE_FIREBASE_*` — Firebase Hosting + analytics (optional for local dev)
@@ -187,4 +188,4 @@ Test counts are deliberately not recorded here; they go stale within a PR. Run `
 
 AI Insights shipped (ADR-0001 + ADR-0002, `docs/decisions/000{1,2}-*.md`): Insights view generates Claude-powered spending insights over the user's **entire transaction history** (no period navigation — see ADR-0002), cached in Supabase (`ai_insights` table, one row per user — requires a manual `schema.sql` apply, see `supabase/README.md`). Client-side, BYO API key, same pattern as `services/ai/`.
 
-**Next initiative**: per-category cross-period comparisons (a `categoryTotals × month` breakdown, so `bleeding_money` insights can detect spend that's *growing*, not just spend that *dominates* — see ADR-0002's trade-offs section), and AI-powered categorization — improve transaction categorization accuracy and confidence scores using an LLM or smarter heuristics.
+**Next initiative**: per-category cross-period comparisons (a `categoryTotals × month` breakdown, so `bleeding_money` insights can detect spend that's _growing_, not just spend that _dominates_ — see ADR-0002's trade-offs section), and AI-powered categorization — improve transaction categorization accuracy and confidence scores using an LLM or smarter heuristics.

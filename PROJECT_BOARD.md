@@ -15,7 +15,7 @@
 
 ## Next
 
-**Per-category cross-period comparisons** — a `categoryTotals × month` breakdown so `bleeding_money` insights can detect *growing* spend, not just *dominant* spend, plus anomaly/spike detection. See ADR-0002's trade-offs section.
+**Per-category cross-period comparisons** — a `categoryTotals × month` breakdown so `bleeding_money` insights can detect _growing_ spend, not just _dominant_ spend, plus anomaly/spike detection. See ADR-0002's trade-offs section.
 
 **AI-powered categorization** — improve accuracy and confidence scores using an LLM or smarter heuristics.
 

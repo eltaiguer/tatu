@@ -21,6 +21,7 @@ All coding tasks must include tests that verify observable behavior.
 ### Definition of done
 
 A task is done only when:
+
 - Tests exist for the new/changed behavior.
 - Relevant test suite passes.
 - Existing behavior remains covered.

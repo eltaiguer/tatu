@@ -8,7 +8,7 @@ it is safe to run repeatedly.
 ## ⚠️ It is NOT applied automatically
 
 Nothing in the app or CI runs `schema.sql` against the live database. Editing
-this file changes the *intended* schema only. Until you apply it manually, the
+this file changes the _intended_ schema only. Until you apply it manually, the
 live database and the app code disagree — and PostgREST (Supabase's REST layer)
 will reject any request that references a missing column with:
 
