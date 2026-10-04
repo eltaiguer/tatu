@@ -45,19 +45,7 @@ interface SidebarInnerProps extends AppSidebarProps {
 
 export function BrandMark() {
   return (
-    <span
-      style={{
-        width: 34,
-        height: 34,
-        borderRadius: 10,
-        background: 'var(--brand)',
-        color: 'var(--primary-foreground)',
-        display: 'grid',
-        placeItems: 'center',
-        flexShrink: 0,
-        boxShadow: 'var(--shadow-sm)',
-      }}
-    >
+    <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] bg-[var(--brand)] text-[var(--primary-foreground)] shadow-[var(--shadow-sm)]">
       <svg
         width={22}
         height={22}
@@ -125,46 +113,15 @@ export function SidebarInner({
   const avatarInitial = userName.charAt(0).toUpperCase()
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-        padding: '22px 16px 18px',
-        overflowY: 'auto',
-      }}
-    >
+    <div className="flex h-full flex-col overflow-y-auto px-[16px] pt-[22px] pb-[18px]">
       {/* Brand row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 11,
-          padding: '4px 8px 22px',
-        }}
-      >
+      <div className="flex items-center gap-[11px] px-[8px] pt-[4px] pb-[22px]">
         <BrandMark />
         <div>
-          <div
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 22,
-              fontWeight: 600,
-              letterSpacing: '-0.02em',
-              lineHeight: 1.1,
-            }}
-          >
+          <div className="font-[family-name:var(--font-display)] text-[22px] leading-[1.1] font-semibold tracking-[-0.02em]">
             Tatú
           </div>
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--text-faint)',
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              fontWeight: 600,
-            }}
-          >
+          <div className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-faint)] uppercase">
             Gastos · Uruguay
           </div>
         </div>
@@ -176,24 +133,7 @@ export function SidebarInner({
           onImport()
           onClose?.()
         }}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 8,
-          width: '100%',
-          padding: '11px 14px',
-          background: 'var(--brand)',
-          color: 'var(--primary-foreground)',
-          border: 'none',
-          borderRadius: 'var(--radius-md)',
-          fontFamily: 'var(--font-sans)',
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: 'pointer',
-          boxShadow: 'var(--shadow-sm)',
-          transition: 'background 0.15s, transform 0.06s',
-        }}
+        className="flex w-full cursor-pointer items-center justify-center gap-[8px] rounded-[var(--radius-md)] border-none bg-[var(--brand)] px-[14px] py-[11px] font-[family-name:var(--font-sans)] text-[14px] font-semibold text-[var(--primary-foreground)] shadow-[var(--shadow-sm)] [transition:background_0.15s,transform_0.06s]"
         onMouseOver={(e) =>
           ((e.currentTarget as HTMLButtonElement).style.background =
             'var(--brand-hover)')
@@ -218,21 +158,8 @@ export function SidebarInner({
 
       {/* Nav groups */}
       {groups.map((group) => (
-        <nav
-          key={group.label}
-          style={{ marginTop: 22 }}
-          aria-label={group.label}
-        >
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.09em',
-              textTransform: 'uppercase',
-              color: 'var(--text-faint)',
-              padding: '0 10px 8px',
-            }}
-          >
+        <nav key={group.label} className="mt-[22px]" aria-label={group.label}>
+          <div className="px-[10px] pt-0 pb-[8px] text-[11px] font-bold tracking-[0.09em] text-[var(--text-faint)] uppercase">
             {group.label}
           </div>
           {group.items.map((item, i) => {
@@ -246,24 +173,15 @@ export function SidebarInner({
                   onClose?.()
                 }}
                 aria-current={isActive ? 'page' : undefined}
+                className={`relative flex w-full cursor-pointer items-center gap-[11px] rounded-[var(--radius-sm)] border-none px-[10px] py-[9px] text-left font-[family-name:var(--font-sans)] text-[14px] [transition:background_0.13s,color_0.13s] ${
+                  isActive ? 'font-semibold' : 'font-medium'
+                } ${i > 0 ? 'mt-[2px]' : 'mt-0'}`}
+                // background + color stay inline: the hover handlers below
+                // write them inline, and React must keep re-asserting the
+                // active/inactive values or a hover color sticks after a click.
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 11,
-                  width: '100%',
-                  padding: '9px 10px',
-                  border: 'none',
                   background: isActive ? 'var(--brand-soft)' : 'transparent',
                   color: isActive ? 'var(--brand-text)' : 'var(--text-muted)',
-                  borderRadius: 'var(--radius-sm)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: 14,
-                  fontWeight: isActive ? 600 : 500,
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'background 0.13s, color 0.13s',
-                  position: 'relative',
-                  marginTop: i > 0 ? 2 : 0,
                 }}
                 onMouseOver={(e) => {
                   if (!isActive) {
@@ -285,37 +203,28 @@ export function SidebarInner({
                 {isActive && (
                   <span
                     aria-hidden="true"
-                    style={{
-                      position: 'absolute',
-                      left: -16,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: 3,
-                      height: 20,
-                      borderRadius: '0 3px 3px 0',
-                      background: 'var(--brand)',
-                    }}
+                    className="absolute top-[50%] left-[-16px] h-[20px] w-[3px] rounded-[0_3px_3px_0] bg-[var(--brand)] [transform:translateY(-50%)]"
                   />
                 )}
                 <span aria-hidden="true">
                   <Icon size={17} strokeWidth={isActive ? 2.2 : 1.8} />
                 </span>
-                <span style={{ flex: 1 }}>{item.label}</span>
+                <span className="flex-1">{item.label}</span>
                 {item.count != null && (
                   <span
                     aria-hidden="true"
                     title={item.countTitle}
+                    className={`rounded-[999px] px-[7px] py-[1px] font-[family-name:var(--font-mono)] text-[11px] ${
+                      isActive
+                        ? 'text-[var(--brand-text)]'
+                        : 'text-[var(--text-faint)]'
+                    }`}
+                    // Inline: the CSS minifier rewrites oklch(1 0 0 / 0.35)
+                    // as #ffffff59 (alpha 0.349), not a byte-identical color.
                     style={{
-                      fontSize: 11,
-                      fontFamily: 'var(--font-mono)',
-                      color: isActive
-                        ? 'var(--brand-text)'
-                        : 'var(--text-faint)',
                       background: isActive
                         ? 'oklch(1 0 0 / 0.35)'
                         : 'var(--surface-2)',
-                      padding: '1px 7px',
-                      borderRadius: 999,
                     }}
                   >
                     {item.count}
@@ -328,57 +237,17 @@ export function SidebarInner({
       ))}
 
       {/* Footer user row */}
-      <div style={{ marginTop: 'auto', paddingTop: 16 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '9px 10px',
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border)',
-            background: 'var(--surface-2)',
-          }}
-        >
-          <span
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 8,
-              background: 'var(--accent-soft)',
-              color: 'var(--accent)',
-              display: 'grid',
-              placeItems: 'center',
-              fontWeight: 700,
-              fontSize: 13,
-              flexShrink: 0,
-            }}
-          >
+      <div className="mt-auto pt-[16px]">
+        <div className="flex items-center gap-[10px] rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--surface-2)] px-[10px] py-[9px]">
+          <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[8px] bg-[var(--accent-soft)] text-[13px] font-bold text-[var(--accent)]">
             {avatarInitial}
           </span>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                color: 'var(--text)',
-              }}
-            >
+          <div className="min-w-0 flex-1">
+            <div className="overflow-hidden text-[13px] font-semibold text-ellipsis whitespace-nowrap text-[var(--text)]">
               {userName}
             </div>
             {userEmail && (
-              <div
-                style={{
-                  fontSize: 11,
-                  color: 'var(--text-faint)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
+              <div className="overflow-hidden text-[11px] text-ellipsis whitespace-nowrap text-[var(--text-faint)]">
                 {userEmail}
               </div>
             )}
@@ -387,17 +256,7 @@ export function SidebarInner({
             <button
               onClick={onSignOut}
               title="Cerrar sesión"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-faint)',
-                display: 'grid',
-                placeItems: 'center',
-                padding: 4,
-                borderRadius: 6,
-                transition: 'color 0.12s',
-              }}
+              className="grid cursor-pointer place-items-center rounded-[6px] border-none bg-transparent p-[4px] text-[var(--text-faint)] [transition:color_0.12s]"
               onMouseOver={(e) =>
                 ((e.currentTarget as HTMLButtonElement).style.color =
                   'var(--text)')
@@ -419,17 +278,7 @@ export function SidebarInner({
 
 export function AppSidebar(props: AppSidebarProps) {
   return (
-    <aside
-      className="hidden md:block"
-      style={{
-        position: 'fixed',
-        inset: '0 auto 0 0',
-        width: 'var(--sidebar-w, 252px)',
-        background: 'var(--surface)',
-        borderRight: '1px solid var(--border)',
-        zIndex: 40,
-      }}
-    >
+    <aside className="fixed inset-[0_auto_0_0] z-40 hidden w-[var(--sidebar-w,252px)] border-r border-r-[var(--border)] bg-[var(--surface)] md:block">
       <SidebarInner {...props} />
     </aside>
   )

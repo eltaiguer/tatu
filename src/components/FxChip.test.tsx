@@ -27,8 +27,9 @@ describe('brand-filled controls', () => {
       />
     )
 
-    expect(
-      screen.getAllByRole('button', { name: /Importar/ })[0].style.color
-    ).toBe('var(--primary-foreground)')
+    // jsdom doesn't load Tailwind, so assert the token-based class.
+    const importButton = screen.getAllByRole('button', { name: /Importar/ })[0]
+    expect(importButton).toHaveClass('text-[var(--primary-foreground)]')
+    expect(importButton.className).not.toMatch(/white|#fff/i)
   })
 })
