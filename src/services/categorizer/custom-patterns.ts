@@ -1,5 +1,10 @@
 import { UserFacingError } from '../../utils/user-error'
 import { normalizeMerchantName, type PatternMatch } from './merchant-patterns'
+import {
+  deleteCustomPattern,
+  upsertCustomPattern,
+} from '../supabase/custom-patterns'
+import { getActiveSupabaseSession } from '../supabase/runtime'
 
 export type MatchType = 'contains' | 'starts_with' | 'exact'
 
@@ -43,7 +48,6 @@ export function addCustomPattern(
 // undo exactly that change before rethrowing, so the UI never shows a rule
 // the server doesn't have (or hides one it still has).
 async function requireSession() {
-  const { getActiveSupabaseSession } = await import('../supabase/runtime')
   const session = getActiveSupabaseSession()
   if (!session) {
     throw new UserFacingError(
@@ -59,7 +63,6 @@ export async function addCustomPatternWithSync(
   const pattern = addCustomPattern(input)
   try {
     const session = await requireSession()
-    const { upsertCustomPattern } = await import('../supabase/custom-patterns')
     await upsertCustomPattern(session, pattern)
   } catch (error) {
     removeCustomPattern(pattern.id)
@@ -78,7 +81,6 @@ export async function removeCustomPatternWithSync(id: string): Promise<void> {
   removeCustomPattern(id)
   try {
     const session = await requireSession()
-    const { deleteCustomPattern } = await import('../supabase/custom-patterns')
     await deleteCustomPattern(session, id)
   } catch (error) {
     if (previous && !patterns.some((p) => p.id === id)) {

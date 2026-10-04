@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { pathForView, titleForView, viewFromPath } from './routes'
 import { normalizeCategoryId } from './services/categories/category-aliases'
@@ -17,11 +24,15 @@ import { Toaster } from './components/ui/sonner'
 import { TatuLogo } from './components/TatuLogo'
 import { AppSidebar, SidebarInner } from './components/AppSidebar'
 import type { View } from './components/AppSidebar'
-import { Dashboard } from './components/Dashboard'
-import { Transactions } from './components/Transactions'
-import { Insights } from './components/Insights'
-import { Categories } from './components/Categories'
-import { Settings } from './components/Settings'
+import {
+  Dashboard,
+  Transactions,
+  Insights,
+  Categories,
+  Settings,
+  preloadViews,
+} from './lazy-views'
+import { ViewErrorBoundary } from './components/ViewErrorBoundary'
 import { ImportCSV } from './components/ImportCSV'
 import { AuthCard } from './components/AuthCard'
 import {
@@ -124,6 +135,14 @@ function App() {
     handlePasswordUpdate,
     clearPasswordResetModeFromUrl,
   } = useAuthSession()
+
+  // Signed in: fetch every view's chunk now, while the first sync runs, so
+  // switching views never waits on the network. A failure here is retried
+  // by the view itself when it renders.
+  const signedIn = Boolean(session)
+  useEffect(() => {
+    if (signedIn) preloadViews().catch(() => {})
+  }, [signedIn])
 
   // Get transactions from store
   const transactions = useStore(transactionStore, (state) => state.transactions)
@@ -446,132 +465,150 @@ function App() {
           ) : syncStatus === 'error' ? (
             <ConnectionLostState onRetry={refetch} />
           ) : (
-            <>
-              {currentView === 'overview' && transactions.length === 0 && (
-                <Onboarding
-                  onImport={() => setImportOpen(true)}
-                  userName={getFriendlyName(session) || undefined}
-                />
-              )}
-              {currentView === 'overview' && transactions.length > 0 && (
-                <Dashboard
-                  transactions={transactions}
-                  userName={getFriendlyName(session) || undefined}
-                  onNavigateToImport={() => setImportOpen(true)}
-                  onNavigateToCategories={() => go('categories')}
-                  onNavigateToTransactions={navigateToTransactions}
-                  homeCurrency={preferredCurrency}
-                  fxRate={fxRate}
-                  onSetHomeCurrency={setPreferredCurrency}
-                  onSetFxRate={setFxRate}
-                />
-              )}
-              {currentView === 'transactions' && transactions.length === 0 && (
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minHeight: 320,
-                    gap: 16,
-                    padding: '48px 24px',
-                    textAlign: 'center',
-                  }}
-                >
-                  <Upload size={40} style={{ color: 'var(--text-faint)' }} />
-                  <div>
-                    <p
-                      style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}
-                    >
-                      No hay transacciones
-                    </p>
-                    <p
+            <ViewErrorBoundary resetKey={currentView}>
+              <Suspense
+                fallback={
+                  currentView === 'transactions' ? (
+                    <TransactionTableSkeleton />
+                  ) : (
+                    <DashboardSkeleton />
+                  )
+                }
+              >
+                {currentView === 'overview' && transactions.length === 0 && (
+                  <Onboarding
+                    onImport={() => setImportOpen(true)}
+                    userName={getFriendlyName(session) || undefined}
+                  />
+                )}
+                {currentView === 'overview' && transactions.length > 0 && (
+                  <Dashboard
+                    transactions={transactions}
+                    userName={getFriendlyName(session) || undefined}
+                    onNavigateToImport={() => setImportOpen(true)}
+                    onNavigateToCategories={() => go('categories')}
+                    onNavigateToTransactions={navigateToTransactions}
+                    homeCurrency={preferredCurrency}
+                    fxRate={fxRate}
+                    onSetHomeCurrency={setPreferredCurrency}
+                    onSetFxRate={setFxRate}
+                  />
+                )}
+                {currentView === 'transactions' &&
+                  transactions.length === 0 && (
+                    <div
                       style={{
-                        fontSize: 14,
-                        color: 'var(--text-muted)',
-                        maxWidth: 280,
-                        margin: '0 auto',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: 320,
+                        gap: 16,
+                        padding: '48px 24px',
+                        textAlign: 'center',
                       }}
                     >
-                      Importá tu primer extracto CSV de Santander para empezar a
-                      ver tus movimientos.
-                    </p>
-                  </div>
-                  <Button onClick={() => setImportOpen(true)}>
-                    <Upload size={16} />
-                    Importar CSV
-                  </Button>
-                </div>
-              )}
-              {currentView === 'transactions' && transactions.length > 0 && (
-                <Transactions
-                  key={transactionsKeyRef.current}
-                  transactions={transactions}
-                  initialFilters={parseFilterParams(location.search)}
-                  onFiltersChange={handleTransactionFiltersChange}
-                  homeCurrency={preferredCurrency}
-                  fxRate={fxRate}
-                  onUpdateTransaction={handleUpdateTransaction}
-                  onDeleteTransaction={handleDeleteTransaction}
-                  onRestoreTransactions={handleRestoreTransactions}
-                  onReload={refetch}
-                  onAutoCategorizeTransactions={
-                    handleAutoCategorizeTransactions
-                  }
-                  onBulkCategorize={handleBulkCategorizeTransactions}
-                  onBulkDelete={handleBulkDeleteTransactions}
-                  onBulkTag={handleBulkTagTransactions}
-                  onSplitTransaction={handleSplitTransaction}
-                  onUnsplitTransaction={handleUnsplitTransaction}
-                />
-              )}
-              {currentView === 'insights' && session && (
-                <Insights
-                  transactions={transactions}
-                  homeCurrency={preferredCurrency}
-                  fxRate={fxRate}
-                  session={session}
-                  aiEnabled={aiEnabled}
-                  claudeApiKey={claudeApiKey}
-                  onNavigateToTransactions={navigateToTransactions}
-                  onNavigateToSettings={() => go('settings')}
-                  onNavigateToImport={() => setImportOpen(true)}
-                />
-              )}
-              {currentView === 'categories' && (
-                <Categories
-                  transactions={transactions}
-                  homeCurrency={preferredCurrency}
-                  fxRate={fxRate}
-                  onNavigateToTransactions={navigateToTransactions}
-                  onApplyPatternToPast={handleApplyPatternToPast}
-                />
-              )}
-              {currentView === 'settings' && (
-                <Settings
-                  theme={theme}
-                  onSetTheme={setTheme}
-                  preferredCurrency={preferredCurrency}
-                  onSetCurrency={setPreferredCurrency}
-                  fxRate={fxRate}
-                  onSetFxRate={setFxRate}
-                  session={session}
-                  supabaseEnabled={true}
-                  onSignOut={() => {
-                    void handleSignOut()
-                  }}
-                  transactions={transactions}
-                  onResetAllData={handleResetAllData}
-                  claudeApiKey={claudeApiKey}
-                  onSetClaudeApiKey={setClaudeApiKey}
-                  aiEnabled={aiEnabled}
-                  onSetAiEnabled={setAiEnabled}
-                  aiModel={aiModel}
-                  onSetAiModel={setAiModel}
-                />
-              )}
-            </>
+                      <Upload
+                        size={40}
+                        style={{ color: 'var(--text-faint)' }}
+                      />
+                      <div>
+                        <p
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 600,
+                            marginBottom: 6,
+                          }}
+                        >
+                          No hay transacciones
+                        </p>
+                        <p
+                          style={{
+                            fontSize: 14,
+                            color: 'var(--text-muted)',
+                            maxWidth: 280,
+                            margin: '0 auto',
+                          }}
+                        >
+                          Importá tu primer extracto CSV de Santander para
+                          empezar a ver tus movimientos.
+                        </p>
+                      </div>
+                      <Button onClick={() => setImportOpen(true)}>
+                        <Upload size={16} />
+                        Importar CSV
+                      </Button>
+                    </div>
+                  )}
+                {currentView === 'transactions' && transactions.length > 0 && (
+                  <Transactions
+                    key={transactionsKeyRef.current}
+                    transactions={transactions}
+                    initialFilters={parseFilterParams(location.search)}
+                    onFiltersChange={handleTransactionFiltersChange}
+                    homeCurrency={preferredCurrency}
+                    fxRate={fxRate}
+                    onUpdateTransaction={handleUpdateTransaction}
+                    onDeleteTransaction={handleDeleteTransaction}
+                    onRestoreTransactions={handleRestoreTransactions}
+                    onReload={refetch}
+                    onAutoCategorizeTransactions={
+                      handleAutoCategorizeTransactions
+                    }
+                    onBulkCategorize={handleBulkCategorizeTransactions}
+                    onBulkDelete={handleBulkDeleteTransactions}
+                    onBulkTag={handleBulkTagTransactions}
+                    onSplitTransaction={handleSplitTransaction}
+                    onUnsplitTransaction={handleUnsplitTransaction}
+                  />
+                )}
+                {currentView === 'insights' && session && (
+                  <Insights
+                    transactions={transactions}
+                    homeCurrency={preferredCurrency}
+                    fxRate={fxRate}
+                    session={session}
+                    aiEnabled={aiEnabled}
+                    claudeApiKey={claudeApiKey}
+                    onNavigateToTransactions={navigateToTransactions}
+                    onNavigateToSettings={() => go('settings')}
+                    onNavigateToImport={() => setImportOpen(true)}
+                  />
+                )}
+                {currentView === 'categories' && (
+                  <Categories
+                    transactions={transactions}
+                    homeCurrency={preferredCurrency}
+                    fxRate={fxRate}
+                    onNavigateToTransactions={navigateToTransactions}
+                    onApplyPatternToPast={handleApplyPatternToPast}
+                  />
+                )}
+                {currentView === 'settings' && (
+                  <Settings
+                    theme={theme}
+                    onSetTheme={setTheme}
+                    preferredCurrency={preferredCurrency}
+                    onSetCurrency={setPreferredCurrency}
+                    fxRate={fxRate}
+                    onSetFxRate={setFxRate}
+                    session={session}
+                    supabaseEnabled={true}
+                    onSignOut={() => {
+                      void handleSignOut()
+                    }}
+                    transactions={transactions}
+                    onResetAllData={handleResetAllData}
+                    claudeApiKey={claudeApiKey}
+                    onSetClaudeApiKey={setClaudeApiKey}
+                    aiEnabled={aiEnabled}
+                    onSetAiEnabled={setAiEnabled}
+                    aiModel={aiModel}
+                    onSetAiModel={setAiModel}
+                  />
+                )}
+              </Suspense>
+            </ViewErrorBoundary>
           )}
         </div>
       </main>

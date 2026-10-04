@@ -1,5 +1,10 @@
 import { isReservedCategoryId } from './category-aliases'
 import { UserFacingError } from '../../utils/user-error'
+import {
+  archiveCustomCategory,
+  upsertCustomCategory,
+} from '../supabase/custom-categories'
+import { getActiveSupabaseSession } from '../supabase/runtime'
 
 export const DEFAULT_CATEGORY_COLOR = '#0ea5e9'
 
@@ -91,7 +96,6 @@ export function removeCustomCategory(id: string): void {
 // also undo concurrent edits) before rethrowing, so the UI never shows a
 // category the server doesn't have.
 async function requireSession() {
-  const { getActiveSupabaseSession } = await import('../supabase/runtime')
   const session = getActiveSupabaseSession()
   if (!session) {
     throw new UserFacingError(
@@ -105,7 +109,6 @@ async function pushCategory(id: string): Promise<void> {
   const category = _customCategories.find((c) => c.id === id)
   if (!category) return
   const session = await requireSession()
-  const { upsertCustomCategory } = await import('../supabase/custom-categories')
   await upsertCustomCategory(session, {
     id: category.id,
     label: category.label,
@@ -204,8 +207,6 @@ export async function removeCustomCategoryWithSync(id: string): Promise<void> {
   removeCustomCategory(id)
   try {
     const session = await requireSession()
-    const { archiveCustomCategory } =
-      await import('../supabase/custom-categories')
     await archiveCustomCategory(session, id)
   } catch (error) {
     restoreCategory(id, previous)
