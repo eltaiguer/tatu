@@ -1,5 +1,5 @@
 import { getSupabaseClient, type SupabaseSession } from './client'
-import { DEFAULT_CATEGORIZATION_MODEL } from '../ai/models'
+import { DEFAULT_PREFERENCES } from '../preferences/defaults'
 
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'auto'
@@ -40,12 +40,13 @@ export async function loadUserPreferences(
 
   const row = data as UserPreferencesRow
   return {
-    theme: (row.theme as 'light' | 'dark' | 'auto') ?? 'auto',
-    currency: (row.currency as 'USD' | 'UYU') ?? 'USD',
-    fxRate: row.fx_rate ?? 40.5,
-    claudeApiKey: row.claude_api_key ?? '',
-    aiEnabled: row.ai_enabled ?? false,
-    aiModel: row.ai_model ?? DEFAULT_CATEGORIZATION_MODEL,
+    theme:
+      (row.theme as 'light' | 'dark' | 'auto') ?? DEFAULT_PREFERENCES.theme,
+    currency: (row.currency as 'USD' | 'UYU') ?? DEFAULT_PREFERENCES.currency,
+    fxRate: row.fx_rate ?? DEFAULT_PREFERENCES.fxRate,
+    claudeApiKey: row.claude_api_key ?? DEFAULT_PREFERENCES.claudeApiKey,
+    aiEnabled: row.ai_enabled ?? DEFAULT_PREFERENCES.aiEnabled,
+    aiModel: row.ai_model ?? DEFAULT_PREFERENCES.aiModel,
   }
 }
 

@@ -1,10 +1,12 @@
 import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ROUTER_FUTURE } from './router-future'
 import App from './App'
 import { preloadViews } from './lazy-views'
 import { transactionStore } from './stores/transaction-store'
+import { teardownWorkspace } from './stores/workspace-store'
 import { listCustomCategories } from './services/categories/category-store'
 
 const MOCK_SESSION = {
@@ -58,8 +60,8 @@ vi.mock('./services/supabase/auth', () => ({
 vi.mock('./services/supabase/transactions', () => ({
   loadUserTransactions: loadUserTransactionsMock,
   persistTransactions: vi.fn().mockResolvedValue(undefined),
-  softDeleteTransaction: softDeleteTransactionMock,
-  updateTransaction: updateTransactionMock,
+  setTransactionsDeleted: softDeleteTransactionMock,
+  updateTransactionsByIds: updateTransactionMock,
 }))
 
 vi.mock('./services/supabase/category-overrides', () => ({
@@ -151,7 +153,8 @@ beforeAll(async () => {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    transactionStore.getState().clearTransactions()
+    // The workspace is module state: start every test signed out of it.
+    teardownWorkspace()
     localStorage.clear()
     window.history.replaceState({}, '', '/')
 
@@ -163,8 +166,11 @@ describe('App', () => {
     listCustomCategoriesMock.mockResolvedValue([])
     listCustomPatternsMock.mockResolvedValue([])
     loadUserPreferencesMock.mockResolvedValue(null)
-    updateTransactionMock.mockResolvedValue(undefined)
-    softDeleteTransactionMock.mockResolvedValue(undefined)
+    // The server confirms every id it was sent.
+    updateTransactionMock.mockImplementation(async (_s, ids: string[]) => ids)
+    softDeleteTransactionMock.mockImplementation(
+      async (_s, ids: string[]) => ids
+    )
   })
 
   it('renders overview (dashboard) view by default', async () => {
@@ -176,6 +182,30 @@ describe('App', () => {
         screen.getByRole('heading', { name: /Bienvenido a Tatú/i })
       ).toBeInTheDocument()
     )
+  })
+
+  it('first Tab reaches a skip link that moves focus to the main content (#203)', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await screen.findByRole('heading', { name: /Bienvenido a Tatú/i })
+
+    await user.tab()
+    const skip = screen.getByRole('link', { name: 'Saltar al contenido' })
+    expect(skip).toHaveFocus()
+
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('main')).toHaveFocus()
+    expect(currentUrl()).toBe('/')
+  })
+
+  it('announces the loading state while the first sync runs (#203)', async () => {
+    loadUserTransactionsMock.mockReturnValue(new Promise(() => {}))
+    renderApp('/configuracion')
+
+    const statuses = await screen.findAllByRole('status')
+    const busy = statuses.filter((s) => s.getAttribute('aria-busy') === 'true')
+    expect(busy).toHaveLength(1)
+    expect(busy[0]).toHaveTextContent('Cargando…')
   })
 
   it('has no floating theme button covering content and toasts', async () => {
@@ -205,9 +235,27 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
     expect(
-      screen.getByRole('heading', { name: 'Importar Transacciones' })
+      screen.getByRole('heading', { name: 'Importar transacciones' })
     ).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
+  })
+
+  it('returns focus to the sidebar Importar button when the import dialog closes', async () => {
+    renderApp()
+    const opener = await screen.findByRole('button', { name: 'Importar' })
+    const user = userEvent.setup()
+
+    opener.focus()
+    await user.keyboard('{Enter}')
+    await screen.findByRole('heading', { name: 'Importar transacciones' })
+    await user.keyboard('{Escape}')
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Importar transacciones' })
+      ).toBeNull()
+    )
+    await waitFor(() => expect(opener).toHaveFocus())
   })
 
   it('shows supported file types on import view', async () => {
@@ -219,9 +267,9 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
-    expect(screen.getByText('Tarjeta de Crédito')).toBeInTheDocument()
+    expect(screen.getByText('Tarjeta de crédito')).toBeInTheDocument()
     expect(screen.getByText('Cuenta USD')).toBeInTheDocument()
-    expect(screen.getByText('Cuenta UYU')).toBeInTheDocument()
+    expect(screen.getByText('Cuenta $U')).toBeInTheDocument()
     expect(
       screen.getByText(/Extracto de tarjeta Santander/)
     ).toBeInTheDocument()
@@ -248,12 +296,10 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole('heading', { name: 'Transacciones' })
-      ).toBeInTheDocument()
-    )
-    expect(screen.getByText(/movimiento.*·/)).toBeInTheDocument()
+    expect(await screen.findByText(/movimiento.*·/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Transacciones' })
+    ).toBeInTheDocument()
   })
 
   it('auto-categorizes selected transactions from the transactions view', async () => {
@@ -277,12 +323,11 @@ describe('App', () => {
       ).toBeInTheDocument()
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+    const checkbox = (
+      await screen.findAllByLabelText('Seleccionar Devoto Supermercado')
+    )[0]
     await act(async () => {
-      fireEvent.click(
-        screen.getAllByRole('checkbox', {
-          name: 'Seleccionar Devoto Supermercado',
-        })[0]
-      )
+      fireEvent.click(checkbox)
     })
 
     const autoCategorizeButton = screen.getByRole('button', {
@@ -330,12 +375,11 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
+    const checkbox = (
+      await screen.findAllByLabelText('Seleccionar Comercio Inventado XYZ')
+    )[0]
     await act(async () => {
-      fireEvent.click(
-        screen.getAllByRole('checkbox', {
-          name: 'Seleccionar Comercio Inventado XYZ',
-        })[0]
-      )
+      fireEvent.click(checkbox)
     })
 
     const autoCategorizeButton = screen.getByRole('button', {
@@ -424,7 +468,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
     expect(
-      screen.getByRole('heading', { name: 'Importar Transacciones' })
+      screen.getByRole('heading', { name: 'Importar transacciones' })
     ).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
   })
@@ -499,7 +543,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     fireEvent.click(
-      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0]
+      (await screen.findAllByLabelText('Seleccionar Comercio A'))[0]
     )
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0]
@@ -509,7 +553,7 @@ describe('App', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
@@ -525,7 +569,13 @@ describe('App', () => {
       expect(txs.find((t) => t.id === 'tx-1')?.category).toBe('entertainment')
       expect(txs.find((t) => t.id === 'tx-2')?.category).toBe('entertainment')
     })
-    expect(updateTransactionMock).toHaveBeenCalledTimes(2)
+    // One request for the whole selection (#60).
+    expect(updateTransactionMock).toHaveBeenCalledTimes(1)
+    expect(updateTransactionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      ['tx-1', 'tx-2'],
+      { category: 'entertainment', categoryConfidence: 1 }
+    )
   })
 
   it('bulk deletes selected transactions and removes them from the store', async () => {
@@ -560,7 +610,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     fireEvent.click(
-      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0]
+      (await screen.findAllByLabelText('Seleccionar Comercio A'))[0]
     )
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0]
@@ -572,7 +622,12 @@ describe('App', () => {
     await waitFor(() => {
       expect(transactionStore.getState().transactions).toHaveLength(0)
     })
-    expect(softDeleteTransactionMock).toHaveBeenCalledTimes(2)
+    expect(softDeleteTransactionMock).toHaveBeenCalledTimes(1)
+    expect(softDeleteTransactionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      ['tx-1', 'tx-2'],
+      true
+    )
     expect(
       await screen.findByText('2 transacciones eliminadas')
     ).toBeInTheDocument()
@@ -601,14 +656,14 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
 
     fireEvent.click(
-      screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio A' })[0]
+      (await screen.findAllByLabelText('Seleccionar Comercio A'))[0]
     )
 
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'recurrente' },
     })

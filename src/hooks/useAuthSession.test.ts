@@ -16,8 +16,8 @@ const auth = vi.hoisted(() => ({
 vi.mock('../services/supabase/auth', () => auth)
 
 import { useAuthSession } from './useAuthSession'
-import { getActiveSupabaseSession } from '../services/supabase/runtime'
 import { transactionStore } from '../stores/transaction-store'
+import { teardownWorkspace, workspaceStore } from '../stores/workspace-store'
 
 function makeSession(userId = 'user-1'): SupabaseSession {
   return {
@@ -56,7 +56,7 @@ describe('useAuthSession', () => {
         return unsubscribe
       }
     )
-    transactionStore.getState().clearTransactions()
+    teardownWorkspace()
   })
 
   afterEach(() => {
@@ -69,17 +69,15 @@ describe('useAuthSession', () => {
 
       expect(result.current.session).toBeNull()
       expect(result.current.authMode).toBe('signin')
-      expect(getActiveSupabaseSession()).toBeNull()
     })
 
-    it('restores the stored session and makes it active for data services', () => {
+    it('restores the stored session', () => {
       const stored = makeSession()
       auth.getCurrentSession.mockReturnValue(stored)
 
       const { result } = renderHook(() => useAuthSession())
 
       expect(result.current.session).toBe(stored)
-      expect(getActiveSupabaseSession()).toBe(stored)
     })
 
     it('stops listening to auth changes on unmount', () => {
@@ -108,7 +106,6 @@ describe('useAuthSession', () => {
       )
       expect(auth.signUpWithPassword).not.toHaveBeenCalled()
       expect(result.current.session).toBe(next)
-      expect(getActiveSupabaseSession()).toBe(next)
       expect(result.current.authSubmitting).toBe(false)
       expect(result.current.authError).toBe('')
     })
@@ -151,7 +148,6 @@ describe('useAuthSession', () => {
       act(() => onSessionChange(next))
 
       expect(result.current.session).toBe(next)
-      expect(getActiveSupabaseSession()).toBe(next)
     })
   })
 
@@ -163,7 +159,32 @@ describe('useAuthSession', () => {
       act(() => onSessionChange(null))
 
       expect(result.current.session).toBeNull()
-      expect(getActiveSupabaseSession()).toBeNull()
+    })
+
+    it('drops the previous user’s workspace before a different user’s session renders', () => {
+      auth.getCurrentSession.mockReturnValue(makeSession('user-a'))
+      workspaceStore.setState({ userId: 'user-a', status: 'ready' })
+      transactionStore.getState().setTransactions([someTransaction])
+      const { result } = renderHook(() => useAuthSession())
+
+      // e.g. user B signs in from another tab.
+      act(() => onSessionChange(makeSession('user-b')))
+
+      expect(result.current.session?.user.id).toBe('user-b')
+      expect(workspaceStore.getState().userId).toBeNull()
+      expect(transactionStore.getState().transactions).toEqual([])
+    })
+
+    it('keeps the workspace when the same user’s token is refreshed', () => {
+      auth.getCurrentSession.mockReturnValue(makeSession('user-a'))
+      workspaceStore.setState({ userId: 'user-a', status: 'ready' })
+      transactionStore.getState().setTransactions([someTransaction])
+      renderHook(() => useAuthSession())
+
+      act(() => onSessionChange(makeSession('user-a')))
+
+      expect(workspaceStore.getState().userId).toBe('user-a')
+      expect(transactionStore.getState().transactions).toHaveLength(1)
     })
 
     it('signs out and clears loaded transactions after a password change', async () => {
@@ -183,7 +204,6 @@ describe('useAuthSession', () => {
       expect(auth.updatePassword).toHaveBeenCalledWith('nueva-clave')
       expect(auth.signOut).toHaveBeenCalledWith(current)
       expect(result.current.session).toBeNull()
-      expect(getActiveSupabaseSession()).toBeNull()
       expect(transactionStore.getState().transactions).toEqual([])
       expect(result.current.password).toBe('')
       expect(result.current.authMode).toBe('signin')
@@ -236,6 +256,17 @@ describe('useAuthSession', () => {
       expect(result.current.authMode).toBe('reset')
       expect(result.current.authNotice).toBe(
         'Ingresá una nueva contraseña para tu cuenta'
+      )
+    })
+
+    it('asks for the email instead of requesting a reset without one (#204)', async () => {
+      const { result } = renderHook(() => useAuthSession())
+
+      await act(() => result.current.handlePasswordReset())
+
+      expect(auth.requestPasswordReset).not.toHaveBeenCalled()
+      expect(result.current.authNotice).toBe(
+        'Ingresá tu email para restablecer la contraseña'
       )
     })
 

@@ -1,0 +1,49 @@
+name: Bug
+description: Something in Tatu behaves wrongly. Triage picks it up from needs-triage.
+title: 'bug: '
+labels: ['bug', 'needs-triage']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is wrong, in one or two sentences. Name the view (Resumen, Transacciones, Insights, Categorías, Configuración) or the flow (import, sync, export).
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Failure scenario / steps to reproduce
+      description: The exact steps (or input data, e.g. a sample CSV from `samples/`) that trigger the bug, with what you expected and what happened instead.
+      placeholder: |
+        1. Import ...
+        2. Go to ...
+        3. ...
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Screenshots, console errors, failing test output, or file paths/lines where the bug lives. Redact real transaction data.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-fix
+    attributes:
+      label: Proposed fix
+      description: Optional. Where you think the fix goes and how. The fix starts from a failing regression test (AGENTS.md).
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: Observable conditions that mean the bug is fixed, including the regression test that must pass.
+      placeholder: |
+        - [ ] A regression test reproduces the bug and passes after the fix
+        - [ ] ...
+    validations:
+      required: true

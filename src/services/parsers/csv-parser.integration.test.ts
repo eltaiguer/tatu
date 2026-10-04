@@ -223,14 +223,16 @@ describe('CSV Parser - Integration Tests with All Sample Files', () => {
       const invalidCSV = 'This is not a valid Santander CSV\nJust random data'
 
       expect(() => parseCSV(invalidCSV, 'invalid.csv')).toThrow(
-        'Unable to detect CSV file type'
+        'No reconocemos este archivo.'
       )
     })
 
     it('should throw error for empty CSV', () => {
       const emptyCSV = ''
 
-      expect(() => parseCSV(emptyCSV, 'empty.csv')).toThrow()
+      expect(() => parseCSV(emptyCSV, 'empty.csv')).toThrow(
+        'El archivo está vacío.'
+      )
     })
 
     it('should throw error for CSV with wrong format', () => {
@@ -238,5 +240,31 @@ describe('CSV Parser - Integration Tests with All Sample Files', () => {
 
       expect(() => parseCSV(wrongFormatCSV, 'wrong.csv')).toThrow()
     })
+  })
+
+  // Parsers are pure (#64): categorization is the import pipeline's job
+  // (categorizeParsedData), so parsed rows carry no category of any kind.
+  describe('Parsers return uncategorized rows', () => {
+    it.each([
+      'CreditCardsMovementsDetail.csv',
+      'USDmovements.csv',
+      'UYUmovements.csv',
+    ])(
+      'leaves category, confidence and display description unset in %s',
+      (fileName) => {
+        const csvContent = readFileSync(
+          join(process.cwd(), 'samples', fileName),
+          'utf-8'
+        )
+        const result = parseCSV(csvContent, fileName)
+
+        expect(result.transactions.length).toBeGreaterThan(0)
+        result.transactions.forEach((tx) => {
+          expect(tx).not.toHaveProperty('category')
+          expect(tx).not.toHaveProperty('categoryConfidence')
+          expect(tx).not.toHaveProperty('displayDescription')
+        })
+      }
+    )
   })
 })

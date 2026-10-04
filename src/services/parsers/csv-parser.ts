@@ -1,6 +1,7 @@
 import type { ParsedData, FileType } from '../../models'
 import { parseCreditCardCSV } from './credit-card-parser'
 import { parseBankAccountCSV } from './bank-account-parser'
+import { UserFacingError } from '../../utils/user-error'
 
 /**
  * Detect the type of Santander CSV file based on its content
@@ -10,6 +11,10 @@ import { parseBankAccountCSV } from './bank-account-parser'
  * @throws Error if file type cannot be detected
  */
 export function detectFileType(csvContent: string): FileType {
+  if (csvContent.trim() === '') {
+    throw new UserFacingError('El archivo está vacío.')
+  }
+
   // Get first few lines for detection
   const firstLines = csvContent.split('\n').slice(0, 10).join('\n')
 
@@ -32,9 +37,9 @@ export function detectFileType(csvContent: string): FileType {
     return 'bank_account_uyu'
   }
 
-  // Unable to detect file type
-  throw new Error(
-    'Unable to detect CSV file type. Expected Santander credit card or bank account format.'
+  // Not one of the three Santander exports (another bank, a hand-made file…)
+  throw new UserFacingError(
+    'No reconocemos este archivo. Tatú importa extractos CSV de Santander Uruguay (tarjeta de crédito o caja de ahorro).'
   )
 }
 
@@ -72,6 +77,6 @@ export function parseCSV(csvContent: string, fileName: string): ParsedData {
 
     default:
       // This should never happen due to detectFileType throwing
-      throw new Error(`Tipo de archivo no soportado: ${fileType}`)
+      throw new UserFacingError(`Tipo de archivo no soportado: ${fileType}`)
   }
 }

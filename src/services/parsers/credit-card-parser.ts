@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import { UserFacingError } from '../../utils/user-error'
 import type {
   ParsedData,
   CreditCardMetadata,
@@ -10,14 +11,15 @@ import {
   parseSantanderDate,
   generateTransactionId,
 } from './utils'
-import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 
 /**
  * Parse a Santander credit card CSV file
  *
  * @param csvContent - Raw CSV content as string
  * @param fileName - Name of the CSV file
- * @returns ParsedData with transactions and metadata
+ * @returns ParsedData with transactions and metadata. Rows come back
+ * uncategorized: the import pipeline categorizes them
+ * (`categorizeParsedData`).
  */
 export function parseCreditCardCSV(
   csvContent: string,
@@ -116,7 +118,7 @@ function parseTransactions(
   // understood. That is different from a statement whose marker is present
   // but which lists no movements, which legitimately yields an empty list.
   if (startIndex === -1) {
-    throw new Error(
+    throw new UserFacingError(
       'No se encontró la sección de movimientos en el archivo. ' +
         '¿Es un resumen de tarjeta de crédito de Santander?'
     )
@@ -183,16 +185,6 @@ function parseRow(
       (currency === 'USD' && dolaresAmount < 0) ||
       (currency === 'UYU' && pesosAmount < 0)
 
-    // Auto-categorize based on transaction details
-    const {
-      category,
-      confidence,
-      description: patternDescription,
-    } = categorizeTransaction(
-      rawTransaction.descripcion,
-      isCredit ? 'credit' : 'debit'
-    )
-
     const transaction: Transaction = {
       id: generateTransactionId(
         rawTransaction.fecha,
@@ -202,21 +194,20 @@ function parseRow(
       ),
       date: parseSantanderDate(rawTransaction.fecha),
       description: rawTransaction.descripcion,
-      displayDescription: patternDescription,
       amount,
       currency,
       type: isCredit ? 'credit' : 'debit',
       source: 'credit_card',
-      category,
-      categoryConfidence: confidence,
       rawData: rawTransaction,
     }
 
     return transaction
   } catch (error) {
     // Row number is 1-based to match what the user sees in a spreadsheet.
-    throw new Error(
-      `Fila ${rowIndex + 1}: ${error instanceof Error ? error.message : String(error)}`
+    // Our own row errors are already Spanish; anything else is a parser bug
+    // whose raw text must not reach the user.
+    throw new UserFacingError(
+      `Fila ${rowIndex + 1}: ${error instanceof UserFacingError ? error.message : 'no se pudo leer la fila'}`
     )
   }
 }

@@ -45,12 +45,12 @@ import {
   buildMonthlyTrendsConverted,
   buildCurrencySplit,
   spendByAccount,
-  isExcludedFromTotals,
   summarizeSavings,
   niceTicks,
 } from '../services/charts/chart-data'
 import type { AccountSpend } from '../services/charts/chart-data'
 import { categoryChanges } from '../services/charts/category-changes'
+import { countsTowardTotals } from '../services/spending/spending-rules'
 import { CategoryChangesCard } from './CategoryChangesCard'
 import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
@@ -253,7 +253,7 @@ export function Dashboard({
   // Every figure on Resumen is computed from countable transactions only —
   // ignored categories (transfers, user-flagged) and split parents are out.
   const countedTransactions = useMemo(
-    () => transactions.filter((tx) => !isExcludedFromTotals(tx)),
+    () => transactions.filter(countsTowardTotals),
     [transactions]
   )
 
@@ -1059,9 +1059,15 @@ export function Dashboard({
               </p>
             ) : (
               <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[240px_1fr] sm:gap-9">
-                <div className="relative mx-auto h-[220px] w-[220px] sm:mx-0">
+                {/* Decorative for assistive tech: the category list beside
+                    it has the same numbers and actions (#203). */}
+                <div
+                  aria-hidden="true"
+                  className="relative mx-auto h-[220px] w-[220px] sm:mx-0"
+                >
                   <PieChart width={220} height={220}>
                     <Pie
+                      rootTabIndex={-1}
                       data={donutData}
                       cx="50%"
                       cy="50%"

@@ -1,6 +1,8 @@
 import type { Currency, Transaction } from '../../models'
-import { isSplitParentTx } from '../../models'
-import { isCategoryIgnored } from '../categories/category-registry'
+import {
+  countsTowardTotals,
+  isCountedExpense,
+} from '../spending/spending-rules'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { convert } from '../currency/convert'
 import { toMonthKey } from '../../utils/date-utils'
@@ -47,13 +49,6 @@ export interface CurrencySplitData {
   pctUYU: number
 }
 
-// A transaction is excluded from every total when its category is ignored
-// (transfers, the legacy 'ignored' id, or any category the user flagged) or
-// when it is the inert parent row of a split.
-export function isExcludedFromTotals(tx: Transaction): boolean {
-  return isCategoryIgnored(tx.category) || isSplitParentTx(tx)
-}
-
 export function buildCategorySpendingConverted(
   transactions: Transaction[],
   homeCurrency: Currency,
@@ -62,7 +57,7 @@ export function buildCategorySpendingConverted(
   const grouped = new Map<string, { total: number; count: number }>()
 
   transactions.forEach((tx) => {
-    if (tx.type !== 'debit' || isExcludedFromTotals(tx)) return
+    if (!isCountedExpense(tx)) return
     // Same id Categorías and the Transacciones filter use, so a category row
     // links to exactly the rows it sums.
     const category = normalizeCategoryId(tx.category)
@@ -86,7 +81,7 @@ export function buildMonthlyTrendsConverted(
   const grouped = new Map<string, MonthlyTrendDatum>()
 
   transactions.forEach((tx) => {
-    if (isExcludedFromTotals(tx)) return
+    if (!countsTowardTotals(tx)) return
     const month = toMonthKey(tx.date)
     if (!grouped.has(month)) {
       grouped.set(month, { month, income: 0, expense: 0, net: 0 })
@@ -115,7 +110,7 @@ export function buildCurrentMonthSummary(
 ): MonthSummary {
   // Reference month comes from countable transactions only — a trailing
   // transfer or ignored row must not drag "este mes" onto an empty month.
-  const counted = transactions.filter((tx) => !isExcludedFromTotals(tx))
+  const counted = transactions.filter(countsTowardTotals)
   if (counted.length === 0) {
     return {
       income: 0,
@@ -185,7 +180,7 @@ export function buildCurrencySplit(
   let uyu = 0
 
   transactions.forEach((tx) => {
-    if (tx.type !== 'debit' || isExcludedFromTotals(tx)) return
+    if (!isCountedExpense(tx)) return
     const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
     if (tx.currency === 'USD') usd += converted
     else uyu += converted
@@ -230,24 +225,22 @@ export function spendByAccount(
     uyu: { conv: 0, USD: 0, UYU: 0, count: 0, pct: 0 },
   }
 
-  transactions
-    .filter((tx) => tx.type === 'debit' && !isExcludedFromTotals(tx))
-    .forEach((tx) => {
-      let bucket: AccountBucket
-      if (tx.source === 'credit_card') {
-        bucket = 'card'
-      } else if (tx.currency === 'USD') {
-        bucket = 'usd'
-      } else {
-        bucket = 'uyu'
-      }
-      const a = map[bucket]
-      a.conv += convert(tx.amount, tx.currency, homeCurrency, fxRate)
-      a[tx.currency] += tx.amount
-      a.count++
-      if (!a.first || tx.date < a.first) a.first = tx.date
-      if (!a.last || tx.date > a.last) a.last = tx.date
-    })
+  transactions.filter(isCountedExpense).forEach((tx) => {
+    let bucket: AccountBucket
+    if (tx.source === 'credit_card') {
+      bucket = 'card'
+    } else if (tx.currency === 'USD') {
+      bucket = 'usd'
+    } else {
+      bucket = 'uyu'
+    }
+    const a = map[bucket]
+    a.conv += convert(tx.amount, tx.currency, homeCurrency, fxRate)
+    a[tx.currency] += tx.amount
+    a.count++
+    if (!a.first || tx.date < a.first) a.first = tx.date
+    if (!a.last || tx.date > a.last) a.last = tx.date
+  })
 
   const total = map.card.conv + map.usd.conv + map.uyu.conv || 1
   ;(Object.keys(map) as AccountBucket[]).forEach((b) => {

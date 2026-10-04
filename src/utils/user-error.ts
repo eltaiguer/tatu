@@ -17,6 +17,39 @@ export class NeedsConfirmationError extends Error {
   }
 }
 
+/**
+ * A write that reached the server for some rows only (#60): the screen
+ * already shows exactly the rows that saved. `retry` re-sends only the rows
+ * whose request failed (absent when only rows gone from the server are
+ * left). `result` carries what a delete did remove, so it can still be
+ * undone.
+ */
+export class PartialWriteError<R = unknown> extends UserFacingError {
+  constructor(
+    message: string,
+    readonly done: number,
+    readonly total: number,
+    readonly retry?: () => Promise<unknown>,
+    readonly result?: R
+  ) {
+    super(message)
+    this.name = 'PartialWriteError'
+  }
+}
+
+/**
+ * The account changed while a write was in flight. What the server answered
+ * belongs to the previous user and is not shown to the new one.
+ */
+export class WorkspaceChangedError extends UserFacingError {
+  constructor() {
+    super(
+      'La sesión cambió mientras se guardaba el cambio; no se muestra en esta cuenta.'
+    )
+    this.name = 'WorkspaceChangedError'
+  }
+}
+
 function isNetworkError(error: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return true

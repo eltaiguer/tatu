@@ -9,6 +9,7 @@ const {
   orderMock,
   limitMock,
   upsertMock,
+  insertMock,
   updateMock,
   eqForUpdateMock,
   eqForUpdateIdMock,
@@ -23,6 +24,7 @@ const {
   orderMock: vi.fn(),
   limitMock: vi.fn(),
   upsertMock: vi.fn(),
+  insertMock: vi.fn(),
   updateMock: vi.fn(),
   eqForUpdateMock: vi.fn(),
   eqForUpdateIdMock: vi.fn(),
@@ -137,6 +139,7 @@ describe('supabase transactions service', () => {
     installFakeTable()
 
     upsertMock.mockResolvedValue({ error: null })
+    insertMock.mockResolvedValue({ error: null })
 
     // UPDATE ... RETURNING transaction_id: one matched row unless a test
     // says otherwise.
@@ -159,6 +162,7 @@ describe('supabase transactions service', () => {
       return {
         select: selectMock,
         upsert: upsertMock,
+        insert: insertMock,
         update: updateMock,
       }
     })
@@ -225,7 +229,7 @@ describe('supabase transactions service', () => {
     await expect(loadUserTransactions(session)).rejects.toThrow('timeout')
   })
 
-  it('upserts transactions with user ownership', async () => {
+  it('inserts imported transactions with user ownership', async () => {
     const { persistTransactions } = await import('./transactions')
     await persistTransactions(session, [
       {
@@ -241,118 +245,42 @@ describe('supabase transactions service', () => {
       },
     ])
 
-    expect(upsertMock).toHaveBeenCalledTimes(1)
-    expect(upsertMock.mock.calls[0][1]).toEqual({
-      onConflict: 'user_id,transaction_id',
+    expect(insertMock).toHaveBeenCalledTimes(1)
+    expect(insertMock.mock.calls[0][0][0]).toMatchObject({
+      user_id: 'user-1',
+      transaction_id: 'tx-99',
+      tags: ['coffee', 'work'],
     })
-    expect(upsertMock.mock.calls[0][0][0].tags).toEqual(['coffee', 'work'])
   })
 
-  it('does not include is_deleted in upsert payload so soft-deleted transactions are not resurrected on re-import', async () => {
+  it('never overwrites a stored row: an id already taken fails the import', async () => {
+    // An upsert would silently replace another transaction's content (or
+    // give a deleted row new content) if a taken id ever slipped through.
+    insertMock.mockResolvedValue({
+      error: { code: '23505', message: 'duplicate key value' },
+    })
     const { persistTransactions } = await import('./transactions')
-    await persistTransactions(session, [
-      {
-        id: 'tx-deleted',
-        date: new Date('2026-02-03T00:00:00.000Z'),
-        description: 'Supermercado',
-        amount: 200,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'credit_card',
-        rawData: {},
-      },
-    ])
-
-    const row = upsertMock.mock.calls[0][0][0]
-    expect(row).not.toHaveProperty('is_deleted')
-    expect(row).not.toHaveProperty('deleted_at')
-  })
-
-  it('soft deletes a transaction', async () => {
-    const { softDeleteTransaction } = await import('./transactions')
-    await softDeleteTransaction(session, 'tx-99')
-
-    expect(updateMock).toHaveBeenCalledWith({
-      is_deleted: true,
-      deleted_at: expect.any(String),
-    })
-    expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
-    expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
-  })
-
-  it('reports a soft delete that matched no row instead of succeeding', async () => {
-    selectAfterUpdateMock.mockResolvedValue({ data: [], error: null })
-    const { softDeleteTransaction } = await import('./transactions')
-
-    await expect(softDeleteTransaction(session, 'tx-gone')).rejects.toThrow(
-      /ya no existe/
-    )
-  })
-
-  it('restores soft-deleted transactions in one request', async () => {
-    selectAfterUpdateMock.mockResolvedValue({
-      data: [{ transaction_id: 'tx-1' }, { transaction_id: 'tx-2' }],
-      error: null,
-    })
-    const { restoreTransactions } = await import('./transactions')
-    await restoreTransactions(session, ['tx-1', 'tx-2'])
-
-    expect(updateMock).toHaveBeenCalledTimes(1)
-    expect(updateMock).toHaveBeenCalledWith({
-      is_deleted: false,
-      deleted_at: null,
-    })
-    expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
-    expect(inForUpdateMock).toHaveBeenCalledWith('transaction_id', [
-      'tx-1',
-      'tx-2',
-    ])
-  })
-
-  it('fails a restore when not every row came back', async () => {
-    selectAfterUpdateMock.mockResolvedValue({
-      data: [{ transaction_id: 'tx-1' }],
-      error: null,
-    })
-    const { restoreTransactions } = await import('./transactions')
 
     await expect(
-      restoreTransactions(session, ['tx-1', 'tx-2'])
-    ).rejects.toThrow(/No se pudieron restaurar/)
+      persistTransactions(session, [
+        {
+          id: 'tx-taken',
+          date: new Date('2026-02-03T00:00:00.000Z'),
+          description: 'Supermercado',
+          amount: 200,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'credit_card',
+          rawData: {},
+        },
+      ])
+    ).rejects.toThrow(/ya estaban guardadas/)
+    expect(upsertMock).not.toHaveBeenCalled()
   })
 
-  it('updates editable fields for a transaction', async () => {
-    const { updateTransaction } = await import('./transactions')
-    await updateTransaction(session, 'tx-99', {
-      description: 'Nuevo comercio',
-      category: '',
-      tags: ['servicio', 'mensual'],
-    })
-
-    expect(updateMock).toHaveBeenCalledWith({
-      description: 'Nuevo comercio',
-      category: null,
-      tags: ['servicio', 'mensual'],
-    })
-    expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
-    expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
-  })
-
-  it('reports an update that matched no row instead of succeeding', async () => {
-    selectAfterUpdateMock.mockResolvedValue({ data: [], error: null })
-    const { updateTransaction } = await import('./transactions')
-
-    await expect(
-      updateTransaction(session, 'tx-gone', { category: 'food' })
-    ).rejects.toThrow(/ya no existe/)
-  })
-
-  it('does not issue update when no fields are provided', async () => {
-    const { updateTransaction } = await import('./transactions')
-    await updateTransaction(session, 'tx-99', {})
-
-    expect(updateMock).not.toHaveBeenCalled()
-  })
+  // Updates, soft deletes, restores and split writes are single-request
+  // primitives of the repository's Supabase adapter; their requests are
+  // tested in services/repository/supabase-repository.test.ts (#119).
 
   describe('findExistingTransactionIds', () => {
     it('splits existing ids into active and deleted, in chunks', async () => {
@@ -396,5 +324,152 @@ describe('supabase transactions service', () => {
         'timeout'
       )
     })
+  })
+})
+
+// A chainable stand-in for a PostgREST select that applies the filters it is
+// given to `rows` and caps each response at `maxRows`, as the server does.
+function installQueryableTable(rows: FakeRow[], maxRows = 1000) {
+  fromMock.mockImplementation(() => ({
+    select: () => {
+      const filters: Array<[string, string, unknown]> = []
+      let limit = Infinity
+      const run = () => {
+        let data = [...rows]
+        for (const [op, col, value] of filters) {
+          data = data.filter((row) => {
+            const v = row[col] as string
+            if (op === 'eq') return v === value
+            if (op === 'is') return (v ?? null) === value
+            if (op === 'in') return (value as unknown[]).includes(v)
+            if (op === 'gt') return v > (value as string)
+            if (op === 'gte') return v >= (value as string)
+            if (op === 'lte') return v <= (value as string)
+            return true
+          })
+        }
+        data.sort((a, b) => a.transaction_id.localeCompare(b.transaction_id))
+        return { data: data.slice(0, Math.min(limit, maxRows)), error: null }
+      }
+      const builder: Record<string, unknown> = {
+        then: (resolve: (v: unknown) => void) => resolve(run()),
+        order: () => builder,
+        limit: (n: number) => {
+          limit = n
+          return builder
+        },
+      }
+      for (const op of ['eq', 'is', 'in', 'gt', 'gte', 'lte']) {
+        builder[op] = (col: string, value: unknown) => {
+          filters.push([op, col, value])
+          return builder
+        }
+      }
+      return builder
+    },
+  }))
+}
+
+describe('findImportCandidates', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const incoming = (id: string, date: string) => ({
+    id,
+    date: new Date(date),
+    description: 'Compra',
+    amount: 100,
+    currency: 'UYU' as const,
+    type: 'debit' as const,
+    source: 'bank_account' as const,
+    rawData: { fecha: '01/02/2026' },
+  })
+
+  function row(id: string, overrides: Partial<FakeRow> = {}): FakeRow {
+    return {
+      ...makeRow(0),
+      transaction_id: id,
+      date: '2026-02-01T03:00:00.000Z',
+      raw_data: { fecha: '01/02/2026' },
+      is_deleted: false,
+      split_parent_id: null,
+      ...overrides,
+    }
+  }
+
+  it('returns live and deleted rows around the file dates, with their content', async () => {
+    installQueryableTable([
+      row('live'),
+      row('gone', {
+        date: '2026-02-02T03:00:00.000Z',
+        is_deleted: true,
+        deleted_at: '2026-03-01T00:00:00.000Z',
+      }),
+      row('long-ago', { date: '2025-06-01T03:00:00.000Z' }),
+      row('other-user', { user_id: 'user-2' }),
+      row('card', { source: 'credit_card' }),
+    ])
+
+    const { findImportCandidates } = await import('./transactions')
+    const found = await findImportCandidates(session, [
+      incoming('new', '2026-02-01T03:00:00.000Z'),
+    ])
+
+    const byId = new Map(found.map((r) => [r.tx.id, r]))
+    expect([...byId.keys()].sort()).toEqual(['gone', 'live'])
+    expect(byId.get('gone')?.deleted).toBe(true)
+    expect(byId.get('live')?.deleted).toBe(false)
+    expect(byId.get('live')?.tx.rawData).toEqual({ fecha: '01/02/2026' })
+  })
+
+  it('reads every row in the window past the server row cap', async () => {
+    installQueryableTable(
+      Array.from({ length: 1053 }, (_, i) =>
+        row(`tx-${String(i).padStart(4, '0')}`, { is_deleted: i % 2 === 0 })
+      ),
+      300
+    )
+
+    const { findImportCandidates } = await import('./transactions')
+    const found = await findImportCandidates(session, [
+      incoming('new', '2026-02-01T00:00:00.000Z'),
+    ])
+
+    expect(found).toHaveLength(1053)
+    expect(found.filter((r) => r.deleted)).toHaveLength(527)
+  })
+
+  it('also returns a row holding an incoming id outside the window', async () => {
+    installQueryableTable([
+      row('same-id', { date: '2020-01-01T03:00:00.000Z' }),
+    ])
+
+    const { findImportCandidates } = await import('./transactions')
+    const found = await findImportCandidates(session, [
+      incoming('same-id', '2026-02-01T03:00:00.000Z'),
+    ])
+
+    expect(found.map((r) => r.tx.id)).toEqual(['same-id'])
+  })
+
+  it('leaves split parts out of the window', async () => {
+    installQueryableTable([
+      row('p', { is_split_parent: true }),
+      row('p_split_0', { split_parent_id: 'p', raw_data: {} }),
+    ])
+
+    const { findImportCandidates } = await import('./transactions')
+    const found = await findImportCandidates(session, [
+      incoming('new', '2026-02-01T00:00:00.000Z'),
+    ])
+
+    expect(found.map((r) => r.tx.id)).toEqual(['p'])
+  })
+
+  it('returns nothing without querying for an empty import', async () => {
+    const { findImportCandidates } = await import('./transactions')
+    expect(await findImportCandidates(session, [])).toEqual([])
+    expect(fromMock).not.toHaveBeenCalled()
   })
 })

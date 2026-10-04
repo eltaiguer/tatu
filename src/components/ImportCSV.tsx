@@ -3,14 +3,21 @@
 import { Card } from './ui/card'
 import { Button } from './ui/button'
 import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { aiErrorMessage, userErrorMessage } from '../utils/user-error'
+import {
+  aiErrorMessage,
+  UserFacingError,
+  userErrorMessage,
+} from '../utils/user-error'
 import { parseCSV } from '../services/parsers/csv-parser'
+import { categorizeParsedData } from '../services/categorizer/import-categorization'
 import { transactionStore } from '../stores/transaction-store'
 import type { ParsedData, Transaction } from '../models'
 
-type ImportState = 'idle' | 'validating' | 'success' | 'error'
+// validating = reading/parsing the file; importing = the file is valid and
+// its rows are being saved.
+type ImportState = 'idle' | 'validating' | 'importing' | 'success' | 'error'
 type UiFileType = 'credit_card' | 'usd_account' | 'uyu_account'
 
 interface ImportCSVProps {
@@ -46,7 +53,8 @@ async function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(new Error('Error al leer el archivo'))
+    reader.onerror = () =>
+      reject(new UserFacingError('Error al leer el archivo'))
     reader.readAsText(file)
   })
 }
@@ -65,6 +73,12 @@ export function ImportCSV({
     duplicates: number
   } | null>(null)
   const [errorMessage, setErrorMessage] = useState<string>('')
+  // Whether the failure happened after the file was understood (saving), so
+  // a valid file is never reported as a validation error.
+  const [failedWhileSaving, setFailedWhileSaving] = useState(false)
+  // The real file input stays hidden; a real button opens it, so the picker
+  // is reachable by Tab and Enter/Space (a <label> is not focusable, #193).
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -87,7 +101,8 @@ export function ImportCSV({
   }
 
   const handleFile = async (file: File) => {
-    if (!file.name.endsWith('.csv')) {
+    setFailedWhileSaving(false)
+    if (!file.name.toLowerCase().endsWith('.csv')) {
       setImportState('error')
       setFileName(file.name)
       setErrorMessage('El archivo debe estar en formato CSV')
@@ -98,13 +113,17 @@ export function ImportCSV({
     setImportState('validating')
     setErrorMessage('')
 
-    // Parse errors are ours and already in Spanish; anything after parsing
-    // (saving, the network) is translated so raw backend text never shows.
+    // Parser errors are UserFacingErrors (Spanish, say what to do); anything
+    // else — a parser bug, saving, the network — is translated so raw
+    // English never shows.
     let parsed = false
     try {
       const csvContent = await readFileAsText(file)
-      const result = parseCSV(csvContent, file.name)
+      // Parsers return uncategorized rows; categorize before anything else
+      // sees them (dedup, AI enrichment, the store).
+      const result = categorizeParsedData(parseCSV(csvContent, file.name))
       parsed = true
+      setImportState('importing')
 
       if (result.fileType === 'credit_card') {
         setFileType('credit_card')
@@ -168,12 +187,14 @@ export function ImportCSV({
     } catch (error) {
       console.error('import failed:', error)
       setImportState('error')
+      setFailedWhileSaving(parsed)
       setErrorMessage(
-        parsed
-          ? userErrorMessage(error, 'No se pudo guardar la importación')
-          : error instanceof Error
-            ? error.message
-            : 'Error al procesar el archivo'
+        userErrorMessage(
+          error,
+          parsed
+            ? 'No se pudo guardar la importación'
+            : 'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
+        )
       )
     }
   }
@@ -190,16 +211,17 @@ export function ImportCSV({
     setFileType(null)
     setImportSummary(null)
     setErrorMessage('')
+    setFailedWhileSaving(false)
   }
 
   const getAccountTypeLabel = (type: UiFileType) => {
     switch (type) {
       case 'credit_card':
-        return 'Tarjeta de Crédito'
+        return 'Tarjeta de crédito'
       case 'usd_account':
         return 'Cuenta USD'
       case 'uyu_account':
-        return 'Cuenta UYU'
+        return 'Cuenta $U'
       default:
         return ''
     }
@@ -208,7 +230,7 @@ export function ImportCSV({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="mb-1">Importar Transacciones</h2>
+        <h2 className="mb-1">Importar transacciones</h2>
         <p className="text-muted-foreground">
           Importá extractos CSV de Santander Uruguay
         </p>
@@ -231,34 +253,42 @@ export function ImportCSV({
               <div className="p-4 rounded-full bg-primary/10">
                 <Upload className="text-primary" size={32} />
               </div>
-              <div>
+              {/* Phones can't drag files: below md only the button shows. */}
+              <div className="hidden md:block">
                 <p className="font-medium mb-1">Arrastrá tu archivo CSV aquí</p>
                 <p className="text-sm text-muted-foreground">
-                  o hacé clic para seleccionar
+                  o seleccioná un archivo
                 </p>
               </div>
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".csv"
                 onChange={handleFileInput}
                 className="hidden"
-                id="file-upload"
+                tabIndex={-1}
+                aria-label="Seleccionar archivo"
               />
-              <Button asChild>
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  Seleccionar archivo
-                </label>
+              <Button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Seleccionar archivo
               </Button>
             </div>
           </div>
         )}
 
-        {importState === 'validating' && (
+        {(importState === 'validating' || importState === 'importing') && (
           <div className="text-center py-12">
             <div className="flex flex-col items-center gap-4">
               <Loader className="animate-spin text-primary" size={48} />
               <div>
-                <p className="font-medium mb-1">Validando archivo...</p>
+                <p className="font-medium mb-1">
+                  {importState === 'importing'
+                    ? 'Importando…'
+                    : 'Validando archivo…'}
+                </p>
                 <p className="text-sm text-muted-foreground">{fileName}</p>
               </div>
             </div>
@@ -308,7 +338,11 @@ export function ImportCSV({
                 <CircleAlert className="text-destructive" size={48} />
               </div>
               <div>
-                <p className="font-medium mb-1">Error al validar archivo</p>
+                <p className="font-medium mb-1">
+                  {failedWhileSaving
+                    ? 'No se pudo importar'
+                    : 'Error al validar archivo'}
+                </p>
                 <p className="text-sm text-muted-foreground mb-2">{fileName}</p>
                 <p className="text-sm text-destructive">
                   {errorMessage || 'El archivo debe estar en formato CSV'}
@@ -326,7 +360,7 @@ export function ImportCSV({
             <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/20">
               <FileText className="text-primary" size={20} />
             </div>
-            <h4>Tarjeta de Crédito</h4>
+            <h4>Tarjeta de crédito</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Extracto de tarjeta Santander con compras y pagos en UYU y USD.
@@ -350,7 +384,7 @@ export function ImportCSV({
             <div className="p-2 rounded-lg bg-success-50 dark:bg-success-900/20">
               <FileText className="text-success-600" size={20} />
             </div>
-            <h4>Cuenta UYU</h4>
+            <h4>Cuenta $U</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Caja de ahorro en pesos uruguayos con todas las operaciones.
