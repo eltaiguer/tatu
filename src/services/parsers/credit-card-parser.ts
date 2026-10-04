@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import { UserFacingError } from '../../utils/user-error'
 import type {
   ParsedData,
   CreditCardMetadata,
@@ -117,7 +118,7 @@ function parseTransactions(
   // understood. That is different from a statement whose marker is present
   // but which lists no movements, which legitimately yields an empty list.
   if (startIndex === -1) {
-    throw new Error(
+    throw new UserFacingError(
       'No se encontró la sección de movimientos en el archivo. ' +
         '¿Es un resumen de tarjeta de crédito de Santander?'
     )
@@ -203,8 +204,10 @@ function parseRow(
     return transaction
   } catch (error) {
     // Row number is 1-based to match what the user sees in a spreadsheet.
-    throw new Error(
-      `Fila ${rowIndex + 1}: ${error instanceof Error ? error.message : String(error)}`
+    // Our own row errors are already Spanish; anything else is a parser bug
+    // whose raw text must not reach the user.
+    throw new UserFacingError(
+      `Fila ${rowIndex + 1}: ${error instanceof UserFacingError ? error.message : 'no se pudo leer la fila'}`
     )
   }
 }

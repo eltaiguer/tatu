@@ -223,14 +223,16 @@ describe('CSV Parser - Integration Tests with All Sample Files', () => {
       const invalidCSV = 'This is not a valid Santander CSV\nJust random data'
 
       expect(() => parseCSV(invalidCSV, 'invalid.csv')).toThrow(
-        'Unable to detect CSV file type'
+        'No reconocemos este archivo.'
       )
     })
 
     it('should throw error for empty CSV', () => {
       const emptyCSV = ''
 
-      expect(() => parseCSV(emptyCSV, 'empty.csv')).toThrow()
+      expect(() => parseCSV(emptyCSV, 'empty.csv')).toThrow(
+        'El archivo está vacío.'
+      )
     })
 
     it('should throw error for CSV with wrong format', () => {

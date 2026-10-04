@@ -1,7 +1,35 @@
 import { afterEach, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import {
+  cleanup,
+  configure,
+  getConfig as getRtlConfig,
+} from '@testing-library/react'
+import { configure as configureUserEventDom } from '@testing-library/dom'
 import '@testing-library/jest-dom/vitest'
 import { installConsoleGuard } from './console-guard'
+
+// findBy* / waitFor give up after `asyncUtilTimeout`, which is separate from
+// Vitest's testTimeout (20s, #78) and defaults to 1s. Under full-suite CPU
+// load an App-level view can take longer than that to render after
+// hydration, so the App suites failed with "Unable to find ..." (#191). A
+// broken wait still fails well inside testTimeout. Don't add retries instead.
+// In App-level tests, also poll with cheap queries (ByLabelText, ByText):
+// waitFor reruns its query on every DOM mutation, and a ByRole query over the
+// whole App takes ~1s under load, starving the very render it waits for. Use
+// a synchronous getByRole after the wait to keep the accessibility check.
+const ASYNC_UTIL_TIMEOUT_MS = 5_000
+configure({ asyncUtilTimeout: ASYNC_UTIL_TIMEOUT_MS })
+
+// user-event drives the hoisted @testing-library/dom, while RTL only wraps
+// its own nested copy in act(). Hand RTL's act() wrappers to the copy
+// user-event uses, so keyboard/pointer tests don't log act() warnings. It
+// gets the same async budget, so waits behave alike in both copies.
+const rtlConfig = getRtlConfig()
+configureUserEventDom({
+  eventWrapper: rtlConfig.eventWrapper,
+  asyncWrapper: rtlConfig.asyncWrapper,
+  asyncUtilTimeout: ASYNC_UTIL_TIMEOUT_MS,
+})
 
 // Cleanup after each test
 afterEach(() => {
