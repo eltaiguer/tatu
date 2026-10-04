@@ -1,10 +1,13 @@
 import { isReservedCategoryId } from './category-aliases'
 import { UserFacingError } from '../../utils/user-error'
-import {
-  archiveCustomCategory,
-  upsertCustomCategory,
-} from '../supabase/custom-categories'
-import { getActiveSupabaseSession } from '../supabase/runtime'
+import type { Repository } from '../repository/repository'
+import { isWorkspaceOwner } from '../../stores/workspace-state'
+
+/** The part of the repository port the category store writes through. */
+export type CategoryRepository = Pick<
+  Repository,
+  'userId' | 'upsertCustomCategory' | 'archiveCustomCategory'
+>
 
 export const DEFAULT_CATEGORY_COLOR = '#0ea5e9'
 
@@ -91,25 +94,28 @@ export function removeCustomCategory(id: string): void {
   _customCategories = _customCategories.filter((c) => c.id !== id)
 }
 
-// The *WithSync functions apply a change locally, push it, and on failure
-// undo exactly that change (not a snapshot of the whole list, which would
-// also undo concurrent edits) before rethrowing, so the UI never shows a
-// category the server doesn't have.
-async function requireSession() {
-  const session = getActiveSupabaseSession()
-  if (!session) {
+// The *WithSync functions save through the repository they are given (the
+// signed-in user's, #119): they apply a change locally, push it, and on
+// failure undo exactly that change (not a snapshot of the whole list, which
+// would also undo concurrent edits) before rethrowing, so the UI never shows
+// a category the server doesn't have. They refuse to start unless that
+// repository's user owns the loaded workspace, and skip the undo if another
+// user signed in meanwhile (their categories are not this change's to undo).
+function requireOwner(repo: CategoryRepository): void {
+  if (!isWorkspaceOwner(repo.userId)) {
     throw new UserFacingError(
       'Tu sesión terminó. Iniciá sesión de nuevo para guardar cambios.'
     )
   }
-  return session
 }
 
-async function pushCategory(id: string): Promise<void> {
+async function pushCategory(
+  repo: CategoryRepository,
+  id: string
+): Promise<void> {
   const category = _customCategories.find((c) => c.id === id)
   if (!category) return
-  const session = await requireSession()
-  await upsertCustomCategory(session, {
+  await repo.upsertCustomCategory({
     id: category.id,
     label: category.label,
     color: category.color,
@@ -119,7 +125,12 @@ async function pushCategory(id: string): Promise<void> {
   })
 }
 
-function restoreCategory(id: string, previous: CustomCategory | undefined) {
+function restoreCategory(
+  repo: CategoryRepository,
+  id: string,
+  previous: CustomCategory | undefined
+) {
+  if (!isWorkspaceOwner(repo.userId)) return
   if (previous) {
     _customCategories = _customCategories.some((c) => c.id === id)
       ? _customCategories.map((c) => (c.id === id ? previous : c))
@@ -129,35 +140,41 @@ function restoreCategory(id: string, previous: CustomCategory | undefined) {
   }
 }
 
-export async function addCustomCategoryWithSync(input: {
-  label: string
-  color: string
-  icon?: string
-  isIgnored?: boolean
-}): Promise<CustomCategory> {
+export async function addCustomCategoryWithSync(
+  repo: CategoryRepository,
+  input: {
+    label: string
+    color: string
+    icon?: string
+    isIgnored?: boolean
+  }
+): Promise<CustomCategory> {
+  requireOwner(repo)
   const created = addCustomCategory(input)
   try {
-    await pushCategory(created.id)
+    await pushCategory(repo, created.id)
   } catch (error) {
-    restoreCategory(created.id, undefined)
+    restoreCategory(repo, created.id, undefined)
     throw error
   }
   return created
 }
 
 export async function updateCustomCategoryWithSync(
+  repo: CategoryRepository,
   id: string,
   updates: Partial<
     Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
   >
 ): Promise<void> {
+  requireOwner(repo)
   const previous = _customCategories.find((c) => c.id === id)
   if (!previous) return
   updateCustomCategory(id, updates)
   try {
-    await pushCategory(id)
+    await pushCategory(repo, id)
   } catch (error) {
-    restoreCategory(id, previous)
+    restoreCategory(repo, id, previous)
     throw error
   }
 }
@@ -187,29 +204,34 @@ export function upsertBuiltinOverride(
 }
 
 export async function upsertBuiltinOverrideWithSync(
+  repo: CategoryRepository,
   id: string,
   updates: Partial<
     Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
   >
 ): Promise<void> {
+  requireOwner(repo)
   const previous = _customCategories.find((c) => c.id === id)
   upsertBuiltinOverride(id, updates)
   try {
-    await pushCategory(id)
+    await pushCategory(repo, id)
   } catch (error) {
-    restoreCategory(id, previous)
+    restoreCategory(repo, id, previous)
     throw error
   }
 }
 
-export async function removeCustomCategoryWithSync(id: string): Promise<void> {
+export async function removeCustomCategoryWithSync(
+  repo: CategoryRepository,
+  id: string
+): Promise<void> {
+  requireOwner(repo)
   const previous = _customCategories.find((c) => c.id === id)
   removeCustomCategory(id)
   try {
-    const session = await requireSession()
-    await archiveCustomCategory(session, id)
+    await repo.archiveCustomCategory(id)
   } catch (error) {
-    restoreCategory(id, previous)
+    restoreCategory(repo, id, previous)
     throw error
   }
 }

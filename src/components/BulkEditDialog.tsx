@@ -11,6 +11,10 @@ import {
 } from './ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { CategoryBadge } from './CategoryBadge'
+import {
+  filterCategorySuggestions,
+  filterTagSuggestions,
+} from '../services/suggestions/suggestions'
 
 interface BulkEditDialogProps {
   open: boolean
@@ -21,8 +25,7 @@ interface BulkEditDialogProps {
   bulkTagPickerOpen: boolean
   bulkCategorySearch: string
   bulkTagSearch: string
-  bulkFilteredCategories: string[]
-  bulkFilteredTags: string[]
+  categorySuggestions: string[]
   tagSuggestions: string[]
   isBulkOperating: boolean
   showCategorySection: boolean
@@ -47,8 +50,7 @@ export function BulkEditDialog({
   bulkTagPickerOpen,
   bulkCategorySearch,
   bulkTagSearch,
-  bulkFilteredCategories,
-  bulkFilteredTags,
+  categorySuggestions,
   tagSuggestions,
   isBulkOperating,
   showCategorySection,
@@ -62,6 +64,12 @@ export function BulkEditDialog({
   onSave,
   onCancel,
 }: BulkEditDialogProps) {
+  const filteredCategories = filterCategorySuggestions(
+    categorySuggestions,
+    bulkCategorySearch
+  )
+  const filteredTags = filterTagSuggestions(tagSuggestions, bulkTagSearch)
+
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
       <DialogContent>
@@ -130,7 +138,7 @@ export function BulkEditDialog({
                           Sin cambios
                         </span>
                       </button>
-                      {bulkFilteredCategories.map((category) => (
+                      {filteredCategories.map((category) => (
                         <button
                           key={category}
                           type="button"
@@ -183,7 +191,7 @@ export function BulkEditDialog({
                       onWheel={(event) => event.stopPropagation()}
                       onTouchMove={(event) => event.stopPropagation()}
                     >
-                      {bulkFilteredTags.map((tag) => (
+                      {filteredTags.map((tag) => (
                         <button
                           key={tag}
                           type="button"

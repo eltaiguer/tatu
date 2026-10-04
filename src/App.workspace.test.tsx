@@ -59,9 +59,8 @@ vi.mock('./services/supabase/auth', () => ({
 vi.mock('./services/supabase/transactions', () => ({
   loadUserTransactions: vi.fn().mockResolvedValue([]),
   persistTransactions: vi.fn().mockResolvedValue(undefined),
-  softDeleteTransaction: vi.fn().mockResolvedValue(undefined),
-  restoreTransactions: vi.fn().mockResolvedValue(undefined),
-  updateTransaction: vi.fn().mockResolvedValue(undefined),
+  setTransactionsDeleted: vi.fn(async (_s: unknown, ids: string[]) => ids),
+  updateTransactionsByIds: vi.fn(async (_s: unknown, ids: string[]) => ids),
 }))
 
 vi.mock('./services/supabase/category-overrides', () => ({
