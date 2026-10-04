@@ -526,7 +526,7 @@ function App() {
           if (!open) setImportOpen(false)
         }}
       >
-        <DialogContent className="max-w-[680px]! overflow-x-hidden rounded-[var(--radius-lg)]! p-0">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[680px]! overflow-x-hidden overflow-y-auto rounded-[var(--radius-lg)]!">
           <DialogTitle className="sr-only">Importar archivo CSV</DialogTitle>
           <DialogDescription className="sr-only">
             Arrastrá o seleccioná un archivo CSV de Santander Uruguay para
