@@ -240,6 +240,24 @@ describe('App', () => {
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
   })
 
+  it('returns focus to the sidebar Importar button when the import dialog closes', async () => {
+    renderApp()
+    const opener = await screen.findByRole('button', { name: 'Importar' })
+    const user = userEvent.setup()
+
+    opener.focus()
+    await user.keyboard('{Enter}')
+    await screen.findByRole('heading', { name: 'Importar transacciones' })
+    await user.keyboard('{Escape}')
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Importar transacciones' })
+      ).toBeNull()
+    )
+    await waitFor(() => expect(opener).toHaveFocus())
+  })
+
   it('shows supported file types on import view', async () => {
     renderApp()
     await waitFor(() =>
@@ -539,7 +557,7 @@ describe('App', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
@@ -649,7 +667,7 @@ describe('App', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'recurrente' },
     })

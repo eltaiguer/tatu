@@ -1,7 +1,17 @@
 import { afterEach, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, getConfig as getRtlConfig } from '@testing-library/react'
+import { configure as configureUserEventDom } from '@testing-library/dom'
 import '@testing-library/jest-dom/vitest'
 import { installConsoleGuard } from './console-guard'
+
+// user-event drives the hoisted @testing-library/dom, while RTL only wraps
+// its own nested copy in act(). Hand RTL's act() wrappers to the copy
+// user-event uses, so keyboard/pointer tests don't log act() warnings.
+const rtlConfig = getRtlConfig()
+configureUserEventDom({
+  eventWrapper: rtlConfig.eventWrapper,
+  asyncWrapper: rtlConfig.asyncWrapper,
+})
 
 // Cleanup after each test
 afterEach(() => {
