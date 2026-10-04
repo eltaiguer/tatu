@@ -91,7 +91,13 @@ export function Settings({
   // A full backup: every row, split parents and ignored rows included; the
   // file's cuenta_en_totales column says which ones count.
   function handleExport(format: 'csv' | 'pdf') {
-    const written = exportTransactions(transactions, { format })
+    let written: number
+    try {
+      written = exportTransactions(transactions, { format })
+    } catch (error) {
+      toast.error(userErrorMessage(error, 'No se pudo exportar'))
+      return
+    }
     toast.success(
       format === 'csv'
         ? `CSV exportado: ${written} transacciones`

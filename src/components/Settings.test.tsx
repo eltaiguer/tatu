@@ -14,6 +14,7 @@ import { CATEGORIZATION_MODELS } from '../services/ai/models'
 import type { Transaction } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 import { captureCsvDownload } from '../test/csv-download'
+import { capturePrintFrame } from '../test/print-frame'
 
 vi.mock('../services/supabase/client', () => ({
   isSupabaseConfigured: () => false,
@@ -287,6 +288,55 @@ describe('Settings', () => {
       'claude-haiku-4-5',
       'claude-sonnet-4-6',
     ])
+  })
+
+  function renderForPdfExport() {
+    render(
+      <>
+        <Settings
+          theme="light"
+          onSetTheme={() => {}}
+          preferredCurrency="UYU"
+          onSetCurrency={() => {}}
+          session={null}
+          supabaseEnabled={false}
+          onSignOut={() => {}}
+          transactions={[makeTx({ description: 'Devoto Pocitos' })]}
+          {...defaultAiProps}
+        />
+        <Toaster />
+      </>
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Exportar PDF/ }))
+  }
+
+  it('prints the PDF report and only then says it was generated (#179)', async () => {
+    const frame = capturePrintFrame()
+    try {
+      renderForPdfExport()
+
+      expect(await screen.findByText('Reporte PDF generado')).toBeVisible()
+      expect(frame.printed()).toHaveLength(1)
+      expect(frame.printed()[0]).toContain('Devoto Pocitos')
+    } finally {
+      frame.restore()
+    }
+  })
+
+  it('shows an error instead of a success toast when the PDF cannot open (#179)', async () => {
+    const frame = capturePrintFrame({ failing: true })
+    try {
+      renderForPdfExport()
+
+      expect(
+        await screen.findByText(
+          'No se pudo abrir el reporte PDF. Recargá la página e intentá de nuevo.'
+        )
+      ).toBeVisible()
+      expect(screen.queryByText('Reporte PDF generado')).not.toBeInTheDocument()
+    } finally {
+      frame.restore()
+    }
   })
 
   it('exports every row as a backup, flags what counts, and toasts the rows written', async () => {
