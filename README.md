@@ -29,7 +29,7 @@ Built with **React + TypeScript + Vite** following strict **TDD** principles.
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Node.js 20 (pinned in `.nvmrc` — run `nvm use`) and npm
 
 ### Installation
 
