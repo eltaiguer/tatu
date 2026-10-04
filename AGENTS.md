@@ -59,6 +59,7 @@ src/
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
     Categories.tsx         # Categorías view — category grid + auto-categorization rules
+    categories/            # Categorías sub-components: CategoryForm, CategoryCard, PatternRulesCard (rules form + list, owns its state)
     Settings.tsx           # Configuración view — theme, currency, account, data management
     ImportCSV.tsx          # CSV import flow (wrapped in Radix Dialog, not a view)
     CategoryBreakdownList.tsx  # Ranked category list with progress bars
@@ -94,7 +95,7 @@ src/
     dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57)
     repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
     mutations/             # transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
-    categories/            # Category registry + user custom categories (source of isCategoryIgnored)
+    categories/            # Category registry + user custom categories (source of isCategoryIgnored); category-counts.ts: rows per category
     filters/               # url-filters.ts: Transacciones filters <-> URL query (the filtering itself is useTransactionFiltering)
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
@@ -240,7 +241,7 @@ Requires `.env` with Supabase vars (see `.env.example`):
 
 Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip. Hooks extracted from App.tsx; store simplified. Deployed to Firebase Hosting. Test counts and line counts are deliberately not recorded here — they go stale within a PR.
 
-**Known shape of the code:** `Transactions.tsx` and `Dashboard.tsx` are very large — the refactor extracted hooks, not view components, so both define their sub-components inline at the top of the file.
+**Known shape of the code:** `Transactions.tsx` and `Dashboard.tsx` are very large — the refactor extracted hooks, not view components, so both define their sub-components inline at the top of the file. #140 moves them out one view per PR into `src/components/<view>/`; Categorías is done (`components/categories/`).
 
 **AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, `importTransactions` (`services/mutations/transaction-mutations.ts`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
 
