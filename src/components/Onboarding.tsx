@@ -46,10 +46,7 @@ export function Onboarding({ onImport, onDemo, userName }: OnboardingProps) {
       <h1 className="font-display text-3xl font-semibold tracking-tight mt-5">
         Bienvenido a Tatú{userName ? `, ${userName}` : ''}
       </h1>
-      <p
-        className="text-muted-foreground mx-auto mt-2.5"
-        style={{ maxWidth: 460 }}
-      >
+      <p className="text-muted-foreground mx-auto mt-2.5 max-w-[460px]">
         Importá tu primer extracto de Santander y en segundos vas a ver todos
         tus gastos ordenados, en pesos y dólares.
       </p>
@@ -60,10 +57,7 @@ export function Onboarding({ onImport, onDemo, userName }: OnboardingProps) {
             key={step.title}
             className="rounded-lg border border-border bg-card p-4"
           >
-            <span
-              className="grid place-items-center rounded-[10px] bg-primary/10 text-primary mb-3"
-              style={{ width: 34, height: 34 }}
-            >
+            <span className="grid h-[34px] w-[34px] place-items-center rounded-[10px] bg-primary/10 text-primary mb-3">
               <step.icon size={17} />
             </span>
             <div className="font-mono text-[11px] font-semibold text-muted-foreground">
@@ -95,10 +89,7 @@ export function Onboarding({ onImport, onDemo, userName }: OnboardingProps) {
             : 'border-border hover:border-primary/50 hover:bg-muted/30'
         }`}
       >
-        <span
-          className="grid place-items-center rounded-xl bg-primary/10 text-primary mx-auto mb-3"
-          style={{ width: 48, height: 48 }}
-        >
+        <span className="grid h-[48px] w-[48px] place-items-center rounded-xl bg-primary/10 text-primary mx-auto mb-3">
           <Upload size={22} strokeWidth={2} />
         </span>
         <div className="font-medium">
