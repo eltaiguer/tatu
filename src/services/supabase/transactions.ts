@@ -3,11 +3,6 @@ import { getSupabaseClient, type SupabaseSession } from './client'
 import { UserFacingError } from '../../utils/user-error'
 import type { ExistingTransaction } from '../dedup/import-dedup'
 
-// PostgREST answers an UPDATE that matched no rows with success; callers
-// reporting "saved" need to know nothing was written (row deleted elsewhere).
-const MISSING_ROW_MESSAGE =
-  'La transacción ya no existe en el servidor. Recargá para ver el estado actual.'
-
 interface TransactionRow {
   user_id: string
   transaction_id: string
@@ -150,53 +145,6 @@ export async function persistTransactions(
 
 const UNIQUE_VIOLATION = '23505'
 
-export async function softDeleteTransaction(
-  session: SupabaseSession,
-  transactionId: string
-): Promise<void> {
-  const client = getSupabaseClient()
-  const { data, error } = await client
-    .from('transactions')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('user_id', session.user.id)
-    .eq('transaction_id', transactionId)
-    .select('transaction_id')
-
-  if (error) {
-    throw new Error(error.message)
-  }
-  if (!data || data.length === 0) {
-    throw new UserFacingError(MISSING_ROW_MESSAGE)
-  }
-}
-
-// Undoes soft deletes in one request, so a failure can't leave some rows
-// restored and others not. Throws unless every id came back.
-export async function restoreTransactions(
-  session: SupabaseSession,
-  transactionIds: string[]
-): Promise<void> {
-  if (transactionIds.length === 0) {
-    return
-  }
-  const client = getSupabaseClient()
-  const { data, error } = await client
-    .from('transactions')
-    .update({ is_deleted: false, deleted_at: null })
-    .eq('user_id', session.user.id)
-    .in('transaction_id', transactionIds)
-    .select('transaction_id')
-
-  if (error) {
-    throw new Error(error.message)
-  }
-  if (!data || data.length !== transactionIds.length) {
-    throw new UserFacingError(
-      'No se pudieron restaurar todas las transacciones. Recargá para ver el estado actual.'
-    )
-  }
-}
-
 // Which of `ids` already exist on the server, split by whether the user
 // deleted them. Imports use this instead of the in-memory store, which never
 // holds deleted rows and can lag the server (other devices, sync in flight).
@@ -315,176 +263,173 @@ export async function findImportCandidates(
   }))
 }
 
-export interface UpdateTransactionInput {
-  description?: string
-  /**
-   * `undefined` leaves the column untouched; `null` (or '') clears it. The
-   * distinction matters: every field here is guarded by `!== undefined`, so
-   * passing `undefined` to mean "clear" silently omits the column from the
-   * payload and the old value survives on the server.
-   */
+// ---------------------------------------------------------------------------
+// Single-request primitives for the repository's Supabase adapter
+// (`services/repository/supabase-repository.ts`, #119). Each is one statement,
+// so it is atomic; the adapter decides how to cut a large write into them.
+// Every one is scoped by `.eq('user_id')` on top of RLS, so a request sent
+// with another user's token matches nothing instead of their rows.
+
+/** A row change in the repository port's convention: absent = untouched, null = clear. */
+export interface TransactionColumnsPatch {
   displayDescription?: string | null
-  category?: string
-  categoryConfidence?: number
+  category?: string | null
+  categoryConfidence?: number | null
   tags?: string[]
 }
 
-export async function updateTransaction(
-  session: SupabaseSession,
-  transactionId: string,
-  updates: UpdateTransactionInput
-): Promise<void> {
-  const payload: Record<string, unknown> = {}
-
-  if (updates.description !== undefined) {
-    payload.description = updates.description
+function patchToColumns(
+  patch: TransactionColumnsPatch
+): Record<string, unknown> {
+  const columns: Record<string, unknown> = {}
+  if (patch.displayDescription !== undefined) {
+    columns.display_description = patch.displayDescription || null
   }
-
-  if (updates.displayDescription !== undefined) {
-    payload.display_description = updates.displayDescription || null
+  if (patch.category !== undefined) columns.category = patch.category || null
+  if (patch.categoryConfidence !== undefined) {
+    columns.category_confidence = patch.categoryConfidence
   }
-
-  if (updates.category !== undefined) {
-    payload.category = updates.category || null
-  }
-
-  if (updates.categoryConfidence !== undefined) {
-    payload.category_confidence = updates.categoryConfidence
-  }
-
-  if (updates.tags !== undefined) {
-    payload.tags = updates.tags
-  }
-
-  if (Object.keys(payload).length === 0) {
-    return
-  }
-
-  const client = getSupabaseClient()
-  const { data, error } = await client
-    .from('transactions')
-    .update(payload)
-    .eq('user_id', session.user.id)
-    .eq('transaction_id', transactionId)
-    .select('transaction_id')
-
-  if (error) {
-    throw new Error(error.message)
-  }
-  if (!data || data.length === 0) {
-    throw new UserFacingError(MISSING_ROW_MESSAGE)
-  }
+  if (patch.tags !== undefined) columns.tags = patch.tags
+  return columns
 }
 
-export interface SplitPart {
-  description: string
-  amount: number
-  category?: string
-}
-
-export async function splitTransaction(
-  session: SupabaseSession,
-  parent: Transaction,
-  parts: SplitPart[]
-): Promise<{ parent: Transaction; children: Transaction[] }> {
-  const client = getSupabaseClient()
-
-  const updatedParent: Transaction = { ...parent, isSplitParent: true }
-
-  const { error: parentError } = await client
-    .from('transactions')
-    .upsert(transactionToRow(session.user.id, updatedParent), {
-      onConflict: 'user_id,transaction_id',
-    })
-
-  if (parentError) {
-    throw new Error(parentError.message)
-  }
-
-  const children: Transaction[] = parts.map((part, i) => ({
-    ...parent,
-    id: `${parent.id}_split_${i}`,
-    description: part.description,
-    displayDescription: undefined,
-    amount: part.amount,
-    category: part.category,
-    categoryConfidence: part.category ? 1 : undefined,
-    isSplitParent: false,
-    splitParentId: parent.id,
-    balance: undefined,
-    rawData: {},
-    tags: [],
-  }))
-
-  const { error: childError } = await client.from('transactions').upsert(
-    children.map((c) => transactionToRow(session.user.id, c)),
-    { onConflict: 'user_id,transaction_id' }
+function returnedIds(data: unknown): string[] {
+  return ((data ?? []) as Array<{ transaction_id: string }>).map(
+    (row) => row.transaction_id
   )
-
-  if (childError) {
-    await client
-      .from('transactions')
-      .upsert(transactionToRow(session.user.id, parent), {
-        onConflict: 'user_id,transaction_id',
-      })
-    throw new Error(childError.message)
-  }
-
-  return { parent: updatedParent, children }
 }
 
-export async function unsplitTransaction(
+/** Applies one patch to every id (≤ ~100: URL length); returns the ids changed. */
+export async function updateTransactionsByIds(
   session: SupabaseSession,
-  parent: Transaction,
-  childIds: string[]
-): Promise<Transaction> {
-  const client = getSupabaseClient()
-
-  if (childIds.length > 0) {
-    const { error: deleteError } = await client
-      .from('transactions')
-      .delete()
-      .eq('user_id', session.user.id)
-      .in('transaction_id', childIds)
-
-    if (deleteError) {
-      throw new Error(deleteError.message)
-    }
-  }
-
-  const restored: Transaction = {
-    ...parent,
-    isSplitParent: false,
-    splitParentId: undefined,
-  }
-
-  const { error: parentError } = await client
+  ids: string[],
+  patch: TransactionColumnsPatch
+): Promise<string[]> {
+  const columns = patchToColumns(patch)
+  if (ids.length === 0 || Object.keys(columns).length === 0) return ids
+  const { data, error } = await getSupabaseClient()
     .from('transactions')
-    .upsert(transactionToRow(session.user.id, restored), {
-      onConflict: 'user_id,transaction_id',
-    })
-
-  if (parentError) {
-    throw new Error(parentError.message)
-  }
-
-  return restored
+    .update(columns)
+    .eq('user_id', session.user.id)
+    .in('transaction_id', ids)
+    .select('transaction_id')
+  if (error) throw new Error(error.message)
+  return returnedIds(data)
 }
 
-export async function hardDeleteTransactions(
+/** Soft-deletes (or restores) every id; returns the ids changed. */
+export async function setTransactionsDeleted(
   session: SupabaseSession,
-  transactionIds: string[]
-): Promise<void> {
-  if (transactionIds.length === 0) return
+  ids: string[],
+  deleted: boolean
+): Promise<string[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await getSupabaseClient()
+    .from('transactions')
+    .update(
+      deleted
+        ? { is_deleted: true, deleted_at: new Date().toISOString() }
+        : { is_deleted: false, deleted_at: null }
+    )
+    .eq('user_id', session.user.id)
+    .in('transaction_id', ids)
+    .select('transaction_id')
+  if (error) throw new Error(error.message)
+  return returnedIds(data)
+}
 
-  const client = getSupabaseClient()
-  const { error } = await client
+/** Removes rows for good (split parts); returns the ids that existed. */
+export async function hardDeleteTransactionsByIds(
+  session: SupabaseSession,
+  ids: string[]
+): Promise<string[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await getSupabaseClient()
     .from('transactions')
     .delete()
     .eq('user_id', session.user.id)
-    .in('transaction_id', transactionIds)
+    .in('transaction_id', ids)
+    .select('transaction_id')
+  if (error) throw new Error(error.message)
+  return returnedIds(data)
+}
 
-  if (error) {
-    throw new Error(error.message)
+/**
+ * Saves new split parts, always live. A plain insert, never an upsert: part
+ * ids are deterministic (`${parent}_split_${i}`), so parts another device
+ * already saved for this parent make the whole insert fail ('taken') instead
+ * of being overwritten.
+ */
+export async function insertSplitParts(
+  session: SupabaseSession,
+  parts: Transaction[]
+): Promise<'saved' | 'taken'> {
+  if (parts.length === 0) return 'saved'
+  const { error } = await getSupabaseClient()
+    .from('transactions')
+    .insert(
+      parts.map((part) => ({
+        ...transactionToRow(session.user.id, part),
+        is_deleted: false,
+        deleted_at: null,
+      }))
+    )
+  if (error?.code === UNIQUE_VIOLATION) return 'taken'
+  if (error) throw new Error(error.message)
+  return 'saved'
+}
+
+/**
+ * Sets only `is_split_parent` on a live row — never the whole row, so edits
+ * made meanwhile survive. `onlyIfSplit` adds a condition on the current
+ * value. Returns how many rows changed (0 or 1).
+ */
+export async function setSplitParentFlag(
+  session: SupabaseSession,
+  parentId: string,
+  isSplitParent: boolean,
+  options: { onlyIfSplit?: boolean } = {}
+): Promise<number> {
+  let query = getSupabaseClient()
+    .from('transactions')
+    .update({ is_split_parent: isSplitParent })
+    .eq('user_id', session.user.id)
+    .eq('transaction_id', parentId)
+    .is('is_deleted', false)
+  if (options.onlyIfSplit !== undefined) {
+    query = query.eq('is_split_parent', options.onlyIfSplit)
   }
+  const { data, error } = await query.select('transaction_id')
+  if (error) throw new Error(error.message)
+  return returnedIds(data).length
+}
+
+/** Deletes a parent's parts: every one pointing at it, or just `ids`. */
+export async function deleteSplitParts(
+  session: SupabaseSession,
+  parentId: string,
+  ids?: string[]
+): Promise<void> {
+  let query = getSupabaseClient()
+    .from('transactions')
+    .delete()
+    .eq('user_id', session.user.id)
+    .eq('split_parent_id', parentId)
+  if (ids) query = query.in('transaction_id', ids)
+  const { error } = await query
+  if (error) throw new Error(error.message)
+}
+
+/** How many parts point at `parentId`. */
+export async function countSplitParts(
+  session: SupabaseSession,
+  parentId: string
+): Promise<number> {
+  const { data, error } = await getSupabaseClient()
+    .from('transactions')
+    .select('transaction_id')
+    .eq('user_id', session.user.id)
+    .eq('split_parent_id', parentId)
+  if (error) throw new Error(error.message)
+  return returnedIds(data).length
 }

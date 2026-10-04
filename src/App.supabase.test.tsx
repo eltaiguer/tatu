@@ -74,9 +74,15 @@ vi.mock('./services/supabase/auth', () => ({
 vi.mock('./services/supabase/transactions', () => ({
   loadUserTransactions: loadUserTransactionsMock,
   persistTransactions: persistTransactionsMock,
-  softDeleteTransaction: softDeleteTransactionMock,
-  restoreTransactions: restoreTransactionsMock,
-  updateTransaction: updateTransactionMock,
+  setTransactionsDeleted: (
+    session: unknown,
+    ids: string[],
+    deleted: boolean
+  ) =>
+    deleted
+      ? softDeleteTransactionMock(session, ids)
+      : restoreTransactionsMock(session, ids),
+  updateTransactionsByIds: updateTransactionMock,
 }))
 
 vi.mock('./services/supabase/category-overrides', () => ({
@@ -129,11 +135,12 @@ describe('App with supabase enabled', () => {
     getCurrentSessionMock.mockReturnValue(null)
     loadUserTransactionsMock.mockResolvedValue([])
     persistTransactionsMock.mockResolvedValue(undefined)
-    softDeleteTransactionMock.mockResolvedValue(undefined)
-    restoreTransactionsMock.mockResolvedValue(undefined)
+    // The server confirms every id it was sent.
+    softDeleteTransactionMock.mockImplementation(async (_s, ids) => ids)
+    restoreTransactionsMock.mockImplementation(async (_s, ids) => ids)
     deleteCategoryOverrideMock.mockResolvedValue(undefined)
     deleteDescriptionOverrideMock.mockResolvedValue(undefined)
-    updateTransactionMock.mockResolvedValue(undefined)
+    updateTransactionMock.mockImplementation(async (_s, ids) => ids)
     listCategoryOverridesMock.mockResolvedValue([])
     upsertCategoryOverrideMock.mockResolvedValue(undefined)
     listDescriptionOverridesMock.mockResolvedValue([])
@@ -424,7 +431,7 @@ describe('App with supabase enabled', () => {
         expect.objectContaining({
           user: expect.objectContaining({ id: 'user-1' }),
         }),
-        'tx-10',
+        ['tx-10'],
         {
           displayDescription: 'New merchant',
           category: 'services',
@@ -444,7 +451,7 @@ describe('App with supabase enabled', () => {
         expect.objectContaining({
           user: expect.objectContaining({ id: 'user-1' }),
         }),
-        'tx-10'
+        ['tx-10']
       )
     )
     await waitFor(() =>
@@ -526,18 +533,21 @@ describe('App with supabase enabled', () => {
         expect.objectContaining({
           user: expect.objectContaining({ id: 'user-1' }),
         }),
-        'tx-10',
+        ['tx-10'],
         {
           displayDescription: 'Devoto',
-          category: undefined,
+          // The row had no category: 'Sin categoría' clears it (a no-op).
+          category: null,
+          categoryConfidence: null,
           tags: [],
         }
       )
     )
 
     expect(
-      updateTransactionMock.mock.calls.filter((call) => call[1] === 'tx-11')
-        .length
+      updateTransactionMock.mock.calls.filter((call) =>
+        (call[1] as string[]).includes('tx-11')
+      ).length
     ).toBe(0)
     expect(upsertDescriptionOverrideMock).toHaveBeenCalledTimes(1)
   })
