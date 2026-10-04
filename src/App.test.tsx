@@ -1,7 +1,8 @@
-import { beforeEach, describe, it, expect, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import App from './App'
+import { preloadViews } from './lazy-views'
 import { transactionStore } from './stores/transaction-store'
 import { listCustomCategories } from './services/categories/category-store'
 
@@ -139,6 +140,12 @@ function tx(
     rawData: {},
   }
 }
+
+// Views are lazy chunks; load them up front so a test's first visit to a
+// view doesn't spend its waitFor budget on module loading.
+beforeAll(async () => {
+  await preloadViews()
+})
 
 describe('App', () => {
   beforeEach(() => {
@@ -361,7 +368,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Categorías' }))
 
     expect(
-      screen.getByRole('heading', { name: 'Categorías y reglas' })
+      await screen.findByRole('heading', { name: 'Categorías y reglas' })
     ).toBeInTheDocument()
   })
 

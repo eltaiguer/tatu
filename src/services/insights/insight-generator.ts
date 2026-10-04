@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import type { Currency } from '../../models'
 import type { InsightInput } from './insight-data'
 import {
@@ -141,6 +140,8 @@ export async function generateInsights(
   input: InsightInput,
   apiKey: string
 ): Promise<InsightsResult> {
+  // Loaded on demand so the SDK stays out of the startup bundle (#62).
+  const { default: Anthropic } = await import('@anthropic-ai/sdk')
   const client = new Anthropic({
     apiKey,
     dangerouslyAllowBrowser: true,

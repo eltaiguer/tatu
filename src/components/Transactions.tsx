@@ -958,6 +958,28 @@ export function Transactions({
   onRestoreTransactions,
   onReload,
 }: TransactionsProps) {
+  /* ---- Period state ---- */
+  const [period, setPeriod] = useState<Period>(() => {
+    const newest =
+      transactions.length > 0
+        ? new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
+        : new Date()
+    const fromUrl = initialFilters.period
+    if (fromUrl) {
+      return fromUrl.mode === 'recent'
+        ? { mode: 'recent', n: fromUrl.n, anchor: newest }
+        : fromUrl
+    }
+    // A link that filters by category/account/currency but names no period
+    // means all time; a plain visit starts on the newest month.
+    const deepLinked =
+      initialFilters.categories.length > 0 ||
+      initialFilters.accounts.length > 0 ||
+      initialFilters.currency !== 'all'
+    if (deepLinked || transactions.length === 0) return { mode: 'all' }
+    return { mode: 'month', y: newest.getFullYear(), m: newest.getMonth() }
+  })
+
   const {
     searchTerm,
     setSearchTerm,
@@ -999,28 +1021,10 @@ export function Transactions({
     paginatedTransactionIds,
     filteredTransactionIds,
     clearAllFilters,
-  } = useTransactionFiltering({ transactions, initial: initialFilters })
-
-  /* ---- Period state ---- */
-  const [period, setPeriod] = useState<Period>(() => {
-    const newest =
-      transactions.length > 0
-        ? new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
-        : new Date()
-    const fromUrl = initialFilters.period
-    if (fromUrl) {
-      return fromUrl.mode === 'recent'
-        ? { mode: 'recent', n: fromUrl.n, anchor: newest }
-        : fromUrl
-    }
-    // A link that filters by category/account/currency but names no period
-    // means all time; a plain visit starts on the newest month.
-    const deepLinked =
-      initialFilters.categories.length > 0 ||
-      initialFilters.accounts.length > 0 ||
-      initialFilters.currency !== 'all'
-    if (deepLinked || transactions.length === 0) return { mode: 'all' }
-    return { mode: 'month', y: newest.getFullYear(), m: newest.getMonth() }
+  } = useTransactionFiltering({
+    transactions,
+    initial: initialFilters,
+    initialDateRange: periodRange(period),
   })
 
   // Clearing filters also clears the period: it is part of what the URL

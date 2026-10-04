@@ -1,5 +1,6 @@
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { preloadViews } from './lazy-views'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { transactionStore } from './stores/transaction-store'
 
@@ -109,6 +110,12 @@ vi.mock('./services/supabase/import-runs', () => ({
   failImportRun: vi.fn(),
   sha256Hex: vi.fn().mockResolvedValue('hash'),
 }))
+
+// Views are lazy chunks; load them up front so a test's first visit to a
+// view doesn't spend its waitFor budget on module loading.
+beforeAll(async () => {
+  await preloadViews()
+})
 
 describe('App with supabase enabled', () => {
   beforeEach(() => {
@@ -386,7 +393,7 @@ describe('App with supabase enabled', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
     fireEvent.click(
-      screen.getAllByRole('button', { name: 'Editar Old merchant' })[0]
+      (await screen.findAllByRole('button', { name: 'Editar Old merchant' }))[0]
     )
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'New merchant' },
@@ -455,7 +462,7 @@ describe('App with supabase enabled', () => {
     expect((await screen.findAllByText('New merchant')).length).toBeGreaterThan(
       0
     )
-  }, 15000)
+  })
 
   it('applies edit to future matching transactions only', async () => {
     getCurrentSessionMock.mockReturnValue({
