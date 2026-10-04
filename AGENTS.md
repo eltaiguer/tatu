@@ -53,7 +53,7 @@ Node 20 (`.nvmrc`). CI runs `tdd:verify` then `build`; `build`'s `tsc` type-chec
 ```
 src/
   components/              # React UI components
-    ui/                    # Radix primitives (shadcn/ui style) + app ones: page-header, segmented-toggle, icon-tile, native-select
+    ui/                    # Radix primitives (shadcn/ui style) + app ones: page-header, segmented-toggle (a radiogroup), icon-tile, native-select; use-return-focus (dialogs return focus to their opener on close), option-list (arrow keys in popover picker lists)
     AppSidebar.tsx         # Fixed 252px sidebar, navigation, user footer
     Dashboard.tsx          # Resumen view — account cards, month summary, top categories, KPI tiles, donut, area chart, merchants (charts live here, not a separate view)
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
@@ -122,7 +122,7 @@ src/
     theme.css              # CSS custom properties — light + dark tokens
                            # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
   utils/                   # date-utils, formatting, category-display, memo, transaction-display, user-display, user-error, auth-errors
-  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test); csv-download.ts captures an exported CSV
+  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV
 supabase/
   schema.sql               # PostgreSQL schema (tables, RLS policies)
 samples/                   # Example Santander CSV files for testing
