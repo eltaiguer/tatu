@@ -616,6 +616,48 @@ function isDeleteResult(value: unknown): value is DeleteResult {
 }
 
 // "1 transacción eliminada" / "3 transacciones eliminadas" from a stem.
+interface BulkStep {
+  label: string
+  run: () => Promise<unknown>
+}
+
+/**
+ * Runs a bulk edit's steps (category, then each tag) in order and returns
+ * the most rows any step updated. When a step saves only some rows, the
+ * PartialWriteError it throws gets a retry that resumes the chain: that
+ * step's failed rows, then every step that never ran.
+ */
+async function runBulkSteps(
+  steps: BulkStep[],
+  onApplied: (label: string) => void = () => {}
+): Promise<number> {
+  let updated = 0
+  for (let i = 0; i < steps.length; i++) {
+    let result: unknown
+    try {
+      result = await steps[i].run()
+    } catch (error) {
+      if (error instanceof PartialWriteError && error.retry) {
+        const rest = steps.slice(i + 1)
+        const retryStep = error.retry
+        throw new PartialWriteError(
+          error.message,
+          error.done,
+          error.total,
+          () =>
+            runBulkSteps([{ label: steps[i].label, run: retryStep }, ...rest]),
+          error.result
+        )
+      }
+      throw error
+    }
+    onApplied(steps[i].label)
+    const stepUpdated = (result as { updated?: number } | undefined)?.updated
+    updated = Math.max(updated, stepUpdated ?? 0)
+  }
+  return updated
+}
+
 function txDone(count: number, participleStem: string): string {
   return count === 1
     ? `1 transacción ${participleStem}a`
@@ -863,7 +905,11 @@ export function Transactions({
                 label: 'Reintentar',
                 onClick: () => {
                   retry().then(
-                    () => toast.success('Cambios guardados'),
+                    // Rows a retried delete removed get their own undo.
+                    (result) =>
+                      isDeleteResult(result)
+                        ? reportDeleted(result)
+                        : toast.success('Cambios guardados'),
                     (retryError: unknown) => reportError(retryError, fallback)
                   )
                 },
@@ -1324,23 +1370,25 @@ export function Transactions({
     // Steps run in sequence; on failure the message says which already
     // applied, so a retry isn't a blind guess.
     const applied: string[] = []
-    let updated = 0
-    try {
-      if (bulkEditCategory && onBulkCategorize) {
-        const result = await onBulkCategorize(
-          selectedTransactionIds,
-          bulkEditCategory
-        )
-        applied.push('la categoría')
-        updated = Math.max(updated, result.updated)
-      }
+    const ids = selectedTransactionIds
+    const steps: BulkStep[] = []
+    if (bulkEditCategory && onBulkCategorize) {
+      const category = bulkEditCategory
+      steps.push({
+        label: 'la categoría',
+        run: () => onBulkCategorize(ids, category),
+      })
+    }
+    if (onBulkTag) {
       for (const tag of bulkEditTagList) {
-        if (onBulkTag) {
-          const result = await onBulkTag(selectedTransactionIds, tag)
-          applied.push(`la etiqueta "${tag}"`)
-          updated = Math.max(updated, result.updated)
-        }
+        steps.push({
+          label: `la etiqueta "${tag}"`,
+          run: () => onBulkTag(ids, tag),
+        })
       }
+    }
+    try {
+      const updated = await runBulkSteps(steps, (label) => applied.push(label))
       setSelectedTransactionIds([])
       closeBulkEdit()
       if (updated === 0) {

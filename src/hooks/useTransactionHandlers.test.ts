@@ -1069,14 +1069,17 @@ describe('useTransactionHandlers — delete and undo', () => {
     expect(repo.rows()).toHaveLength(50)
     expect(error.result?.removed).toHaveLength(100)
 
-    await error.retry!()
+    const retried = (await error.retry!()) as DeleteResult
     expect(transactionStore.getState().transactions).toHaveLength(0)
     expect(repo.rows()).toHaveLength(0)
+    expect(retried.removed).toHaveLength(50)
 
-    // The part that was deleted first can still be undone.
+    // Both parts can be undone, each by the user who deleted it.
     await handlers.handleRestoreTransactions(error.result!.removed)
     expect(repo.rows()).toHaveLength(100)
-    expect(transactionStore.getState().transactions).toHaveLength(100)
+    await handlers.handleRestoreTransactions(retried.removed)
+    expect(repo.rows()).toHaveLength(150)
+    expect(transactionStore.getState().transactions).toHaveLength(150)
   })
 })
 

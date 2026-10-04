@@ -1119,6 +1119,92 @@ describe('Transactions', () => {
     expect(retry).toHaveBeenCalledTimes(1)
   })
 
+  it('retrying a partial category step also applies the tags that never ran', async () => {
+    const retry = vi.fn().mockResolvedValue({ updated: 1 })
+    const onBulkCategorize = vi
+      .fn()
+      .mockRejectedValue(
+        new PartialWriteError('Se actualizaron 1 de 2', 1, 2, retry)
+      )
+    const onBulkTag = vi.fn().mockResolvedValue({ updated: 2 })
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'Devoto')]}
+          onBulkCategorize={onBulkCategorize}
+          onBulkTag={onBulkTag}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+    )
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
+    })
+    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
+      target: { value: 'entretenimiento' },
+    })
+    const options = screen.getAllByText('Entretenimiento')
+    fireEvent.click(options[options.length - 1])
+    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
+      target: { value: 'viaje' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: /Crear etiqueta "viaje"/ })
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+
+    expect(
+      await screen.findByText('Se actualizaron 1 de 2 — reintentar')
+    ).toBeTruthy()
+    expect(onBulkTag).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    expect(await screen.findByText('Cambios guardados')).toBeTruthy()
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(onBulkTag).toHaveBeenCalledWith(['tx-1'], 'viaje')
+  })
+
+  it('offers undo for the rows a retried delete removed', async () => {
+    const b = makeTransaction(2, 'Merchant B')
+    const retry = vi.fn().mockResolvedValue({ removed: [b], reversible: true })
+    const onBulkDelete = vi.fn().mockRejectedValue(
+      new PartialWriteError('Se eliminaron 0 de 1', 0, 1, retry, {
+        removed: [],
+        reversible: true,
+      })
+    )
+    const onRestoreTransactions = vi.fn().mockResolvedValue({ restored: 1 })
+
+    render(
+      <>
+        <Transactions
+          transactions={[b]}
+          onBulkDelete={onBulkDelete}
+          onRestoreTransactions={onRestoreTransactions}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant B' })[0]
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+
+    expect(await screen.findByText('1 transacción eliminada')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+    expect(onRestoreTransactions).toHaveBeenCalledWith([b])
+  })
+
   it('bulk tags selected transactions', async () => {
     const onBulkTag = vi.fn().mockResolvedValue({ updated: 2 })
 
