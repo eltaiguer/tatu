@@ -87,13 +87,13 @@ src/
     useAuthSession.ts      # Supabase auth session management
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
     useTransactionHandlers.ts  # All transaction mutation handlers
-    useTransactionFiltering.ts # Filter + sort + paginate transactions
+    useTransactionFiltering.ts # React state (URL filter shape, period included) + sort + pagination around filterTransactions
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored)
-    filters/               # url-filters.ts: Transacciones filters <-> URL query (the filtering itself is useTransactionFiltering)
+    filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; url-filters.ts: that state <-> URL query
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     charts/                # Chart data transformations; category-changes.ts feeds CategoryChangesCard
