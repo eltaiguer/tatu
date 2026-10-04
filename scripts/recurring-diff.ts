@@ -14,7 +14,10 @@
 
 import type { Currency, Transaction } from '../src/models'
 import { convert } from '../src/services/currency/convert'
-import { buildInsightInput } from '../src/services/insights/insight-data'
+import {
+  buildInsightInput,
+  isInstallment,
+} from '../src/services/insights/insight-data'
 import {
   groupByMerchant,
   merchantKeyOf,
@@ -98,9 +101,7 @@ const expenses = rows.filter(isCountedExpense)
 // a group's label, hence the second map).
 const keyByLabel = new Map<string, string>()
 for (const g of groupByMerchant(expenses)) keyByLabel.set(g.label, g.key)
-for (const g of groupByMerchant(
-  expenses.filter((tx) => !/\bcuota\s+\d/i.test(tx.description))
-)) {
+for (const g of groupByMerchant(expenses.filter((tx) => !isInstallment(tx)))) {
   keyByLabel.set(g.label, g.key)
 }
 

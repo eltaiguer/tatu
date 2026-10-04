@@ -144,6 +144,11 @@ function cadenceFromGap(avgGapDays: number): RecurringCadence {
   return 'irregular'
 }
 
+/** An installment of a purchase ("Cuota 09 10"), never a recurring charge. */
+export function isInstallment(tx: Transaction): boolean {
+  return INSTALLMENT_PATTERN.test(tx.description)
+}
+
 function isWithinBand(amount: number, reference: number): boolean {
   return reference === 0
     ? amount === 0
@@ -173,7 +178,7 @@ function detectRecurringCharges(
   historyEndMonthKey: string
 ): RecurringCharge[] {
   const relevant = allTransactions.filter(
-    (tx) => isCountedExpense(tx) && !INSTALLMENT_PATTERN.test(tx.description)
+    (tx) => isCountedExpense(tx) && !isInstallment(tx)
   )
 
   const charges: RecurringCharge[] = []
