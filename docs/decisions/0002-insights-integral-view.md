@@ -90,6 +90,10 @@ data genuinely did change — and no materiality threshold was added to
 soften it. A reasonable follow-up if it proves noisy in practice, not
 built now.
 
+The hash also folds in `INSIGHT_PROMPT_VERSION` (`insight-prompt.ts`) and
+`INSIGHTS_MODEL`, so a prompt or model change marks cached insights stale
+once (#176) — bump `INSIGHT_PROMPT_VERSION` whenever the prompt changes.
+
 ## New Field: `monthsSinceLastSeen`
 
 Without a lookback window, nothing ages a recurring charge out once

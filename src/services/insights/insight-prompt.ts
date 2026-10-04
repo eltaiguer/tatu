@@ -1,5 +1,10 @@
 import type { InsightInput } from './insight-data'
 
+// Folded into the cached-insights hash (insight-cache.ts) so cached results
+// go stale once when the prompt changes. Bump PROMPT_VERSION whenever
+// buildInsightSystemPrompt or buildInsightUserMessage changes.
+export const INSIGHT_PROMPT_VERSION = 1
+
 export function buildInsightSystemPrompt(): string {
   return `You are a financial insights analyst for Tatu, a personal finance app for Santander Uruguay bank and credit card statements.
 

@@ -18,6 +18,8 @@ import {
   getCachedInsights,
   saveCachedInsights,
 } from './insight-cache'
+import { INSIGHT_PROMPT_VERSION } from './insight-prompt'
+import { INSIGHTS_MODEL } from '../ai/models'
 
 const session = {
   user: { id: 'user-1' },
@@ -47,6 +49,27 @@ describe('hashInsightInput', () => {
     }
     expect(hashInsightInput(input)).not.toBe(hashInsightInput(changed))
   })
+
+  it('changes when the prompt version changes', () => {
+    expect(
+      hashInsightInput(input, { promptVersion: INSIGHT_PROMPT_VERSION + 1 })
+    ).not.toBe(hashInsightInput(input))
+  })
+
+  it('changes when the insights model changes', () => {
+    expect(hashInsightInput(input, { model: 'claude-other-model' })).not.toBe(
+      hashInsightInput(input)
+    )
+  })
+
+  it('defaults to the current prompt version and insights model', () => {
+    expect(hashInsightInput(input)).toBe(
+      hashInsightInput(input, {
+        promptVersion: INSIGHT_PROMPT_VERSION,
+        model: INSIGHTS_MODEL,
+      })
+    )
+  })
 })
 
 describe('getCachedInsights', () => {
@@ -64,7 +87,7 @@ describe('getCachedInsights', () => {
   it('marks the result fresh when the stored hash matches the current input', async () => {
     loadCachedInsightsMock.mockResolvedValue({
       inputHash: hashInsightInput(input),
-      model: 'claude-opus-4-8',
+      model: INSIGHTS_MODEL,
       insights: result,
       generatedAt: '2026-06-30T12:00:00.000Z',
     })
@@ -72,7 +95,7 @@ describe('getCachedInsights', () => {
     const cached = await getCachedInsights(session, input)
     expect(cached).toEqual({
       result,
-      model: 'claude-opus-4-8',
+      model: INSIGHTS_MODEL,
       generatedAt: '2026-06-30T12:00:00.000Z',
       isStale: false,
     })
@@ -89,6 +112,58 @@ describe('getCachedInsights', () => {
     const cached = await getCachedInsights(session, input)
     expect(cached?.isStale).toBe(true)
   })
+
+  it('marks the result stale when it was generated with an older prompt version', async () => {
+    loadCachedInsightsMock.mockResolvedValue({
+      inputHash: hashInsightInput(input, {
+        promptVersion: INSIGHT_PROMPT_VERSION - 1,
+      }),
+      model: INSIGHTS_MODEL,
+      insights: result,
+      generatedAt: '2026-06-30T12:00:00.000Z',
+    })
+
+    const cached = await getCachedInsights(session, input)
+    expect(cached?.isStale).toBe(true)
+  })
+
+  it('marks the result stale when it was generated with a different model', async () => {
+    loadCachedInsightsMock.mockResolvedValue({
+      inputHash: hashInsightInput(input, { model: 'claude-old-model' }),
+      model: 'claude-old-model',
+      insights: result,
+      generatedAt: '2026-06-30T12:00:00.000Z',
+    })
+
+    const cached = await getCachedInsights(session, input)
+    expect(cached?.isStale).toBe(true)
+  })
+
+  it('marks a result saved with the current prompt and model as fresh', async () => {
+    saveInsightsMock.mockResolvedValue(undefined)
+    await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
+    const saved = saveInsightsMock.mock.calls[0][1]
+    loadCachedInsightsMock.mockResolvedValue({
+      ...saved,
+      generatedAt: '2026-06-30T12:00:00.000Z',
+    })
+
+    const cached = await getCachedInsights(session, input)
+    expect(cached?.isStale).toBe(false)
+  })
+
+  it('marks a result saved by a different model as stale', async () => {
+    saveInsightsMock.mockResolvedValue(undefined)
+    await saveCachedInsights(session, input, result, 'claude-old-model')
+    const saved = saveInsightsMock.mock.calls[0][1]
+    loadCachedInsightsMock.mockResolvedValue({
+      ...saved,
+      generatedAt: '2026-06-30T12:00:00.000Z',
+    })
+
+    const cached = await getCachedInsights(session, input)
+    expect(cached?.isStale).toBe(true)
+  })
 })
 
 describe('saveCachedInsights', () => {
@@ -99,11 +174,11 @@ describe('saveCachedInsights', () => {
   it('saves the result with the computed input hash', async () => {
     saveInsightsMock.mockResolvedValue(undefined)
 
-    await saveCachedInsights(session, input, result, 'claude-opus-4-8')
+    await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
 
     expect(saveInsightsMock).toHaveBeenCalledWith(session, {
       inputHash: hashInsightInput(input),
-      model: 'claude-opus-4-8',
+      model: INSIGHTS_MODEL,
       insights: result,
     })
   })
