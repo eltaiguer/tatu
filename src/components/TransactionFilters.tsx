@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Filter, Search, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { Card } from './ui/card'
@@ -223,6 +223,8 @@ export function TransactionFilters({
   onClearAll,
 }: TransactionFiltersProps) {
   const [amountPanelOpen, setAmountPanelOpen] = useState(false)
+  const minAmountId = useId()
+  const maxAmountId = useId()
 
   const categoryOptions = availableCategories.map((cat) => ({
     value: cat,
@@ -362,10 +364,14 @@ export function TransactionFilters({
           }}
         >
           <div>
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">
+            <label
+              htmlFor={minAmountId}
+              className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5"
+            >
               Monto mínimo
             </label>
             <Input
+              id={minAmountId}
               type="number"
               placeholder="0"
               value={minAmount}
@@ -374,10 +380,14 @@ export function TransactionFilters({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5">
+            <label
+              htmlFor={maxAmountId}
+              className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5"
+            >
               Monto máximo
             </label>
             <Input
+              id={maxAmountId}
               type="number"
               placeholder="∞"
               value={maxAmount}

@@ -91,9 +91,13 @@ describe('BulkEditDialog', () => {
     ).toBeInTheDocument()
   })
 
-  // Bug (#66): the plural title is built as 'transacción' + 'es', so it reads
-  // "Editar 3 transacciónes" (accent kept). Expected "Editar 3 transacciones".
-  it.todo('spells the plural title "Editar 3 transacciones"')
+  it('spells the plural without the singular accent', () => {
+    render(<BulkEditDialog {...baseProps({ selectionCount: 3 })} />)
+
+    expect(
+      screen.getByRole('dialog', { name: 'Editar 3 transacciones' })
+    ).toBeInTheDocument()
+  })
 
   it('saves the category the user picked', () => {
     const onSave = vi.fn()

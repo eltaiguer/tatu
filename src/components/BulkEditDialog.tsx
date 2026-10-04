@@ -67,8 +67,8 @@ export function BulkEditDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            Editar {selectionCount} transacción
-            {selectionCount === 1 ? '' : 'es'}
+            Editar {selectionCount}{' '}
+            {selectionCount === 1 ? 'transacción' : 'transacciones'}
           </DialogTitle>
           <DialogDescription>
             Cambiá categoría y tags de las transacciones seleccionadas.
