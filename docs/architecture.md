@@ -59,9 +59,10 @@ Details that matter:
 
 ## Sync on sign-in
 
-There is no local copy of user data. On sign-in, and when `syncKey` changes,
-`useTransactionSync` loads everything from Supabase and replaces the in-memory
-state.
+There is no local copy of user data. `src/stores/workspace-store.ts` owns
+everything a signed-in user has in memory. On sign-in (and on refetch),
+`useUserWorkspace` calls `hydrateWorkspace`, which loads everything from
+Supabase and replaces the in-memory state in one synchronous step.
 
 ```mermaid
 flowchart LR
@@ -70,12 +71,30 @@ flowchart LR
     P --> O["category_overrides, description_overrides, custom_patterns, custom_categories"]
     P --> U["user_preferences: theme, currency, fx_rate, AI key and model"]
     O --> R["replaceMerchantCategoryOverrides, replaceDescriptionOverrides, replaceCustomPatterns, replaceCustomCategories"]
-    U --> Q["Preference setters, then markPrefsLoaded"]
+    U --> Q["workspace preferences (defaults when there is no row) + AI config"]
     T --> X["store.setTransactions, which runs inferInternalTransfers"]
 ```
 
 The sync depends on the user id, not the session object, so a token refresh
 doesn't reload everything.
+
+Ordering guarantees:
+
+- **One teardown.** `teardownWorkspace` clears transactions, both override
+  maps, custom patterns, custom categories, preferences (back to
+  `DEFAULT_PREFERENCES`, including the Claude key) and the AI config. Sign
+  out, back-to-sign-in, password update, Supabase's `SIGNED_OUT` event and
+  a session that switches to another user (`setSession` in `useAuthSession`)
+  all call it. Reset-all-data calls `startEmptyWorkspace`, which tears down
+  and marks the same user ready with nothing.
+- **Late loads are discarded.** Each hydrate takes a generation number; a
+  teardown, a newer hydrate or an abandoned effect invalidates it, and a load
+  that resolves late applies nothing.
+- **Saves only for the loaded user.** There is no save effect. `setPreference`
+  saves only when the session's user is the one whose workspace is `ready`,
+  so loading preferences never writes them back and one user's values (e.g.
+  their API key, #123) can't reach another user's row. Saves go out one at a
+  time, coalesced to the latest values; sign-out and reset wait for them.
 
 ## Editing a category: apply-scope
 
@@ -176,7 +195,7 @@ All conversion happens in the browser, at render or aggregation time, with
 | `Transactions.tsx`                                                                                                                                    | Filtered-set totals                                            |
 | `TransactionTable.tsx`                                                                                                                                | The faint `≈` converted amount next to a native one            |
 
-The home currency (`preferredCurrency` in `useUserPreferences`, passed down as
+The home currency (`preferredCurrency` from `useUserWorkspace`, passed down as
 `homeCurrency`) and `fxRate` (default 40.5) come from `user_preferences`.
 Totals leave out ignored categories (`isCategoryIgnored`) and split parents;
 `isExcludedFromTotals` combines the two checks.
@@ -187,7 +206,7 @@ Totals leave out ignored categories (`isCategoryIgnored`) and split parents;
 | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Transactions                                                                  | Supabase `transactions` (soft delete via `is_deleted` / `deleted_at`; split parts hard-deleted) | Zustand `transactionStore`, no persist middleware                                            |
 | Description overrides, merchant overrides, custom patterns, custom categories | Supabase `description_overrides`, `category_overrides`, `custom_patterns`, `custom_categories`  | Module-level state in their services, replaced on sync; edits also write through to Supabase |
-| Preferences, including the Claude API key                                     | Supabase `user_preferences`                                                                     | `useUserPreferences` state; the AI config in `ai-config.ts`                                  |
+| Preferences, including the Claude API key                                     | Supabase `user_preferences`                                                                     | `workspaceStore` preferences; the AI config in `ai-config.ts`, derived from them             |
 | Import audit                                                                  | Supabase `import_runs`                                                                          | Not loaded                                                                                   |
 | Insights cache                                                                | Supabase `ai_insights`, one row per user                                                        | `Insights.tsx` state                                                                         |
 | Auth session                                                                  | Supabase Auth                                                                                   | Cached in `localStorage` under `tatu:supabase:session` (`src/services/supabase/client.ts`)   |

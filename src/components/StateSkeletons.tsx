@@ -4,7 +4,7 @@ import { Skeleton } from './ui/skeleton'
 /**
  * Loading skeletons shaped like the real screens. Built on the existing
  * shadcn <Skeleton> (bg-accent animate-pulse). Render while the initial
- * Supabase sync is in flight (see useTransactionSync status patch in README).
+ * Supabase sync is in flight (useUserWorkspace status is 'loading').
  */
 
 function AccountCardSkeleton() {

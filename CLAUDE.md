@@ -78,9 +78,8 @@ src/
                            #   CoverageAnalysis, AiCategorizationPreview, AiPatternAnalysis
   hooks/                   # Custom React hooks (extracted from App.tsx)
     useAuthSession.ts      # Supabase auth session management
-    useUserPreferences.ts  # Theme, homeCurrency, fxRate — synced to Supabase
+    useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
     useTransactionHandlers.ts  # All transaction mutation handlers
-    useTransactionSync.ts  # Loads transactions from Supabase on login
     useTransactionFiltering.ts # Filter + sort + paginate transactions
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
@@ -94,6 +93,7 @@ src/
     descriptions/          # Description override management
     transfers/             # Internal transfer detection
     ai/                    # Client-side Claude (BYO API key): categorization/enrichment; models.ts is the only place model IDs live
+    preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
     insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
     supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data), runtime (active session)
     firebase.ts            # Firebase config
@@ -102,7 +102,7 @@ src/
   lazy-views.tsx           # The five views as lazy chunks (retryable, preloadViews)
   router-future.ts         # React Router v7 future flags (app + test routers)
   models/                  # TypeScript interfaces + Category enum
-  stores/                  # Zustand store (transaction-store, in-memory only)
+  stores/                  # Zustand stores, in-memory only: transaction-store; workspace-store = the ONE owner of per-user state (hydrateWorkspace / teardownWorkspace / setPreference)
   index.css                # CSS entry (imported by main.tsx): fonts → tailwind → theme
   styles/
     fonts.css              # Google Fonts: Spectral, Hanken Grotesk, JetBrains Mono
@@ -143,7 +143,7 @@ type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 
 Users earn in USD and spend in both USD and UYU. The app converts and combines both into a **home currency** for dashboard and insight totals:
 
-- `homeCurrency` (`'USD' | 'UYU'`) + `fxRate` (number, default `40.5`) — managed in `useUserPreferences`, persisted in Supabase `user_preferences`
+- `homeCurrency` (`'USD' | 'UYU'`) + `fxRate` (number, default `40.5`) — owned by `stores/workspace-store.ts` (exposed via `useUserWorkspace`), persisted in Supabase `user_preferences`
 - `convert(amount, from, to, rate)` lives in `services/currency/convert.ts`
 - Resumen + Insights: all totals convert + combine into `homeCurrency` (Insights' `InsightInput` is built entirely from already-converted, pre-computed numbers — see ADR-0001)
 - Transaction rows: native amount is primary; faint `≈ converted` shown when tx currency ≠ home
@@ -154,8 +154,9 @@ Users earn in USD and spend in both USD and UYU. The app converts and combines b
 
 - **Transactions, categories, overrides, custom patterns, preferences**: all in Supabase (PostgreSQL)
 - **Auth session token**: cached in `localStorage` by the Supabase client (standard Supabase auth behavior, not app data)
-- **Zustand store**: holds in-memory state only — no persist middleware. Populated from Supabase on login via `useTransactionSync`
+- **Zustand store**: holds in-memory state only — no persist middleware. Populated from Supabase on login by `hydrateWorkspace` (`stores/workspace-store.ts`)
 - No offline fallback. Unauthenticated users see the `AuthCard` login screen.
+- **Per-user lifecycle** (#117): `stores/workspace-store.ts` is the only place that fills (`hydrateWorkspace`) or empties (`teardownWorkspace`) a user's in-memory state — transactions, overrides, custom patterns/categories, preferences, AI config. Every path that ends a session calls `teardownWorkspace`; new per-user state must be added there. Preferences are saved only by `setPreference`, only for the user whose workspace is loaded and ready.
 
 ## Testing approach
 

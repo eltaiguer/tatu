@@ -53,15 +53,14 @@ import { Button } from './components/ui/button'
 import { useStore } from 'zustand'
 import { transactionStore } from './stores/transaction-store'
 import { signOut } from './services/supabase/auth'
-import { clearAllCategoryOverrides } from './services/categorizer/category-overrides'
-import { clearAllDescriptionOverrides } from './services/descriptions/description-overrides'
-import { replaceCustomCategories } from './services/categories/category-store'
-import { replaceCustomPatterns } from './services/categorizer/custom-patterns'
 import { resetUserSupabaseData } from './services/supabase/reset'
-import { useUserPreferences } from './hooks/useUserPreferences'
-import { setAiConfig } from './services/ai/ai-config'
+import {
+  flushPreferenceSaves,
+  startEmptyWorkspace,
+  teardownWorkspace,
+} from './stores/workspace-store'
+import { useUserWorkspace } from './hooks/useUserWorkspace'
 import { useAuthSession } from './hooks/useAuthSession'
-import { useTransactionSync } from './hooks/useTransactionSync'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
 import { getFriendlyName } from './utils/user-display'
 import { UserFacingError } from './utils/user-error'
@@ -108,14 +107,6 @@ function App() {
     window.scrollTo(0, 0)
     document.title = titleForView(currentView)
   }, [currentView])
-  const [syncStatus, setSyncStatus] = useState<'loading' | 'ready' | 'error'>(
-    'loading'
-  )
-  const [syncKey, setSyncKey] = useState(0)
-
-  function refetch() {
-    setSyncKey((k) => k + 1)
-  }
   const {
     session,
     setSession,
@@ -160,6 +151,8 @@ function App() {
   )
 
   const {
+    status: syncStatus,
+    refetch,
     theme,
     setTheme,
     preferredCurrency,
@@ -172,50 +165,31 @@ function App() {
     setAiEnabled,
     aiModel,
     setAiModel,
-    markPrefsLoaded,
-    resetPrefsLoaded,
-  } = useUserPreferences(session)
-
-  useTransactionSync({
+  } = useUserWorkspace({
     session,
     authMode,
-    syncKey,
-    markPrefsLoaded,
-    setError: setAuthError,
-    setNotice: setAuthNotice,
-    setSyncStatus,
-    setTheme,
-    setPreferredCurrency,
-    setFxRate,
-    setClaudeApiKey,
-    setAiEnabled,
-    setAiModel,
+    onHydrateStart: () => {
+      setAuthError('')
+      setAuthNotice('')
+    },
   })
 
   async function handleSignOut() {
     setAuthSubmitting(true)
     try {
+      // Let the last preference edit reach the server while the token is
+      // still valid.
+      await flushPreferenceSaves()
       await signOut(session)
       clearPasswordResetModeFromUrl()
       setSession(null)
+      teardownWorkspace()
       setAuthMode('signin')
       toast('Sesión cerrada')
-      transactionStore.getState().clearTransactions()
-      clearAllCategoryOverrides()
-      clearAllDescriptionOverrides()
-      replaceCustomPatterns([])
-      replaceCustomCategories([])
-      setAiConfig(null)
-      setTheme('auto')
-      setPreferredCurrency('USD')
-      setFxRate(40.5)
-      resetPrefsLoaded()
       navigate('/', { replace: true })
       setImportOpen(false)
       setAuthError('')
       setAuthNotice('')
-      setSyncStatus('loading')
-      setSyncKey(0)
     } catch (error) {
       setAuthError(
         error instanceof Error ? error.message : 'No se pudo cerrar sesión'
@@ -231,6 +205,9 @@ function App() {
   async function handleResetAllData() {
     if (session) {
       try {
+        // A save still in flight could recreate the preferences row after
+        // the delete.
+        await flushPreferenceSaves()
         await resetUserSupabaseData(session)
       } catch (error) {
         console.error('reset failed:', error)
@@ -241,16 +218,10 @@ function App() {
       }
     }
 
-    transactionStore.getState().clearTransactions()
-    clearAllCategoryOverrides()
-    clearAllDescriptionOverrides()
-    replaceCustomPatterns([])
-    replaceCustomCategories([])
-    setAiConfig(null)
-    setTheme('auto')
-    setPreferredCurrency('USD')
-    setFxRate(40.5)
-    resetPrefsLoaded()
+    // The server now holds nothing for this user: start them over empty,
+    // with default preferences (no key, AI off), still signed in.
+    if (session) startEmptyWorkspace(session)
+    else teardownWorkspace()
   }
 
   function navigateToTransactions(
@@ -322,7 +293,7 @@ function App() {
               clearPasswordResetModeFromUrl()
               void signOut(session)
               setSession(null)
-              transactionStore.getState().clearTransactions()
+              teardownWorkspace()
             }}
           />
         </div>
