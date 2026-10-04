@@ -62,16 +62,32 @@ export function EditTransactionDialog({
   onClose,
   ...formProps
 }: EditTransactionDialogProps) {
+  // Keeps the last transaction on screen while the dialog animates closed,
+  // and counts openings so reopening the same row starts a fresh draft.
+  const [seen, setSeen] = useState({
+    prop: transaction,
+    shown: transaction,
+    opens: 0,
+  })
+  if (seen.prop !== transaction) {
+    setSeen({
+      prop: transaction,
+      shown: transaction ?? seen.shown,
+      opens: transaction && !seen.prop ? seen.opens + 1 : seen.opens,
+    })
+  }
+  const shown = seen.shown
+
   return (
     <Dialog
       open={transaction !== null}
       onOpenChange={(open) => !open && onClose()}
     >
       <DialogContent>
-        {transaction ? (
+        {shown ? (
           <EditTransactionForm
-            key={transaction.id}
-            transaction={transaction}
+            key={`${shown.id}:${seen.opens}`}
+            transaction={shown}
             onClose={onClose}
             {...formProps}
           />

@@ -291,6 +291,33 @@ describe('EditTransactionDialog', () => {
     )
   })
 
+  it('starts a fresh draft when the same transaction is reopened', () => {
+    const props = baseProps()
+    const { rerender } = render(<EditTransactionDialog {...props} />)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Borrador' },
+    })
+    rerender(<EditTransactionDialog {...props} transaction={null} />)
+    rerender(<EditTransactionDialog {...props} />)
+
+    expect(screen.getByLabelText('Descripción edición')).toHaveValue('Disco')
+  })
+
+  it('keeps the draft while the open transaction is refreshed', () => {
+    const props = baseProps()
+    const { rerender } = render(<EditTransactionDialog {...props} />)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Borrador' },
+    })
+    rerender(
+      <EditTransactionDialog {...props} transaction={{ ...transaction }} />
+    )
+
+    expect(screen.getByLabelText('Descripción edición')).toHaveValue('Borrador')
+  })
+
   it('renders nothing editable without a transaction', () => {
     render(<EditTransactionDialog {...baseProps({ transaction: null })} />)
 
