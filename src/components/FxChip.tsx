@@ -74,7 +74,7 @@ export function FxChip({ fxRate, onSetFxRate }: FxChipProps) {
         setDraft(String(fxRate))
         setEditing(true)
       }}
-      title="Editar tipo de cambio"
+      title="Tipo de cambio que ingresaste vos · editar"
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -90,7 +90,18 @@ export function FxChip({ fxRate, onSetFxRate }: FxChipProps) {
       }}
     >
       {label}
-      <Pencil size={10} />
+      {/* Visible, not a tooltip: the rate is the user's, not a live quote. */}
+      <span
+        style={{
+          fontSize: 10,
+          color: 'var(--text-faint)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+        }}
+      >
+        manual
+      </span>
+      <Pencil size={10} aria-hidden />
     </button>
   )
 }

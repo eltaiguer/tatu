@@ -37,7 +37,7 @@ describe('supabase ai-insights service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    eqUserMock.mockReturnValue({ single: singleMock })
+    eqUserMock.mockReturnValue({ maybeSingle: singleMock })
     selectMock.mockReturnValue({ eq: eqUserMock })
 
     upsertMock.mockResolvedValue({ error: null })
@@ -78,7 +78,14 @@ describe('supabase ai-insights service', () => {
     })
   })
 
-  it('returns null when no cached row exists (PGRST116)', async () => {
+  it('returns null when no cached row exists (no error, no data)', async () => {
+    singleMock.mockResolvedValue({ data: null, error: null })
+    const { loadCachedInsights } = await import('./ai-insights')
+
+    await expect(loadCachedInsights(session)).resolves.toBeNull()
+  })
+
+  it('returns null when several rows exist (PGRST116)', async () => {
     singleMock.mockResolvedValue({
       data: null,
       error: { code: 'PGRST116', message: 'no rows' },

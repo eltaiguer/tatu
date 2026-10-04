@@ -147,7 +147,7 @@ function MultiSelectPopover({
                       height="10"
                       viewBox="0 0 24 24"
                       fill="none"
-                      stroke="white"
+                      stroke="var(--primary-foreground)"
                       strokeWidth="3"
                     >
                       <polyline points="20 6 9 17 4 12" />

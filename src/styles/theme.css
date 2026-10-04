@@ -217,6 +217,9 @@
 
   --brand: oklch(0.74 0.09 196);
   --brand-hover: oklch(0.8 0.09 196);
+  /* The dark brand is a light teal: text on it must be dark to meet AA. */
+  --primary-foreground: oklch(0.22 0.02 200);
+  --sidebar-primary-foreground: oklch(0.22 0.02 200);
   --brand-soft: oklch(0.31 0.045 200);
   --brand-text: oklch(0.82 0.085 196);
 

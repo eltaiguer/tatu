@@ -24,13 +24,20 @@ export async function loadCachedInsights(
     .from('ai_insights')
     .select('*')
     .eq('user_id', session.user.id)
-    .single()
+    // maybeSingle: no cached row is the normal first-run state, not an
+    // error (.single() answered it with a 406).
+    .maybeSingle()
 
   if (error) {
+    // More than one row (a database still on the old per-period key, see
+    // supabase/README.md) is treated as "no usable cache".
     if (error.code === 'PGRST116') {
       return null
     }
     throw new Error(error.message)
+  }
+  if (!data) {
+    return null
   }
 
   const row = data as AiInsightsRow

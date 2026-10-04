@@ -927,4 +927,33 @@ describe('App', () => {
     expect(screen.queryByText('UBER EATS')).not.toBeInTheDocument()
     expect(screen.getAllByText(/^2 movimientos/).length).toBeGreaterThan(0)
   })
+
+  it('badges Transacciones with how many have no category', async () => {
+    loadUserTransactionsMock.mockResolvedValue([
+      tx('a', '2026-03-10T12:00:00.000Z', 'Sin cat 1', ''),
+      tx('b', '2026-03-11T12:00:00.000Z', 'Sin cat 2', 'uncategorized'),
+      tx('c', '2026-03-12T12:00:00.000Z', 'Devoto', 'groceries'),
+    ])
+    renderApp('/')
+
+    expect(
+      (await screen.findAllByTitle('2 sin categoría')).length
+    ).toBeGreaterThan(0)
+  })
+
+  it('opens the mobile menu without React ref warnings', async () => {
+    // Installed before the first open: React reports this warning once per
+    // component, so a later spy would pass vacuously.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderApp('/')
+    fireEvent.click(await screen.findByRole('button', { name: 'Abrir menú' }))
+    await screen.findByRole('dialog')
+
+    expect(
+      errorSpy.mock.calls.some((call) =>
+        String(call[0]).includes('Function components cannot be given refs')
+      )
+    ).toBe(false)
+    errorSpy.mockRestore()
+  })
 })

@@ -208,7 +208,7 @@ export function Insights({
       )}
 
       {!hasTransactions && (
-        <Card className="p-8 text-center space-y-4">
+        <Card className="p-8 text-center space-y-4 items-center">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <Upload className="text-primary" size={28} />
           </div>
@@ -229,7 +229,7 @@ export function Insights({
       )}
 
       {hasTransactions && !isConfigured && (
-        <Card className="p-8 text-center space-y-4">
+        <Card className="p-8 text-center space-y-4 items-center">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <Sparkles className="text-primary" size={28} />
           </div>
@@ -245,7 +245,7 @@ export function Insights({
       )}
 
       {hasTransactions && isConfigured && !loadingCache && !cached && (
-        <Card className="p-8 text-center space-y-4">
+        <Card className="p-8 text-center space-y-4 items-center">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <Sparkles className="text-primary" size={28} />
           </div>

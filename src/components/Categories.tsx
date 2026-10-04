@@ -336,7 +336,7 @@ export function Categories({
           onClick={openNewForm}
           style={{
             background: 'var(--brand)',
-            color: '#fff',
+            color: 'var(--primary-foreground)',
             border: 'none',
             borderRadius: 'var(--radius-md)',
             padding: '9px 16px',
@@ -943,7 +943,7 @@ export function Categories({
                           : 'var(--surface)',
                       color:
                         patternForm.applyScope === value
-                          ? '#fff'
+                          ? 'var(--primary-foreground)'
                           : 'var(--text)',
                       fontWeight: patternForm.applyScope === value ? 600 : 400,
                       whiteSpace: 'nowrap',
