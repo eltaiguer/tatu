@@ -208,7 +208,7 @@ Requires `.env` with Supabase vars (see `.env.example`):
 
 Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip. Hooks extracted from App.tsx; store simplified. Deployed to Firebase Hosting. Test counts and line counts are deliberately not recorded here — they go stale within a PR.
 
-**Known shape of the code:** `Transactions.tsx` and `Dashboard.tsx` are very large (`Categories.tsx` and `TransactionTable.tsx` are big too) — the refactor extracted hooks, not view components, so sub-components are defined inline at the top of each file.
+**Known shape of the code:** `Transactions.tsx` and `Dashboard.tsx` are very large — the refactor extracted hooks, not view components, so both define their sub-components inline at the top of the file.
 
 **AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, `handleTransactionsImported` (`useTransactionHandlers`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
 
