@@ -265,14 +265,17 @@ rows. Never group by `description` or `getDisplayDescription` directly.
 
 - `merchantKeyOf(tx)`: the user's rename (`displayDescription`, else a live
   description override) folded (lowercase, no accents, `*` as a space, single
-  spaces); a split part's own description, folded; otherwise
-  `rawMerchantKey(description)`.
+  spaces); otherwise `rawMerchantKey(description)` — split parts too, since
+  they are prefilled with the parent's bank description.
 - `rawMerchantKey`: drops tokens with digits (auth/reference codes, "Cuota 09
   10", branch numbers) except after `NRO`, `NRR:…`, the `TARJ: ####1234` card
-  mask, and a trailing `, PLACE` (only a known Uruguayan place, or any short
-  place in the debit-card shape that has a `TARJ:` mask); then folds. If that
-  leaves nothing, a bare processor/bank prefix (`GENERIC_KEYS`) or one word
-  under 4 letters, the digits are kept instead.
+  mask, and a trailing `, PLACE` (any short place in the debit-card shape that
+  has a `TARJ:` mask; otherwise only a known Uruguayan place that is not also
+  a common name, and never on transfer/Supernet rows, which end in a person's
+  name); then folds. If that leaves nothing, a bare processor/bank prefix
+  (`GENERIC_KEYS`) or one word under 4 letters that is not a known short
+  merchant (`KNOWN_SHORT_MERCHANTS`: UTE, OSE, BPS, DGI, KFC…), the digits are
+  kept instead.
 - `merchantLabelFor(rows)`: what the user sees and the Insights model echoes —
   the most recent rename, else the most common raw description (ties: most
   recent row).

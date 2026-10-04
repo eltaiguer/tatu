@@ -126,6 +126,36 @@ describe('rawMerchantKey', () => {
     expect(rawMerchantKey('Stm')).toBe('stm')
   })
 
+  it('merges known short merchants (utilities, agencies) across reference codes', () => {
+    expect(rawMerchantKey('KFC 1234TT56')).toBe('kfc')
+    expect(rawMerchantKey('KFC 7890TT12')).toBe('kfc')
+    expect(rawMerchantKey('UTE 20251106')).toBe('ute')
+    expect(rawMerchantKey('OSE 554433')).toBe('ose')
+    expect(rawMerchantKey('BPS 0099')).toBe('bps')
+    expect(rawMerchantKey('DGI 7788')).toBe('dgi')
+  })
+
+  it('does not strip a city-like first name from a transfer counterparty', () => {
+    const mercedes = rawMerchantKey(
+      'TRANSF INSTANTANEA RECIBIDA 618258LR:000022847973 PEREZ, MERCEDES'
+    )
+    const dolores = rawMerchantKey(
+      'TRANSF INSTANTANEA RECIBIDA 644388LR:000022992325 PEREZ, DOLORES'
+    )
+    expect(mercedes).not.toBe(dolores)
+    expect(
+      rawMerchantKey('DEBITO OPERACION EN SUPERNET O SMS PAGO A GOMEZ, ROCHA')
+    ).toBe('debito operacion en supernet o sms pago a gomez, rocha')
+    // Names that are also cities are not stripped outside a card purchase.
+    expect(rawMerchantKey('PELUQUERIA, FLORIDA')).toBe('peluqueria, florida')
+    // A card purchase still loses its city, whatever the city.
+    expect(
+      rawMerchantKey(
+        'COMPRA CON TARJETA DEBITO PANADERIA SOL, MERCEDES TARJ: ############9172'
+      )
+    ).toBe('compra con tarjeta debito panaderia sol')
+  })
+
   it('keeps an "NRO <number>": the number tells payees apart', () => {
     expect(
       rawMerchantKey('DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA      5506')
@@ -171,10 +201,22 @@ describe('merchantKeyOf', () => {
     ).toBe('netflix 4k')
   })
 
-  it('keys a split part on its user-typed description, never stripped', () => {
+  it("keys a default split part (the parent's bank description) with its unsplit siblings", () => {
+    // SplitTransactionDialog prefills each part with the parent's raw
+    // description, so a split Netflix charge stays Netflix.
     expect(
-      merchantKeyOf(tx({ description: 'Pago 1', splitParentId: 'p' }))
-    ).not.toBe(merchantKeyOf(tx({ description: 'Pago 2', splitParentId: 'p' })))
+      merchantKeyOf(
+        tx({ description: 'NETFLIX.COM 1234TT56', splitParentId: 'p' })
+      )
+    ).toBe(merchantKeyOf(tx({ description: 'NETFLIX.COM 7890TT12' })))
+  })
+
+  it('keys a user-typed split part on what the user typed', () => {
+    expect(
+      merchantKeyOf(
+        tx({ description: 'Regalo cumple Ana', splitParentId: 'p' })
+      )
+    ).toBe('regalo cumple ana')
   })
 
   it('ignores a whitespace-only displayDescription', () => {
