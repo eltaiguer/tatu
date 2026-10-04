@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
-import { useState } from 'react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { EditTransactionDialog } from './EditTransactionDialog'
 import type { Transaction } from '../models'
@@ -8,179 +7,329 @@ import { getCategoryDisplay } from '../utils/category-display'
 import { replaceCustomCategories } from '../services/categories/category-store'
 
 type DialogProps = ComponentProps<typeof EditTransactionDialog>
-type ApplyScope = DialogProps['applyScope']
 
 const transaction: Transaction = {
   id: 'tx-1',
   date: new Date('2025-03-10T12:00:00'),
   description: 'POS COMPRA DISCO 123',
+  displayDescription: 'Disco',
   amount: 100,
   currency: 'USD',
   type: 'debit',
   source: 'bank_account',
   category: 'groceries',
+  tags: ['super'],
   rawData: {},
 }
 
 function baseProps(overrides: Partial<DialogProps> = {}): DialogProps {
   return {
-    editingTransaction: transaction,
-    editDescription: 'Disco',
-    editCategory: 'groceries',
-    editTagList: [],
-    applyScope: 'single',
-    editError: '',
-    categoryPickerOpen: false,
-    tagPickerOpen: false,
-    newCategoryInput: '',
-    newTagInput: '',
-    filteredCategorySuggestions: ['groceries', 'restaurants'],
-    filteredTagSuggestions: [],
-    pendingTransactionIds: new Set<string>(),
-    similarCount: 4,
-    onDescriptionChange: vi.fn(),
-    onCategoryChange: vi.fn(),
-    onApplyScopeChange: vi.fn(),
-    onCategoryPickerOpenChange: vi.fn(),
-    onTagPickerOpenChange: vi.fn(),
-    onNewCategoryInputChange: vi.fn(),
-    onNewTagInputChange: vi.fn(),
-    onAddCategory: vi.fn(),
-    onAddTag: vi.fn(),
-    onAddInlineTag: vi.fn(),
-    onRemoveTag: vi.fn(),
+    transaction,
+    // Fake reach: 4 similar rows, 2 once the name changes.
+    countSimilar: (_transaction, renamed) => (renamed ? 2 : 4),
+    knownTags: ['super', 'viaje', 'trabajo'],
+    isSaving: false,
+    onCreateCategory: vi.fn(async () => undefined),
     onSave: vi.fn(),
-    onCancel: vi.fn(),
+    onClose: vi.fn(),
     ...overrides,
   }
 }
 
-interface SavedEdit {
-  description: string
-  category: string
-  scope: ApplyScope
-}
-
-// Owns the dialog's state the way Transactions does, and records what that
-// state is at the moment the user saves — i.e. what the save handler sends.
-function StatefulDialog({ onSave }: { onSave: (edit: SavedEdit) => void }) {
-  const [description, setDescription] = useState('Disco')
-  const [category, setCategory] = useState('groceries')
-  const [scope, setScope] = useState<ApplyScope>('single')
-  const [pickerOpen, setPickerOpen] = useState(false)
-
-  return (
-    <EditTransactionDialog
-      {...baseProps()}
-      editDescription={description}
-      editCategory={category}
-      applyScope={scope}
-      categoryPickerOpen={pickerOpen}
-      onDescriptionChange={setDescription}
-      onCategoryChange={setCategory}
-      onApplyScopeChange={setScope}
-      onCategoryPickerOpenChange={setPickerOpen}
-      onSave={() => onSave({ description, category, scope })}
-    />
-  )
+function save() {
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 }
 
 describe('EditTransactionDialog', () => {
   const restaurants = getCategoryDisplay('restaurants').label
+  const groceries = getCategoryDisplay('groceries').label
 
   beforeEach(() => {
     replaceCustomCategories([])
   })
 
-  it('saves the description, category and scope the user chose', () => {
-    const onSave = vi.fn()
-    render(<StatefulDialog onSave={onSave} />)
+  it('starts the draft from the transaction being edited', () => {
+    render(<EditTransactionDialog {...baseProps()} />)
+
+    expect(screen.getByLabelText('Descripción edición')).toHaveValue('Disco')
+    expect(screen.getByLabelText('Categoría dropdown')).toHaveTextContent(
+      groceries
+    )
+    expect(screen.getByLabelText('Etiquetas dropdown')).toHaveTextContent(
+      '1 etiqueta seleccionada'
+    )
+    expect(screen.getByLabelText('Solo esta transacción')).toBeChecked()
+    expect(
+      screen.getByText('Original: POS COMPRA DISCO 123')
+    ).toBeInTheDocument()
+  })
+
+  it('saves the unchanged draft as it started', () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
+
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith({
+      description: 'Disco',
+      category: 'groceries',
+      tags: ['super'],
+      applyScope: 'single',
+    })
+  })
+
+  it('saves the description, category, tags and scope the user chose', () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
 
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
-      target: { value: 'Disco Pocitos' },
+      target: { value: '  Disco Pocitos  ' },
     })
     fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     fireEvent.click(screen.getByRole('button', { name: restaurants }))
+    fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: 'viaje' }))
     fireEvent.click(screen.getByLabelText(/^Todas las similares/))
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    save()
 
-    expect(onSave).toHaveBeenCalledWith({
+    expect(props.onSave).toHaveBeenCalledWith({
       description: 'Disco Pocitos',
       category: 'restaurants',
-      scope: 'matching_past_and_future',
+      tags: ['super', 'viaje'],
+      applyScope: 'matching_past_and_future',
     })
   })
 
   it('saves the future-only scope when chosen', () => {
-    const onSave = vi.fn()
-    render(<StatefulDialog onSave={onSave} />)
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
 
     fireEvent.click(
       screen.getByLabelText('Esta y las que importes en el futuro')
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    save()
 
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ scope: 'future_matching_only' })
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ applyScope: 'future_matching_only' })
     )
   })
 
-  it('reports each scope option as the exact scope value', () => {
-    const props = baseProps({ applyScope: 'matching_past_and_future' })
+  it('saves no category when the user picks "sin categoría"', () => {
+    const props = baseProps()
     render(<EditTransactionDialog {...props} />)
 
-    expect(screen.getByLabelText(/^Todas las similares/)).toBeChecked()
-
-    fireEvent.click(screen.getByLabelText('Solo esta transacción'))
-    expect(props.onApplyScopeChange).toHaveBeenLastCalledWith('single')
-
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     fireEvent.click(
-      screen.getByLabelText('Esta y las que importes en el futuro')
+      screen.getByRole('button', {
+        name: getCategoryDisplay('uncategorized').label,
+      })
     )
-    expect(props.onApplyScopeChange).toHaveBeenLastCalledWith(
-      'future_matching_only'
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ category: undefined })
     )
   })
 
-  it('reports the picked category and closes the picker', () => {
-    const props = baseProps({ categoryPickerOpen: true })
+  it('refuses to save an empty description', () => {
+    const props = baseProps()
     render(<EditTransactionDialog {...props} />)
 
-    fireEvent.click(screen.getByRole('button', { name: restaurants }))
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: '   ' },
+    })
+    save()
 
-    expect(props.onCategoryChange).toHaveBeenCalledWith('restaurants')
-    expect(props.onCategoryPickerOpenChange).toHaveBeenCalledWith(false)
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'La descripción no puede quedar vacía'
+    )
+    expect(props.onSave).not.toHaveBeenCalled()
   })
 
-  it('tells how many transactions the similar scope reaches', () => {
-    render(<EditTransactionDialog {...baseProps({ similarCount: 4 })} />)
+  it('filters the category list by the search text', () => {
+    render(<EditTransactionDialog {...baseProps()} />)
+
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.change(screen.getByLabelText('Nueva categoría'), {
+      target: { value: restaurants.slice(0, 5) },
+    })
+
+    expect(
+      screen.getByRole('button', { name: restaurants })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: groceries })
+    ).not.toBeInTheDocument()
+  })
+
+  it('selects a created category only once it is saved', async () => {
+    const onCreateCategory = vi.fn(async () => ({ id: 'custom_mascotas' }))
+    const props = baseProps({ onCreateCategory })
+    render(<EditTransactionDialog {...props} />)
+
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.change(screen.getByLabelText('Nueva categoría'), {
+      target: { value: ' Mascotas ' },
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Crear categoría'))
+    })
+    save()
+
+    expect(onCreateCategory).toHaveBeenCalledWith('Mascotas')
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'custom_mascotas' })
+    )
+  })
+
+  it('keeps the category when creating one fails', async () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
+
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.change(screen.getByLabelText('Nueva categoría'), {
+      target: { value: 'Mascotas' },
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Crear categoría'))
+    })
+    save()
+
+    expect(props.onCreateCategory).toHaveBeenCalledWith('Mascotas')
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'groceries' })
+    )
+  })
+
+  it('creates and removes tags on the draft', () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
+
+    fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
+    fireEvent.change(screen.getByLabelText('Nueva etiqueta'), {
+      target: { value: ' vacaciones ' },
+    })
+    fireEvent.click(screen.getByLabelText('Crear etiqueta'))
+    fireEvent.click(screen.getByLabelText('Quitar etiqueta super'))
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ tags: ['vacaciones'] })
+    )
+  })
+
+  it('filters the tag list by the search text', () => {
+    render(<EditTransactionDialog {...baseProps()} />)
+
+    fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
+    fireEvent.change(screen.getByLabelText('Nueva etiqueta'), {
+      target: { value: 'VIA' },
+    })
+
+    expect(screen.getByRole('button', { name: 'viaje' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'trabajo' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('tells how many transactions the similar scope reaches as the name changes', () => {
+    render(<EditTransactionDialog {...baseProps()} />)
+
+    expect(
+      screen.getByLabelText(/se aplica a 2 transacciones/)
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'POS COMPRA DISCO 123' },
+    })
 
     expect(
       screen.getByLabelText(/se aplica a 4 transacciones/)
     ).toBeInTheDocument()
   })
 
-  it('shows the transaction being edited and its original description', () => {
-    render(<EditTransactionDialog {...baseProps()} />)
+  it('counts the similar reach as a rename only when the name differs from the original', () => {
+    const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
+      renamed ? 2 : 1
+    )
+    render(<EditTransactionDialog {...baseProps({ countSimilar })} />)
 
+    // "Disco" differs from the raw "POS COMPRA DISCO 123".
+    expect(countSimilar).toHaveBeenLastCalledWith(transaction, true)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'POS COMPRA DISCO 123' },
+    })
+
+    expect(countSimilar).toHaveBeenLastCalledWith(transaction, false)
     expect(
-      screen.getByText('Original: POS COMPRA DISCO 123')
+      screen.getByLabelText(
+        'Todas las similares · solo esta por ahora (y las futuras)'
+      )
     ).toBeInTheDocument()
   })
 
-  it('shows a save error', () => {
-    render(
+  it('starts a fresh draft for the next transaction', () => {
+    const props = baseProps()
+    const { rerender } = render(<EditTransactionDialog {...props} />)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Borrador' },
+    })
+    rerender(<EditTransactionDialog {...props} transaction={null} />)
+    rerender(
       <EditTransactionDialog
-        {...baseProps({ editError: 'No se pudo guardar' })}
+        {...props}
+        transaction={{
+          ...transaction,
+          id: 'tx-2',
+          displayDescription: 'Tienda Inglesa',
+        }}
       />
     )
 
-    expect(screen.getByRole('alert')).toHaveTextContent('No se pudo guardar')
+    expect(screen.getByLabelText('Descripción edición')).toHaveValue(
+      'Tienda Inglesa'
+    )
+  })
+
+  it('starts a fresh draft when the same transaction is reopened', () => {
+    const props = baseProps()
+    const { rerender } = render(<EditTransactionDialog {...props} />)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Borrador' },
+    })
+    rerender(<EditTransactionDialog {...props} transaction={null} />)
+    rerender(<EditTransactionDialog {...props} />)
+
+    expect(screen.getByLabelText('Descripción edición')).toHaveValue('Disco')
+  })
+
+  it('keeps the draft while the open transaction is refreshed', () => {
+    const props = baseProps()
+    const { rerender } = render(<EditTransactionDialog {...props} />)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Borrador' },
+    })
+    rerender(
+      <EditTransactionDialog {...props} transaction={{ ...transaction }} />
+    )
+
+    expect(screen.getByLabelText('Descripción edición')).toHaveValue('Borrador')
+  })
+
+  it('renders nothing editable without a transaction', () => {
+    render(<EditTransactionDialog {...baseProps({ transaction: null })} />)
+
+    expect(
+      screen.queryByLabelText('Descripción edición')
+    ).not.toBeInTheDocument()
   })
 
   it('blocks saving and cancelling while the save is pending', () => {
-    const props = baseProps({ pendingTransactionIds: new Set(['tx-1']) })
-    render(<EditTransactionDialog {...props} />)
+    render(<EditTransactionDialog {...baseProps({ isSaving: true })} />)
 
     expect(
       screen.getByRole('button', { name: 'Guardar cambios' })
@@ -188,13 +337,13 @@ describe('EditTransactionDialog', () => {
     expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled()
   })
 
-  it('cancels from the cancel button', () => {
+  it('closes from the cancel button without saving', () => {
     const props = baseProps()
     render(<EditTransactionDialog {...props} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
 
-    expect(props.onCancel).toHaveBeenCalledTimes(1)
+    expect(props.onClose).toHaveBeenCalledTimes(1)
     expect(props.onSave).not.toHaveBeenCalled()
   })
 })

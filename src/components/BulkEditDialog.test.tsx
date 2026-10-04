@@ -18,8 +18,7 @@ function baseProps(overrides: Partial<DialogProps> = {}): DialogProps {
     bulkTagPickerOpen: false,
     bulkCategorySearch: '',
     bulkTagSearch: '',
-    bulkFilteredCategories: ['groceries', 'restaurants'],
-    bulkFilteredTags: ['viaje', 'trabajo'],
+    categorySuggestions: ['groceries', 'restaurants'],
     tagSuggestions: ['viaje', 'trabajo'],
     isBulkOperating: false,
     showCategorySection: true,
@@ -192,6 +191,39 @@ describe('BulkEditDialog', () => {
       screen.getByRole('button', { name: 'Guardar cambios' })
     ).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled()
+  })
+
+  it('lists only the categories matching the search', () => {
+    render(
+      <BulkEditDialog
+        {...baseProps({
+          bulkCategoryPickerOpen: true,
+          bulkCategorySearch: restaurants.slice(0, 5).toUpperCase(),
+        })}
+      />
+    )
+
+    expect(
+      screen.getByRole('button', { name: restaurants })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', {
+        name: getCategoryDisplay('groceries').label,
+      })
+    ).not.toBeInTheDocument()
+  })
+
+  it('lists only the tags matching the search', () => {
+    render(
+      <BulkEditDialog
+        {...baseProps({ bulkTagPickerOpen: true, bulkTagSearch: 'VIA' })}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '#viaje' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: '#trabajo' })
+    ).not.toBeInTheDocument()
   })
 
   it('shows only the sections asked for', () => {

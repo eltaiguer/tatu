@@ -24,10 +24,10 @@ import { cn } from './ui/utils'
 import { Category } from '../models'
 import type { Transaction } from '../models'
 import { getCategoryDisplay } from '../utils/category-display'
-import { getDisplayDescription } from '../utils/transaction-display'
 import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
 import { useClickOutside } from '../hooks/useClickOutside'
 import { EditTransactionDialog } from './EditTransactionDialog'
+import type { EditTransactionDraft } from './EditTransactionDialog'
 import { BulkEditDialog } from './BulkEditDialog'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
@@ -38,9 +38,12 @@ import { exportTransactions } from '../services/export/export'
 import { useConfirm } from './ConfirmDialog'
 import {
   addCustomCategoryWithSync,
-  listCustomCategories,
   DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
+import {
+  buildCategorySuggestions,
+  buildTagSuggestions,
+} from '../services/suggestions/suggestions'
 import { sumCountedTotals } from '../services/spending/spending-rules'
 import {
   DEFAULT_URL_FILTERS,
@@ -891,77 +894,21 @@ export function Transactions({
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
-  const [editDescription, setEditDescription] = useState('')
-  const [editCategory, setEditCategory] = useState('')
-  const [editTagList, setEditTagList] = useState<string[]>([])
-  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
-  const [tagPickerOpen, setTagPickerOpen] = useState(false)
-  const [newCategoryInput, setNewCategoryInput] = useState('')
-  const [newTagInput, setNewTagInput] = useState('')
-
-  // Same matching the apply-to-similar write uses, so the number the
-  // dialog shows is the number of rows the save will touch.
-  const similarCount = useMemo(() => {
-    if (!editingTransaction) return 0
-    // "Renamed" exactly as the save decides it.
-    const name = editDescription.trim()
-    const renamed = !!name && name !== editingTransaction.description
-    return countSimilarEditReach(transactions, editingTransaction, renamed)
-  }, [transactions, editingTransaction, editDescription])
-  const [applyScope, setApplyScope] = useState<
-    'single' | 'matching_past_and_future' | 'future_matching_only'
-  >('single')
-  const [editError, setEditError] = useState('')
   const { confirm: confirmDeletion, dialog: confirmDialog } = useConfirm()
 
   const [splittingTransaction, setSplittingTransaction] =
     useState<Transaction | null>(null)
   const [splitPending, setSplitPending] = useState(false)
 
-  const categorySuggestions = useMemo(() => {
-    return Array.from(
-      new Set(
-        [
-          ...Object.values(Category),
-          ...listCustomCategories().map((c) => c.id),
-          editCategory,
-        ]
-          .map((value) => value.trim())
-          .filter(Boolean)
-      )
-    ).sort((a, b) =>
-      getCategoryDisplay(a).label.localeCompare(
-        getCategoryDisplay(b).label,
-        'es'
-      )
-    )
-  }, [editCategory])
+  // Not memoized: custom categories live outside React state, and the list
+  // is short, so rebuilding it each render keeps a category created in the
+  // edit dialog visible to the bulk pickers.
+  const categorySuggestions = buildCategorySuggestions()
 
-  const filteredCategorySuggestions = useMemo(() => {
-    const query = newCategoryInput.trim().toLowerCase()
-    const base = categorySuggestions.filter((c) => c !== Category.Uncategorized)
-    if (!query) return base
-    return base.filter((category) => {
-      const label = getCategoryDisplay(category).label.toLowerCase()
-      return category.toLowerCase().includes(query) || label.includes(query)
-    })
-  }, [categorySuggestions, newCategoryInput])
-
-  const tagSuggestions = useMemo(() => {
-    return Array.from(
-      new Set(
-        [...transactions.flatMap((tx) => tx.tags ?? []), ...editTagList]
-          .map((value) => value.trim())
-          .filter(Boolean)
-      )
-    ).sort((a, b) => a.localeCompare(b, 'es'))
-  }, [transactions, editTagList])
-
-  const filteredTagSuggestions = useMemo(() => {
-    const query = newTagInput.trim().toLowerCase()
-    if (!query) return tagSuggestions
-    return tagSuggestions.filter((tag) => tag.toLowerCase().includes(query))
-  }, [tagSuggestions, newTagInput])
+  const tagSuggestions = useMemo(
+    () => buildTagSuggestions(transactions.flatMap((tx) => tx.tags ?? [])),
+    [transactions]
+  )
 
   useEffect(() => {
     const validIds = new Set(transactions.map((transaction) => transaction.id))
@@ -970,87 +917,43 @@ export function Transactions({
     )
   }, [transactions])
 
-  function startEditTransaction(transaction: Transaction) {
-    setEditingTransaction(transaction)
-    setEditDescription(getDisplayDescription(transaction))
-    setEditCategory(transaction.category ?? '')
-    setEditTagList(transaction.tags ?? [])
-    setApplyScope('single')
-    setCategoryPickerOpen(false)
-    setTagPickerOpen(false)
-    setNewCategoryInput('')
-    setNewTagInput('')
-    setEditError('')
+  // Same matching the apply-to-similar write uses, so the number the
+  // dialog shows is the number of rows the save will touch.
+  function countSimilar(transaction: Transaction, renamed: boolean) {
+    return countSimilarEditReach(transactions, transaction, renamed)
   }
 
-  function resetEditState() {
-    setEditingTransaction(null)
-    setEditDescription('')
-    setEditCategory('')
-    setEditTagList([])
-    setApplyScope('single')
-    setCategoryPickerOpen(false)
-    setTagPickerOpen(false)
-    setNewCategoryInput('')
-    setNewTagInput('')
-    setEditError('')
-  }
-
-  // Selects the new category only once it is saved, so the edit can't
-  // reference a category the server doesn't have.
-  async function handleAddCategory() {
-    const value = newCategoryInput.trim()
-    if (!value) return
+  async function handleCreateCategory(label: string) {
     try {
       const created = await addCustomCategoryWithSync({
-        label: value,
+        label,
         color: DEFAULT_CATEGORY_COLOR,
         icon: '🏷️',
       })
-      setEditCategory(created.id)
-      setNewCategoryInput('')
+      return created
     } catch (error) {
       reportError(error, 'No se pudo crear la categoría')
+      return undefined
     }
   }
 
-  function handleAddTag(tag: string) {
-    const value = tag.trim()
-    if (!value || editTagList.includes(value)) return
-    setEditTagList((current) => [...current, value])
-  }
-
-  function handleAddInlineTag() {
-    handleAddTag(newTagInput)
-    setNewTagInput('')
-  }
-
-  function handleRemoveTag(tag: string) {
-    setEditTagList((current) => current.filter((value) => value !== tag))
-  }
-
-  async function handleSaveEditTransaction() {
+  async function handleSaveEditTransaction(draft: EditTransactionDraft) {
     if (!onUpdateTransaction || !editingTransaction) return
-    const trimmedDescription = editDescription.trim()
-    if (!trimmedDescription) {
-      setEditError('La descripción no puede quedar vacía')
-      return
-    }
     const editingId = editingTransaction.id
     setPending(editingId, true)
     try {
       const { affected } = await onUpdateTransaction(editingId, {
-        displayDescription: trimmedDescription,
-        category: editCategory.trim() || undefined,
-        tags: editTagList,
-        applyScope,
+        displayDescription: draft.description,
+        category: draft.category,
+        tags: draft.tags,
+        applyScope: draft.applyScope,
       })
       toast.success(
         affected > 1
           ? `Cambios aplicados a ${affected} transacciones`
           : 'Cambios guardados'
       )
-      resetEditState()
+      setEditingTransaction(null)
     } catch (error) {
       // The dialog stays open so the user can retry.
       reportError(error, 'No se pudieron guardar los cambios')
@@ -1142,21 +1045,6 @@ export function Transactions({
   function handleSelectAllFiltered() {
     mergeSelectedTransactionIds(filteredTransactionIds)
   }
-
-  const bulkFilteredCategories = useMemo(() => {
-    const query = bulkCategorySearch.trim().toLowerCase()
-    if (!query) return categorySuggestions
-    return categorySuggestions.filter((category) => {
-      const label = getCategoryDisplay(category).label.toLowerCase()
-      return category.toLowerCase().includes(query) || label.includes(query)
-    })
-  }, [categorySuggestions, bulkCategorySearch])
-
-  const bulkFilteredTags = useMemo(() => {
-    const query = bulkTagSearch.trim().toLowerCase()
-    if (!query) return tagSuggestions
-    return tagSuggestions.filter((tag) => tag.toLowerCase().includes(query))
-  }, [tagSuggestions, bulkTagSearch])
 
   const isBusy = isAutoCategorizing || isBulkOperating
 
@@ -1464,7 +1352,7 @@ export function Transactions({
         onSort={handleSort}
         onClearFilters={clearFiltersAndPeriod}
         onShowIgnoredChange={setShowIgnored}
-        onEdit={startEditTransaction}
+        onEdit={setEditingTransaction}
         onDelete={(transaction) => {
           void handleDeleteTransaction(transaction)
         }}
@@ -1483,37 +1371,18 @@ export function Transactions({
       />
 
       <EditTransactionDialog
-        editingTransaction={editingTransaction}
-        editDescription={editDescription}
-        editCategory={editCategory}
-        editTagList={editTagList}
-        applyScope={applyScope}
-        editError={editError}
-        categoryPickerOpen={categoryPickerOpen}
-        tagPickerOpen={tagPickerOpen}
-        newCategoryInput={newCategoryInput}
-        newTagInput={newTagInput}
-        filteredCategorySuggestions={filteredCategorySuggestions}
-        filteredTagSuggestions={filteredTagSuggestions}
-        pendingTransactionIds={pendingTransactionIds}
-        similarCount={similarCount}
-        onDescriptionChange={setEditDescription}
-        onCategoryChange={setEditCategory}
-        onApplyScopeChange={setApplyScope}
-        onCategoryPickerOpenChange={setCategoryPickerOpen}
-        onTagPickerOpenChange={setTagPickerOpen}
-        onNewCategoryInputChange={setNewCategoryInput}
-        onNewTagInputChange={setNewTagInput}
-        onAddCategory={() => {
-          void handleAddCategory()
+        transaction={editingTransaction}
+        countSimilar={countSimilar}
+        knownTags={tagSuggestions}
+        isSaving={
+          editingTransaction !== null &&
+          pendingTransactionIds.has(editingTransaction.id)
+        }
+        onCreateCategory={handleCreateCategory}
+        onSave={(draft) => {
+          void handleSaveEditTransaction(draft)
         }}
-        onAddTag={handleAddTag}
-        onAddInlineTag={handleAddInlineTag}
-        onRemoveTag={handleRemoveTag}
-        onSave={() => {
-          void handleSaveEditTransaction()
-        }}
-        onCancel={resetEditState}
+        onClose={() => setEditingTransaction(null)}
       />
 
       <BulkEditDialog
@@ -1525,8 +1394,7 @@ export function Transactions({
         bulkTagPickerOpen={bulkTagPickerOpen}
         bulkCategorySearch={bulkCategorySearch}
         bulkTagSearch={bulkTagSearch}
-        bulkFilteredCategories={bulkFilteredCategories}
-        bulkFilteredTags={bulkFilteredTags}
+        categorySuggestions={categorySuggestions}
         tagSuggestions={tagSuggestions}
         isBulkOperating={isBulkOperating}
         showCategorySection={Boolean(onBulkCategorize)}
