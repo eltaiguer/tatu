@@ -147,6 +147,7 @@ Behavior testing — tests verify what the system does, not how it does it.
 - `refactor:` for refactors
 - `test:` for test-only commits
 - Each commit should have passing tests
+- **Schema changes**: a PR that changes `supabase/schema.sql` must say so in its body (the SQL is applied by hand — see `supabase/README.md`; CI labels it `schema-change`). Never merge it unattended — tag it `needs-human-review` and leave the merge to a human.
 
 ## Code conventions
 
