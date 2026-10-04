@@ -284,6 +284,24 @@ describe('App with supabase enabled', () => {
     )
   })
 
+  it('keeps "Restablecer contraseña" enabled and explains it needs the email (#204)', async () => {
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App />
+      </MemoryRouter>
+    )
+
+    const reset = screen.getByRole('button', { name: 'Restablecer contraseña' })
+    expect(reset).toBeEnabled()
+    fireEvent.click(reset)
+
+    expect(
+      await screen.findByText('Ingresá tu email para restablecer la contraseña')
+    ).toBeInTheDocument()
+    expect(requestPasswordResetMock).not.toHaveBeenCalled()
+  })
+
   it('updates password from recovery mode', async () => {
     window.history.replaceState({}, '', '/?mode=reset-password')
 
@@ -296,6 +314,9 @@ describe('App with supabase enabled', () => {
 
     expect(
       screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Este cambio se aplica a tu cuenta de Tatú.')
     ).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('Nueva contraseña'), {

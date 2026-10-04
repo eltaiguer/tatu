@@ -235,7 +235,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
     expect(
-      screen.getByRole('heading', { name: 'Importar Transacciones' })
+      screen.getByRole('heading', { name: 'Importar transacciones' })
     ).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
   })
@@ -249,9 +249,9 @@ describe('App', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
-    expect(screen.getByText('Tarjeta de Crédito')).toBeInTheDocument()
+    expect(screen.getByText('Tarjeta de crédito')).toBeInTheDocument()
     expect(screen.getByText('Cuenta USD')).toBeInTheDocument()
-    expect(screen.getByText('Cuenta UYU')).toBeInTheDocument()
+    expect(screen.getByText('Cuenta $U')).toBeInTheDocument()
     expect(
       screen.getByText(/Extracto de tarjeta Santander/)
     ).toBeInTheDocument()
@@ -454,7 +454,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Importar' }))
 
     expect(
-      screen.getByRole('heading', { name: 'Importar Transacciones' })
+      screen.getByRole('heading', { name: 'Importar transacciones' })
     ).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
   })
