@@ -2,7 +2,13 @@ import { MemoryRouter } from 'react-router-dom'
 import { ROUTER_FUTURE } from './router-future'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { preloadViews } from './lazy-views'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { teardownWorkspace } from './stores/workspace-store'
 
 const {
@@ -178,6 +184,20 @@ describe('App with supabase enabled', () => {
     expect(screen.getByPlaceholderText('email@ejemplo.com')).toBeInTheDocument()
   })
 
+  it('gives the sign-in screen a main landmark and an h1 (#203)', async () => {
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App />
+      </MemoryRouter>
+    )
+
+    const main = screen.getByRole('main')
+    expect(
+      within(main).getByRole('heading', { level: 1, name: 'Ingresar a Tatú' })
+    ).toBeInTheDocument()
+  })
+
   it('shows Spanish error when signin fails with Supabase credentials error', async () => {
     signInWithPasswordMock.mockRejectedValue(
       new Error('Invalid login credentials')
@@ -264,6 +284,24 @@ describe('App with supabase enabled', () => {
     )
   })
 
+  it('keeps "Restablecer contraseña" enabled and explains it needs the email (#204)', async () => {
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App />
+      </MemoryRouter>
+    )
+
+    const reset = screen.getByRole('button', { name: 'Restablecer contraseña' })
+    expect(reset).toBeEnabled()
+    fireEvent.click(reset)
+
+    expect(
+      await screen.findByText('Ingresá tu email para restablecer la contraseña')
+    ).toBeInTheDocument()
+    expect(requestPasswordResetMock).not.toHaveBeenCalled()
+  })
+
   it('updates password from recovery mode', async () => {
     window.history.replaceState({}, '', '/?mode=reset-password')
 
@@ -276,6 +314,9 @@ describe('App with supabase enabled', () => {
 
     expect(
       screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Este cambio se aplica a tu cuenta de Tatú.')
     ).toBeInTheDocument()
 
     fireEvent.change(screen.getByPlaceholderText('Nueva contraseña'), {
@@ -401,9 +442,7 @@ describe('App with supabase enabled', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
-    fireEvent.click(
-      (await screen.findAllByRole('button', { name: 'Editar Old merchant' }))[0]
-    )
+    fireEvent.click((await screen.findAllByLabelText('Editar Old merchant'))[0])
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'New merchant' },
     })
@@ -518,7 +557,7 @@ describe('App with supabase enabled', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
     fireEvent.click(
-      screen.getAllByRole('button', { name: 'Editar AUT 998877 DEVOTO' })[0]
+      (await screen.findAllByLabelText('Editar AUT 998877 DEVOTO'))[0]
     )
     fireEvent.click(
       screen.getByLabelText('Esta y las que importes en el futuro')

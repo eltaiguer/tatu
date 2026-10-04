@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Dashboard } from './Dashboard'
 import type { Transaction } from '../models'
 import { Category } from '../models'
@@ -792,5 +792,34 @@ describe('Dashboard', () => {
         screen.getAllByText(/jun\.? 2026 – sep|jun\.? 2026 – set/).length
       ).toBeGreaterThan(0)
     })
+  })
+
+  // #203 (axe svg-img-alt): the donut drew one unnamed role="img" path per
+  // slice. The category list beside it carries the same data and actions,
+  // so the chart is decorative for assistive tech and out of the Tab order.
+  it('keeps the category donut out of the accessibility tree', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-15T12:00:00.000Z'))
+    const { container } = render(
+      <Dashboard
+        transactions={[
+          makeTransaction({ id: 'a', category: Category.Groceries }),
+          makeTransaction({ id: 'b', category: Category.Restaurants }),
+        ]}
+      />
+    )
+
+    // Wait for the slice animation to draw the slice paths.
+    await waitFor(() =>
+      expect(container.querySelectorAll('[role="img"]').length).toBeGreaterThan(
+        0
+      )
+    )
+    vi.useRealTimers()
+
+    expect(screen.queryAllByRole('img', { name: '' })).toHaveLength(0)
+    expect(
+      container.querySelector('.recharts-pie')?.closest('[tabindex="0"]')
+    ).toBeNull()
   })
 })

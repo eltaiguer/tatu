@@ -163,7 +163,10 @@ async function signInAs(session: SupabaseSession) {
     target: { value: 'secret123' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-  await screen.findByRole('button', { name: 'Configuración' })
+  // Poll with a text query: a role query over the whole App costs ~1s under
+  // full-suite load and starves the render it waits for (#191).
+  await screen.findAllByText('Configuración')
+  screen.getByRole('button', { name: 'Configuración' })
 }
 
 async function openSettings() {
@@ -200,9 +203,12 @@ async function expectUserBIsClean() {
   expect(getAiConfig()).toBeNull()
 
   fireEvent.click(
-    within(screen.getByRole('tablist', { name: 'Tema' })).getByRole('tab', {
-      name: 'Oscuro',
-    })
+    within(screen.getByRole('radiogroup', { name: 'Tema' })).getByRole(
+      'radio',
+      {
+        name: 'Oscuro',
+      }
+    )
   )
   await waitFor(() =>
     expect(savesFor('user-b')).toContainEqual(

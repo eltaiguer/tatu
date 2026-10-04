@@ -78,7 +78,10 @@ The importer auto-detects three CSV exports (`detectFileType`):
   joined. A filled `debito` column means a debit; otherwise it is a credit.
 
 A value that does not parse as a number stops the import with the row number
-(`Fila N: …`) rather than turning into `NaN`.
+(`Fila N: …`) rather than turning into `NaN`. A file that matches none of the
+three formats ("No reconocemos este archivo…") or is empty ("El archivo está
+vacío.") is rejected the same way. Parser errors are `UserFacingError`s; the
+`.csv` extension check ignores case.
 
 ## UI copy guide
 
