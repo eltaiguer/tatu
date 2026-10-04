@@ -40,6 +40,8 @@ npm run deploy:firebase  # Build + deploy to Firebase
 npx vitest run <path>    # Run one test file (or a directory)
 ```
 
+Shared Claude Code config lives in `.claude/settings.json`: the verification commands above (plus read-only `gh`/`git`) run without a prompt, deploys always prompt, force-push and `.env*` edits (except `.env.example`) are denied, and a PostToolUse hook (`.claude/hooks/format-on-edit.sh`) runs Prettier on edited `src/` and Markdown files.
+
 Node 20 (`.nvmrc`). CI runs `tdd:verify` then `build`; `build`'s `tsc` type-checks test files too, so a type error in a test fails CI.
 
 ## Project structure
