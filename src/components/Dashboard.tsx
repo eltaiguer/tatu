@@ -120,73 +120,30 @@ function DrillTarget({
 
 function SectionDivider({ label, sub }: { label: string; sub?: string }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'baseline',
-        gap: 14,
-        margin: '34px 0 18px',
-      }}
-    >
-      <h2
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 20,
-          fontWeight: 600,
-          whiteSpace: 'nowrap',
-          margin: 0,
-        }}
-      >
+    <div className="mx-0 mt-[34px] mb-[18px] flex items-baseline gap-[14px]">
+      <h2 className="m-0 font-[family-name:var(--font-display)] text-[20px] font-semibold whitespace-nowrap">
         {label}
       </h2>
       {sub && (
-        <span
-          style={{
-            fontSize: 13,
-            color: 'var(--text-faint)',
-            whiteSpace: 'nowrap',
-          }}
-        >
+        <span className="text-[13px] whitespace-nowrap text-[var(--text-faint)]">
           {sub}
         </span>
       )}
-      <span
-        style={{
-          flex: 1,
-          height: 1,
-          background: 'var(--border)',
-          alignSelf: 'center',
-        }}
-      />
+      <span className="h-[1px] flex-1 self-center bg-[var(--border)]" />
     </div>
   )
 }
 
 function SplitBar({ pctUSD, pctUYU }: { pctUSD: number; pctUYU: number }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        height: 10,
-        borderRadius: 5,
-        overflow: 'hidden',
-        background: 'var(--surface-2)',
-        marginBottom: 16,
-      }}
-    >
+    <div className="mb-[16px] flex h-[10px] overflow-hidden rounded-[5px] bg-[var(--surface-2)]">
       <div
-        style={{
-          width: `${pctUSD}%`,
-          background: 'var(--brand)',
-          transition: 'width 0.3s',
-        }}
+        className="bg-[var(--brand)] [transition:width_0.3s]"
+        style={{ width: `${pctUSD}%` }}
       />
       <div
-        style={{
-          width: `${pctUYU}%`,
-          background: 'var(--accent)',
-          transition: 'width 0.3s',
-        }}
+        className="bg-[var(--accent)] [transition:width_0.3s]"
+        style={{ width: `${pctUYU}%` }}
       />
     </div>
   )
@@ -211,41 +168,22 @@ function AccountExpenseCard({
 }: AccountExpenseCardProps) {
   const mixed = stat.USD > 0 && stat.UYU > 0
   return (
-    <Card style={{ padding: 0, overflow: 'hidden' }}>
+    <Card className="overflow-hidden p-0">
       <DrillTarget
         onOpen={onOpen}
         label={`Ver los gastos de ${label}`}
         className="flex flex-col gap-[14px] p-5"
       >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-          <span
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              background: 'var(--surface-2)',
-              color: 'var(--brand)',
-              display: 'grid',
-              placeItems: 'center',
-              flexShrink: 0,
-            }}
-          >
+        <div className="flex items-center gap-[11px]">
+          <span className="grid h-[36px] w-[36px] shrink-0 place-items-center rounded-[10px] bg-[var(--surface-2)] text-[var(--brand)]">
             <Icon size={18} strokeWidth={1.8} />
           </span>
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontWeight: 600,
-                fontSize: 14,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
+          <div className="min-w-0">
+            <div className="overflow-hidden text-[14px] font-semibold text-ellipsis whitespace-nowrap">
               {label}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+            <div className="text-[12px] text-[var(--text-faint)]">
               {sublabel}
             </div>
           </div>
@@ -253,26 +191,14 @@ function AccountExpenseCard({
 
         {/* Amount */}
         <div>
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 500,
-              color: 'var(--text-faint)',
-            }}
-          >
+          <div className="text-[12px] font-medium text-[var(--text-faint)]">
             Gastos
           </div>
-          <div
-            className="font-mono"
-            style={{ fontSize: 22, marginTop: 4, color: 'var(--text)' }}
-          >
+          <div className="font-mono mt-[4px] text-[22px] text-[var(--text)]">
             {formatCurrency(stat.conv, homeCurrency)}
           </div>
           {mixed && (
-            <div
-              className="font-mono"
-              style={{ fontSize: 12, marginTop: 3, color: 'var(--text-faint)' }}
-            >
+            <div className="font-mono mt-[3px] text-[12px] text-[var(--text-faint)]">
               US$ {Math.round(stat.USD).toLocaleString('es-UY')} · $U{' '}
               {Math.round(stat.UYU).toLocaleString('es-UY')}
             </div>
@@ -280,39 +206,14 @@ function AccountExpenseCard({
         </div>
 
         {/* Footer */}
-        <div
-          style={{
-            marginTop: 'auto',
-            paddingTop: 10,
-            borderTop: '1px solid var(--border)',
-          }}
-        >
-          <div
-            style={{
-              height: 4,
-              borderRadius: 2,
-              background: 'var(--surface-2)',
-              overflow: 'hidden',
-              marginBottom: 7,
-            }}
-          >
+        <div className="mt-auto border-t border-[var(--border)] pt-[10px]">
+          <div className="mb-[7px] h-[4px] overflow-hidden rounded-[2px] bg-[var(--surface-2)]">
             <div
-              style={{
-                height: '100%',
-                width: `${stat.pct}%`,
-                background: 'var(--brand)',
-                borderRadius: 2,
-              }}
+              className="h-full rounded-[2px] bg-[var(--brand)]"
+              style={{ width: `${stat.pct}%` }}
             />
           </div>
-          <div
-            style={{
-              fontSize: 12,
-              color: 'var(--text-faint)',
-              display: 'flex',
-              justifyContent: 'space-between',
-            }}
-          >
+          <div className="flex justify-between text-[12px] text-[var(--text-faint)]">
             <span>{stat.count} movimientos</span>
             <span className="font-mono">{Math.round(stat.pct)}% del gasto</span>
           </div>
@@ -636,22 +537,9 @@ export function Dashboard({
         (payload[0].payload as { label?: string } | undefined)?.label ??
         String(payload[0].name ?? '')
       return (
-        <div
-          style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            padding: '10px 14px',
-            boxShadow: 'var(--shadow-md)',
-          }}
-        >
-          <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>
-            {label}
-          </p>
-          <p
-            className="font-mono"
-            style={{ fontSize: 13, color: 'var(--text-faint)' }}
-          >
+        <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-[14px] py-[10px] shadow-[var(--shadow-md)]">
+          <p className="mb-[2px] text-[13px] font-semibold">{label}</p>
+          <p className="font-mono text-[13px] text-[var(--text-faint)]">
             {formatCurrency(value, homeCurrency)}
           </p>
         </div>
@@ -672,43 +560,25 @@ export function Dashboard({
       neto: number
     }
     return (
-      <div
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)',
-          padding: '10px 14px',
-          boxShadow: 'var(--shadow-md)',
-        }}
-      >
-        <p
-          style={{
-            fontSize: 12,
-            color: 'var(--text-faint)',
-            margin: '0 0 6px',
-          }}
-        >
+      <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-[14px] py-[10px] shadow-[var(--shadow-md)]">
+        <p className="mx-0 mt-0 mb-[6px] text-[12px] text-[var(--text-faint)]">
           {label}
         </p>
-        <p style={{ fontSize: 12, margin: '3px 0', color: 'var(--pos)' }}>
+        <p className="mx-0 my-[3px] text-[12px] text-[var(--pos)]">
           Ingresos:{' '}
           <span className="font-mono">
             {formatCurrency(d.ingresos, homeCurrency)}
           </span>
         </p>
-        <p style={{ fontSize: 12, margin: '3px 0', color: 'var(--neg)' }}>
+        <p className="mx-0 my-[3px] text-[12px] text-[var(--neg)]">
           Gastos:{' '}
           <span className="font-mono">
             {formatCurrency(d.gastos, homeCurrency)}
           </span>
         </p>
         <p
-          style={{
-            fontSize: 12,
-            margin: '3px 0',
-            fontWeight: 600,
-            color: d.neto >= 0 ? 'var(--pos)' : 'var(--neg)',
-          }}
+          className="mx-0 my-[3px] text-[12px] font-semibold"
+          style={{ color: d.neto >= 0 ? 'var(--pos)' : 'var(--neg)' }}
         >
           Balance:{' '}
           <span className="font-mono">
@@ -809,7 +679,7 @@ export function Dashboard({
 
           {/* Account source cards — 3-col grid */}
           {periodRange && (
-            <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: 0 }}>
+            <p className="m-0 text-[11px] text-[var(--text-faint)]">
               Período analizado: {periodRange}
             </p>
           )}
@@ -865,28 +735,14 @@ export function Dashboard({
 
           {/* Este mes panel — converted + combined in home currency */}
           <Card className="p-6">
-            <div style={{ marginBottom: 20 }}>
-              <h2
-                style={{
-                  fontSize: 16,
-                  fontWeight: 600,
-                  margin: 0,
-                  fontFamily: 'var(--font-sans)',
-                }}
-              >
+            <div className="mb-[20px]">
+              <h2 className="m-0 font-[family-name:var(--font-sans)] text-[16px] font-semibold">
                 {monthSummary.isCurrentMonth
                   ? 'Este mes'
                   : capitalize(monthSummary.monthLabel)}
                 , todo en {curWord}
               </h2>
-              <p
-                style={{
-                  fontSize: 12,
-                  color: 'var(--text-faint)',
-                  marginTop: 4,
-                  marginBottom: 0,
-                }}
-              >
+              <p className="mt-[4px] mb-0 text-[12px] text-[var(--text-faint)]">
                 {!monthSummary.isCurrentMonth &&
                   'Último mes con movimientos · importá tu extracto más reciente para ver este mes. '}
                 Combina tus movimientos en US$ y $U usando el tipo de cambio.
@@ -897,16 +753,10 @@ export function Dashboard({
                 onOpen={openSummaryMonth && (() => openSummaryMonth('credit'))}
                 label="Ver los ingresos del mes"
               >
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
-                >
+                <div className="mb-[4px] text-[12px] font-medium text-muted-foreground">
                   Ingresos
                 </div>
-                <div
-                  className="font-mono"
-                  style={{ fontSize: 22, color: 'var(--pos)' }}
-                >
+                <div className="font-mono text-[22px] text-[var(--pos)]">
                   {formatCurrency(monthSummary.income, homeCurrency)}
                 </div>
               </DrillTarget>
@@ -914,26 +764,13 @@ export function Dashboard({
                 onOpen={openSummaryMonth && (() => openSummaryMonth('debit'))}
                 label="Ver los gastos del mes"
               >
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
-                >
+                <div className="mb-[4px] text-[12px] font-medium text-muted-foreground">
                   Gastos
                 </div>
-                <div
-                  className="font-mono"
-                  style={{ fontSize: 22, color: 'var(--text)' }}
-                >
+                <div className="font-mono text-[22px] text-[var(--text)]">
                   {formatCurrency(monthSummary.expense, homeCurrency)}
                 </div>
-                <div
-                  className="font-mono"
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--text-faint)',
-                    marginTop: 8,
-                  }}
-                >
+                <div className="font-mono mt-[8px] text-[11px] text-[var(--text-faint)]">
                   US${' '}
                   {Math.round(monthSummary.split.USD).toLocaleString('es-UY')} +
                   $U{' '}
@@ -944,26 +781,19 @@ export function Dashboard({
                 onOpen={openSummaryMonth && (() => openSummaryMonth())}
                 label="Ver los movimientos del mes"
               >
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 4 }}
-                >
+                <div className="mb-[4px] text-[12px] font-medium text-muted-foreground">
                   Balance neto
                 </div>
                 <div
-                  className="font-mono"
+                  className="font-mono text-[22px]"
                   style={{
-                    fontSize: 22,
                     color: monthSummary.net >= 0 ? 'var(--pos)' : 'var(--neg)',
                   }}
                 >
                   {monthSummary.net >= 0 ? '+' : '−'}
                   {formatCurrency(Math.abs(monthSummary.net), homeCurrency)}
                 </div>
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, marginTop: 8 }}
-                >
+                <div className="mt-[8px] text-[12px] text-muted-foreground">
                   {monthSummary.count} transacciones registradas
                 </div>
               </DrillTarget>
@@ -978,7 +808,7 @@ export function Dashboard({
 
           {/* KPI tiles — 4-col */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <Card className="overflow-hidden p-0">
               <DrillTarget
                 onOpen={
                   onNavigateToTransactions && topCategory
@@ -992,69 +822,55 @@ export function Dashboard({
                 label={`Ver la mayor categoría: ${topCategory?.label ?? ''}`}
                 className="h-full p-5"
               >
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
-                >
+                <div className="mb-[8px] text-[12px] font-medium text-muted-foreground">
                   Mayor categoría
                 </div>
-                <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
+                <div className="mb-[4px] text-[20px] font-bold">
                   {topCategory?.label ?? '—'}
                 </div>
-                <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+                <div className="text-[12px] text-muted-foreground">
                   {topCategory
                     ? `${Math.round(topCategory.pct)}% del gasto · todo el historial`
                     : 'Sin datos'}
                 </div>
               </DrillTarget>
             </Card>
-            <Card className="p-5" style={{ containerType: 'inline-size' }}>
-              <div
-                className="text-muted-foreground"
-                style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
-              >
+            <Card className="@container p-5">
+              <div className="mb-[8px] text-[12px] font-medium text-muted-foreground">
                 Gasto promedio mensual
               </div>
               <div
-                className="font-mono"
+                className="font-mono mb-[4px] font-bold whitespace-nowrap"
                 style={{
                   fontSize: fitMonoFontSize(
                     formatCurrency(avgMonthly, homeCurrency),
                     20
                   ),
-                  fontWeight: 700,
-                  marginBottom: 4,
-                  whiteSpace: 'nowrap',
                 }}
               >
                 {formatCurrency(avgMonthly, homeCurrency)}
               </div>
-              <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+              <div className="text-[12px] text-muted-foreground">
                 Últimos {monthlyTrend.length} meses
               </div>
             </Card>
             <Card className="p-5">
-              <div
-                className="text-muted-foreground"
-                style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
-              >
+              <div className="mb-[8px] text-[12px] font-medium text-muted-foreground">
                 Tasa de ahorro
               </div>
               <div
+                className="mb-[4px] text-[20px] font-bold"
                 style={{
-                  fontSize: 20,
-                  fontWeight: 700,
-                  marginBottom: 4,
                   color: savingsRate >= 0 ? 'var(--pos)' : 'var(--neg)',
                 }}
               >
                 {savingsRate}%
               </div>
-              <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+              <div className="text-[12px] text-muted-foreground">
                 Ingresos no gastados · últimos {monthlyTrend.length} meses
               </div>
             </Card>
-            <Card style={{ padding: 0, overflow: 'hidden' }}>
+            <Card className="overflow-hidden p-0">
               <DrillTarget
                 onOpen={
                   onNavigateToTransactions && uncategorizedSpend
@@ -1068,19 +884,13 @@ export function Dashboard({
                 label="Ver los gastos sin categoría"
                 className="h-full p-5"
               >
-                <div
-                  className="text-muted-foreground"
-                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
-                >
+                <div className="mb-[8px] text-[12px] font-medium text-muted-foreground">
                   Sin categoría
                 </div>
-                <div
-                  className="font-mono"
-                  style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}
-                >
+                <div className="font-mono mb-[4px] text-[20px] font-bold">
                   {formatCurrency(uncategorizedSpend?.total ?? 0, homeCurrency)}
                 </div>
-                <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+                <div className="text-[12px] text-muted-foreground">
                   {uncategorizedSpend
                     ? `${uncategorizedSpend.count} ${uncategorizedSpend.count === 1 ? 'gasto' : 'gastos'} · todo el historial`
                     : 'Todo categorizado'}
@@ -1095,47 +905,25 @@ export function Dashboard({
               <div className="grid grid-cols-1 lg:grid-cols-[258px_1fr] gap-8 items-center">
                 {/* Verdict text */}
                 <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 10,
-                      marginBottom: 10,
-                    }}
-                  >
-                    <h2
-                      style={{
-                        fontSize: 16,
-                        fontWeight: 600,
-                        margin: 0,
-                        fontFamily: 'var(--font-sans)',
-                      }}
-                    >
+                  <div className="mb-[10px] flex items-baseline gap-[10px]">
+                    <h2 className="m-0 font-[family-name:var(--font-sans)] text-[16px] font-semibold">
                       ¿Estás ahorrando?
                     </h2>
-                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+                    <span className="text-[11px] text-[var(--text-faint)]">
                       Últimos 12 meses
                     </span>
                   </div>
-                  <div
-                    className="text-muted-foreground"
-                    style={{ fontSize: 12, fontWeight: 500 }}
-                  >
+                  <div className="text-[12px] font-medium text-muted-foreground">
                     Mes típico (mediana de ingresos − gastos)
                   </div>
                   <div
-                    className="font-mono"
-                    style={{
-                      fontSize: 30,
-                      fontWeight: 600,
-                      marginTop: 4,
-                      color: saving ? 'var(--pos)' : 'var(--neg)',
-                    }}
+                    className="font-mono mt-[4px] text-[30px] font-semibold"
+                    style={{ color: saving ? 'var(--pos)' : 'var(--neg)' }}
                   >
                     {saving ? '+' : '−'}
                     {formatCurrency(Math.abs(typicalNet), homeCurrency)}
                   </div>
-                  <p style={{ fontSize: 14, marginTop: 12, lineHeight: 1.5 }}>
+                  <p className="mt-[12px] text-[14px] leading-[1.5]">
                     {positiveMonths > negativeMonths
                       ? 'Te queda dinero la mayoría de los meses.'
                       : positiveMonths < negativeMonths
@@ -1163,10 +951,7 @@ export function Dashboard({
                       </>
                     )}
                   </p>
-                  <div
-                    className="text-muted-foreground"
-                    style={{ fontSize: 12, marginTop: 8 }}
-                  >
+                  <div className="mt-[8px] text-[12px] text-muted-foreground">
                     {positiveMonths} de {monthlyTrend.length} meses en positivo
                   </div>
                 </div>
@@ -1248,33 +1033,13 @@ export function Dashboard({
 
           {/* Gasto por categoría — donut + ranked rows (all-history) */}
           <Card className="p-6">
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-                marginBottom: 20,
-              }}
-            >
+            <div className="mb-[20px] flex items-baseline justify-between">
               <div>
-                <h2
-                  style={{
-                    fontSize: 16,
-                    fontWeight: 600,
-                    margin: 0,
-                    fontFamily: 'var(--font-sans)',
-                  }}
-                >
+                <h2 className="m-0 font-[family-name:var(--font-sans)] text-[16px] font-semibold">
                   Gasto por categoría
                 </h2>
                 {periodRange && (
-                  <p
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--text-faint)',
-                      margin: '2px 0 0',
-                    }}
-                  >
+                  <p className="mx-0 mt-[2px] mb-0 text-[11px] text-[var(--text-faint)]">
                     {periodRange}
                   </p>
                 )}
@@ -1282,32 +1047,19 @@ export function Dashboard({
               {onNavigateToTransactions && (
                 <button
                   onClick={() => onNavigateToTransactions({ type: 'debit' })}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    fontSize: 13,
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: 'var(--brand)',
-                    fontWeight: 500,
-                  }}
+                  className="flex cursor-pointer items-center gap-[4px] border-none bg-transparent text-[13px] font-medium text-[var(--brand)]"
                 >
                   Ver movimientos <ArrowRight size={14} />
                 </button>
               )}
             </div>
             {!hasExpenseData ? (
-              <p className="text-muted-foreground" style={{ fontSize: 13 }}>
+              <p className="text-[13px] text-muted-foreground">
                 Sin gastos registrados.
               </p>
             ) : (
               <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-[240px_1fr] sm:gap-9">
-                <div
-                  className="mx-auto sm:mx-0"
-                  style={{ position: 'relative', width: 220, height: 220 }}
-                >
+                <div className="relative mx-auto h-[220px] w-[220px] sm:mx-0">
                   <ResponsiveContainer width={220} height={220}>
                     <PieChart>
                       <Pie
@@ -1332,30 +1084,11 @@ export function Dashboard({
                       <Tooltip content={customTooltip} />
                     </PieChart>
                   </ResponsiveContainer>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      textAlign: 'center',
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    <div
-                      className="text-muted-foreground"
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        letterSpacing: '0.08em',
-                      }}
-                    >
+                  <div className="pointer-events-none absolute top-[50%] left-[50%] [transform:translate(-50%,-50%)] text-center">
+                    <div className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground">
                       TOTAL
                     </div>
-                    <div
-                      className="font-mono"
-                      style={{ fontSize: 15, fontWeight: 700 }}
-                    >
+                    <div className="font-mono text-[15px] font-bold">
                       {formatCurrency(totalExpenses, homeCurrency)}
                     </div>
                   </div>
@@ -1374,41 +1107,18 @@ export function Dashboard({
           {/* Gasto por moneda — single SplitBar + legend */}
           {currencySplit.total > 0 && (
             <Card className="p-6">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'baseline',
-                  marginBottom: 14,
-                }}
-              >
+              <div className="mb-[14px] flex items-baseline justify-between">
                 <div>
-                  <h2
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 600,
-                      margin: 0,
-                      fontFamily: 'var(--font-sans)',
-                    }}
-                  >
+                  <h2 className="m-0 font-[family-name:var(--font-sans)] text-[16px] font-semibold">
                     Gasto por moneda
                   </h2>
                   {periodRange && (
-                    <p
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-faint)',
-                        margin: '2px 0 0',
-                      }}
-                    >
+                    <p className="mx-0 mt-[2px] mb-0 text-[11px] text-[var(--text-faint)]">
                       {periodRange}
                     </p>
                   )}
                 </div>
-                <span
-                  className="text-muted-foreground"
-                  style={{ fontSize: 13 }}
-                >
+                <span className="text-[13px] text-muted-foreground">
                   Total {formatCurrency(currencySplit.total, homeCurrency)}
                 </span>
               </div>
@@ -1416,53 +1126,25 @@ export function Dashboard({
                 pctUSD={currencySplit.pctUSD}
                 pctUYU={currencySplit.pctUYU}
               />
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 32,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 3,
-                      background: 'var(--brand)',
-                      flexShrink: 0,
-                    }}
-                  />
+              <div className="flex flex-wrap gap-[32px]">
+                <div className="flex items-center gap-[10px]">
+                  <span className="h-[10px] w-[10px] shrink-0 rounded-[3px] bg-[var(--brand)]" />
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                    <div className="text-[13px] font-semibold">
                       Dólares · {Math.round(currencySplit.pctUSD)}%
                     </div>
-                    <div
-                      className="font-mono text-muted-foreground"
-                      style={{ fontSize: 12 }}
-                    >
+                    <div className="font-mono text-[12px] text-muted-foreground">
                       {formatCurrency(currencySplit.USD, homeCurrency)}
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 3,
-                      background: 'var(--accent)',
-                      flexShrink: 0,
-                    }}
-                  />
+                <div className="flex items-center gap-[10px]">
+                  <span className="h-[10px] w-[10px] shrink-0 rounded-[3px] bg-[var(--accent)]" />
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                    <div className="text-[13px] font-semibold">
                       Pesos · {Math.round(currencySplit.pctUYU)}%
                     </div>
-                    <div
-                      className="font-mono text-muted-foreground"
-                      style={{ fontSize: 12 }}
-                    >
+                    <div className="font-mono text-[12px] text-muted-foreground">
                       {formatCurrency(currencySplit.UYU, homeCurrency)}
                     </div>
                   </div>
@@ -1473,58 +1155,26 @@ export function Dashboard({
 
           {/* Ingresos vs Gastos — area trend chart */}
           <Card className="p-6">
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: 20,
-              }}
-            >
+            <div className="mb-[20px] flex items-center justify-between">
               <div>
-                <h2
-                  style={{
-                    fontSize: 16,
-                    fontWeight: 600,
-                    margin: 0,
-                    fontFamily: 'var(--font-sans)',
-                  }}
-                >
+                <h2 className="m-0 font-[family-name:var(--font-sans)] text-[16px] font-semibold">
                   Ingresos vs Gastos
                 </h2>
-                <p
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--text-faint)',
-                    margin: '2px 0 0',
-                  }}
-                >
+                <p className="mx-0 mt-[2px] mb-0 text-[11px] text-[var(--text-faint)]">
                   Últimos 12 meses
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: 18 }}>
+              <div className="flex gap-[18px]">
                 {[
-                  { label: 'Ingresos', color: 'var(--pos)' },
-                  { label: 'Gastos', color: 'var(--neg)' },
-                ].map(({ label, color }) => (
+                  { label: 'Ingresos', swatch: 'bg-[var(--pos)]' },
+                  { label: 'Gastos', swatch: 'bg-[var(--neg)]' },
+                ].map(({ label, swatch }) => (
                   <span
                     key={label}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 7,
-                      fontSize: 13,
-                      color: 'var(--text-faint)',
-                    }}
+                    className="inline-flex items-center gap-[7px] text-[13px] text-[var(--text-faint)]"
                   >
                     <span
-                      style={{
-                        width: 12,
-                        height: 3,
-                        borderRadius: 2,
-                        background: color,
-                        display: 'inline-block',
-                      }}
+                      className={`inline-block h-[3px] w-[12px] rounded-[2px] ${swatch}`}
                     />
                     {label}
                   </span>
@@ -1612,44 +1262,20 @@ export function Dashboard({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Movimientos recientes */}
             <Card className="p-6">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 14,
-                }}
-              >
-                <h2
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 600,
-                    margin: 0,
-                    fontFamily: 'var(--font-sans)',
-                  }}
-                >
+              <div className="mb-[14px] flex items-center justify-between">
+                <h2 className="m-0 font-[family-name:var(--font-sans)] text-[15px] font-semibold">
                   Movimientos recientes
                 </h2>
                 {onNavigateToTransactions && (
                   <button
                     onClick={() => onNavigateToTransactions({})}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontSize: 13,
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--brand)',
-                      fontWeight: 500,
-                    }}
+                    className="flex cursor-pointer items-center gap-[4px] border-none bg-transparent text-[13px] font-medium text-[var(--brand)]"
                   >
                     Ver todos <ArrowRight size={14} />
                   </button>
                 )}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="flex flex-col">
                 {recentTransactions.map((tx, i) => {
                   const catDef = getCategoryDefinition(
                     tx.category ?? 'uncategorized'
@@ -1662,46 +1288,28 @@ export function Dashboard({
                   return (
                     <div
                       key={tx.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        padding: '10px 0',
-                        borderBottom:
-                          i < recentTransactions.length - 1
-                            ? '1px solid var(--border)'
-                            : 'none',
-                      }}
+                      className={`flex items-center gap-[12px] px-0 py-[10px] ${
+                        i < recentTransactions.length - 1
+                          ? 'border-b border-[var(--border)]'
+                          : 'border-b-0'
+                      }`}
                     >
                       <IconTile size="md" color={catDef.color}>
                         {catDef.icon}
                       </IconTile>
-                      <div style={{ minWidth: 0, flex: 1 }}>
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 500,
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
+                      <div className="min-w-0 flex-1">
+                        <div className="overflow-hidden text-[14px] font-medium text-ellipsis whitespace-nowrap">
                           {getDisplayDescription(tx)}
                         </div>
-                        <div
-                          className="text-muted-foreground"
-                          style={{ fontSize: 12 }}
-                        >
+                        <div className="text-[12px] text-muted-foreground">
                           {formatDateCompact(tx.date)}
                         </div>
                       </div>
-                      <div style={{ flexShrink: 0, textAlign: 'right' }}>
+                      <div className="shrink-0 text-right">
                         <span
-                          className="font-mono"
+                          className="font-mono block text-[14px]"
                           style={{
-                            fontSize: 14,
                             color: isCredit ? 'var(--pos)' : 'var(--text)',
-                            display: 'block',
                           }}
                         >
                           {isCredit ? '+' : '−'}
@@ -1710,10 +1318,7 @@ export function Dashboard({
                         {showConverted &&
                           convertedAmt !== null &&
                           Math.abs(convertedAmt) >= 0.005 && (
-                            <span
-                              className="font-mono text-muted-foreground"
-                              style={{ fontSize: 11, display: 'block' }}
-                            >
+                            <span className="font-mono block text-[11px] text-muted-foreground">
                               ≈ {formatCurrency(convertedAmt, homeCurrency)}
                             </span>
                           )}
@@ -1727,35 +1332,17 @@ export function Dashboard({
             {/* Mayores comercios */}
             {topMerchants.length > 0 && (
               <Card className="p-6">
-                <div style={{ marginBottom: 14 }}>
-                  <h2
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 600,
-                      margin: 0,
-                      fontFamily: 'var(--font-sans)',
-                    }}
-                  >
+                <div className="mb-[14px]">
+                  <h2 className="m-0 font-[family-name:var(--font-sans)] text-[15px] font-semibold">
                     Mayores comercios
                   </h2>
                   {periodRange && (
-                    <p
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-faint)',
-                        margin: '2px 0 0',
-                      }}
-                    >
+                    <p className="mx-0 mt-[2px] mb-0 text-[11px] text-[var(--text-faint)]">
                       {periodRange}
                     </p>
                   )}
                 </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                  }}
-                >
+                <div className="flex flex-col">
                   {topMerchants.map((m, i) => {
                     const display = getCategoryDisplay(m.catId)
                     const emoji = emojiLookup.get(m.catId)
@@ -1773,46 +1360,27 @@ export function Dashboard({
                         label={`Ver los gastos en ${m.name}`}
                         className="flex items-center gap-3 border-b border-border py-[10px]"
                       >
-                        <span
-                          className="font-mono text-muted-foreground"
-                          style={{ fontSize: 12, width: 16 }}
-                        >
+                        <span className="font-mono w-[16px] text-[12px] text-muted-foreground">
                           {i + 1}
                         </span>
                         <IconTile size="sm" color={display.color}>
                           {emoji ?? (
                             <span
-                              style={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: '50%',
-                                background: display.color,
-                                display: 'block',
-                              }}
+                              className="block h-[8px] w-[8px] rounded-[50%]"
+                              style={{ background: display.color }}
                             />
                           )}
                         </IconTile>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontSize: 14,
-                              fontWeight: 500,
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                            }}
-                          >
+                        <div className="min-w-0 flex-1">
+                          <div className="overflow-hidden text-[14px] font-medium text-ellipsis whitespace-nowrap">
                             {m.name}
                           </div>
-                          <div
-                            className="text-muted-foreground"
-                            style={{ fontSize: 12 }}
-                          >
+                          <div className="text-[12px] text-muted-foreground">
                             {m.count}{' '}
                             {m.count > 1 ? 'movimientos' : 'movimiento'}
                           </div>
                         </div>
-                        <span className="font-mono" style={{ fontSize: 13 }}>
+                        <span className="font-mono text-[13px]">
                           {formatCurrency(m.total, homeCurrency)}
                         </span>
                       </DrillTarget>
