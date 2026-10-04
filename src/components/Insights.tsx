@@ -28,6 +28,7 @@ import {
   saveCachedInsights,
   type CachedInsightsLookup,
 } from '../services/insights/insight-cache'
+import { INSIGHTS_MODEL } from '../services/ai/models'
 
 interface InsightsProps {
   transactions: Transaction[]
@@ -151,10 +152,10 @@ export function Insights({
     setError('')
     try {
       const result = await generateInsights(input, claudeApiKey)
-      await saveCachedInsights(session, input, result, 'claude-opus-4-8')
+      await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
       setCached({
         result,
-        model: 'claude-opus-4-8',
+        model: INSIGHTS_MODEL,
         generatedAt: new Date().toISOString(),
         isStale: false,
       })

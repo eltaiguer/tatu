@@ -10,6 +10,7 @@ import {
 import { Toaster } from 'sonner'
 import { Settings } from './Settings'
 import { UserFacingError } from '../utils/user-error'
+import { CATEGORIZATION_MODELS } from '../services/ai/models'
 import type { Transaction } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 
@@ -250,5 +251,40 @@ describe('Settings', () => {
       await screen.findByText('No se pudieron borrar todos los datos.')
     ).toBeInTheDocument()
     expect(screen.queryByText('Datos eliminados')).not.toBeInTheDocument()
+  })
+
+  it('offers exactly the shared categorization models in the model picker', () => {
+    const onSetAiModel = vi.fn()
+    render(
+      <Settings
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
+        session={null}
+        supabaseEnabled={false}
+        onSignOut={() => {}}
+        transactions={[]}
+        {...defaultAiProps}
+        aiEnabled
+        onSetAiModel={onSetAiModel}
+      />
+    )
+
+    const picker = screen.getByRole('tablist', { name: 'Modelo de IA' })
+    const tabs = within(picker).getAllByRole('tab')
+    expect(tabs.map((t) => t.textContent)).toEqual(
+      CATEGORIZATION_MODELS.map((m) => m.label)
+    )
+
+    tabs.forEach((tab) => fireEvent.click(tab))
+    expect(onSetAiModel.mock.calls.map(([id]) => id)).toEqual(
+      CATEGORIZATION_MODELS.map((m) => m.id)
+    )
+    // Behavior unchanged: same two models as before.
+    expect(CATEGORIZATION_MODELS.map((m) => m.id)).toEqual([
+      'claude-haiku-4-5',
+      'claude-sonnet-4-6',
+    ])
   })
 })
