@@ -58,6 +58,7 @@ src/
     AppSidebar.tsx         # Fixed 252px sidebar, navigation, user footer
     Dashboard.tsx          # Resumen view — account cards, month summary, top categories, KPI tiles, donut, area chart, merchants (charts live here, not a separate view)
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
+    transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state)
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
     Categories.tsx         # Categorías view — category grid + auto-categorization rules
     categories/            # Categorías sub-components: CategoryForm, CategoryCard, PatternRulesCard (rules form + list, owns its state)
@@ -95,9 +96,9 @@ src/
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
     dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57)
     repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
-    mutations/             # transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
+    mutations/             # bulk-steps.ts: runs a bulk edit's steps in order (retry resumes the chain); transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored); category-counts.ts: rows per category
-    filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; url-filters.ts: that state <-> URL query
+    filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; url-filters.ts: that state <-> URL query; period-label.ts: a period's Spanish label
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     charts/                # Chart data transformations; category-changes.ts feeds CategoryChangesCard
@@ -245,7 +246,7 @@ Requires `.env` with Supabase vars (see `.env.example`):
 
 Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip. Hooks extracted from App.tsx; store simplified. Deployed to Firebase Hosting. Test counts and line counts are deliberately not recorded here — they go stale within a PR.
 
-**Known shape of the code:** `Transactions.tsx` and `Dashboard.tsx` are very large — the refactor extracted hooks, not view components, so both define their sub-components inline at the top of the file. #140 moves them out one view per PR into `src/components/<view>/`; Categorías is done (`components/categories/`).
+**Known shape of the code:** #140 moved the large views' inline sub-components out, one view per PR, into `src/components/<view>/`: Categorías (`components/categories/`), Resumen (#190) and Transacciones (`components/transactions/`, which also holds the view's state hooks and `TransactionTable`'s row/card) are done. With all three merged, no view file is over ~600 lines. Put new sub-components in the view's folder, not inline.
 
 **AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, `importTransactions` (`services/mutations/transaction-mutations.ts`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
 
