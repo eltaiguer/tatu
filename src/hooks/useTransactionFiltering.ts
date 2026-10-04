@@ -16,17 +16,23 @@ export const ITEMS_PER_PAGE = 25
 
 // `initial` seeds the filters once (from the URL). To apply a different
 // initial state, remount the consumer — the view does this on navigations.
+// `initialDateRange` seeds the dates the same way, so a deep-linked period
+// filters the very first render instead of flashing every date first.
 export function useTransactionFiltering({
   transactions,
   initial = DEFAULT_URL_FILTERS,
+  initialDateRange,
 }: {
   transactions: Transaction[]
   initial?: UrlFilterState
+  initialDateRange?: { from: string; to: string }
 }) {
   const [searchTerm, setSearchTerm] = useState(initial.search)
   const [merchantFilter, setMerchantFilter] = useState(initial.merchant)
-  const [dateFromFilter, setDateFromFilter] = useState('')
-  const [dateToFilter, setDateToFilter] = useState('')
+  const [dateFromFilter, setDateFromFilter] = useState(
+    initialDateRange?.from ?? ''
+  )
+  const [dateToFilter, setDateToFilter] = useState(initialDateRange?.to ?? '')
   const [categoryFilters, setCategoryFilters] = useState<string[]>(
     initial.categories
   )
