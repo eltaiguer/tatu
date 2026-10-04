@@ -125,10 +125,10 @@ describe('selectDocs', () => {
   it('picks exactly the agent-facing docs', () => {
     expect(
       selectDocs([
+        'AGENTS.md',
         'CLAUDE.md',
         'agents.md',
         'README.md',
-        'TDD.md',
         'handoff/README.md',
         'supabase/README.md',
         'docs/decisions/0001-x.md',
@@ -137,8 +137,8 @@ describe('selectDocs', () => {
       ])
     ).toEqual([
       '.claude/skills/x/SKILL.md',
+      'AGENTS.md',
       'CLAUDE.md',
-      'agents.md',
       'docs/decisions/0001-x.md',
       'supabase/README.md',
     ])

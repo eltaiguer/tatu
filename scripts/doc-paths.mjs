@@ -183,7 +183,6 @@ export function selectDocs(files) {
       (f) =>
         f === 'CLAUDE.md' ||
         f === 'AGENTS.md' ||
-        f === 'agents.md' ||
         f === 'supabase/README.md' ||
         /^\.claude\/skills\/.+\/SKILL\.md$/.test(f) ||
         /^docs\/.+\.md$/.test(f)
