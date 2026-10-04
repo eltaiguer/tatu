@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import type { ComponentProps } from 'react'
 import { BulkEditDialog } from './BulkEditDialog'
@@ -48,6 +49,7 @@ function StatefulDialog({ onSave }: { onSave: (edit: SavedBulkEdit) => void }) {
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
   const [tagSearch, setTagSearch] = useState('')
+  const [categorySearch, setCategorySearch] = useState('')
 
   return (
     <BulkEditDialog
@@ -57,6 +59,8 @@ function StatefulDialog({ onSave }: { onSave: (edit: SavedBulkEdit) => void }) {
       bulkCategoryPickerOpen={categoryPickerOpen}
       bulkTagPickerOpen={tagPickerOpen}
       bulkTagSearch={tagSearch}
+      bulkCategorySearch={categorySearch}
+      onBulkCategorySearchChange={setCategorySearch}
       onBulkEditCategoryChange={setCategory}
       onBulkEditTagListChange={setTags}
       onBulkCategoryPickerOpenChange={setCategoryPickerOpen}
@@ -242,6 +246,81 @@ describe('BulkEditDialog', () => {
     expect(
       screen.getByRole('button', { name: 'Etiquetas 1 etiqueta a agregar' })
     ).toBeInTheDocument()
+  })
+
+  describe('keyboard', () => {
+    it('adds a new tag typed in the search with Enter', async () => {
+      const user = userEvent.setup()
+      const onSave = vi.fn()
+      render(<StatefulDialog onSave={onSave} />)
+
+      await user.click(screen.getByRole('button', { name: /^Etiquetas/ }))
+      await user.type(
+        screen.getByLabelText('Buscar o crear etiqueta'),
+        'vacaciones{Enter}'
+      )
+
+      expect(
+        screen.getByRole('button', { name: 'Quitar etiqueta vacaciones' })
+      ).toBeInTheDocument()
+      expect(screen.getByLabelText('Buscar o crear etiqueta')).toHaveValue('')
+      await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+      expect(onSave).toHaveBeenCalledWith({
+        category: '',
+        tags: ['vacaciones'],
+      })
+    })
+
+    it('adds an existing tag typed in the search with Enter, once', async () => {
+      const user = userEvent.setup()
+      render(<StatefulDialog onSave={vi.fn()} />)
+
+      await user.click(screen.getByRole('button', { name: /^Etiquetas/ }))
+      const search = screen.getByLabelText('Buscar o crear etiqueta')
+      await user.type(search, 'viaje{Enter}')
+      await user.type(search, 'viaje{Enter}')
+
+      expect(
+        screen.getAllByRole('button', { name: 'Quitar etiqueta viaje' })
+      ).toHaveLength(1)
+    })
+
+    it('picks the first matching category with Enter', async () => {
+      const user = userEvent.setup()
+      render(<StatefulDialog onSave={vi.fn()} />)
+
+      await user.click(screen.getByRole('button', { name: /^Categoría/ }))
+      await user.type(
+        screen.getByLabelText('Buscar categoría'),
+        restaurants.slice(0, 4) + '{Enter}'
+      )
+
+      await waitFor(() =>
+        expect(screen.queryByLabelText('Buscar categoría')).toBeNull()
+      )
+      expect(
+        screen.getByRole('button', { name: `Categoría ${restaurants}` })
+      ).toBeInTheDocument()
+    })
+
+    it('moves from the category search into the list with ArrowDown', async () => {
+      const user = userEvent.setup()
+      render(<StatefulDialog onSave={vi.fn()} />)
+
+      await user.click(screen.getByRole('button', { name: /^Categoría/ }))
+      await user.type(
+        screen.getByLabelText('Buscar categoría'),
+        restaurants.slice(0, 4)
+      )
+      await user.keyboard('{ArrowDown}')
+      await user.keyboard('{ArrowDown}')
+      expect(screen.getByRole('button', { name: restaurants })).toHaveFocus()
+      await user.keyboard('{Enter}')
+
+      expect(
+        screen.getByRole('button', { name: `Categoría ${restaurants}` })
+      ).toBeInTheDocument()
+    })
   })
 
   it('shows only the sections asked for', () => {
