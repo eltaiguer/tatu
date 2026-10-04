@@ -91,6 +91,7 @@ src/
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
+    dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored)
     filters/               # url-filters.ts: Transacciones filters <-> URL query (the filtering itself is useTransactionFiltering)
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
@@ -218,7 +219,7 @@ A task is done only when:
 
 - **Transaction sources**: Credit Card, USD Bank Account, UYU Bank Account (3 distinct CSV formats from Santander Uruguay)
 - **Categorization**: Pattern-based merchant matching (`merchant-patterns.ts`) with confidence scores (0–1). System learns from user overrides stored in Supabase. Optional AI enrichment on import (see Current status).
-- **Deduplication**: Hash-based transaction IDs prevent duplicate imports
+- **Deduplication**: by content, not ID — imports match rows by fingerprint (source, raw date, raw description, signed amount, currency) as a multiset, deleted rows included; a taken ID gets a salted `_cN` suffix (`services/dedup/import-dedup.ts`, #57). IDs (hash incl. row position) are unchanged
 - **Internal transfers**: inferred in the store (`inferInternalTransfers`) by keyword + scored debit/credit pairing within ±2 days, recomputed on load — see `docs/architecture.md`
 - **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `handleUpdateTransaction` in `useTransactionHandlers`
 

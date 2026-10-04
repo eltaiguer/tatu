@@ -1,6 +1,7 @@
 import type { Transaction } from '../../models'
 import { getSupabaseClient, type SupabaseSession } from './client'
 import { UserFacingError } from '../../utils/user-error'
+import type { ExistingTransaction } from '../dedup/import-dedup'
 
 // PostgREST answers an UPDATE that matched no rows with success; callers
 // reporting "saved" need to know nothing was written (row deleted elsewhere).
@@ -112,6 +113,12 @@ export async function loadUserTransactions(
     .sort((a, b) => b.date.getTime() - a.date.getTime())
 }
 
+/**
+ * Saves the new rows of an import. A plain insert, not an upsert: import
+ * dedup has already given every new row a free id, and if one were ever taken
+ * anyway, failing the import beats silently overwriting another transaction
+ * (or giving a deleted one new content).
+ */
 export async function persistTransactions(
   session: SupabaseSession,
   transactions: Transaction[],
@@ -129,14 +136,19 @@ export async function persistTransactions(
     import_id: options?.importId ?? null,
   }))
 
-  const { error } = await client
-    .from('transactions')
-    .upsert(rows, { onConflict: 'user_id,transaction_id' })
+  const { error } = await client.from('transactions').insert(rows)
 
   if (error) {
+    if (error.code === UNIQUE_VIOLATION) {
+      throw new UserFacingError(
+        'Algunas transacciones ya estaban guardadas (¿otra importación en curso?). Recargá e importá de nuevo.'
+      )
+    }
     throw new Error(error.message)
   }
 }
+
+const UNIQUE_VIOLATION = '23505'
 
 export async function softDeleteTransaction(
   session: SupabaseSession,
@@ -218,6 +230,89 @@ export async function findExistingTransactionIds(
     }
   }
   return { active, deleted }
+}
+
+// What import dedup needs from a stored row: its content and whether the user
+// deleted it.
+const CANDIDATE_COLUMNS =
+  'transaction_id, date, description, amount, currency, type, source, raw_data, is_deleted, is_split_parent, split_parent_id'
+
+// Stored dates may be local midnight (03:00Z at UTC-3) or UTC midnight (#58);
+// two days of slack either side covers both in any time zone.
+const CANDIDATE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
+
+/**
+ * The stored rows an import is deduplicated against (#57,
+ * `services/dedup/import-dedup.ts`): every row of the file's sources dated
+ * within the file's date range (± 2 days), live or deleted — a deleted row
+ * must keep matching so it stays deleted — plus any row holding one of the
+ * incoming ids, wherever it is dated, so a taken id is never reused. Split
+ * parts are left out of the window: they are not bank rows.
+ */
+export async function findImportCandidates(
+  session: SupabaseSession,
+  incoming: Transaction[]
+): Promise<ExistingTransaction[]> {
+  if (incoming.length === 0) {
+    return []
+  }
+  const client = getSupabaseClient()
+  const rows = new Map<string, TransactionRow>()
+
+  const ids = Array.from(new Set(incoming.map((tx) => tx.id)))
+  for (let i = 0; i < ids.length; i += EXISTING_LOOKUP_CHUNK) {
+    const { data, error } = await client
+      .from('transactions')
+      .select(CANDIDATE_COLUMNS)
+      .eq('user_id', session.user.id)
+      .in('transaction_id', ids.slice(i, i + EXISTING_LOOKUP_CHUNK))
+    if (error) {
+      throw new Error(error.message)
+    }
+    for (const row of (data ?? []) as TransactionRow[]) {
+      rows.set(row.transaction_id, row)
+    }
+  }
+
+  const times = incoming.map((tx) => tx.date.getTime())
+  const from = new Date(Math.min(...times) - CANDIDATE_WINDOW_MS).toISOString()
+  const to = new Date(Math.max(...times) + CANDIDATE_WINDOW_MS).toISOString()
+  const sources = Array.from(new Set(incoming.map((tx) => tx.source)))
+  // Paged by key until an empty page, like loadUserTransactions: the server
+  // truncates each response silently.
+  let lastId: string | undefined
+  for (;;) {
+    let query = client
+      .from('transactions')
+      .select(CANDIDATE_COLUMNS)
+      .eq('user_id', session.user.id)
+      .in('source', sources)
+      .gte('date', from)
+      .lte('date', to)
+      .is('split_parent_id', null)
+    if (lastId !== undefined) {
+      query = query.gt('transaction_id', lastId)
+    }
+    const { data, error } = await query
+      .order('transaction_id', { ascending: true })
+      .limit(LOAD_PAGE_SIZE)
+    if (error) {
+      throw new Error(error.message)
+    }
+    const page = (data ?? []) as TransactionRow[]
+    if (page.length === 0) {
+      break
+    }
+    for (const row of page) {
+      rows.set(row.transaction_id, row)
+    }
+    lastId = page[page.length - 1].transaction_id
+  }
+
+  return Array.from(rows.values(), (row) => ({
+    tx: rowToTransaction(row),
+    deleted: row.is_deleted === true,
+  }))
 }
 
 export interface UpdateTransactionInput {

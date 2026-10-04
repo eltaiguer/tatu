@@ -21,13 +21,14 @@ flowchart TD
     B --> C["parseCreditCardCSV or parseBankAccountCSV"]
     C --> E["Per row: generateTransactionId(date, description, amount text, row index)"]
     E --> D["categorizeParsedData, per row: categorizeTransaction(description, type), no context"]
-    D --> F["findExistingTransactionIds on Supabase + findDuplicateIds in the store"]
-    F --> G{"ID already stored?"}
+    D --> F["findImportCandidates on Supabase: rows in the file's date window (live and deleted) + rows holding an incoming id"]
+    F --> G{"classifyImport: same content (fingerprint) already stored, as many times?"}
     G -- "yes, live" --> H["Skipped as duplicate"]
     G -- "yes, soft-deleted" --> I["Skipped so it stays deleted"]
-    G -- "no" --> J{"AI enabled with an API key?"}
+    G -- "no" --> S["New row; id salted to id_cN if taken"]
+    S --> J{"AI enabled with an API key?"}
     J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a description or merchant override"]
-    J -- "no" --> L["persistTransactions: upsert into transactions, tagged with the import run"]
+    J -- "no" --> L["persistTransactions: insert into transactions, tagged with the import run"]
     K --> L
     L --> M["store.addTransactions, which runs inferInternalTransfers"]
     M --> N["completeImportRun with row counts"]
@@ -47,11 +48,47 @@ Details that matter:
   merchant override. That includes rows a custom pattern or merchant pattern
   already matched. If the AI call fails, the rule-based result stays and the
   error is returned as `aiError` so the UI can say so.
-- **The transaction ID is the dedup key.** `generateTransactionId` hashes the
-  date, description, amount text and row position, so re-importing a file
-  gives the same IDs. Changing its inputs would re-ID every stored row (#57).
+- **Dedup is by content, not by ID** (#57, `src/services/dedup/import-dedup.ts`).
+  `generateTransactionId` hashes the date, description, amount text and row
+  _position_, so an overlapping export that shifts rows gives the same bank
+  rows new IDs. The ID scheme is left alone (changing its inputs would re-ID
+  every stored row); instead each row is fingerprinted by
+  `transactionFingerprint` as (source, raw `fecha` string, parser description
+  with whitespace collapsed, signed amount in cents, currency):
+  - **Multiset match.** A fingerprint stored _k_ times absorbs _k_ incoming
+    copies; the rest import. A genuine identical same-day pair imports twice;
+    re-importing it (shifted or not) imports nothing. An incoming row first
+    claims the stored row with its own ID when everything but the date agrees,
+    then any unclaimed row with its fingerprint, live before deleted.
+  - **Deleted rows count.** `findImportCandidates` reads every row of the
+    file's sources dated within the file's date range ± 2 days, with no
+    `is_deleted` filter and paged by key (no 1000-row truncation), so a row the
+    user deleted is matched by content and stays deleted. Split parts are left
+    out (not bank rows); a split parent keeps the original fields and counts
+    once, so a deleted split parent stays deleted too.
+  - **The server is the pool.** Rows only in the in-memory store (deleted on
+    another device) don't absorb incoming rows; their IDs are only kept clear
+    of when salting.
+  - **Taken IDs are salted, never reused.** A new row whose ID belongs to a
+    different stored row gets `${id}_c${n}` (smallest free _n_; salted IDs
+    are re-checked on the server). Salting happens before AI enrichment, which
+    maps results back by ID. `persistTransactions` inserts rather than upserts,
+    so an ID that still collides fails the import instead of overwriting.
+  - **Raw date, not parsed date.** The fingerprint reads `rawData.fecha`, so
+    changing how dates are parsed (#58) doesn't change it. A stored row without
+    `raw_data.fecha` (not expected — it has always been written) falls back to
+    its stored date rounded to the nearest UTC midnight.
+  - **Known blind spots:** two cards, or two same-currency accounts, with an
+    identical row on the same day share a fingerprint; credit card
+    installments are told apart only by the "Cuota N M" counter Santander puts
+    in the description. Duplicates imported before #57 are not cleaned up
+    (#167 reuses `transactionFingerprint` for that).
+  - The import result and `completeImportRun` report new / duplicate /
+    previously-deleted counts (total = inserted + duplicates + deleted).
+
   The import run's SHA-256 (`sha256Hex`) is a file checksum for the audit
   record, not part of the ID.
+
 - **Internal-transfer inference is not persisted at import.**
   `persistTransactions` writes the rows before the store adds them, and the
   store runs `inferInternalTransfers` on every write (`addTransactions`,

@@ -24,11 +24,15 @@ const mocks = vi.hoisted(() => ({
   restoreTransactions: vi.fn<[unknown, string[]], Promise<void>>(
     async () => undefined
   ),
-  findExistingTransactionIds: vi.fn(
-    async (): Promise<{ active: Set<string>; deleted: Set<string> }> => ({
-      active: new Set(),
-      deleted: new Set(),
-    })
+  findExistingTransactionIds: vi.fn<
+    [unknown, string[]],
+    Promise<{ active: Set<string>; deleted: Set<string> }>
+  >(async () => ({
+    active: new Set(),
+    deleted: new Set(),
+  })),
+  findImportCandidates: vi.fn(
+    async (): Promise<Array<{ tx: Transaction; deleted: boolean }>> => []
   ),
   unsplitTransaction: vi.fn<[unknown, unknown, string[]], Promise<unknown>>(),
   hardDeleteTransactions: vi.fn<[unknown, string[]], Promise<void>>(
@@ -55,6 +59,7 @@ vi.mock('../services/supabase/transactions', () => ({
   softDeleteTransaction: mocks.softDeleteTransaction,
   restoreTransactions: mocks.restoreTransactions,
   findExistingTransactionIds: mocks.findExistingTransactionIds,
+  findImportCandidates: mocks.findImportCandidates,
   updateTransaction: mocks.updateRemoteTransaction,
   splitTransaction: mocks.splitTransaction,
   unsplitTransaction: mocks.unsplitTransaction,
@@ -100,6 +105,7 @@ vi.mock('../services/ai/correction-context', () => ({
 import { useTransactionHandlers } from './useTransactionHandlers'
 import { NeedsConfirmationError } from '../utils/user-error'
 import { transactionStore } from '../stores/transaction-store'
+import { parseBankAccountCSV } from '../services/parsers/bank-account-parser'
 
 const session = { user: { id: 'user-1' } } as SupabaseSession
 
@@ -257,10 +263,9 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
       enabled: false,
       model: 'claude-haiku-4-5',
     })
-    mocks.findExistingTransactionIds.mockResolvedValueOnce({
-      active: new Set(),
-      deleted: new Set(['gone']),
-    })
+    mocks.findImportCandidates.mockResolvedValueOnce([
+      { tx: makeTransaction('gone'), deleted: true },
+    ])
     const { handlers } = setup()
 
     const result = await handlers.handleTransactionsImported(
@@ -290,10 +295,9 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
       enabled: false,
       model: 'claude-haiku-4-5',
     })
-    mocks.findExistingTransactionIds.mockResolvedValueOnce({
-      active: new Set(['remote-only']),
-      deleted: new Set(),
-    })
+    mocks.findImportCandidates.mockResolvedValueOnce([
+      { tx: makeTransaction('remote-only'), deleted: false },
+    ])
     const { handlers } = setup()
 
     const result = await handlers.handleTransactionsImported(
@@ -308,7 +312,7 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
   })
 
   it('fails before recording the import when the lookup fails', async () => {
-    mocks.findExistingTransactionIds.mockRejectedValueOnce(new Error('timeout'))
+    mocks.findImportCandidates.mockRejectedValueOnce(new Error('timeout'))
     const { handlers } = setup()
 
     await expect(
@@ -339,6 +343,212 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     // to tell the user that most rows *were* enriched.
     expect(outcome.aiPartial).toContain('529 overloaded')
     expect(outcome.aiError).toBeUndefined()
+  })
+})
+
+// #57: ids hash the row's position in the file, so overlapping exports give
+// the same bank rows new ids. Imports match rows by content instead.
+describe('useTransactionHandlers — import dedup by content', () => {
+  const HEADER = `Cliente,Gazzano      A Jose,
+Cuenta,Ca De Ahorro Atm,
+Número,007003529520,
+Moneda,UYU,
+Sucursal,02 - 18 De Julio,
+
+Movimientos,
+Desde:,01/11/2025,Hasta:,30/11/2025
+
+Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
+`
+  const NEW =
+    '28/11/2025,1,COMPRA CON TARJETA DEBITO FARMACIA,,-300.00,,500.00,'
+  const A = '27/11/2025,2,COMPRA CON TARJETA DEBITO DISCO,,-1200.00,,800.00,'
+  const B = '26/11/2025,3,CR. PAGO SUELDOS SETA WORKSHOP SRL,,,6104.26,2000.00,'
+
+  function file(...rows: string[]): Transaction[] {
+    return parseBankAccountCSV(HEADER + rows.join('\n') + '\n', 'UYU.csv')
+      .transactions
+  }
+
+  // Rows as findImportCandidates returns them after a Supabase round trip.
+  function onServer(txs: Transaction[], deleted = false) {
+    return txs.map((tx) => ({
+      tx: { ...tx, date: new Date(tx.date.toISOString()) },
+      deleted,
+    }))
+  }
+
+  function persisted(): Transaction[] {
+    return (mocks.persistTransactions.mock.calls[0]?.[1] ?? []) as Transaction[]
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    transactionStore.getState().clearTransactions()
+    mocks.getAiConfig.mockReturnValue({
+      apiKey: '',
+      enabled: false,
+      model: 'claude-haiku-4-5',
+    })
+  })
+
+  it('imports nothing new from an overlapping export whose rows shifted', async () => {
+    mocks.findImportCandidates.mockResolvedValueOnce(onServer(file(A, B)))
+    const { handlers } = setup()
+    const shifted = file(NEW, A, B)
+
+    const result = await handlers.handleTransactionsImported(
+      shifted,
+      makeImportContext()
+    )
+
+    expect(result.added.map((t) => t.id)).toEqual([shifted[0].id])
+    expect(result.duplicates).toHaveLength(2)
+    expect(persisted().map((t) => t.id)).toEqual([shifted[0].id])
+    expect(mocks.completeImportRun).toHaveBeenCalledWith(session, 'import-1', {
+      totalRows: 3,
+      insertedRows: 1,
+      duplicateRows: 2,
+    })
+  })
+
+  it('imports nothing when the exact same file is imported again', async () => {
+    mocks.findImportCandidates.mockResolvedValueOnce(onServer(file(A, B)))
+    const { handlers } = setup()
+
+    const result = await handlers.handleTransactionsImported(
+      file(A, B),
+      makeImportContext()
+    )
+
+    expect(result.added).toEqual([])
+    expect(result.duplicates).toHaveLength(2)
+    expect(persisted()).toEqual([])
+  })
+
+  it('imports both rows of a genuine identical same-day pair', async () => {
+    const { handlers } = setup()
+
+    const result = await handlers.handleTransactionsImported(
+      file(A, A),
+      makeImportContext()
+    )
+
+    expect(result.added).toHaveLength(2)
+    expect(persisted()).toHaveLength(2)
+  })
+
+  it('keeps a deleted row deleted after a shifted re-import', async () => {
+    mocks.findImportCandidates.mockResolvedValueOnce([
+      ...onServer(file(A), true),
+      ...onServer(file(A, B)).slice(1),
+    ])
+    const { handlers } = setup()
+    const shifted = file(NEW, A, B)
+
+    const result = await handlers.handleTransactionsImported(
+      shifted,
+      makeImportContext()
+    )
+
+    expect(result.added.map((t) => t.id)).toEqual([shifted[0].id])
+    expect(result.previouslyDeleted?.map((t) => t.id)).toEqual([shifted[1].id])
+    expect(transactionStore.getState().transactions.map((t) => t.id)).toEqual([
+      shifted[0].id,
+    ])
+  })
+
+  it('saves a row whose id is taken by a different row under a salted id', async () => {
+    const [incoming] = file(A)
+    const other = { ...file(B)[0], id: incoming.id }
+    mocks.findImportCandidates.mockResolvedValueOnce(onServer([other]))
+    const { handlers } = setup()
+
+    const result = await handlers.handleTransactionsImported(
+      [incoming],
+      makeImportContext()
+    )
+
+    expect(result.added.map((t) => t.id)).toEqual([`${incoming.id}_c1`])
+    expect(persisted().map((t) => t.id)).toEqual([`${incoming.id}_c1`])
+    expect(
+      transactionStore.getState().transactions.map((t) => t.description)
+    ).toEqual([incoming.description])
+  })
+
+  it('salts further when the salted id turns out to be taken on the server', async () => {
+    const [incoming] = file(A)
+    mocks.findImportCandidates.mockResolvedValueOnce(
+      onServer([{ ...file(B)[0], id: incoming.id }])
+    )
+    // `_c1` exists but was dated outside the lookup window.
+    mocks.findExistingTransactionIds.mockImplementationOnce(
+      async (_s: unknown, ids: string[]) => ({
+        active: new Set(ids.filter((id) => id === `${incoming.id}_c1`)),
+        deleted: new Set<string>(),
+      })
+    )
+    const { handlers } = setup()
+
+    const result = await handlers.handleTransactionsImported(
+      [incoming],
+      makeImportContext()
+    )
+
+    expect(persisted().map((t) => t.id)).toEqual([`${incoming.id}_c2`])
+    expect(result.added.map((t) => t.id)).toEqual([`${incoming.id}_c2`])
+  })
+
+  it('sends the salted id to AI enrichment so its result lands on the row', async () => {
+    mocks.getAiConfig.mockReturnValue({
+      apiKey: 'sk-test',
+      enabled: true,
+      model: 'claude-haiku-4-5',
+    })
+    const [incoming] = file(A)
+    mocks.findImportCandidates.mockResolvedValueOnce(
+      onServer([{ ...file(B)[0], id: incoming.id }])
+    )
+    const { handlers } = setup()
+
+    await handlers.handleTransactionsImported([incoming], makeImportContext())
+
+    const sent = mocks.enrichTransactionsWithAi.mock.calls[0] as unknown as [
+      Array<{ id: string }>,
+    ]
+    expect(sent[0].map((t) => t.id)).toEqual([`${incoming.id}_c1`])
+  })
+
+  it('is not blocked by a row still in memory that the server no longer has', async () => {
+    // Deleted on another device (or a data reset there): the server is the
+    // record of what exists.
+    transactionStore.getState().setTransactions(file(A))
+    const { handlers } = setup()
+    const shifted = file(NEW, A)
+
+    const result = await handlers.handleTransactionsImported(
+      shifted,
+      makeImportContext()
+    )
+
+    expect(result.added).toHaveLength(2)
+    // The stale row's id is still kept clear of.
+    expect(
+      new Set(transactionStore.getState().transactions.map((t) => t.id))
+    ).toHaveProperty('size', 3)
+  })
+
+  it('dedups by content without a session too', async () => {
+    transactionStore.getState().setTransactions(file(A, B))
+    const { result } = renderHook(() =>
+      useTransactionHandlers({ session: null, setError: vi.fn() })
+    )
+    const shifted = file(NEW, A, B)
+
+    const outcome = await result.current.handleTransactionsImported(shifted)
+
+    expect(outcome.added.map((t) => t.id)).toEqual([shifted[0].id])
+    expect(outcome.duplicates).toHaveLength(2)
   })
 })
 
