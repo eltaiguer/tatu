@@ -37,9 +37,12 @@ function renderFilters(overrides: Partial<FilterProps> = {}) {
 }
 
 function segment(group: string, option: string): HTMLElement {
-  return within(screen.getByRole('tablist', { name: group })).getByRole('tab', {
-    name: option,
-  })
+  return within(screen.getByRole('radiogroup', { name: group })).getByRole(
+    'radio',
+    {
+      name: option,
+    }
+  )
 }
 
 describe('TransactionFilters', () => {
@@ -148,10 +151,7 @@ describe('TransactionFilters', () => {
         hasActiveFilters: true,
       })
 
-      expect(segment('Tipo de transacción', 'Gastos')).toHaveAttribute(
-        'aria-selected',
-        'true'
-      )
+      expect(segment('Tipo de transacción', 'Gastos')).toBeChecked()
       fireEvent.click(screen.getByLabelText('Quitar filtro Gastos'))
 
       expect(props.onTypeChange).toHaveBeenCalledWith('all')
