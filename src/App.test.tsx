@@ -3,7 +3,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ROUTER_FUTURE } from './router-future'
-import userEvent from '@testing-library/user-event'
 import App from './App'
 import { preloadViews } from './lazy-views'
 import { transactionStore } from './stores/transaction-store'
@@ -248,12 +247,12 @@ describe('App', () => {
 
     opener.focus()
     await user.keyboard('{Enter}')
-    await screen.findByRole('heading', { name: 'Importar Transacciones' })
+    await screen.findByRole('heading', { name: 'Importar transacciones' })
     await user.keyboard('{Escape}')
 
     await waitFor(() =>
       expect(
-        screen.queryByRole('heading', { name: 'Importar Transacciones' })
+        screen.queryByRole('heading', { name: 'Importar transacciones' })
       ).toBeNull()
     )
     await waitFor(() => expect(opener).toHaveFocus())
