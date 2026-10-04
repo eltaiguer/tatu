@@ -1,5 +1,10 @@
 import { afterEach, vi } from 'vitest'
-import { cleanup, configure } from '@testing-library/react'
+import {
+  cleanup,
+  configure,
+  getConfig as getRtlConfig,
+} from '@testing-library/react'
+import { configure as configureUserEventDom } from '@testing-library/dom'
 import '@testing-library/jest-dom/vitest'
 import { installConsoleGuard } from './console-guard'
 
@@ -12,7 +17,19 @@ import { installConsoleGuard } from './console-guard'
 // waitFor reruns its query on every DOM mutation, and a ByRole query over the
 // whole App takes ~1s under load, starving the very render it waits for. Use
 // a synchronous getByRole after the wait to keep the accessibility check.
-configure({ asyncUtilTimeout: 5_000 })
+const ASYNC_UTIL_TIMEOUT_MS = 5_000
+configure({ asyncUtilTimeout: ASYNC_UTIL_TIMEOUT_MS })
+
+// user-event drives the hoisted @testing-library/dom, while RTL only wraps
+// its own nested copy in act(). Hand RTL's act() wrappers to the copy
+// user-event uses, so keyboard/pointer tests don't log act() warnings. It
+// gets the same async budget, so waits behave alike in both copies.
+const rtlConfig = getRtlConfig()
+configureUserEventDom({
+  eventWrapper: rtlConfig.eventWrapper,
+  asyncWrapper: rtlConfig.asyncWrapper,
+  asyncUtilTimeout: ASYNC_UTIL_TIMEOUT_MS,
+})
 
 // Cleanup after each test
 afterEach(() => {

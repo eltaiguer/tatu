@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ROUTER_FUTURE } from './router-future'
 import App from './App'
@@ -183,6 +184,30 @@ describe('App', () => {
     )
   })
 
+  it('first Tab reaches a skip link that moves focus to the main content (#203)', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await screen.findByRole('heading', { name: /Bienvenido a Tatú/i })
+
+    await user.tab()
+    const skip = screen.getByRole('link', { name: 'Saltar al contenido' })
+    expect(skip).toHaveFocus()
+
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('main')).toHaveFocus()
+    expect(currentUrl()).toBe('/')
+  })
+
+  it('announces the loading state while the first sync runs (#203)', async () => {
+    loadUserTransactionsMock.mockReturnValue(new Promise(() => {}))
+    renderApp('/configuracion')
+
+    const statuses = await screen.findAllByRole('status')
+    const busy = statuses.filter((s) => s.getAttribute('aria-busy') === 'true')
+    expect(busy).toHaveLength(1)
+    expect(busy[0]).toHaveTextContent('Cargando…')
+  })
+
   it('has no floating theme button covering content and toasts', async () => {
     // Theme lives in Configuración; the old fixed bottom-right toggle sat on
     // top of row actions and the toast corner.
@@ -213,6 +238,24 @@ describe('App', () => {
       screen.getByRole('heading', { name: 'Importar transacciones' })
     ).toBeInTheDocument()
     expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
+  })
+
+  it('returns focus to the sidebar Importar button when the import dialog closes', async () => {
+    renderApp()
+    const opener = await screen.findByRole('button', { name: 'Importar' })
+    const user = userEvent.setup()
+
+    opener.focus()
+    await user.keyboard('{Enter}')
+    await screen.findByRole('heading', { name: 'Importar transacciones' })
+    await user.keyboard('{Escape}')
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('heading', { name: 'Importar transacciones' })
+      ).toBeNull()
+    )
+    await waitFor(() => expect(opener).toHaveFocus())
   })
 
   it('shows supported file types on import view', async () => {
@@ -510,7 +553,7 @@ describe('App', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
@@ -620,7 +663,7 @@ describe('App', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'recurrente' },
     })
