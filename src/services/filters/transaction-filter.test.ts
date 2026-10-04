@@ -285,10 +285,65 @@ describe('filterTransactions — period (UTC calendar days)', () => {
       )
     ).toHaveLength(rows.length)
   })
+
+  it('lets an explicit anchor win over the newest row', () => {
+    const recent = [
+      tx('jan', { date: day('2026-01-15') }),
+      tx('jun', { date: day('2026-06-15') }),
+    ]
+    expect(
+      ids(
+        filterTransactions(
+          recent,
+          filters({ period: { mode: 'recent', n: 1 } }),
+          { recentAnchor: day('2026-01-02') }
+        )
+      )
+    ).toEqual(['jan'])
+  })
+})
+
+describe('filterTransactions — edge inputs', () => {
+  it('ignores a non-numeric amount bound and applies a lone one', () => {
+    const rows = [tx('small', { amount: 5 }), tx('big', { amount: -500 })]
+    expect(ids(filterTransactions(rows, filters({ min: 'abc' })))).toEqual([
+      'small',
+      'big',
+    ])
+    expect(ids(filterTransactions(rows, filters({ max: '10' })))).toEqual([
+      'small',
+    ])
+  })
+
+  it('combines filters with AND', () => {
+    const rows = [
+      tx('match', { currency: 'UYU', category: 'restaurants' }),
+      tx('wrong-currency', { currency: 'USD', category: 'restaurants' }),
+      tx('wrong-category', { currency: 'UYU', category: 'groceries' }),
+    ]
+    expect(
+      ids(
+        filterTransactions(
+          rows,
+          filters({ currency: 'UYU', categories: ['restaurants'] })
+        )
+      )
+    ).toEqual(['match'])
+  })
 })
 
 describe('periodDateRange', () => {
   const anchor = day('2026-03-10')
+
+  it('handles December and a "recent" window across the year boundary', () => {
+    expect(periodDateRange({ mode: 'month', y: 2025, m: 11 }, anchor)).toEqual({
+      from: '2025-12-01',
+      to: '2025-12-31',
+    })
+    expect(
+      periodDateRange({ mode: 'recent', n: 3 }, day('2026-01-20'))
+    ).toEqual({ from: '2025-11-01', to: '2026-01-31' })
+  })
 
   it('gives a month as its first and last day', () => {
     expect(periodDateRange({ mode: 'month', y: 2024, m: 1 }, anchor)).toEqual({
