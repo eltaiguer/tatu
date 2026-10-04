@@ -98,6 +98,19 @@ describe('SplitTransactionDialog', () => {
     expect(confirmBtn).toHaveProperty('disabled', true)
   })
 
+  it('keeps "Restante" neutral until an amount is entered (#204)', async () => {
+    renderDialog({})
+    await waitFor(() => screen.getAllByPlaceholderText('0.00'))
+    const remainingBox = screen.getByText('Restante').parentElement!
+
+    expect(remainingBox).not.toHaveClass('border-[var(--neg)]')
+
+    fireEvent.change(screen.getAllByPlaceholderText('0.00')[0], {
+      target: { value: '60' },
+    })
+    expect(remainingBox).toHaveClass('border-[var(--neg)]')
+  })
+
   it('enables confirm button when amounts sum exactly to parent total', async () => {
     renderDialog({})
 

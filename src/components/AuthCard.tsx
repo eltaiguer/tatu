@@ -110,7 +110,7 @@ export function AuthCard({
           <Button
             type="button"
             variant="ghost"
-            disabled={authSubmitting || !email}
+            disabled={authSubmitting}
             onClick={onResetPassword}
             className="px-0"
           >

@@ -2,6 +2,8 @@
  * Parsing utilities for Santander Uruguay CSV files
  */
 
+import { UserFacingError } from '../../utils/user-error'
+
 /**
  * Parse a number from Santander format
  * - Credit Card format: "1.234,56" (period as thousands, comma as decimal)
@@ -33,7 +35,7 @@ export function parseSantanderNumber(value: string): number {
 
   const parsed = Number(normalized)
   if (!Number.isFinite(parsed)) {
-    throw new Error(`Importe ilegible: "${value}"`)
+    throw new UserFacingError(`Importe ilegible: "${value}"`)
   }
 
   return parsed
