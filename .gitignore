@@ -36,7 +36,7 @@ coverage
 figma-designs
 
 # Screenshots (Claude Code sessions) — root clutter only; tracked images in
-# subfolders (docs, handoff) stay visible to git.
+# subfolders stay visible to git.
 /*.png
 /*.jpg
 /screenshot-*
