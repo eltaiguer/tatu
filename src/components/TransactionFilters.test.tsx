@@ -188,10 +188,10 @@ describe('TransactionFilters', () => {
       expect(screen.queryByPlaceholderText('∞')).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'Monto' }))
 
-      fireEvent.change(screen.getByPlaceholderText('0'), {
+      fireEvent.change(screen.getByLabelText('Monto mínimo'), {
         target: { value: '50' },
       })
-      fireEvent.change(screen.getByPlaceholderText('∞'), {
+      fireEvent.change(screen.getByLabelText('Monto máximo'), {
         target: { value: '500' },
       })
 
