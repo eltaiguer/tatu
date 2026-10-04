@@ -84,17 +84,23 @@ export function categoryChanges(
   now: Date = new Date()
 ): CategoryChanges {
   // Coverage: the first and last day each account has data for.
-  const coverage = new Map<AccountKey, { first: string; last: string }>()
+  const coverage = new Map<
+    AccountKey,
+    { first: string; last: string; months: Set<string> }
+  >()
   for (const tx of transactions) {
     if (tx.isSplitParent) continue
     const day = isoDay(tx.date)
     const key = accountOf(tx)
-    const c = coverage.get(key)
-    if (!c) coverage.set(key, { first: day, last: day })
-    else {
-      if (day < c.first) c.first = day
-      if (day > c.last) c.last = day
+    const entry = coverage.get(key) ?? {
+      first: day,
+      last: day,
+      months: new Set<string>(),
     }
+    if (day < entry.first) entry.first = day
+    if (day > entry.last) entry.last = day
+    entry.months.add(day.slice(0, 7))
+    coverage.set(key, entry)
   }
   if (coverage.size === 0) return { kind: 'insufficient' }
 
@@ -113,7 +119,11 @@ export function categoryChanges(
     const endFrom = `${month}-${pad(lastDay(month) - EDGE_DAYS)}`
     const dormantBefore = shiftDays(monthStart, -DORMANT_AFTER_DAYS)
     return Array.from(coverage.values()).every(
-      (c) => c.last < dormantBefore || (c.first <= startBy && c.last >= endFrom)
+      (c) =>
+        c.last < dormantBefore ||
+        // Rows in the month itself: a statement skipped between two
+        // imported ones leaves a hole that first/last can't see.
+        (c.months.has(month) && c.first <= startBy && c.last >= endFrom)
     )
   }
 

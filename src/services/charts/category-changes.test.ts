@@ -169,6 +169,18 @@ describe('categoryChanges', () => {
     expect(result.kind).toBe('insufficient')
   })
 
+  it('treats a skipped statement in the middle as a hole, not a quiet month', () => {
+    // Card statements for Jun, Jul and Sep imported; August skipped.
+    const txs = fullMonths(['2026-06', '2026-07', '2026-09'], (m) => [
+      tx(`${m}-10`, 'restaurants', 300),
+    ])
+    const result = categoryChanges(txs, 'USD', 40, NOW)
+
+    // August isn't a near-zero baseline month; September has no complete
+    // month right before it, so there's nothing honest to compare.
+    expect(result.kind).toBe('insufficient')
+  })
+
   it('needs at least two complete months before the reference', () => {
     const txs = fullMonths(['2026-08', '2026-09'], (m) => [
       tx(`${m}-10`, 'restaurants', 100),

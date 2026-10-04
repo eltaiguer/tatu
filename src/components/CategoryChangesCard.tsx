@@ -40,6 +40,86 @@ function signed(amount: number, currency: Currency): string {
   return `${amount >= 0 ? '+' : '−'}${formatCurrency(Math.abs(amount), currency)}`
 }
 
+function ChangeRow({
+  change,
+  down,
+  reference,
+  baseline,
+  baselineLabel,
+  homeCurrency,
+  onOpen,
+}: {
+  change: CategoryChange
+  down?: boolean
+  reference: string
+  baseline: string[]
+  baselineLabel: string
+  homeCurrency: Currency
+  onOpen?: (filter: TransactionsFilter) => void
+}) {
+  const display = getCategoryDisplay(change.category)
+  const icon = getCategoryDefinition(display.id).icon
+  const open = (filter: TransactionsFilter) => () => onOpen?.(filter)
+  const base = {
+    categories: [change.category],
+    type: 'debit' as const,
+  }
+  return (
+    <li className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-0.5 border-b border-border py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1.4fr)_auto_auto]">
+      <span className="flex min-w-0 items-center gap-2 text-[14px] font-medium">
+        <span aria-hidden>{icon}</span>
+        <span className="truncate">
+          {down ? `Bajaste en ${display.label}` : display.label}
+        </span>
+      </span>
+      <span className="flex items-center gap-1 justify-self-end font-mono text-[13px]">
+        {down ? (
+          <ArrowDownRight size={14} className="text-[color:var(--pos)]" />
+        ) : (
+          <ArrowUpRight size={14} className="text-[color:var(--neg)]" />
+        )}
+        {signed(change.delta, homeCurrency)}
+        {change.pct !== null && (
+          <span className="text-muted-foreground">
+            ({change.pct >= 0 ? '+' : ''}
+            {Math.round(change.pct * 100)}%)
+          </span>
+        )}
+      </span>
+      <span className="col-span-2 flex flex-wrap items-center gap-x-3 text-[12px] text-muted-foreground sm:col-span-1 sm:justify-self-end">
+        <button
+          type="button"
+          disabled={!onOpen}
+          onClick={open({ ...base, period: monthPeriod(reference) })}
+          className="font-mono text-[12px] text-[color:var(--text)] underline-offset-2 hover:underline disabled:no-underline"
+          aria-label={`Ver los gastos en ${display.label} de ${monthName(reference)}`}
+        >
+          {formatCurrency(change.current, homeCurrency)} en{' '}
+          {monthName(reference, 'short')}
+        </button>
+        <button
+          type="button"
+          disabled={!onOpen}
+          onClick={open({ ...base, period: rangePeriod(baseline) })}
+          className="font-mono text-[11.5px] underline-offset-2 hover:underline disabled:no-underline"
+          aria-label={`Ver los gastos en ${display.label} de ${baselineLabel}`}
+          title={`Mediana de ${baselineLabel}: ${formatCurrency(change.median, homeCurrency)}`}
+        >
+          {baseline
+            .map(
+              (m, i) =>
+                `${monthName(m, 'short')} ${formatCurrency(
+                  change.baselineByMonth[i],
+                  homeCurrency
+                )}`
+            )
+            .join(' · ')}
+        </button>
+      </span>
+    </li>
+  )
+}
+
 // "What changed": leads Resumen with the categories that moved most in the
 // latest complete month, against the median of the months before it. Each
 // number links to exactly the rows behind it (the month's expenses, and the
@@ -72,70 +152,6 @@ export function CategoryChangesCard({
     'short'
   )}`
 
-  function Row({ change, down }: { change: CategoryChange; down?: boolean }) {
-    const display = getCategoryDisplay(change.category)
-    const icon = getCategoryDefinition(display.id).icon
-    const open = (filter: TransactionsFilter) => () => onOpen?.(filter)
-    const base = {
-      categories: [change.category],
-      type: 'debit' as const,
-    }
-    return (
-      <li className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-0.5 border-b border-border py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1.4fr)_auto_auto]">
-        <span className="flex min-w-0 items-center gap-2 text-[14px] font-medium">
-          <span aria-hidden>{icon}</span>
-          <span className="truncate">
-            {down ? `Bajaste en ${display.label}` : display.label}
-          </span>
-        </span>
-        <span className="flex items-center gap-1 justify-self-end font-mono text-[13px]">
-          {down ? (
-            <ArrowDownRight size={14} className="text-[color:var(--pos)]" />
-          ) : (
-            <ArrowUpRight size={14} className="text-[color:var(--neg)]" />
-          )}
-          {signed(change.delta, homeCurrency)}
-          {change.pct !== null && (
-            <span className="text-muted-foreground">
-              ({change.pct >= 0 ? '+' : ''}
-              {Math.round(change.pct * 100)}%)
-            </span>
-          )}
-        </span>
-        <span className="col-span-2 flex flex-wrap items-center gap-x-3 text-[12px] text-muted-foreground sm:col-span-1 sm:justify-self-end">
-          <button
-            type="button"
-            disabled={!onOpen}
-            onClick={open({ ...base, period: monthPeriod(reference) })}
-            className="font-mono text-[12px] text-[color:var(--text)] underline-offset-2 hover:underline disabled:no-underline"
-            aria-label={`Ver los gastos en ${display.label} de ${monthName(reference)}`}
-          >
-            {formatCurrency(change.current, homeCurrency)} en{' '}
-            {monthName(reference, 'short')}
-          </button>
-          <button
-            type="button"
-            disabled={!onOpen}
-            onClick={open({ ...base, period: rangePeriod(baseline) })}
-            className="font-mono text-[11.5px] underline-offset-2 hover:underline disabled:no-underline"
-            aria-label={`Ver los gastos en ${display.label} de ${baselineLabel}`}
-            title={`Mediana de ${baselineLabel}: ${formatCurrency(change.median, homeCurrency)}`}
-          >
-            {baseline
-              .map(
-                (m, i) =>
-                  `${monthName(m, 'short')} ${formatCurrency(
-                    change.baselineByMonth[i],
-                    homeCurrency
-                  )}`
-              )
-              .join(' · ')}
-          </button>
-        </span>
-      </li>
-    )
-  }
-
   return (
     <Card className="gap-2 p-5">
       <div>
@@ -154,9 +170,27 @@ export function CategoryChangesCard({
       ) : (
         <ul>
           {increases.map((change) => (
-            <Row key={change.category} change={change} />
+            <ChangeRow
+              key={change.category}
+              change={change}
+              reference={reference}
+              baseline={baseline}
+              baselineLabel={baselineLabel}
+              homeCurrency={homeCurrency}
+              onOpen={onOpen}
+            />
           ))}
-          {decrease && <Row change={decrease} down />}
+          {decrease && (
+            <ChangeRow
+              change={decrease}
+              down
+              reference={reference}
+              baseline={baseline}
+              baselineLabel={baselineLabel}
+              homeCurrency={homeCurrency}
+              onOpen={onOpen}
+            />
+          )}
         </ul>
       )}
     </Card>

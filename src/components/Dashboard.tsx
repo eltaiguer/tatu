@@ -72,9 +72,6 @@ function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
-// Wraps a number so it opens the transactions behind it. A real button
-// (keyboard + screen reader), visually the content itself; a plain block
-// when there is nowhere to navigate.
 // The period an account card's own number covers (accounts are imported
 // separately, so one global range would be wrong for some of them).
 function accountRange(stat: AccountSpend): string {
@@ -91,6 +88,10 @@ function accountRange(stat: AccountSpend): string {
 
 // Id of the synthetic "Otros" row/slice (categories beyond the top 7).
 const OTHER_ROW_ID = '__other__'
+
+// Wraps a number so it opens the transactions behind it. A real button
+// (keyboard + screen reader), visually the content itself; a plain block
+// when there is nowhere to navigate.
 
 function DrillTarget({
   onOpen,
