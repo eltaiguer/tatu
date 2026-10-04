@@ -113,19 +113,60 @@ describe('categoryChanges', () => {
   })
 
   it('does not let a dormant account block the comparison', () => {
-    // The $U account's last movement was in July; it simply had no activity
-    // after that.
+    // The $U account's last movement was in early April — months before the
+    // compared ones, so it is quiet, not waiting for an import.
     const bank = { source: 'bank_account' as const, currency: 'UYU' as const }
     const txs = [
       ...fullMonths(['2026-06', '2026-07', '2026-08', '2026-09'], (m) => [
         tx(`${m}-10`, 'restaurants', 100),
       ]),
-      tx('2026-06-01', 'housing', 40, bank),
-      tx('2026-07-29', 'housing', 40, bank),
+      tx('2026-03-01', 'housing', 40, bank),
+      tx('2026-04-10', 'housing', 40, bank),
     ]
     const result = categoryChanges(txs, 'USD', 40, NOW)
 
     expect(result.kind === 'ok' && result.reference).toBe('2026-09')
+  })
+
+  it('waits for a statement that is not imported yet instead of reading a drop', () => {
+    // Bank through Sep 30; the latest card statement ends Aug 20.
+    const bank = { source: 'bank_account' as const }
+    const txs = [
+      ...fullMonths(['2026-05', '2026-06', '2026-07'], (m) => [
+        tx(`${m}-10`, 'restaurants', 300),
+      ]),
+      tx('2026-08-02', 'restaurants', 300),
+      tx('2026-08-20', 'fees', 0.01),
+      ...['2026-05', '2026-06', '2026-07', '2026-08', '2026-09'].flatMap(
+        (m) => [
+          tx(`${m}-01`, 'housing', 500, bank),
+          tx(`${m}-29`, 'housing', 1, bank),
+        ]
+      ),
+    ]
+    const result = categoryChanges(txs, 'USD', 40, NOW)
+
+    // Neither September (card missing) nor August (card partial).
+    expect(result.kind === 'ok' && result.reference).toBe('2026-07')
+    expect(
+      result.kind === 'ok' && result.decrease?.category === 'restaurants'
+    ).toBe(false)
+  })
+
+  it('keeps the baseline contiguous so its range link opens only those months', () => {
+    // The $U account stops mid-July, so July is incomplete: the baseline
+    // before September can only be August, not [June, August].
+    const uyu = { source: 'bank_account' as const, currency: 'UYU' as const }
+    const txs = [
+      ...fullMonths(['2026-06', '2026-07', '2026-08', '2026-09'], (m) => [
+        tx(`${m}-10`, 'restaurants', 100),
+      ]),
+      tx('2026-06-01', 'housing', 40, uyu),
+      tx('2026-07-15', 'housing', 40, uyu),
+    ]
+    const result = categoryChanges(txs, 'USD', 40, NOW)
+
+    expect(result.kind).toBe('insufficient')
   })
 
   it('needs at least two complete months before the reference', () => {

@@ -37,6 +37,9 @@ export type CategoryChanges =
 const NOISE_FLOOR_USD = 10
 const EDGE_DAYS = 3
 const BASELINE_MONTHS = 3
+// Longer than a statement cycle plus import delay: an account silent for
+// this long before a month is dormant for it, not "not imported yet".
+const DORMANT_AFTER_DAYS = 45
 
 type AccountKey = 'card' | 'usd' | 'uyu'
 
@@ -53,6 +56,12 @@ function shiftMonth(key: string, by: number): string {
   const [y, m] = key.split('-').map(Number)
   const d = new Date(Date.UTC(y, m - 1 + by, 1))
   return toMonthKey(d)
+}
+
+function shiftDays(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00.000Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
 }
 
 function lastDay(key: string): number {
@@ -91,19 +100,20 @@ export function categoryChanges(
 
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const pad = (n: number) => String(n).padStart(2, '0')
-  // An account constrains a month only if it has data on or after the
-  // month's start: then it must already have started by then (not imported
-  // later) and must run to the month's end (a statement closing on the 20th
-  // leaves the month partial). An account with no data from that month on
-  // is treated as dormant, not as missing — otherwise a quiet account would
-  // block every comparison.
+  // Every account must cover the month: already started by then (not
+  // imported later) and running to the month's end (a statement closing on
+  // the 20th leaves the month partial). The one exception is an account
+  // whose last movement is long before the month (DORMANT_AFTER_DAYS) — a
+  // quiet account, not a statement waiting to be imported — which would
+  // otherwise block every comparison.
   const isComplete = (month: string) => {
     if (month >= currentMonth) return false
     const monthStart = `${month}-01`
     const startBy = `${month}-${pad(EDGE_DAYS)}`
     const endFrom = `${month}-${pad(lastDay(month) - EDGE_DAYS)}`
+    const dormantBefore = shiftDays(monthStart, -DORMANT_AFTER_DAYS)
     return Array.from(coverage.values()).every(
-      (c) => c.last < monthStart || (c.first <= startBy && c.last >= endFrom)
+      (c) => c.last < dormantBefore || (c.first <= startBy && c.last >= endFrom)
     )
   }
 
@@ -124,11 +134,13 @@ export function categoryChanges(
   }
   if (!reference) return { kind: 'insufficient' }
 
-  // The months immediately before it — no skipping over gaps.
+  // The months immediately before it, contiguous: stop at the first
+  // incomplete one (the range link opens every month between the ends).
   const baseline: string[] = []
-  for (let i = BASELINE_MONTHS; i >= 1; i--) {
+  for (let i = 1; i <= BASELINE_MONTHS; i++) {
     const m = shiftMonth(reference, -i)
-    if (isComplete(m)) baseline.push(m)
+    if (!isComplete(m)) break
+    baseline.unshift(m)
   }
   if (baseline.length < 2) return { kind: 'insufficient', reference }
 
