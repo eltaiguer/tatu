@@ -3,7 +3,8 @@
 How data moves through Tatu, the order in which categorization sources win,
 where money is converted, and what is stored where. This page describes the
 current code. When you change one of the flows below, update the page in the
-same PR. Decisions and their reasons are in [`decisions/`](decisions/README.md).
+same PR. Decisions and their reasons are in [`decisions/`](decisions/README.md);
+terms are defined in [`CONTEXT.md`](CONTEXT.md).
 
 ## Import
 
