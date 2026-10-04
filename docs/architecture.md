@@ -224,7 +224,11 @@ backup, split parents and ignored rows included); Transacciones exports the
 rows on screen (`filteredTransactions`, so ignored rows only with "show
 ignored" on). Both CSV and PDF end with a `cuenta_en_totales` column (`1` /
 `0`, from `countsTowardTotals`): summing the `1` rows gives the app's totals,
-because a split parent is `0` and its parts are `1`.
+because a split parent is `0` and its parts are `1`. PDF prints an HTML
+report (every interpolated string HTML-escaped) from a hidden same-origin
+iframe, not a popup — `window.open` with `noopener` returns `null` (#179). If
+the frame can't be written or printed, the export throws a `UserFacingError`
+and Configuración shows it instead of a success toast.
 
 ## Persistence boundaries
 
