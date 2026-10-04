@@ -114,7 +114,7 @@ describe('EditTransactionDialog', () => {
     )
   })
 
-  it('saves no category when the user picks "sin categoría"', () => {
+  it('clears the category (null) when the user picks "sin categoría"', () => {
     const props = baseProps()
     render(<EditTransactionDialog {...props} />)
 
@@ -127,7 +127,7 @@ describe('EditTransactionDialog', () => {
     save()
 
     expect(props.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ category: undefined })
+      expect.objectContaining({ category: null })
     )
   })
 

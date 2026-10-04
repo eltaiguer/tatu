@@ -14,7 +14,7 @@ import {
 import { CategoryBadge } from './CategoryBadge'
 import type { Transaction } from '../models'
 import { formatCurrency } from '../utils/formatting'
-import type { SplitPart } from '../services/supabase/transactions'
+import type { SplitPart } from '../services/mutations/transaction-mutations'
 import { getCategoryDefinitions } from '../services/categories/category-registry'
 
 interface SplitPartDraft {

@@ -315,7 +315,12 @@ describe('Settings', () => {
     try {
       renderForPdfExport()
 
-      expect(await screen.findByText('Reporte PDF generado')).toBeVisible()
+      // In the document, not toBeVisible: sonner fades a toast in (opacity 0
+      // until its mount frame runs), so visibility right after it appears
+      // depends on timing and flaked.
+      expect(
+        await screen.findByText('Reporte PDF generado')
+      ).toBeInTheDocument()
       expect(frame.printed()).toHaveLength(1)
       expect(frame.printed()[0]).toContain('Devoto Pocitos')
     } finally {
@@ -332,7 +337,7 @@ describe('Settings', () => {
         await screen.findByText(
           'No se pudo abrir el reporte PDF. Recargá la página e intentá de nuevo.'
         )
-      ).toBeVisible()
+      ).toBeInTheDocument()
       expect(screen.queryByText('Reporte PDF generado')).not.toBeInTheDocument()
     } finally {
       frame.restore()

@@ -31,10 +31,11 @@ export type ApplyScope =
   | 'future_matching_only'
 
 // What the user saved. `description` is trimmed and never empty;
-// `category` is undefined for "sin categoría".
+// `category` is null for "sin categoría", which clears it (on the server
+// too, #119).
 export interface EditTransactionDraft {
   description: string
-  category?: string
+  category: string | null
   tags: string[]
   applyScope: ApplyScope
 }
@@ -187,7 +188,7 @@ function EditTransactionForm({
     setError('')
     onSave({
       description: trimmed,
-      category: category.trim() || undefined,
+      category: category.trim() || null,
       tags,
       applyScope,
     })

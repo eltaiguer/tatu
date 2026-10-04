@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
-import { NeedsConfirmationError, userErrorMessage } from '../utils/user-error'
+import {
+  NeedsConfirmationError,
+  PartialWriteError,
+  userErrorMessage,
+} from '../utils/user-error'
+import {
+  requireRepository,
+  type Repository,
+} from '../services/repository/repository'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import {
   Calendar,
@@ -602,7 +610,57 @@ function BulkBar({
 
 type DeleteResult = { removed: Transaction[]; reversible: boolean }
 
+function isDeleteResult(value: unknown): value is DeleteResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as DeleteResult).removed)
+  )
+}
+
 // "1 transacción eliminada" / "3 transacciones eliminadas" from a stem.
+interface BulkStep {
+  label: string
+  run: () => Promise<unknown>
+}
+
+/**
+ * Runs a bulk edit's steps (category, then each tag) in order and returns
+ * the most rows any step updated. When a step saves only some rows, the
+ * PartialWriteError it throws gets a retry that resumes the chain: that
+ * step's failed rows, then every step that never ran.
+ */
+async function runBulkSteps(
+  steps: BulkStep[],
+  onApplied: (label: string) => void = () => {}
+): Promise<number> {
+  let updated = 0
+  for (let i = 0; i < steps.length; i++) {
+    let result: unknown
+    try {
+      result = await steps[i].run()
+    } catch (error) {
+      if (error instanceof PartialWriteError && error.retry) {
+        const rest = steps.slice(i + 1)
+        const retryStep = error.retry
+        throw new PartialWriteError(
+          error.message,
+          error.done,
+          error.total,
+          () =>
+            runBulkSteps([{ label: steps[i].label, run: retryStep }, ...rest]),
+          error.result
+        )
+      }
+      throw error
+    }
+    onApplied(steps[i].label)
+    const stepUpdated = (result as { updated?: number } | undefined)?.updated
+    updated = Math.max(updated, stepUpdated ?? 0)
+  }
+  return updated
+}
+
 function txDone(count: number, participleStem: string): string {
   return count === 1
     ? `1 transacción ${participleStem}a`
@@ -625,7 +683,8 @@ interface BaseTransactionsProps {
     transactionId: string,
     updates: {
       displayDescription?: string
-      category?: string
+      // null clears it ("Sin categoría"); absent leaves it alone.
+      category?: string | null
       tags?: string[]
       applyScope: 'single' | 'matching_past_and_future' | 'future_matching_only'
     }
@@ -648,6 +707,8 @@ interface BaseTransactionsProps {
   onUnsplitTransaction?: (transactionId: string) => Promise<void>
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void
+  // The signed-in user's repository: a category created inline saves there.
+  repository?: Repository | null
 }
 
 // Deleting offers "Deshacer", so whoever wires a delete handler must also
@@ -690,6 +751,7 @@ export function Transactions({
   onUnsplitTransaction,
   onRestoreTransactions,
   onReload,
+  repository,
 }: TransactionsProps) {
   /* ---- Period state ---- */
   const [period, setPeriod] = useState<Period>(() => {
@@ -830,7 +892,38 @@ export function Transactions({
     })
   }
 
-  function reportError(error: unknown, fallback: string) {
+  function reportError(error: unknown, fallback: string, prefix = '') {
+    // Some rows saved and are already shown (#60): say how many, offer to
+    // retry just the rest, and keep the undo for what a delete did remove.
+    if (error instanceof PartialWriteError) {
+      if (isDeleteResult(error.result) && error.result.removed.length > 0) {
+        reportDeleted(error.result)
+      }
+      const retry = error.retry
+      toast.error(
+        prefix + (retry ? `${error.message} — reintentar` : error.message),
+        retry
+          ? {
+              action: {
+                label: 'Reintentar',
+                onClick: () => {
+                  retry().then(
+                    // Rows a retried delete removed get their own undo.
+                    (result) =>
+                      isDeleteResult(result)
+                        ? reportDeleted(result)
+                        : toast.success('Cambios guardados'),
+                    (retryError: unknown) => reportError(retryError, fallback)
+                  )
+                },
+              },
+            }
+          : onReload
+            ? { action: { label: 'Recargar', onClick: onReload } }
+            : {}
+      )
+      return
+    }
     toast.error(
       userErrorMessage(error, fallback),
       onReload ? { action: { label: 'Recargar', onClick: onReload } } : {}
@@ -925,11 +1018,14 @@ export function Transactions({
 
   async function handleCreateCategory(label: string) {
     try {
-      const created = await addCustomCategoryWithSync({
-        label,
-        color: DEFAULT_CATEGORY_COLOR,
-        icon: '🏷️',
-      })
+      const created = await addCustomCategoryWithSync(
+        requireRepository(repository),
+        {
+          label,
+          color: DEFAULT_CATEGORY_COLOR,
+          icon: '🏷️',
+        }
+      )
       return created
     } catch (error) {
       reportError(error, 'No se pudo crear la categoría')
@@ -1162,23 +1258,25 @@ export function Transactions({
     // Steps run in sequence; on failure the message says which already
     // applied, so a retry isn't a blind guess.
     const applied: string[] = []
-    let updated = 0
-    try {
-      if (bulkEditCategory && onBulkCategorize) {
-        const result = await onBulkCategorize(
-          selectedTransactionIds,
-          bulkEditCategory
-        )
-        applied.push('la categoría')
-        updated = Math.max(updated, result.updated)
-      }
+    const ids = selectedTransactionIds
+    const steps: BulkStep[] = []
+    if (bulkEditCategory && onBulkCategorize) {
+      const category = bulkEditCategory
+      steps.push({
+        label: 'la categoría',
+        run: () => onBulkCategorize(ids, category),
+      })
+    }
+    if (onBulkTag) {
       for (const tag of bulkEditTagList) {
-        if (onBulkTag) {
-          const result = await onBulkTag(selectedTransactionIds, tag)
-          applied.push(`la etiqueta "${tag}"`)
-          updated = Math.max(updated, result.updated)
-        }
+        steps.push({
+          label: `la etiqueta "${tag}"`,
+          run: () => onBulkTag(ids, tag),
+        })
       }
+    }
+    try {
+      const updated = await runBulkSteps(steps, (label) => applied.push(label))
       setSelectedTransactionIds([])
       closeBulkEdit()
       if (updated === 0) {
@@ -1187,6 +1285,16 @@ export function Transactions({
         toast.success(txDone(updated, 'actualizad'))
       }
     } catch (error) {
+      if (error instanceof PartialWriteError) {
+        reportError(
+          error,
+          'No se pudieron actualizar las transacciones',
+          applied.length > 0
+            ? `Se aplicó ${applied.join(' y ')}, pero falló el resto: `
+            : ''
+        )
+        return
+      }
       const message = userErrorMessage(
         error,
         'No se pudieron actualizar las transacciones'

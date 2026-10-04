@@ -22,6 +22,10 @@ import {
   type MatchType,
 } from '../../services/categorizer/custom-patterns'
 import { userErrorMessage } from '../../utils/user-error'
+import {
+  requireRepository,
+  type Repository,
+} from '../../services/repository/repository'
 
 interface PatternRulesCardProps {
   transactions: Transaction[]
@@ -30,6 +34,8 @@ interface PatternRulesCardProps {
   onApplyPatternToPast?: (
     pattern: CustomPattern
   ) => Promise<{ updated: number; failed: number }>
+  // The signed-in user's repository: rules save through it.
+  repository?: Repository | null
 }
 
 // "Reglas de auto-categorización": the add-rule form and the list of the
@@ -37,6 +43,7 @@ interface PatternRulesCardProps {
 export function PatternRulesCard({
   transactions,
   onApplyPatternToPast,
+  repository,
 }: PatternRulesCardProps) {
   const [customPatterns, setCustomPatterns] = useState(() =>
     listCustomPatterns()
@@ -53,7 +60,7 @@ export function PatternRulesCard({
     if (!patternForm.pattern.trim()) return
     let created: CustomPattern
     try {
-      created = await addCustomPatternWithSync({
+      created = await addCustomPatternWithSync(requireRepository(repository), {
         pattern: patternForm.pattern,
         matchType: patternForm.matchType,
         category: patternForm.category,
@@ -100,7 +107,7 @@ export function PatternRulesCard({
 
   async function handleRemovePattern(id: string) {
     try {
-      await removeCustomPatternWithSync(id)
+      await removeCustomPatternWithSync(requireRepository(repository), id)
       toast.success('Regla eliminada')
     } catch (error) {
       toast.error(userErrorMessage(error, 'No se pudo eliminar la regla'))

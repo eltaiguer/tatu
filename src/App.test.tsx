@@ -59,8 +59,8 @@ vi.mock('./services/supabase/auth', () => ({
 vi.mock('./services/supabase/transactions', () => ({
   loadUserTransactions: loadUserTransactionsMock,
   persistTransactions: vi.fn().mockResolvedValue(undefined),
-  softDeleteTransaction: softDeleteTransactionMock,
-  updateTransaction: updateTransactionMock,
+  setTransactionsDeleted: softDeleteTransactionMock,
+  updateTransactionsByIds: updateTransactionMock,
 }))
 
 vi.mock('./services/supabase/category-overrides', () => ({
@@ -165,8 +165,11 @@ describe('App', () => {
     listCustomCategoriesMock.mockResolvedValue([])
     listCustomPatternsMock.mockResolvedValue([])
     loadUserPreferencesMock.mockResolvedValue(null)
-    updateTransactionMock.mockResolvedValue(undefined)
-    softDeleteTransactionMock.mockResolvedValue(undefined)
+    // The server confirms every id it was sent.
+    updateTransactionMock.mockImplementation(async (_s, ids: string[]) => ids)
+    softDeleteTransactionMock.mockImplementation(
+      async (_s, ids: string[]) => ids
+    )
   })
 
   it('renders overview (dashboard) view by default', async () => {
@@ -527,7 +530,13 @@ describe('App', () => {
       expect(txs.find((t) => t.id === 'tx-1')?.category).toBe('entertainment')
       expect(txs.find((t) => t.id === 'tx-2')?.category).toBe('entertainment')
     })
-    expect(updateTransactionMock).toHaveBeenCalledTimes(2)
+    // One request for the whole selection (#60).
+    expect(updateTransactionMock).toHaveBeenCalledTimes(1)
+    expect(updateTransactionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      ['tx-1', 'tx-2'],
+      { category: 'entertainment', categoryConfidence: 1 }
+    )
   })
 
   it('bulk deletes selected transactions and removes them from the store', async () => {
@@ -574,7 +583,12 @@ describe('App', () => {
     await waitFor(() => {
       expect(transactionStore.getState().transactions).toHaveLength(0)
     })
-    expect(softDeleteTransactionMock).toHaveBeenCalledTimes(2)
+    expect(softDeleteTransactionMock).toHaveBeenCalledTimes(1)
+    expect(softDeleteTransactionMock).toHaveBeenCalledWith(
+      expect.anything(),
+      ['tx-1', 'tx-2'],
+      true
+    )
     expect(
       await screen.findByText('2 transacciones eliminadas')
     ).toBeInTheDocument()

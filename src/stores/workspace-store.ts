@@ -13,19 +13,20 @@
 // Races: every hydrate takes a generation number. A teardown, a newer hydrate
 // or an abandoned effect bumps the generation, and a load that resolves under
 // a stale generation applies nothing.
-import { createStore } from 'zustand/vanilla'
 import { toast } from 'sonner'
-import type { SupabaseSession } from '../services/supabase/client'
 import {
-  loadUserPreferences,
-  saveUserPreferences,
-  type UserPreferences,
-} from '../services/supabase/user-preferences'
-import { loadUserTransactions } from '../services/supabase/transactions'
-import { listCategoryOverrides } from '../services/supabase/category-overrides'
-import { listDescriptionOverrides as listRemoteDescriptionOverrides } from '../services/supabase/description-overrides'
-import { listCustomCategories as listRemoteCustomCategories } from '../services/supabase/custom-categories'
-import { listCustomPatterns as listRemoteCustomPatterns } from '../services/supabase/custom-patterns'
+  isWorkspaceOwner,
+  workspaceStore,
+  type WorkspaceState,
+  type WorkspaceStatus,
+} from './workspace-state'
+import type { SupabaseSession } from '../services/supabase/client'
+import type { UserPreferences } from '../services/supabase/user-preferences'
+import type {
+  Repository,
+  WorkspaceSnapshot,
+} from '../services/repository/repository'
+import { createSupabaseRepository } from '../services/repository/supabase-repository'
 import {
   clearAllCategoryOverrides,
   replaceMerchantCategoryOverrides,
@@ -42,26 +43,8 @@ import { transactionStore } from './transaction-store'
 
 export type { UserPreferences }
 export { DEFAULT_PREFERENCES }
-
-/**
- * - `idle`: nobody's data is loaded.
- * - `loading` / `error`: `userId`'s data is being (or failed to be) loaded.
- * - `ready`: `userId`'s data is loaded; preference edits are saved.
- */
-export type WorkspaceStatus = 'idle' | 'loading' | 'ready' | 'error'
-
-export interface WorkspaceState {
-  /** Whose workspace this is, or null when nobody's is loaded. */
-  userId: string | null
-  status: WorkspaceStatus
-  preferences: UserPreferences
-}
-
-export const workspaceStore = createStore<WorkspaceState>()(() => ({
-  userId: null,
-  status: 'idle',
-  preferences: { ...DEFAULT_PREFERENCES },
-}))
+export { workspaceStore, isWorkspaceOwner }
+export type { WorkspaceState, WorkspaceStatus }
 
 let generation = 0
 
@@ -96,6 +79,7 @@ export function teardownWorkspace(): void {
   // already in flight finishes against that user's own row, but nothing
   // waits on it any more (a hung request can't block the next user's saves).
   detachSaves()
+  preferenceRepository = null
   workspaceStore.setState({ userId: null, status: 'idle' })
 }
 
@@ -117,11 +101,15 @@ export interface Hydration {
 }
 
 /**
- * Loads `session`'s user from Supabase and replaces the workspace with it.
+ * Loads `session`'s user through the repository port (Supabase unless a
+ * test passes another adapter) and replaces the workspace with it.
  * Switching to a different user tears the previous one down first. Nothing is
  * applied unless this is still the latest hydrate when the load resolves.
  */
-export function hydrateWorkspace(session: SupabaseSession): Hydration {
+export function hydrateWorkspace(
+  session: SupabaseSession,
+  repository: Repository = createSupabaseRepository(session)
+): Hydration {
   const userId = session.user.id
   const current = workspaceStore.getState().userId
   if (current !== null && current !== userId) {
@@ -132,11 +120,12 @@ export function hydrateWorkspace(session: SupabaseSession): Hydration {
   const myGeneration = generation
   const isCurrent = () => generation === myGeneration
   workspaceStore.setState({ userId, status: 'loading' })
+  preferenceRepository = repository
 
   // A reload while an edit is still being saved would read the old row and
   // revert the edit in memory: let pending saves land first.
   const done = flushPreferenceSaves()
-    .then(() => (isCurrent() ? loadEverything(session) : null))
+    .then(() => (isCurrent() ? repository.loadWorkspace() : null))
     .then(
       (loaded) => {
         if (!loaded || !isCurrent()) return
@@ -157,34 +146,8 @@ export function hydrateWorkspace(session: SupabaseSession): Hydration {
   }
 }
 
-async function loadEverything(session: SupabaseSession) {
-  const [
-    transactions,
-    categoryOverrides,
-    descriptionOverrides,
-    customPatterns,
-    customCategories,
-    preferences,
-  ] = await Promise.all([
-    loadUserTransactions(session),
-    listCategoryOverrides(session),
-    listRemoteDescriptionOverrides(session),
-    listRemoteCustomPatterns(session),
-    listRemoteCustomCategories(session),
-    loadUserPreferences(session),
-  ])
-  return {
-    transactions,
-    categoryOverrides,
-    descriptionOverrides,
-    customPatterns,
-    customCategories,
-    preferences,
-  }
-}
-
 // Applies a whole load synchronously, so no render ever sees half a user.
-function applyLoaded(loaded: Awaited<ReturnType<typeof loadEverything>>) {
+function applyLoaded(loaded: WorkspaceSnapshot) {
   replaceMerchantCategoryOverrides(
     Object.fromEntries(
       loaded.categoryOverrides.map((override) => [
@@ -244,15 +207,23 @@ export function setPreference<K extends keyof UserPreferences>(
   if (Object.is(preferences[key], value)) return true
   const next = { ...preferences, [key]: value }
   applyPreferences(next)
-  enqueueSave(session, next)
+  enqueueSave(
+    preferenceRepository?.userId === session.user.id
+      ? preferenceRepository
+      : createSupabaseRepository(session),
+    next
+  )
   return true
 }
 
 // Saves go out one at a time, coalesced to the latest values: Configuración
 // saves on every keystroke, and parallel full-row upserts could land out of
 // order (an older key overwriting a newer one).
+// The repository the current workspace was loaded through (tests pass an
+// in-memory one); preference saves go to the same place.
+let preferenceRepository: Repository | null = null
 let queuedSave: {
-  session: SupabaseSession
+  repository: Repository
   preferences: UserPreferences
 } | null = null
 let saving: Promise<void> | null = null
@@ -265,10 +236,10 @@ function detachSaves(): void {
 }
 
 function enqueueSave(
-  session: SupabaseSession,
+  repository: Repository,
   preferences: UserPreferences
 ): void {
-  queuedSave = { session, preferences }
+  queuedSave = { repository, preferences }
   if (!saving) {
     const drain: Promise<void> = drainSaves(saveEpoch).finally(() => {
       if (saving === drain) saving = null
@@ -279,10 +250,10 @@ function enqueueSave(
 
 async function drainSaves(epoch: number): Promise<void> {
   while (queuedSave && epoch === saveEpoch) {
-    const { session, preferences } = queuedSave
+    const { repository, preferences } = queuedSave
     queuedSave = null
     try {
-      await saveUserPreferences(session, preferences)
+      await repository.savePreferences(preferences)
     } catch (err) {
       console.error('preferences save failed:', err)
       toast.error('No se pudieron guardar las preferencias. Intentá de nuevo.')

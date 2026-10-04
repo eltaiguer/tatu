@@ -20,20 +20,12 @@ import {
   clearAllCustomPatterns,
   listCustomPatterns,
 } from '../services/categorizer/custom-patterns'
+import { createInMemoryRepository } from '../services/repository/in-memory-repository'
+import { workspaceStore } from '../stores/workspace-state'
 
-// Category and rule changes are saved to Supabase before they count; give
-// these view tests a signed-in session and a server that accepts writes.
-vi.mock('../services/supabase/runtime', () => ({
-  getActiveSupabaseSession: () => ({ user: { id: 'user-1' } }),
-}))
-vi.mock('../services/supabase/custom-categories', () => ({
-  upsertCustomCategory: vi.fn().mockResolvedValue(undefined),
-  archiveCustomCategory: vi.fn().mockResolvedValue(undefined),
-}))
-vi.mock('../services/supabase/custom-patterns', () => ({
-  upsertCustomPattern: vi.fn().mockResolvedValue(undefined),
-  deleteCustomPattern: vi.fn().mockResolvedValue(undefined),
-}))
+// Category and rule changes are saved before they count; these view tests
+// get a signed-in user whose (in-memory) server accepts writes.
+let repo = createInMemoryRepository()
 
 function makeTx(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -55,10 +47,12 @@ describe('Categories', () => {
     clearAllCustomPatterns()
     replaceCustomCategories([])
     vi.restoreAllMocks()
+    repo = createInMemoryRepository()
+    workspaceStore.setState({ userId: repo.userId, status: 'ready' })
   })
 
   it('renders the page heading and all default categories', () => {
-    render(<Categories transactions={[]} />)
+    render(<Categories repository={repo} transactions={[]} />)
 
     expect(
       screen.getByRole('heading', { name: 'Categorías y reglas' })
@@ -83,7 +77,14 @@ describe('Categories', () => {
         type: 'credit',
       }),
     ]
-    render(<Categories transactions={txs} homeCurrency="USD" fxRate={40} />)
+    render(
+      <Categories
+        repository={repo}
+        transactions={txs}
+        homeCurrency="USD"
+        fxRate={40}
+      />
+    )
 
     expect(screen.getByText(/US\$ 110,00 · 2 gastos/)).toBeInTheDocument()
     expect(screen.getByText(/US\$ 7,00 · 1 gasto$/)).toBeInTheDocument()
@@ -94,7 +95,14 @@ describe('Categories', () => {
       makeTx({ id: '1', category: 'restaurants', amount: 5, currency: 'USD' }),
       makeTx({ id: '2', category: 'groceries', amount: 50, currency: 'USD' }),
     ]
-    render(<Categories transactions={txs} homeCurrency="USD" fxRate={40} />)
+    render(
+      <Categories
+        repository={repo}
+        transactions={txs}
+        homeCurrency="USD"
+        fxRate={40}
+      />
+    )
 
     const names = screen
       .getAllByRole('button', { name: /^Editar categoría/ })
@@ -110,6 +118,7 @@ describe('Categories', () => {
   it("shows a category's spend as soon as it stops being ignored", async () => {
     render(
       <Categories
+        repository={repo}
         transactions={[
           makeTx({
             id: '1',
@@ -139,6 +148,7 @@ describe('Categories', () => {
   it('gives a deleted category that still has expenses its own card', () => {
     render(
       <Categories
+        repository={repo}
         transactions={[
           makeTx({
             id: '1',
@@ -162,14 +172,21 @@ describe('Categories', () => {
       makeTx({ id: '1_split_0', category: 'groceries', splitParentId: '1' }),
       makeTx({ id: '1_split_1', category: 'restaurants', splitParentId: '1' }),
     ]
-    render(<Categories transactions={txs} homeCurrency="UYU" fxRate={40} />)
+    render(
+      <Categories
+        repository={repo}
+        transactions={txs}
+        homeCurrency="UYU"
+        fxRate={40}
+      />
+    )
 
     // Each part is one expense; the parent counts nowhere.
     expect(screen.getAllByText(/· 1 gasto$/)).toHaveLength(2)
   })
 
   it('opens new category form when clicking Nueva categoría', () => {
-    render(<Categories transactions={[]} />)
+    render(<Categories repository={repo} transactions={[]} />)
     fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
 
     expect(screen.getByLabelText('Nombre de categoría')).toBeInTheDocument()
@@ -178,7 +195,7 @@ describe('Categories', () => {
   })
 
   it('creates a new custom category', async () => {
-    render(<Categories transactions={[]} />)
+    render(<Categories repository={repo} transactions={[]} />)
     fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
 
     fireEvent.change(screen.getByLabelText('Nombre de categoría'), {
@@ -203,7 +220,12 @@ describe('Categories', () => {
       icon: '☕',
     })
 
-    render(<Categories transactions={[makeTx({ category: custom.id })]} />)
+    render(
+      <Categories
+        repository={repo}
+        transactions={[makeTx({ category: custom.id })]}
+      />
+    )
 
     fireEvent.click(
       screen.getByRole('button', { name: `Editar categoría ${custom.label}` })
@@ -235,7 +257,7 @@ describe('Categories', () => {
     })
     expect(listCustomCategories()).toHaveLength(1)
 
-    render(<Categories transactions={[]} />)
+    render(<Categories repository={repo} transactions={[]} />)
 
     fireEvent.click(
       screen.getByRole('button', { name: `Eliminar categoría ${custom.label}` })
@@ -252,7 +274,7 @@ describe('Categories', () => {
   })
 
   it('adds and removes a pattern rule', async () => {
-    render(<Categories transactions={[]} />)
+    render(<Categories repository={repo} transactions={[]} />)
 
     fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
       target: { value: 'farmashop' },
@@ -280,6 +302,7 @@ describe('Categories', () => {
     })
     render(
       <Categories
+        repository={repo}
         transactions={[
           makeTx({ id: '1', description: 'UBER TRIP' }),
           makeTx({ id: '2', description: 'UBER EATS' }),
@@ -301,6 +324,7 @@ describe('Categories', () => {
     render(
       <>
         <Categories
+          repository={repo}
           transactions={[]}
           onApplyPatternToPast={onApplyPatternToPast}
         />
@@ -326,6 +350,7 @@ describe('Categories', () => {
     render(
       <>
         <Categories
+          repository={repo}
           transactions={[]}
           onApplyPatternToPast={onApplyPatternToPast}
         />
@@ -347,7 +372,7 @@ describe('Categories', () => {
   it('confirms a new category only after it is saved', async () => {
     render(
       <>
-        <Categories transactions={[]} />
+        <Categories repository={repo} transactions={[]} />
         <Toaster />
       </>
     )
@@ -366,6 +391,7 @@ describe('Categories', () => {
     const onNavigateToTransactions = vi.fn()
     render(
       <Categories
+        repository={repo}
         transactions={[
           makeTx({ id: 'a', category: undefined }),
           makeTx({ id: 'b', category: '' }),
@@ -381,7 +407,7 @@ describe('Categories', () => {
   })
 
   it('saves the type and category chosen in the rule form', async () => {
-    render(<Categories transactions={[]} />)
+    render(<Categories repository={repo} transactions={[]} />)
 
     fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
       target: { value: 'uber' },
@@ -405,7 +431,7 @@ describe('Categories', () => {
   })
 
   it('exposes which scope is selected to assistive tech', () => {
-    render(<Categories transactions={[]} />)
+    render(<Categories repository={repo} transactions={[]} />)
 
     const group = screen.getByRole('group', { name: 'Aplicar a' })
     expect(
