@@ -1069,6 +1069,56 @@ describe('Transactions', () => {
     expect(screen.queryByText(/actualizada/)).not.toBeInTheDocument()
   })
 
+  it('offers to retry the rest when a bulk edit step saved only some rows', async () => {
+    const retry = vi.fn().mockResolvedValue({ updated: 1 })
+    const onBulkCategorize = vi.fn().mockResolvedValue({ updated: 2 })
+    const onBulkTag = vi
+      .fn()
+      .mockRejectedValue(
+        new PartialWriteError('Se actualizaron 1 de 2', 1, 2, retry)
+      )
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'Devoto')]}
+          onBulkCategorize={onBulkCategorize}
+          onBulkTag={onBulkTag}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+    )
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
+    })
+    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
+      target: { value: 'entretenimiento' },
+    })
+    const options = screen.getAllByText('Entretenimiento')
+    fireEvent.click(options[options.length - 1])
+    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
+      target: { value: 'viaje' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: /Crear etiqueta "viaje"/ })
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+
+    expect(
+      await screen.findByText(
+        'Se aplicó la categoría, pero falló el resto: Se actualizaron 1 de 2 — reintentar'
+      )
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(retry).toHaveBeenCalledTimes(1)
+  })
+
   it('bulk tags selected transactions', async () => {
     const onBulkTag = vi.fn().mockResolvedValue({ updated: 2 })
 

@@ -847,7 +847,7 @@ export function Transactions({
     })
   }
 
-  function reportError(error: unknown, fallback: string) {
+  function reportError(error: unknown, fallback: string, prefix = '') {
     // Some rows saved and are already shown (#60): say how many, offer to
     // retry just the rest, and keep the undo for what a delete did remove.
     if (error instanceof PartialWriteError) {
@@ -856,7 +856,7 @@ export function Transactions({
       }
       const retry = error.retry
       toast.error(
-        retry ? `${error.message} — reintentar` : error.message,
+        prefix + (retry ? `${error.message} — reintentar` : error.message),
         retry
           ? {
               action: {
@@ -1349,6 +1349,16 @@ export function Transactions({
         toast.success(txDone(updated, 'actualizad'))
       }
     } catch (error) {
+      if (error instanceof PartialWriteError) {
+        reportError(
+          error,
+          'No se pudieron actualizar las transacciones',
+          applied.length > 0
+            ? `Se aplicó ${applied.join(' y ')}, pero falló el resto: `
+            : ''
+        )
+        return
+      }
       const message = userErrorMessage(
         error,
         'No se pudieron actualizar las transacciones'
