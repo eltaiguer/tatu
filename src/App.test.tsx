@@ -956,4 +956,55 @@ describe('App', () => {
     ).toBe(false)
     errorSpy.mockRestore()
   })
+
+  it('opens exactly the rows behind a "what changed" amount', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-03T12:00:00.000Z'))
+    const months = ['2026-06', '2026-07', '2026-08', '2026-09']
+    loadUserTransactionsMock.mockResolvedValue(
+      months.flatMap((m, i) => [
+        tx(`a${i}`, `${m}-01T12:00:00.000Z`, 'Borde', 'fees'),
+        tx(`b${i}`, `${m}-28T12:00:00.000Z`, 'Borde', 'fees'),
+        tx(`r${i}`, `${m}-10T12:00:00.000Z`, 'Cantina', 'restaurants'),
+        ...(m === '2026-09'
+          ? [
+              {
+                ...tx(
+                  'r-extra-1',
+                  `${m}-11T12:00:00.000Z`,
+                  'Cantina',
+                  'restaurants'
+                ),
+                amount: 2000,
+              },
+              {
+                ...tx(
+                  'r-extra-2',
+                  `${m}-12T12:00:00.000Z`,
+                  'Cantina',
+                  'restaurants'
+                ),
+                amount: 1500,
+              },
+            ]
+          : []),
+      ])
+    )
+    try {
+      renderApp('/')
+      const link = await screen.findByRole('button', {
+        name: /Ver los gastos en Restaurantes de (setiembre|septiembre)/,
+      })
+      const amount = link.textContent!.split(' en ')[0]
+
+      fireEvent.click(link)
+
+      await waitFor(() => expect(currentUrl()).toMatch(/^\/transacciones\?/))
+      // The summed amount only appears in the expense total, never on a row.
+      expect((await screen.findAllByText(amount)).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(/^3 movimientos/).length).toBeGreaterThan(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

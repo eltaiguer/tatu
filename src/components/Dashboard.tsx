@@ -12,6 +12,7 @@ import {
   Banknote,
 } from 'lucide-react'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
+import { Category } from '../models'
 import { useMemo, type ReactNode } from 'react'
 import {
   PieChart,
@@ -49,6 +50,8 @@ import {
   niceTicks,
 } from '../services/charts/chart-data'
 import type { AccountSpend } from '../services/charts/chart-data'
+import { categoryChanges } from '../services/charts/category-changes'
+import { CategoryChangesCard } from './CategoryChangesCard'
 import { convert } from '../services/currency/convert'
 import { FxChip } from './FxChip'
 import { CurrencyToggle } from './CurrencyToggle'
@@ -72,6 +75,20 @@ function capitalize(text: string): string {
 // Wraps a number so it opens the transactions behind it. A real button
 // (keyboard + screen reader), visually the content itself; a plain block
 // when there is nowhere to navigate.
+// The period an account card's own number covers (accounts are imported
+// separately, so one global range would be wrong for some of them).
+function accountRange(stat: AccountSpend): string {
+  if (!stat.first || !stat.last) return 'Sin gastos'
+  const fmt = new Intl.DateTimeFormat('es-UY', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+  const from = fmt.format(stat.first)
+  const to = fmt.format(stat.last)
+  return from === to ? from : `${from} – ${to}`
+}
+
 // Id of the synthetic "Otros" row/slice (categories beyond the top 7).
 const OTHER_ROW_ID = '__other__'
 
@@ -242,7 +259,7 @@ function AccountExpenseCard({
               color: 'var(--text-faint)',
             }}
           >
-            Gastos del período
+            Gastos
           </div>
           <div
             className="font-mono"
@@ -428,6 +445,21 @@ export function Dashboard({
       }
     })
   }, [transactions, homeCurrency, fxRate, emojiLookup])
+
+  const changes = useMemo(
+    () => categoryChanges(transactions, homeCurrency, fxRate),
+    [transactions, homeCurrency, fxRate]
+  )
+
+  // Uncategorized expenses: same rows and conversion as the category list,
+  // so the tile's numbers equal the rows its link opens.
+  const uncategorizedSpend = useMemo(
+    () =>
+      buildCategorySpendingConverted(transactions, homeCurrency, fxRate).find(
+        (row) => row.category === Category.Uncategorized
+      ),
+    [transactions, homeCurrency, fxRate]
+  )
 
   const totalExpenses = categoryData.reduce((s, c) => s + c.value, 0)
   const hasExpenseData = totalExpenses > 0
@@ -767,6 +799,13 @@ export function Dashboard({
 
       {hasTransactions && !allIgnored && (
         <>
+          {/* Lead with what changed, before the totals. */}
+          <CategoryChangesCard
+            changes={changes}
+            homeCurrency={homeCurrency}
+            onOpen={onNavigateToTransactions}
+          />
+
           {/* Account source cards — 3-col grid */}
           {periodRange && (
             <p style={{ fontSize: 11, color: 'var(--text-faint)', margin: 0 }}>
@@ -777,7 +816,7 @@ export function Dashboard({
             <AccountExpenseCard
               icon={CreditCard}
               label="Tarjeta de crédito"
-              sublabel="Santander"
+              sublabel={accountRange(acctSpend.card)}
               stat={acctSpend.card}
               homeCurrency={homeCurrency}
               onOpen={
@@ -792,7 +831,7 @@ export function Dashboard({
             <AccountExpenseCard
               icon={DollarSign}
               label="Cuenta USD"
-              sublabel="Santander USD"
+              sublabel={accountRange(acctSpend.usd)}
               stat={acctSpend.usd}
               homeCurrency={homeCurrency}
               onOpen={
@@ -808,7 +847,7 @@ export function Dashboard({
             <AccountExpenseCard
               icon={Banknote}
               label="Cuenta $U"
-              sublabel="Santander $U"
+              sublabel={accountRange(acctSpend.uyu)}
               stat={acctSpend.uyu}
               homeCurrency={homeCurrency}
               onOpen={
@@ -963,7 +1002,7 @@ export function Dashboard({
                 </div>
                 <div className="text-muted-foreground" style={{ fontSize: 12 }}>
                   {topCategory
-                    ? `${Math.round(topCategory.pct)}% del gasto`
+                    ? `${Math.round(topCategory.pct)}% del gasto · todo el historial`
                     : 'Sin datos'}
                 </div>
               </DrillTarget>
@@ -1011,22 +1050,41 @@ export function Dashboard({
                 {savingsRate}%
               </div>
               <div className="text-muted-foreground" style={{ fontSize: 12 }}>
-                Ingresos no gastados
+                Ingresos no gastados · últimos {monthlyTrend.length} meses
               </div>
             </Card>
-            <Card className="p-5">
-              <div
-                className="text-muted-foreground"
-                style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              <DrillTarget
+                onOpen={
+                  onNavigateToTransactions && uncategorizedSpend
+                    ? () =>
+                        onNavigateToTransactions({
+                          categories: [Category.Uncategorized],
+                          type: 'debit',
+                        })
+                    : undefined
+                }
+                label="Ver los gastos sin categoría"
+                className="h-full p-5"
               >
-                Categorías activas
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>
-                {categoryData.length}
-              </div>
-              <div className="text-muted-foreground" style={{ fontSize: 12 }}>
-                Con gasto registrado
-              </div>
+                <div
+                  className="text-muted-foreground"
+                  style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}
+                >
+                  Sin categoría
+                </div>
+                <div
+                  className="font-mono"
+                  style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}
+                >
+                  {formatCurrency(uncategorizedSpend?.total ?? 0, homeCurrency)}
+                </div>
+                <div className="text-muted-foreground" style={{ fontSize: 12 }}>
+                  {uncategorizedSpend
+                    ? `${uncategorizedSpend.count} ${uncategorizedSpend.count === 1 ? 'gasto' : 'gastos'} · todo el historial`
+                    : 'Todo categorizado'}
+                </div>
+              </DrillTarget>
             </Card>
           </div>
 
