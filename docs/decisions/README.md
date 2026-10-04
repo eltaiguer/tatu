@@ -7,10 +7,11 @@ stays readable. For how the system works today, see
 
 ## Index
 
-| ADR                                    | Title                                                    | Status                                                                   | Date       |
-| -------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------ | ---------- |
-| [0001](0001-ai-spending-insights.md)   | AI-powered spending insights                             | Accepted. Partially superseded by [0002](0002-insights-integral-view.md) | 2026-07-22 |
-| [0002](0002-insights-integral-view.md) | Insights: integral (all-time) view instead of per-period | Accepted                                                                 | 2026-07-24 |
+| ADR                                                | Title                                                               | Status                                                                   | Date       |
+| -------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------- |
+| [0001](0001-ai-spending-insights.md)               | AI-powered spending insights                                        | Accepted. Partially superseded by [0002](0002-insights-integral-view.md) | 2026-07-22 |
+| [0002](0002-insights-integral-view.md)             | Insights: integral (all-time) view instead of per-period            | Accepted                                                                 | 2026-07-24 |
+| [0003](0003-repository-port-and-partial-writes.md) | Repository port, one mutation module, and "screen mirrors database" | Proposed                                                                 | 2026-10-04 |
 
 ADR-0002 replaced 0001's per-period navigation, per-period cache key and
 `deltaVsPriorPeriod`. ADR-0001's client-side BYO-key pattern, its model choice
@@ -20,7 +21,7 @@ stand.
 ## Adding an ADR
 
 1. Copy [`template.md`](template.md) to `<NNNN>-<short-kebab-title>.md`, using the
-   next free number with four digits (the next one is `0003`).
+   next free number with four digits (the next one is `0004`).
 2. Fill in every section. Start with status `Proposed` and change it to
    `Accepted` when the change merges.
 3. Add a row to the index above in the same PR.

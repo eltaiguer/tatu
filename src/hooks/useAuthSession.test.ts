@@ -16,7 +16,6 @@ const auth = vi.hoisted(() => ({
 vi.mock('../services/supabase/auth', () => auth)
 
 import { useAuthSession } from './useAuthSession'
-import { getActiveSupabaseSession } from '../services/supabase/runtime'
 import { transactionStore } from '../stores/transaction-store'
 import { teardownWorkspace, workspaceStore } from '../stores/workspace-store'
 
@@ -70,17 +69,15 @@ describe('useAuthSession', () => {
 
       expect(result.current.session).toBeNull()
       expect(result.current.authMode).toBe('signin')
-      expect(getActiveSupabaseSession()).toBeNull()
     })
 
-    it('restores the stored session and makes it active for data services', () => {
+    it('restores the stored session', () => {
       const stored = makeSession()
       auth.getCurrentSession.mockReturnValue(stored)
 
       const { result } = renderHook(() => useAuthSession())
 
       expect(result.current.session).toBe(stored)
-      expect(getActiveSupabaseSession()).toBe(stored)
     })
 
     it('stops listening to auth changes on unmount', () => {
@@ -109,7 +106,6 @@ describe('useAuthSession', () => {
       )
       expect(auth.signUpWithPassword).not.toHaveBeenCalled()
       expect(result.current.session).toBe(next)
-      expect(getActiveSupabaseSession()).toBe(next)
       expect(result.current.authSubmitting).toBe(false)
       expect(result.current.authError).toBe('')
     })
@@ -152,7 +148,6 @@ describe('useAuthSession', () => {
       act(() => onSessionChange(next))
 
       expect(result.current.session).toBe(next)
-      expect(getActiveSupabaseSession()).toBe(next)
     })
   })
 
@@ -164,7 +159,6 @@ describe('useAuthSession', () => {
       act(() => onSessionChange(null))
 
       expect(result.current.session).toBeNull()
-      expect(getActiveSupabaseSession()).toBeNull()
     })
 
     it('drops the previous user’s workspace before a different user’s session renders', () => {
@@ -210,7 +204,6 @@ describe('useAuthSession', () => {
       expect(auth.updatePassword).toHaveBeenCalledWith('nueva-clave')
       expect(auth.signOut).toHaveBeenCalledWith(current)
       expect(result.current.session).toBeNull()
-      expect(getActiveSupabaseSession()).toBeNull()
       expect(transactionStore.getState().transactions).toEqual([])
       expect(result.current.password).toBe('')
       expect(result.current.authMode).toBe('signin')
