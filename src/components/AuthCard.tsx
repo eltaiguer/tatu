@@ -46,8 +46,15 @@ export function AuthCard({
         onSignIn()
       }}
     >
+      {/* Visually hidden labels: the placeholder alone isn't a name (#199). */}
+      {!isResetMode && (
+        <label htmlFor="auth-email" className="sr-only">
+          Correo electrónico
+        </label>
+      )}
       {!isResetMode && (
         <input
+          id="auth-email"
           type="email"
           value={email}
           onChange={(event) => onEmailChange(event.target.value)}
@@ -57,7 +64,11 @@ export function AuthCard({
           required
         />
       )}
+      <label htmlFor="auth-password" className="sr-only">
+        {isResetMode ? 'Nueva contraseña' : 'Contraseña'}
+      </label>
       <input
+        id="auth-password"
         type="password"
         value={password}
         onChange={(event) => onPasswordChange(event.target.value)}
