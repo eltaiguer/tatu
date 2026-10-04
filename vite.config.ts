@@ -1,11 +1,29 @@
 import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { sentryVitePlugin } from '@sentry/vite-plugin'
+
+// Source maps go to Sentry only when deploying with SENTRY_AUTH_TOKEN set
+// (plus SENTRY_ORG / SENTRY_PROJECT); they are deleted from dist/ after the
+// upload so Firebase never serves them. Other builds skip this entirely.
+const uploadSourceMaps = Boolean(process.env.SENTRY_AUTH_TOKEN)
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    uploadSourceMaps &&
+      sentryVitePlugin({
+        org: process.env.SENTRY_ORG,
+        project: process.env.SENTRY_PROJECT,
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+        telemetry: false,
+        sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
+      }),
+  ],
   build: {
+    sourcemap: uploadSourceMaps ? 'hidden' : false,
     rollupOptions: {
       output: {
         // Long-lived vendor code in its own chunks, so an app deploy doesn't
@@ -16,6 +34,7 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom', 'scheduler'],
           supabase: ['@supabase/supabase-js'],
+          sentry: ['@sentry/react', '@sentry/browser', '@sentry/core'],
         },
       },
     },

@@ -46,12 +46,17 @@ const mocks = vi.hoisted(() => ({
   clearDescriptionOverrideWithSync: vi.fn(async () => undefined),
   setMerchantCategoryOverrideWithSync: vi.fn(async () => undefined),
   clearMerchantCategoryOverrideWithSync: vi.fn(async () => undefined),
+  captureError: vi.fn(),
   enrichTransactionsWithAi: vi.fn(
     async (): Promise<{
       results: Map<string, unknown>
       partialFailure?: string
     }> => ({ results: new Map() })
   ),
+}))
+
+vi.mock('../services/monitoring/error-reporting', () => ({
+  captureError: mocks.captureError,
 }))
 
 vi.mock('../services/supabase/transactions', () => ({
@@ -209,6 +214,31 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
       'AI enrichment failed during import:',
       expect.any(Error)
     )
+  })
+
+  it('reports unexpected AI failures to Sentry, not invalid keys', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { handlers } = setup()
+    mocks.captureError.mockClear()
+
+    mocks.enrichTransactionsWithAi.mockRejectedValueOnce(
+      new Error('401 invalid x-api-key')
+    )
+    await handlers.handleTransactionsImported(
+      [makeTransaction('tx-1')],
+      makeImportContext()
+    )
+    expect(mocks.captureError).not.toHaveBeenCalled()
+
+    const bug = new TypeError(
+      "Cannot read properties of undefined (reading 'map')"
+    )
+    mocks.enrichTransactionsWithAi.mockRejectedValueOnce(bug)
+    await handlers.handleTransactionsImported(
+      [makeTransaction('tx-2')],
+      makeImportContext()
+    )
+    expect(mocks.captureError).toHaveBeenCalledWith(bug, 'ai')
   })
 
   it('does not report an AI failure when AI is disabled', async () => {

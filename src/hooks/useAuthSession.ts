@@ -12,6 +12,7 @@ import {
 } from '../services/supabase/auth'
 import type { SupabaseSession } from '../services/supabase/client'
 import { setActiveSupabaseSession } from '../services/supabase/runtime'
+import { setErrorReportingUser } from '../services/monitoring/error-reporting'
 import { mapAuthError } from '../utils/auth-errors'
 
 function isPasswordResetMode(): boolean {
@@ -87,6 +88,7 @@ export function useAuthSession() {
 
   useEffect(() => {
     setActiveSupabaseSession(session)
+    setErrorReportingUser(session?.user?.id ?? null)
   }, [session])
 
   useEffect(() => {

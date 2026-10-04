@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import type { SupabaseSession } from '../services/supabase/client'
 import type { Transaction } from '../models'
 import { transactionStore } from '../stores/transaction-store'
+import { captureError } from '../services/monitoring/error-reporting'
 import {
   persistTransactions,
   softDeleteTransaction,
@@ -56,7 +57,11 @@ import {
   applyAiEnrichment,
 } from '../services/ai'
 import { buildCorrectionContext } from '../services/ai/correction-context'
-import { NeedsConfirmationError, UserFacingError } from '../utils/user-error'
+import {
+  NeedsConfirmationError,
+  UserFacingError,
+  isUnexpectedAiError,
+} from '../utils/user-error'
 
 const MISSING_TRANSACTION = new UserFacingError(
   'La transacción ya no existe. Recargá para ver el estado actual.'
@@ -219,6 +224,7 @@ export function useTransactionHandlers({
           aiError =
             error instanceof Error ? error.message : 'Error desconocido de IA'
           console.error('AI enrichment failed during import:', error)
+          if (isUnexpectedAiError(aiError)) captureError(error, 'ai')
         }
       }
     }
@@ -252,6 +258,7 @@ export function useTransactionHandlers({
         })
       } catch (error) {
         console.error('Could not complete import run record:', error)
+        captureError(error, 'import')
       }
     }
 

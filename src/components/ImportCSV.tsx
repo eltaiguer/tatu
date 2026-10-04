@@ -9,6 +9,7 @@ import { aiErrorMessage, userErrorMessage } from '../utils/user-error'
 import { parseCSV } from '../services/parsers/csv-parser'
 import { categorizeParsedData } from '../services/categorizer/import-categorization'
 import { transactionStore } from '../stores/transaction-store'
+import { captureError } from '../services/monitoring/error-reporting'
 import type { ParsedData, Transaction } from '../models'
 
 type ImportState = 'idle' | 'validating' | 'success' | 'error'
@@ -170,6 +171,9 @@ export function ImportCSV({
       }
     } catch (error) {
       console.error('import failed:', error)
+      // A save failure is reported by userErrorMessage below; a parse failure
+      // is reported here — it may mean Santander changed its export format.
+      if (!parsed) captureError(error, 'import-parse')
       setImportState('error')
       setErrorMessage(
         parsed

@@ -1,3 +1,5 @@
+import { captureError } from '../services/monitoring/error-reporting'
+
 // Errors whose message is already written for the user (Spanish, no jargon).
 // Anything else — Supabase/PostgREST text, fetch failures — is translated by
 // `userErrorMessage` so raw English never reaches a toast.
@@ -32,11 +34,14 @@ export function userErrorMessage(error: unknown, fallback: string): string {
     return error.message
   }
   console.error(error)
+  captureError(error)
   if (isNetworkError(error)) {
     return 'Sin conexión con el servidor. Revisá tu conexión e intentá de nuevo.'
   }
   return fallback
 }
+
+const AI_UNEXPECTED = 'error inesperado del servicio de IA'
 
 // The Anthropic SDK reports failures in English with status codes; turn the
 // ones users can act on into Spanish. Messages the app itself wrote (already
@@ -72,5 +77,14 @@ export function aiErrorMessage(raw: string): string {
   if (/failed to fetch|network|connection/.test(text)) {
     return 'sin conexión con Anthropic'
   }
-  return 'error inesperado del servicio de IA'
+  return AI_UNEXPECTED
+}
+
+// Whether an AI failure is worth reporting as a bug: an unexpected error, or
+// one the app raised itself (e.g. a malformed model response). A bad key, a
+// rate limit, no credit or an outage is the user's setup or Anthropic's, and
+// the toast already explains it.
+export function isUnexpectedAiError(raw: string): boolean {
+  const message = aiErrorMessage(raw)
+  return message === raw || message === AI_UNEXPECTED
 }

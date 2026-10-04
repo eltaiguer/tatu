@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Button } from './ui/button'
+import { captureError } from '../services/monitoring/error-reporting'
 
 interface Props {
   children: ReactNode
@@ -38,6 +39,7 @@ export class ViewErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: unknown) {
     console.error('view failed to render:', error)
+    captureError(error, 'view')
   }
 
   render() {

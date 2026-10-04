@@ -1,10 +1,13 @@
 import React from 'react'
+import { initErrorReporting } from './services/monitoring/error-reporting'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import { ROUTER_FUTURE } from './router-future'
 import './services/firebase'
 import './index.css'
+
+initErrorReporting()
 
 // A deploy replaces the hashed chunks; a tab opened before it then fails to
 // load a view it hasn't fetched yet. Reload once to pick up the new build —
