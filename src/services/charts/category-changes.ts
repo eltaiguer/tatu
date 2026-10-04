@@ -84,10 +84,7 @@ export function categoryChanges(
   now: Date = new Date()
 ): CategoryChanges {
   // Coverage: the first and last day each account has data for.
-  const coverage = new Map<
-    AccountKey,
-    { first: string; last: string; months: Set<string> }
-  >()
+  const coverage = new Map<AccountKey, { first: string; last: string }>()
   for (const tx of transactions) {
     if (tx.isSplitParent) continue
     const day = isoDay(tx.date)
@@ -95,11 +92,9 @@ export function categoryChanges(
     const entry = coverage.get(key) ?? {
       first: day,
       last: day,
-      months: new Set<string>(),
     }
     if (day < entry.first) entry.first = day
     if (day > entry.last) entry.last = day
-    entry.months.add(day.slice(0, 7))
     coverage.set(key, entry)
   }
   if (coverage.size === 0) return { kind: 'insufficient' }
@@ -107,11 +102,14 @@ export function categoryChanges(
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const pad = (n: number) => String(n).padStart(2, '0')
   // Every account must cover the month: already started by then (not
-  // imported later) and running to the month's end (a statement closing on
-  // the 20th leaves the month partial). The one exception is an account
-  // whose last movement is long before the month (DORMANT_AFTER_DAYS) — a
-  // quiet account, not a statement waiting to be imported — which would
-  // otherwise block every comparison.
+  // imported later) and, if the month is the account's last one, running to
+  // its end (a statement closing on the 20th leaves that month partial).
+  // Months between an account's first and last are taken as covered even
+  // without rows — sparse accounts (a USD account with a movement every
+  // month or two) are common, so a quiet month is read as quiet. Trade-off:
+  // a statement skipped between two imported ones also reads as quiet.
+  // An account silent for DORMANT_AFTER_DAYS before the month is dormant,
+  // not "waiting to be imported", and doesn't constrain it.
   const isComplete = (month: string) => {
     if (month >= currentMonth) return false
     const monthStart = `${month}-01`
@@ -121,9 +119,8 @@ export function categoryChanges(
     return Array.from(coverage.values()).every(
       (c) =>
         c.last < dormantBefore ||
-        // Rows in the month itself: a statement skipped between two
-        // imported ones leaves a hole that first/last can't see.
-        (c.months.has(month) && c.first <= startBy && c.last >= endFrom)
+        (c.first <= startBy &&
+          (c.last.slice(0, 7) > month || c.last >= endFrom))
     )
   }
 

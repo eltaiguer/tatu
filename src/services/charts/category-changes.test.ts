@@ -169,16 +169,45 @@ describe('categoryChanges', () => {
     expect(result.kind).toBe('insufficient')
   })
 
-  it('treats a skipped statement in the middle as a hole, not a quiet month', () => {
-    // Card statements for Jun, Jul and Sep imported; August skipped.
+  it('compares a sparse but active account instead of getting stuck', () => {
+    // A USD account with movements only in early May and mid-September,
+    // next to a card with every month imported.
+    const usd = { source: 'bank_account' as const, currency: 'USD' as const }
+    const txs = [
+      ...fullMonths(
+        ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09'],
+        (m) => [tx(`${m}-10`, 'restaurants', m === '2026-08' ? 600 : 300)]
+      ),
+      tx('2026-05-02', 'housing', 50, usd),
+      tx('2026-09-10', 'housing', 50, usd),
+    ]
+    const result = categoryChanges(txs, 'USD', 40, NOW)
+
+    // September is the USD account's last, partial month; August compares.
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.reference).toBe('2026-08')
+    expect(result.baseline).toEqual(['2026-05', '2026-06', '2026-07'])
+    expect(result.increases[0]).toMatchObject({
+      category: 'restaurants',
+      delta: 300,
+    })
+  })
+
+  it('reads a statement skipped in the middle as a quiet month (accepted trade-off)', () => {
+    // Card statements for Jun, Jul and Sep imported; August skipped. With
+    // sparse accounts favoured, August counts as complete with no spend.
     const txs = fullMonths(['2026-06', '2026-07', '2026-09'], (m) => [
       tx(`${m}-10`, 'restaurants', 300),
     ])
     const result = categoryChanges(txs, 'USD', 40, NOW)
 
-    // August isn't a near-zero baseline month; September has no complete
-    // month right before it, so there's nothing honest to compare.
-    expect(result.kind).toBe('insufficient')
+    expect(result.kind === 'ok' && result.reference).toBe('2026-09')
+    expect(result.kind === 'ok' && result.baseline).toEqual([
+      '2026-06',
+      '2026-07',
+      '2026-08',
+    ])
   })
 
   it('needs at least two complete months before the reference', () => {
