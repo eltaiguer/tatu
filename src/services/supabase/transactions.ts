@@ -488,3 +488,168 @@ export async function hardDeleteTransactions(
     throw new Error(error.message)
   }
 }
+
+// ---------------------------------------------------------------------------
+// Single-request primitives for the repository's Supabase adapter
+// (`services/repository/supabase-repository.ts`, #119). Each is one statement,
+// so it is atomic; the adapter decides how to cut a large write into them.
+// Every one is scoped by `.eq('user_id')` on top of RLS, so a request sent
+// with another user's token matches nothing instead of their rows.
+
+/** A row change in the repository port's convention: absent = untouched, null = clear. */
+export interface TransactionColumnsPatch {
+  displayDescription?: string | null
+  category?: string | null
+  categoryConfidence?: number | null
+  tags?: string[]
+}
+
+function patchToColumns(
+  patch: TransactionColumnsPatch
+): Record<string, unknown> {
+  const columns: Record<string, unknown> = {}
+  if (patch.displayDescription !== undefined) {
+    columns.display_description = patch.displayDescription || null
+  }
+  if (patch.category !== undefined) columns.category = patch.category || null
+  if (patch.categoryConfidence !== undefined) {
+    columns.category_confidence = patch.categoryConfidence
+  }
+  if (patch.tags !== undefined) columns.tags = patch.tags
+  return columns
+}
+
+function returnedIds(data: unknown): string[] {
+  return ((data ?? []) as Array<{ transaction_id: string }>).map(
+    (row) => row.transaction_id
+  )
+}
+
+/** Applies one patch to every id (≤ ~100: URL length); returns the ids changed. */
+export async function updateTransactionsByIds(
+  session: SupabaseSession,
+  ids: string[],
+  patch: TransactionColumnsPatch
+): Promise<string[]> {
+  const columns = patchToColumns(patch)
+  if (ids.length === 0 || Object.keys(columns).length === 0) return ids
+  const { data, error } = await getSupabaseClient()
+    .from('transactions')
+    .update(columns)
+    .eq('user_id', session.user.id)
+    .in('transaction_id', ids)
+    .select('transaction_id')
+  if (error) throw new Error(error.message)
+  return returnedIds(data)
+}
+
+/** Soft-deletes (or restores) every id; returns the ids changed. */
+export async function setTransactionsDeleted(
+  session: SupabaseSession,
+  ids: string[],
+  deleted: boolean
+): Promise<string[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await getSupabaseClient()
+    .from('transactions')
+    .update(
+      deleted
+        ? { is_deleted: true, deleted_at: new Date().toISOString() }
+        : { is_deleted: false, deleted_at: null }
+    )
+    .eq('user_id', session.user.id)
+    .in('transaction_id', ids)
+    .select('transaction_id')
+  if (error) throw new Error(error.message)
+  return returnedIds(data)
+}
+
+/** Removes rows for good (split parts); returns the ids that existed. */
+export async function hardDeleteTransactionsByIds(
+  session: SupabaseSession,
+  ids: string[]
+): Promise<string[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await getSupabaseClient()
+    .from('transactions')
+    .delete()
+    .eq('user_id', session.user.id)
+    .in('transaction_id', ids)
+    .select('transaction_id')
+  if (error) throw new Error(error.message)
+  return returnedIds(data)
+}
+
+/** Saves split parts (deterministic ids, so an upsert), always live. */
+export async function upsertSplitParts(
+  session: SupabaseSession,
+  parts: Transaction[]
+): Promise<void> {
+  if (parts.length === 0) return
+  const { error } = await getSupabaseClient()
+    .from('transactions')
+    .upsert(
+      parts.map((part) => ({
+        ...transactionToRow(session.user.id, part),
+        is_deleted: false,
+        deleted_at: null,
+      })),
+      { onConflict: 'user_id,transaction_id' }
+    )
+  if (error) throw new Error(error.message)
+}
+
+/**
+ * Sets only `is_split_parent` on a live row — never the whole row, so edits
+ * made meanwhile survive. `onlyIfSplit` adds a condition on the current
+ * value. Returns how many rows changed (0 or 1).
+ */
+export async function setSplitParentFlag(
+  session: SupabaseSession,
+  parentId: string,
+  isSplitParent: boolean,
+  options: { onlyIfSplit?: boolean } = {}
+): Promise<number> {
+  let query = getSupabaseClient()
+    .from('transactions')
+    .update({ is_split_parent: isSplitParent })
+    .eq('user_id', session.user.id)
+    .eq('transaction_id', parentId)
+    .is('is_deleted', false)
+  if (options.onlyIfSplit !== undefined) {
+    query = query.eq('is_split_parent', options.onlyIfSplit)
+  }
+  const { data, error } = await query.select('transaction_id')
+  if (error) throw new Error(error.message)
+  return returnedIds(data).length
+}
+
+/** Deletes a parent's parts: every one pointing at it, or just `ids`. */
+export async function deleteSplitParts(
+  session: SupabaseSession,
+  parentId: string,
+  ids?: string[]
+): Promise<void> {
+  let query = getSupabaseClient()
+    .from('transactions')
+    .delete()
+    .eq('user_id', session.user.id)
+    .eq('split_parent_id', parentId)
+  if (ids) query = query.in('transaction_id', ids)
+  const { error } = await query
+  if (error) throw new Error(error.message)
+}
+
+/** How many parts point at `parentId`. */
+export async function countSplitParts(
+  session: SupabaseSession,
+  parentId: string
+): Promise<number> {
+  const { data, error } = await getSupabaseClient()
+    .from('transactions')
+    .select('transaction_id')
+    .eq('user_id', session.user.id)
+    .eq('split_parent_id', parentId)
+  if (error) throw new Error(error.message)
+  return returnedIds(data).length
+}
