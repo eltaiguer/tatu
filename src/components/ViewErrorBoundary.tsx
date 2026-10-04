@@ -6,6 +6,8 @@ interface Props {
   children: ReactNode
   /** Changing it (e.g. moving to another view) clears a caught failure. */
   resetKey: string
+  /** Runs before a reset re-renders the children (e.g. resetFailedViews). */
+  onReset?: () => void
 }
 
 interface State {
@@ -29,6 +31,7 @@ export class ViewErrorBoundary extends Component<Props, State> {
 
   componentDidUpdate(prev: Props) {
     if (this.state.failed && prev.resetKey !== this.props.resetKey) {
+      this.props.onReset?.()
       this.setState({ failed: false })
     }
   }

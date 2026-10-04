@@ -31,6 +31,7 @@ import {
   Categories,
   Settings,
   preloadViews,
+  resetFailedViews,
 } from './lazy-views'
 import { ViewErrorBoundary } from './components/ViewErrorBoundary'
 import { ImportCSV } from './components/ImportCSV'
@@ -465,7 +466,10 @@ function App() {
           ) : syncStatus === 'error' ? (
             <ConnectionLostState onRetry={refetch} />
           ) : (
-            <ViewErrorBoundary resetKey={currentView}>
+            <ViewErrorBoundary
+              resetKey={currentView}
+              onReset={resetFailedViews}
+            >
               <Suspense
                 fallback={
                   currentView === 'transactions' ? (
