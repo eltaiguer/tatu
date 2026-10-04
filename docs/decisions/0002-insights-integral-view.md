@@ -105,6 +105,13 @@ against the history's end month, not a wall-clock read). The prompt
 instructs the model to flag a charge as possibly no longer active when
 `monthsSinceLastSeen >= 2`, rather than presenting it as a current expense.
 
+_Amended by #59 (2026-10):_ detection tolerates outliers. A merchant is
+recurring when ≥ 75% of its charges are within ±15% of the median and those
+in-band charges span ≥ 3 distinct months (it used to require **every** charge
+in band). `approxAmount` is the in-band median; `lastSeenMonth` still counts
+every charge. Installment purchases (`Cuota N M`) are excluded. See
+`docs/architecture.md` → Merchant key.
+
 ## Consequences
 
 - `ai_insights` requires a one-time manual `drop table if exists public.ai_insights;`
