@@ -96,6 +96,7 @@ in both light and dark.
 ---
 
 **Why these specific fixes** (current build → prototype target):
+
 - Totals are still rendered as per-currency silos — the exact pattern the multicurrency rework replaced with convert-and-combine.
 - No period navigator, no amount min/max filter, no active-filter chips.
 - Categoría/Cuenta are single-select; the prototype is multi-select.

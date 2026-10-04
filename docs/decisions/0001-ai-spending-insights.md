@@ -1,6 +1,7 @@
 # ADR-0001: AI-Powered Spending Insights
 
 ## Status
+
 Accepted — Phase 1 shipped in #42.
 
 **Partially superseded by [ADR-0002](0002-insights-integral-view.md)**: the
@@ -29,6 +30,7 @@ supersession:
   parse defensively" decision is unchanged.
 
 ## Date
+
 2026-07-22
 
 ## Context
@@ -99,7 +101,7 @@ other.
 figures that were already computed deterministically.** Every number in an
 insight (amounts, percentages, deltas) is pulled from existing aggregator/
 chart selectors (`src/services/aggregator/aggregation.ts`,
-`src/services/charts/chart-data.ts`) *before* the prompt is built, and echoed
+`src/services/charts/chart-data.ts`) _before_ the prompt is built, and echoed
 back into the insight's structured fields verbatim. The model's job is
 narrative and prioritization: which of the pre-computed facts matter most,
 why, and what plain-language story they tell. This is non-negotiable for a
@@ -126,6 +128,7 @@ shippable slice stays small.
 ## Alternatives Considered
 
 ### Move Claude calls to a Supabase Edge Function
+
 - Pros: centralizes API key handling, removes `dangerouslyAllowBrowser`
 - Cons: introduces a new backend paradigm inconsistent with every other
   AI call in the codebase; no shared-secret risk exists to justify it (BYO
@@ -135,6 +138,7 @@ shippable slice stays small.
   moves away from BYO-key entirely (would need its own ADR).
 
 ### Let the model compute the numbers directly from a transaction dump
+
 - Pros: simpler prompt — just hand over a period's transactions and ask
   for insights
 - Cons: LLM arithmetic over dozens/hundreds of rows is exactly where
@@ -146,6 +150,7 @@ shippable slice stays small.
   name); insights should too.
 
 ### Respect the user's existing `ai_model` setting for insights
+
 - Pros: one mental model, cheaper by default (Haiku)
 - Cons: insight quality (pattern-finding, prioritization, narrative
   coherence over a whole period) benefits much more from a stronger model
@@ -155,6 +160,7 @@ shippable slice stays small.
   tuned independently. Revisit if cost feedback says otherwise.
 
 ### Auto-generate on import / scheduled digest
+
 - Pros: always fresh, no user action needed
 - Cons: every import (which can happen multiple times) or every scheduled
   tick spends money whether or not the user ever looks; on-demand +
@@ -204,12 +210,12 @@ invalidation system: recompute the hash of the current period's
 
 ## Service Layer (`src/services/insights/`)
 
-| File | Responsibility |
-|---|---|
-| `insight-data.ts` | Pure functions. Builds `InsightInput` for a period from existing aggregator/chart selectors: category totals + prior-period deltas, top merchants, recurring-charge detection (same merchant + similar amount, monthly cadence), month-over-month trend series. No I/O — easy to unit test with fixture transactions. |
-| `insight-prompt.ts` | Builds system + user prompt from `InsightInput`, mirroring `transaction-ai.ts`'s prompt-building conventions (plain text, explicit output format instructions). |
+| File                   | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `insight-data.ts`      | Pure functions. Builds `InsightInput` for a period from existing aggregator/chart selectors: category totals + prior-period deltas, top merchants, recurring-charge detection (same merchant + similar amount, monthly cadence), month-over-month trend series. No I/O — easy to unit test with fixture transactions.                                                                                                              |
+| `insight-prompt.ts`    | Builds system + user prompt from `InsightInput`, mirroring `transaction-ai.ts`'s prompt-building conventions (plain text, explicit output format instructions).                                                                                                                                                                                                                                                                    |
 | `insight-generator.ts` | Calls Claude (`claude-opus-4-8`, hardcoded) via the same client-side `Anthropic({ apiKey, dangerouslyAllowBrowser: true })` pattern. Parses the JSON response the same defensive way `transaction-ai.ts` does (strip markdown fences, `JSON.parse`, validate/clamp fields) — no `output_config.format` dependency, matching the existing convention rather than introducing a second response-handling style in the same codebase. |
-| `insight-cache.ts` | Reads/writes `ai_insights` rows via `src/services/supabase/`, computes `input_hash`, exposes `getCachedInsights(period)` / `saveInsights(period, result)`. |
+| `insight-cache.ts`     | Reads/writes `ai_insights` rows via `src/services/supabase/`, computes `input_hash`, exposes `getCachedInsights(period)` / `saveInsights(period, result)`.                                                                                                                                                                                                                                                                         |
 
 ### `InsightInput` (computed, not sent to the model for verification — the model only sees this)
 
@@ -220,9 +226,9 @@ interface InsightInput {
   homeCurrency: 'USD' | 'UYU'
   categoryTotals: Array<{
     category: Category
-    amount: number          // home-currency, already converted
+    amount: number // home-currency, already converted
     pctOfTotal: number
-    deltaVsPriorPeriod: number  // signed, home-currency
+    deltaVsPriorPeriod: number // signed, home-currency
   }>
   topMerchants: Array<{ merchant: string; amount: number; count: number }>
   recurringCharges: Array<{
@@ -240,9 +246,9 @@ interface InsightInput {
 ```ts
 interface Insight {
   type: 'bleeding_money' | 'easiest_cut' | 'recurring' | 'trend' | 'anomaly'
-  title: string             // short, e.g. "Restaurantes creció 40% este mes"
-  narrative: string         // 1-3 sentences, model-authored
-  amount?: number           // copied verbatim from InsightInput — never computed by the model
+  title: string // short, e.g. "Restaurantes creció 40% este mes"
+  narrative: string // 1-3 sentences, model-authored
+  amount?: number // copied verbatim from InsightInput — never computed by the model
   currency: 'USD' | 'UYU'
   category?: Category
   merchant?: string
@@ -281,17 +287,19 @@ way `validateCategory()` in `transaction-ai.ts` clamps an invalid category to
 ## Phased Delivery
 
 **Phase 1 (this ADR's scope for a first PR):**
-- `category totals` + `deltaVsPriorPeriod` → *bleeding_money* insights
-- `recurringCharges` → *recurring* insights (this is what makes the scope
+
+- `category totals` + `deltaVsPriorPeriod` → _bleeding_money_ insights
+- `recurringCharges` → _recurring_ insights (this is what makes the scope
   "broader" than just the two literal questions, and it's cheap: pure
   arithmetic over existing transaction data, no new external calls)
-- *easiest_cut* insights derived from a mix of low-essential categories
+- _easiest_cut_ insights derived from a mix of low-essential categories
   (entertainment, shopping, restaurants) with material spend
 - Insights view, generation, caching, regeneration banner
 
 **Phase 2 (follow-up):**
-- `monthlyTrend` → *trend* narratives across 3+ months
-- *anomaly* detection (single-transaction or single-month spikes)
+
+- `monthlyTrend` → _trend_ narratives across 3+ months
+- _anomaly_ detection (single-transaction or single-month spikes)
 - Cross-period comparisons ("vs. your 3-month average")
 
 ## Consequences

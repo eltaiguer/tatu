@@ -7,6 +7,7 @@ elsewhere in this bundle.
 
 > **Golden rule:** when this prose and the prototype disagree, **the prototype wins.**
 > The source of truth for every visual, string, size, and component is, in order:
+>
 > 1. `prototype/screen-*.jsx` + `prototype/ui.jsx` + `prototype/sidebar.jsx` (exact markup, sizes, copy)
 > 2. `prototype/styles.css` (tokens)
 > 3. `screenshots/*.png` (target render)
@@ -60,10 +61,10 @@ greeting is unmistakably a **bold serif**; in the current build it is sans‑ser
 
 **Root cause:** there are two competing typography definitions in `src/styles/`:
 
-| File | Defines | Keep? |
-|---|---|---|
-| `theme.css` | `--font-sans: 'Hanken Grotesk'`, `--font-display: 'Spectral'`, `--font-mono: 'JetBrains Mono'` + `h1/h2 { font-family: var(--font-display) }` | ✅ **the correct one** |
-| `fonts.css` | `@import` Spectral + Hanken Grotesk + JetBrains Mono | ✅ keep |
+| File             | Defines                                                                                                                                                              | Keep?                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `theme.css`      | `--font-sans: 'Hanken Grotesk'`, `--font-display: 'Spectral'`, `--font-mono: 'JetBrains Mono'` + `h1/h2 { font-family: var(--font-display) }`                        | ✅ **the correct one**         |
+| `fonts.css`      | `@import` Spectral + Hanken Grotesk + JetBrains Mono                                                                                                                 | ✅ keep                        |
 | `typography.css` | `@import` **Inter** + **Space Grotesk**; `--font-sans: 'Inter'`; `--font-display: 'Space Grotesk'`; its own `@layer base h1/h2 { font-family: var(--font-display) }` | ❌ **DELETE** — Figma leftover |
 
 Whenever `typography.css` is in the bundle (or gets imported during a refactor) it
@@ -78,22 +79,23 @@ the wrong fonts can't come back. Then make sure `src/index.css` imports only:
 
 **Exact font per element** (must match after the fix):
 
-| Element | Family (var) | Notes |
-|---|---|---|
-| Page greeting `h1` (Resumen) | `--font-display` Spectral | **30px / 600**, `letter-spacing:-0.02em`. (Build currently 26/700 — fix size + weight.) |
-| Other `h1`, `h2` section titles | per prototype | section titles are 15–16px/600 in `--font-sans`, NOT display — see prototype `.section-title`. Only the page title + brand wordmark use Spectral. |
-| Body / UI text, buttons, nav | `--font-sans` Hanken Grotesk | base 15px / 1.5 |
-| Brand wordmark "Tatú" | `--font-display` Spectral | 22px/600 |
-| **All amounts / numbers / dates-in-tables** | `--font-mono` JetBrains Mono | `font-variant-numeric: tabular-nums` (use `.amt` / `.font-mono`) |
+| Element                                     | Family (var)                 | Notes                                                                                                                                             |
+| ------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Page greeting `h1` (Resumen)                | `--font-display` Spectral    | **30px / 600**, `letter-spacing:-0.02em`. (Build currently 26/700 — fix size + weight.)                                                           |
+| Other `h1`, `h2` section titles             | per prototype                | section titles are 15–16px/600 in `--font-sans`, NOT display — see prototype `.section-title`. Only the page title + brand wordmark use Spectral. |
+| Body / UI text, buttons, nav                | `--font-sans` Hanken Grotesk | base 15px / 1.5                                                                                                                                   |
+| Brand wordmark "Tatú"                       | `--font-display` Spectral    | 22px/600                                                                                                                                          |
+| **All amounts / numbers / dates-in-tables** | `--font-mono` JetBrains Mono | `font-variant-numeric: tabular-nums` (use `.amt` / `.font-mono`)                                                                                  |
 
 **Runtime verification (add a test or check in devtools):**
 
 ```ts
 // the var must resolve to Spectral, and NO file may define Space Grotesk/Inter
 getComputedStyle(document.documentElement).getPropertyValue('--font-display') // → Spectral…
-getComputedStyle(document.querySelector('h1')!).fontFamily                    // → contains "Spectral"
-getComputedStyle(document.querySelector('.amt')!).fontFamily                  // → contains "JetBrains Mono"
+getComputedStyle(document.querySelector('h1')!).fontFamily // → contains "Spectral"
+getComputedStyle(document.querySelector('.amt')!).fontFamily // → contains "JetBrains Mono"
 ```
+
 Plus a grep guard in CI: `grep -R "Space Grotesk\|'Inter'" src/styles` must return nothing.
 
 ---
@@ -102,14 +104,14 @@ Plus a grep guard in CI: `grep -R "Space Grotesk\|'Inter'" src/styles` must retu
 
 Open the screenshot `screenshots/01-resumen-light.png` alongside this.
 
-| Location | Current build | **Target (use this)** |
-|---|---|---|
-| Dashboard panel title | `Este mes` | **`Este mes, todo en dólares`** when home=USD / **`…en pesos`** when home=UYU (suffix tracks the toggle) |
-| …its subtitle | *(missing)* | **`Combina tus movimientos en US$ y $U usando el tipo de cambio.`** (faint, 12px, directly under the title) |
-| Account-card footer (left) | `314 movimientos este período` | **`{n} movimientos`** |
-| Account-card footer (right) | *(missing)* | **`≈ {amount converted into home currency}`** (mono, faint) — the cards are a `space-between` row: count left, converted right |
-| Account sub-line | `Santander Mastercard` / `Caja de ahorro USD` | include the **masked number**: `{sub} ·· {last4}` → e.g. `Caja de ahorro USD ·· 8226` (use the real account's label + last 4 digits; don't hardcode a card brand) |
-| Gastos native caption | `US$ 33,60 + $U 1.175,00 nativo` | **`US$ 33,60 + $U 1.175,00`** (drop the trailing "nativo"; match prototype `splitNote`) |
+| Location                    | Current build                                 | **Target (use this)**                                                                                                                                             |
+| --------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dashboard panel title       | `Este mes`                                    | **`Este mes, todo en dólares`** when home=USD / **`…en pesos`** when home=UYU (suffix tracks the toggle)                                                          |
+| …its subtitle               | _(missing)_                                   | **`Combina tus movimientos en US$ y $U usando el tipo de cambio.`** (faint, 12px, directly under the title)                                                       |
+| Account-card footer (left)  | `314 movimientos este período`                | **`{n} movimientos`**                                                                                                                                             |
+| Account-card footer (right) | _(missing)_                                   | **`≈ {amount converted into home currency}`** (mono, faint) — the cards are a `space-between` row: count left, converted right                                    |
+| Account sub-line            | `Santander Mastercard` / `Caja de ahorro USD` | include the **masked number**: `{sub} ·· {last4}` → e.g. `Caja de ahorro USD ·· 8226` (use the real account's label + last 4 digits; don't hardcode a card brand) |
+| Gastos native caption       | `US$ 33,60 + $U 1.175,00 nativo`              | **`US$ 33,60 + $U 1.175,00`** (drop the trailing "nativo"; match prototype `splitNote`)                                                                           |
 
 **Do NOT "fix" the greeting back to a hardcoded name.** `Hola, {firstName} 👋` derived
 from the signed-in user is correct and intended — the prototype only hardcodes "José"
@@ -127,18 +129,25 @@ Reference: `prototype/ui.jsx` (`MiniBars`) and `prototype/screen-overview.jsx`.
 
 1. **`MiniBars` sparkline — match the prototype exactly.** Build uses `height:24, gap:2`,
    last bar opacity 1 / others 0.35, `minHeight:3px`. Prototype is:
+
    ```jsx
    // height 36, gap 3, opacity RAMPS across bars, min 6% height
-   <div style={{ display:'flex', alignItems:'flex-end', gap:3, height:36 }}>
-     {values.map((v,i)=>(
-       <div style={{ flex:1,
-         height: `${Math.max((v/max)*100, 6)}%`,
-         background: color, borderRadius:2,
-         opacity: 0.25 + 0.75*(i/values.length) }}/>
+   <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 36 }}>
+     {values.map((v, i) => (
+       <div
+         style={{
+           flex: 1,
+           height: `${Math.max((v / max) * 100, 6)}%`,
+           background: color,
+           borderRadius: 2,
+           opacity: 0.25 + 0.75 * (i / values.length),
+         }}
+       />
      ))}
    </div>
    ```
-   The opacity *ramp* (older bars faded, newest fully opaque) is the look — not a single
+
+   The opacity _ramp_ (older bars faded, newest fully opaque) is the look — not a single
    highlighted last bar.
 
 2. **Sparkline placement in "Este mes".** Prototype puts a MiniBars **only under

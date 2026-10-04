@@ -17,4 +17,3 @@ Every feature and bug fix should include tests that cover the observable behavio
 - Include tests for behavior changes.
 - Bug fixes should include a regression test.
 - Keep changes small and logically scoped.
-

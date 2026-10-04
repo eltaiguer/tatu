@@ -1,9 +1,11 @@
 # ADR-0002: Insights — Integral (All-Time) View Instead of Per-Period
 
 ## Status
+
 Accepted
 
 ## Date
+
 2026-07-24
 
 ## Context
@@ -48,6 +50,7 @@ left to get wrong.
 ## Alternatives Considered
 
 ### Rolling trailing window (e.g. last 6 or 12 months)
+
 - Pros: bounds recurring-charge detection so very old, long-cancelled
   subscriptions don't linger forever; keeps the payload from growing
   unbounded over years of history
@@ -58,6 +61,7 @@ left to get wrong.
   `monthsSinceLastSeen` field below rather than by excluding old data.
 
 ### Keep a drill-down mode (integral view + optional per-month detail)
+
 - Pros: preserves the ability to inspect one month in isolation
 - Rejected: the user explicitly asked to remove month navigation entirely,
   not just make it secondary. Dashboard already covers "this month"

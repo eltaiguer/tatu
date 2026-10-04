@@ -51,6 +51,7 @@ When these variables are present, the app enables login and stores
 transactions in Supabase.
 
 Auth flow includes:
+
 - Email/password sign in and sign up
 - Password reset email request
 - Automatic migration of existing local transactions after first login
@@ -156,10 +157,12 @@ All commits must have passing tests.
 ## CSV File Formats
 
 ### Credit Card Transactions
+
 - Metadata: Client info, card details, balances
 - Columns: Fecha, Número de tarjeta, Número de autorización, Descripción, Importe original, Pesos, Dólares
 
 ### Bank Accounts (USD/UYU)
+
 - Metadata: Account info
 - Columns: Fecha, Referencia, Concepto, Descripción, Débito, Crédito, Saldos
 
