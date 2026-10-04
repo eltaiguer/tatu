@@ -173,12 +173,12 @@ export function Insights({
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div className="flex flex-col gap-[24px]">
       <PageHeader
         icon={
           <Sparkles
             size={22}
-            style={{ color: 'var(--accent)' }}
+            className="text-[var(--accent)]"
             aria-hidden="true"
           />
         }
@@ -187,7 +187,7 @@ export function Insights({
       />
 
       {error && (
-        <p role="alert" style={{ fontSize: 13, color: 'var(--neg)' }}>
+        <p role="alert" className="text-[13px] text-[var(--neg)]">
           {error}
         </p>
       )}
@@ -254,16 +254,8 @@ export function Insights({
 
       {hasTransactions && isConfigured && cached && (
         <>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 10,
-            }}
-          >
-            <p style={{ fontSize: 12, color: 'var(--text-faint)', margin: 0 }}>
+          <div className="flex flex-wrap items-center justify-between gap-[10px]">
+            <p className="m-0 text-[12px] text-[var(--text-faint)]">
               Generado el{' '}
               {new Date(cached.generatedAt).toLocaleString('es-UY', {
                 dateStyle: 'medium',
@@ -282,28 +274,14 @@ export function Insights({
           </div>
 
           {cached.isStale && (
-            <Card
-              className="p-4"
-              style={{
-                borderColor: 'var(--accent)',
-                background: 'var(--accent-soft)',
-              }}
-            >
-              <p style={{ fontSize: 13, margin: 0 }}>
+            <Card className="p-4 border-[var(--accent)] bg-[var(--accent-soft)]">
+              <p className="m-0 text-[13px]">
                 Tus transacciones cambiaron desde la última vez que generaste
                 insights. Los que ves abajo pueden estar desactualizados —{' '}
                 <button
                   onClick={() => void handleGenerate()}
                   disabled={generating}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    padding: 0,
-                    color: 'var(--brand-text)',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
+                  className="cursor-pointer border-none bg-transparent p-0 font-semibold text-[var(--brand-text)] underline"
                 >
                   regenerar ahora
                 </button>
@@ -314,7 +292,7 @@ export function Insights({
 
           {groups.length === 0 && (
             <Card className="p-6 text-center">
-              <p className="text-muted-foreground" style={{ margin: 0 }}>
+              <p className="m-0 text-muted-foreground">
                 No encontramos patrones destacados en tu historial.
               </p>
             </Card>
@@ -325,26 +303,15 @@ export function Insights({
             const Icon = meta.icon
             return (
               <div key={group.type}>
-                <h3
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    fontSize: 14,
-                    fontWeight: 600,
-                    marginBottom: 12,
-                  }}
-                >
+                <h3 className="mb-[12px] flex items-center gap-[8px] text-[14px] font-semibold">
                   <Icon
                     size={16}
-                    style={{ color: 'var(--text-muted)' }}
+                    className="text-[var(--text-muted)]"
                     aria-hidden="true"
                   />
                   {meta.label}
                 </h3>
-                <div
-                  style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-                >
+                <div className="flex flex-col gap-[10px]">
                   {group.items.map((insight, i) => (
                     <Card
                       key={`${group.type}-${i}`}
@@ -353,33 +320,16 @@ export function Insights({
                         borderLeft: `3px solid ${SEVERITY_COLOR[insight.severity]}`,
                       }}
                     >
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'flex-start',
-                          gap: 12,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: 200 }}>
-                          <p
-                            style={{
-                              fontWeight: 600,
-                              fontSize: 14,
-                              margin: '0 0 4px',
-                            }}
-                          >
+                      <div className="flex flex-wrap items-start justify-between gap-[12px]">
+                        <div className="min-w-[200px] flex-1">
+                          <p className="mx-0 mt-0 mb-[4px] text-[14px] font-semibold">
                             {insight.title}
                           </p>
-                          <p
-                            className="text-muted-foreground"
-                            style={{ fontSize: 13, margin: 0 }}
-                          >
+                          <p className="m-0 text-[13px] text-muted-foreground">
                             {insight.narrative}
                           </p>
                           {insight.category && (
-                            <div style={{ marginTop: 8 }}>
+                            <div className="mt-[8px]">
                               <CategoryBadge
                                 categoryId={insight.category}
                                 size="sm"
@@ -387,16 +337,9 @@ export function Insights({
                             </div>
                           )}
                         </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div className="shrink-0 text-right">
                           {typeof insight.amount === 'number' && (
-                            <p
-                              className="font-mono"
-                              style={{
-                                fontSize: 16,
-                                fontWeight: 600,
-                                margin: 0,
-                              }}
-                            >
+                            <p className="m-0 font-mono text-[16px] font-semibold">
                               {insight.amount < 0 ? '−' : ''}
                               {formatCurrency(
                                 Math.abs(insight.amount),
@@ -411,16 +354,7 @@ export function Insights({
                                   category: insight.category,
                                 })
                               }
-                              style={{
-                                marginTop: 6,
-                                background: 'none',
-                                border: 'none',
-                                padding: 0,
-                                fontSize: 12,
-                                color: 'var(--brand-text)',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                              }}
+                              className="mt-[6px] cursor-pointer border-none bg-transparent p-0 text-[12px] font-semibold text-[var(--brand-text)]"
                             >
                               Ver transacciones →
                             </button>
