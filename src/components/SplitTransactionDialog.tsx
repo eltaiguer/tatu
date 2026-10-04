@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
+import { cn } from './ui/utils'
 import {
   Dialog,
   DialogContent,
@@ -104,18 +105,12 @@ export function SplitTransactionDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
       <DialogContent
-        style={{ maxWidth: 560 }}
+        className="max-w-[560px]!"
         onClick={() => setCategoryPickerIdx(null)}
       >
         <DialogHeader>
           <DialogTitle>Dividir transacción</DialogTitle>
-          <div
-            style={{
-              fontSize: 13,
-              color: 'var(--text-muted)',
-              marginTop: 2,
-            }}
-          >
+          <div className="mt-[2px] text-[13px] text-[var(--text-muted)]">
             {transaction.description} &mdash;{' '}
             <span className="font-mono">
               {formatCurrency(parentAmount, currency)}
@@ -123,25 +118,13 @@ export function SplitTransactionDialog({
           </div>
         </DialogHeader>
 
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 8,
-            margin: '8px 0',
-          }}
-        >
+        <div className="mx-0 my-[8px] flex flex-col gap-[8px]">
           {parts.map((part, idx) => (
             <div
               key={idx}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 110px 32px',
-                gap: 6,
-                alignItems: 'start',
-              }}
+              className="grid grid-cols-[1fr_110px_32px] items-start gap-[6px]"
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div className="flex flex-col gap-[4px]">
                 <Input
                   placeholder="Descripción"
                   value={part.description}
@@ -149,9 +132,9 @@ export function SplitTransactionDialog({
                     updatePart(idx, { description: e.target.value })
                   }
                   disabled={pending}
-                  style={{ fontSize: 13 }}
+                  className="text-[13px]!"
                 />
-                <div style={{ position: 'relative' }}>
+                <div className="relative">
                   <button
                     type="button"
                     onClick={(e) => {
@@ -161,22 +144,12 @@ export function SplitTransactionDialog({
                       )
                     }}
                     disabled={pending}
-                    style={{
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '4px 8px',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius)',
-                      background: 'var(--surface)',
-                      cursor: 'pointer',
-                      fontSize: 12,
-                      color: part.category
-                        ? 'var(--text)'
-                        : 'var(--text-muted)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
+                    className={cn(
+                      'flex w-full cursor-pointer items-center gap-[6px] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-[8px] py-[4px] text-left text-[12px]',
+                      part.category
+                        ? 'text-[var(--text)]'
+                        : 'text-[var(--text-muted)]'
+                    )}
                   >
                     {part.category ? (
                       <CategoryBadge categoryId={part.category} />
@@ -188,20 +161,7 @@ export function SplitTransactionDialog({
                   {categoryPickerIdx === idx && (
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        zIndex: 50,
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius)',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                        maxHeight: 200,
-                        overflowY: 'auto',
-                        minWidth: 200,
-                        marginTop: 2,
-                      }}
+                      className="absolute top-full left-0 z-50 mt-[2px] max-h-[200px] min-w-[200px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
                     >
                       <button
                         type="button"
@@ -209,17 +169,7 @@ export function SplitTransactionDialog({
                           updatePart(idx, { category: undefined })
                           setCategoryPickerIdx(null)
                         }}
-                        style={{
-                          display: 'block',
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '6px 10px',
-                          fontSize: 12,
-                          color: 'var(--text-muted)',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                        }}
+                        className="block w-full cursor-pointer border-none bg-transparent px-[10px] py-[6px] text-left text-[12px] text-[var(--text-muted)]"
                       >
                         Sin categoría
                       </button>
@@ -231,22 +181,12 @@ export function SplitTransactionDialog({
                             updatePart(idx, { category: cat.id })
                             setCategoryPickerIdx(null)
                           }}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            width: '100%',
-                            textAlign: 'left',
-                            padding: '5px 10px',
-                            fontSize: 12,
-                            background:
-                              part.category === cat.id
-                                ? 'var(--surface-hover)'
-                                : 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: 'var(--text)',
-                          }}
+                          className={cn(
+                            'flex w-full cursor-pointer items-center gap-[6px] border-none px-[10px] py-[5px] text-left text-[12px] text-[var(--text)]',
+                            part.category === cat.id
+                              ? 'bg-[var(--surface-hover)]'
+                              : 'bg-transparent'
+                          )}
                         >
                           <CategoryBadge categoryId={cat.id} />
                         </button>
@@ -264,28 +204,19 @@ export function SplitTransactionDialog({
                 value={part.amount}
                 onChange={(e) => updatePart(idx, { amount: e.target.value })}
                 disabled={pending}
-                className="font-mono"
-                style={{ fontSize: 13, textAlign: 'right' }}
+                className="text-right font-mono text-[13px]!"
               />
 
               <button
                 type="button"
                 onClick={() => removePart(idx)}
                 disabled={parts.length <= 2 || pending}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 32,
-                  height: 32,
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius)',
-                  background: 'none',
-                  cursor: parts.length <= 2 ? 'not-allowed' : 'pointer',
-                  opacity: parts.length <= 2 ? 0.3 : 1,
-                  color: 'var(--text-muted)',
-                  marginTop: 2,
-                }}
+                className={cn(
+                  'mt-[2px] flex h-[32px] w-[32px] items-center justify-center rounded-[var(--radius)] border border-[var(--border)] bg-transparent text-[var(--text-muted)]',
+                  parts.length <= 2
+                    ? 'cursor-not-allowed opacity-30'
+                    : 'cursor-pointer opacity-100'
+                )}
                 title="Eliminar parte"
               >
                 <Trash2 size={14} />
@@ -297,19 +228,7 @@ export function SplitTransactionDialog({
             type="button"
             onClick={addPart}
             disabled={pending}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'none',
-              border: '1px dashed var(--border)',
-              borderRadius: 'var(--radius)',
-              padding: '6px 10px',
-              fontSize: 12,
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              width: 'fit-content',
-            }}
+            className="flex w-fit cursor-pointer items-center gap-[6px] rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-transparent px-[10px] py-[6px] text-[12px] text-[var(--text-muted)]"
           >
             <Plus size={14} />
             Agregar parte
@@ -317,28 +236,21 @@ export function SplitTransactionDialog({
         </div>
 
         <div
-          style={{
-            padding: '10px 12px',
-            background: 'var(--surface)',
-            border: `1px solid ${isBalanced ? 'var(--border)' : 'var(--neg)'}`,
-            borderRadius: 'var(--radius)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontSize: 13,
-          }}
+          className={cn(
+            'flex items-center justify-between rounded-[var(--radius)] border bg-[var(--surface)] px-[12px] py-[10px] text-[13px]',
+            isBalanced ? 'border-[var(--border)]' : 'border-[var(--neg)]'
+          )}
         >
-          <span style={{ color: 'var(--text-muted)' }}>Restante</span>
+          <span className="text-[var(--text-muted)]">Restante</span>
           <span
-            className="font-mono"
-            style={{
-              fontWeight: 600,
-              color: isBalanced
-                ? 'var(--text-muted)'
+            className={cn(
+              'font-mono font-semibold',
+              isBalanced
+                ? 'text-[var(--text-muted)]'
                 : remainingCents < 0
-                  ? 'var(--neg)'
-                  : 'var(--text)',
-            }}
+                  ? 'text-[var(--neg)]'
+                  : 'text-[var(--text)]'
+            )}
           >
             {remainingCents < 0 ? '−' : ''}
             {formatCurrency(Math.abs(remainingAmount), currency)}
