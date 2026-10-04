@@ -136,6 +136,82 @@ describe('ImportCSV', () => {
     })
   })
 
+  describe('copy and states (#204)', () => {
+    it('uses sentence case and the copy guide’s account names', () => {
+      render(<ImportCSV />)
+
+      expect(
+        screen.getByRole('heading', { name: 'Importar transacciones' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Tarjeta de crédito' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Cuenta USD' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Cuenta $U' })
+      ).toBeInTheDocument()
+    })
+
+    it('says "Importando…" while a valid file’s rows are being saved', async () => {
+      parseCSVMock.mockReturnValue(makeParsedData())
+      const onTransactionsImported = vi.fn(() => new Promise<never>(() => {}))
+      render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+
+      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+        target: {
+          files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+        },
+      })
+
+      expect(await screen.findByText('Importando…')).toBeInTheDocument()
+      expect(screen.queryByText(/Validando archivo/)).not.toBeInTheDocument()
+    })
+
+    it('titles a save failure "No se pudo importar", not a validation error', async () => {
+      parseCSVMock.mockReturnValue(makeParsedData())
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const onTransactionsImported = vi
+        .fn()
+        .mockRejectedValue(new Error('duplicate key value violates'))
+      render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+
+      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+        target: {
+          files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+        },
+      })
+
+      expect(await screen.findByText('No se pudo importar')).toBeInTheDocument()
+      expect(
+        screen.queryByText('Error al validar archivo')
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByText('No se pudo guardar la importación')
+      ).toBeInTheDocument()
+      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+    })
+
+    it('labels the account type of a successful import in sentence case', async () => {
+      parseCSVMock.mockReturnValue({
+        ...makeParsedData(),
+        fileType: 'credit_card',
+      })
+      addTransactionsMock.mockReturnValue({ added: [], duplicates: [] })
+      render(<ImportCSV />)
+
+      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+        target: {
+          files: [new File(['a,b'], 'card.csv', { type: 'text/csv' })],
+        },
+      })
+
+      await screen.findByText('Importación completada')
+      expect(screen.getAllByText('Tarjeta de crédito')).toHaveLength(2)
+    })
+  })
+
   it('rejects non-csv files before parsing', () => {
     render(<ImportCSV />)
 
@@ -322,7 +398,7 @@ describe('ImportCSV', () => {
       },
     })
 
-    expect(screen.getByText('Validando archivo...')).toBeInTheDocument()
+    expect(screen.getByText('Validando archivo…')).toBeInTheDocument()
 
     const reader = DeferredFileReaderMock.instances[0]
     await act(async () => {

@@ -259,6 +259,17 @@ describe('useAuthSession', () => {
       )
     })
 
+    it('asks for the email instead of requesting a reset without one (#204)', async () => {
+      const { result } = renderHook(() => useAuthSession())
+
+      await act(() => result.current.handlePasswordReset())
+
+      expect(auth.requestPasswordReset).not.toHaveBeenCalled()
+      expect(result.current.authNotice).toBe(
+        'Ingresá tu email para restablecer la contraseña'
+      )
+    })
+
     it('requests a reset email for the entered address', async () => {
       auth.requestPasswordReset.mockResolvedValue(undefined)
       const { result } = renderHook(() => useAuthSession())

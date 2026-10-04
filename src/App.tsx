@@ -268,7 +268,7 @@ function App() {
             </h2>
             <p className="text-sm text-muted-foreground">
               {authMode === 'reset'
-                ? 'Este cambio se aplica a tu cuenta de Supabase.'
+                ? 'Este cambio se aplica a tu cuenta de Tatú.'
                 : 'Tu información se guarda de forma segura en tu cuenta.'}
             </p>
           </div>
