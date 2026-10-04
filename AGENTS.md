@@ -66,7 +66,7 @@ src/
     CurrencyToggle.tsx     # Home-currency switch
     TransactionFilters.tsx # Unified filter bar (search, category, account, type, currency, date, amount)
     TransactionTable.tsx   # Transaction rows, selection, confidence meter, row actions
-    EditTransactionDialog.tsx  # Edit modal: description, category, apply-scope
+    EditTransactionDialog.tsx  # Edit modal: owns the draft (description, category, tags, apply-scope) + validation; emits it via one onSave
     BulkEditDialog.tsx     # Bulk categorization modal
     SplitTransactionDialog.tsx # Split one transaction into parts (see is_split_parent / split_parent_id)
     ConfirmDialog.tsx      # Shared confirmation modal
@@ -98,6 +98,7 @@ src/
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     charts/                # Chart data transformations; category-changes.ts feeds CategoryChangesCard
     currency/              # convert(amount, from, to, rate) + Currency type
+    suggestions/           # suggestions.ts: category/tag suggestion lists + search filters shared by the edit dialogs
     descriptions/          # Description override management
     transfers/             # Internal transfer detection
     ai/                    # Client-side Claude (BYO API key): categorization/enrichment; models.ts is the only place model IDs live
