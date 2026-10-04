@@ -10,6 +10,7 @@ vi.mock('../services/supabase/user-preferences', () => ({
 vi.mock('../services/ai/ai-config', () => ({ setAiConfig: vi.fn() }))
 
 import { useUserPreferences } from './useUserPreferences'
+import { DEFAULT_CATEGORIZATION_MODEL } from '../services/ai/models'
 
 function makeSession(userId: string): SupabaseSession {
   // New object identity each call — mirrors the session Supabase hands us on refocus.
@@ -53,5 +54,13 @@ describe('useUserPreferences', () => {
     })
 
     expect(saveUserPreferences).toHaveBeenCalledTimes(1)
+  })
+
+  it('starts with the shared default categorization model before preferences load', () => {
+    const { result } = renderHook(() => useUserPreferences(null))
+
+    expect(result.current.aiModel).toBe(DEFAULT_CATEGORIZATION_MODEL)
+    // Behavior unchanged: the default is still Haiku.
+    expect(result.current.aiModel).toBe('claude-haiku-4-5')
   })
 })

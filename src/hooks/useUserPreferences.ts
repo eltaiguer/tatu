@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import type { SupabaseSession } from '../services/supabase/client'
 import { saveUserPreferences } from '../services/supabase/user-preferences'
 import { setAiConfig } from '../services/ai/ai-config'
+import { DEFAULT_CATEGORIZATION_MODEL } from '../services/ai/models'
 
 export function useUserPreferences(session: SupabaseSession | null) {
   const prefsLoadedRef = useRef(false)
@@ -17,7 +18,7 @@ export function useUserPreferences(session: SupabaseSession | null) {
   const [fxRate, setFxRate] = useState<number>(40.5)
   const [claudeApiKey, setClaudeApiKey] = useState<string>('')
   const [aiEnabled, setAiEnabled] = useState<boolean>(false)
-  const [aiModel, setAiModel] = useState<string>('claude-haiku-4-5')
+  const [aiModel, setAiModel] = useState<string>(DEFAULT_CATEGORIZATION_MODEL)
 
   // Listen for system color-scheme changes (used when theme === 'auto')
   useEffect(() => {
