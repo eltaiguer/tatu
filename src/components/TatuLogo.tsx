@@ -15,7 +15,7 @@ export function TatuLogo({ size = 'md', showText = true }: TatuLogoProps) {
           height: tileSize,
           borderRadius: 10,
           background: 'var(--brand)',
-          color: '#fff',
+          color: 'var(--primary-foreground)',
           display: 'grid',
           placeItems: 'center',
           flexShrink: 0,

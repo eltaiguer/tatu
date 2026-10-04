@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { pathForView, titleForView, viewFromPath } from './routes'
+import { normalizeCategoryId } from './services/categories/category-aliases'
 import {
   filterToSearch,
   parseFilterParams,
@@ -126,6 +127,17 @@ function App() {
 
   // Get transactions from store
   const transactions = useStore(transactionStore, (state) => state.transactions)
+
+  // Same rows Categorías' "Sin categoría" counts and its link opens.
+  const uncategorizedCount = useMemo(
+    () =>
+      transactions.filter(
+        (tx) =>
+          !tx.isSplitParent &&
+          normalizeCategoryId(tx.category) === 'uncategorized'
+      ).length,
+    [transactions]
+  )
 
   const {
     theme,
@@ -311,7 +323,7 @@ function App() {
           void handleSignOut()
         }}
         session={session}
-        txCount={transactions.length}
+        uncategorizedCount={uncategorizedCount}
         supabaseEnabled={true}
       />
 
@@ -345,7 +357,7 @@ function App() {
               setMobileMenuOpen(false)
             }}
             session={session}
-            txCount={transactions.length}
+            uncategorizedCount={uncategorizedCount}
             supabaseEnabled={true}
           />
         </SheetContent>

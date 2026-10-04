@@ -19,7 +19,13 @@ export type View =
 
 interface NavGroup {
   label: string
-  items: { id: View; label: string; icon: React.ElementType; count?: number }[]
+  items: {
+    id: View
+    label: string
+    icon: React.ElementType
+    count?: number
+    countTitle?: string
+  }[]
 }
 
 interface AppSidebarProps {
@@ -28,7 +34,8 @@ interface AppSidebarProps {
   onImport: () => void
   onSignOut: () => void
   session: SupabaseSession | null
-  txCount: number
+  // Transactions without a category (shown as a badge on Transacciones).
+  uncategorizedCount: number
   supabaseEnabled: boolean
 }
 
@@ -44,7 +51,7 @@ export function BrandMark() {
         height: 34,
         borderRadius: 10,
         background: 'var(--brand)',
-        color: '#fff',
+        color: 'var(--primary-foreground)',
         display: 'grid',
         placeItems: 'center',
         flexShrink: 0,
@@ -83,7 +90,7 @@ export function SidebarInner({
   onImport,
   onSignOut,
   session,
-  txCount,
+  uncategorizedCount,
   supabaseEnabled,
   onClose,
 }: SidebarInnerProps) {
@@ -96,7 +103,8 @@ export function SidebarInner({
           id: 'transactions',
           label: 'Transacciones',
           icon: ListFilter,
-          count: txCount > 0 ? txCount : undefined,
+          count: uncategorizedCount > 0 ? uncategorizedCount : undefined,
+          countTitle: `${uncategorizedCount} sin categoría`,
         },
         { id: 'insights', label: 'Insights', icon: Sparkles },
       ],
@@ -176,7 +184,7 @@ export function SidebarInner({
           width: '100%',
           padding: '11px 14px',
           background: 'var(--brand)',
-          color: '#fff',
+          color: 'var(--primary-foreground)',
           border: 'none',
           borderRadius: 'var(--radius-md)',
           fontFamily: 'var(--font-sans)',
@@ -296,6 +304,7 @@ export function SidebarInner({
                 {item.count != null && (
                   <span
                     aria-hidden="true"
+                    title={item.countTitle}
                     style={{
                       fontSize: 11,
                       fontFamily: 'var(--font-mono)',
