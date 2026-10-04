@@ -3,24 +3,28 @@ interface TatuLogoProps {
   showText?: boolean
 }
 
+// Literal class names so Tailwind can see them. Tile: 24 / 34 / 48px;
+// wordmark: 18 / 22 / 30px. Keep in sync with `tileSize` below (the svg
+// icon is sized from it).
+const TILE_SIZE_CLASSES: Record<NonNullable<TatuLogoProps['size']>, string> = {
+  sm: 'h-[24px] w-[24px]',
+  md: 'h-[34px] w-[34px]',
+  lg: 'h-[48px] w-[48px]',
+}
+const TEXT_SIZE_CLASSES: Record<NonNullable<TatuLogoProps['size']>, string> = {
+  sm: 'text-[18px]',
+  md: 'text-[22px]',
+  lg: 'text-[30px]',
+}
+
 export function TatuLogo({ size = 'md', showText = true }: TatuLogoProps) {
   const tileSize = size === 'sm' ? 24 : size === 'lg' ? 48 : 34
   const iconSize = tileSize * 0.65
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <div className="flex items-center gap-[10px]">
       <span
-        style={{
-          width: tileSize,
-          height: tileSize,
-          borderRadius: 10,
-          background: 'var(--brand)',
-          color: 'var(--primary-foreground)',
-          display: 'grid',
-          placeItems: 'center',
-          flexShrink: 0,
-          boxShadow: 'var(--shadow-sm)',
-        }}
+        className={`grid shrink-0 place-items-center rounded-[10px] bg-[var(--brand)] text-[var(--primary-foreground)] shadow-[var(--shadow-sm)] ${TILE_SIZE_CLASSES[size]}`}
       >
         <svg
           width={iconSize}
@@ -47,12 +51,7 @@ export function TatuLogo({ size = 'md', showText = true }: TatuLogoProps) {
       </span>
       {showText && (
         <span
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: size === 'sm' ? 18 : size === 'lg' ? 30 : 22,
-            fontWeight: 600,
-            letterSpacing: '-0.02em',
-          }}
+          className={`font-[family-name:var(--font-display)] font-semibold tracking-[-0.02em] ${TEXT_SIZE_CLASSES[size]}`}
         >
           Tatú
         </span>

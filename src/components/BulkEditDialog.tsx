@@ -114,8 +114,7 @@ export function BulkEditDialog({
                       placeholder="Buscar categoría..."
                     />
                     <div
-                      className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2"
-                      style={{ WebkitOverflowScrolling: 'touch' }}
+                      className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2 [-webkit-overflow-scrolling:touch]"
                       onWheel={(event) => event.stopPropagation()}
                       onTouchMove={(event) => event.stopPropagation()}
                     >
@@ -180,8 +179,7 @@ export function BulkEditDialog({
                       placeholder="Buscar o crear etiqueta..."
                     />
                     <div
-                      className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2"
-                      style={{ WebkitOverflowScrolling: 'touch' }}
+                      className="max-h-44 overflow-y-auto overscroll-contain space-y-1 pr-2 [-webkit-overflow-scrolling:touch]"
                       onWheel={(event) => event.stopPropagation()}
                       onTouchMove={(event) => event.stopPropagation()}
                     >

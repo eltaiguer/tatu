@@ -2,6 +2,9 @@ interface ConfidenceBadgeProps {
   confidence: number
 }
 
+// Literal class names so Tailwind can see them (8px / 11px / 14px bars).
+const BAR_HEIGHTS = ['h-[8px]', 'h-[11px]', 'h-[14px]']
+
 export function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
   if (!confidence) return null
 
@@ -18,17 +21,13 @@ export function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
   return (
     <span
       title={`Confianza ${level} · ${Math.round(confidence * 100)}%`}
-      style={{ display: 'inline-flex', gap: 2, alignItems: 'flex-end' }}
+      className="inline-flex items-end gap-[2px]"
     >
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          style={{
-            width: 4,
-            height: [8, 11, 14][i],
-            borderRadius: 2,
-            background: filled > i ? color : 'var(--surface-3)',
-          }}
+          className={`w-[4px] rounded-[2px] ${BAR_HEIGHTS[i]}`}
+          style={{ background: filled > i ? color : 'var(--surface-3)' }}
         />
       ))}
     </span>

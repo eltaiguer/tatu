@@ -331,9 +331,7 @@ function App() {
   }
 
   return (
-    <div
-      style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}
-    >
+    <div className="flex min-h-[100vh] bg-[var(--bg)]">
       {/* Sidebar (desktop only — hidden on mobile via CSS) */}
       <AppSidebar
         view={currentView}
@@ -351,12 +349,7 @@ function App() {
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
         <SheetContent
           side="left"
-          style={{
-            padding: 0,
-            width: 'min(288px, 85vw)',
-            background: 'var(--surface)',
-            borderRight: '1px solid var(--border)',
-          }}
+          className="w-[min(288px,85vw)] border-r border-r-[var(--border)] bg-[var(--surface)] p-0"
         >
           <SheetTitle className="sr-only">Menú de navegación</SheetTitle>
           <SheetDescription className="sr-only">
@@ -384,75 +377,30 @@ function App() {
       </Sheet>
 
       {/* Main content */}
-      <main
-        style={{
-          flex: 1,
-          minWidth: 0,
-          marginLeft: 'var(--sidebar-w, 252px)',
-        }}
-      >
+      <main className="ml-[var(--sidebar-w,252px)] min-w-0 flex-1">
         {/* Mobile sticky header */}
-        <header
-          className="md:hidden sticky top-0 z-40 flex items-center gap-3"
-          style={{
-            height: 56,
-            padding: '0 16px',
-            background: 'var(--surface)',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
+        <header className="md:hidden sticky top-0 z-40 flex items-center gap-3 h-[56px] px-[16px] py-0 bg-[var(--surface)] border-b border-b-[var(--border)]">
           <button
             onClick={() => setMobileMenuOpen(true)}
             aria-label="Abrir menú"
             aria-expanded={mobileMenuOpen}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'var(--text-muted)',
-              display: 'grid',
-              placeItems: 'center',
-              padding: 8,
-              borderRadius: 8,
-              flexShrink: 0,
-            }}
+            className="grid shrink-0 cursor-pointer place-items-center rounded-[8px] border-none bg-transparent bg-none p-[8px] text-[var(--text-muted)]"
           >
             <Menu size={20} />
           </button>
-          <span
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 20,
-              fontWeight: 600,
-              letterSpacing: '-0.02em',
-            }}
-          >
+          <span className="font-[family-name:var(--font-display)] text-[20px] font-semibold tracking-[-0.02em]">
             Tatú
           </span>
         </header>
 
-        <div
-          className="px-4 pt-5 pb-20 md:px-11 md:pt-10"
-          style={{
-            maxWidth: 1180,
-            margin: '0 auto',
-          }}
-        >
+        <div className="px-4 pt-5 pb-20 md:px-11 md:pt-10 max-w-[1180px] mx-auto my-0">
           {authError && (
-            <p
-              className="text-sm mb-4"
-              style={{ color: 'var(--neg)' }}
-              role="alert"
-            >
+            <p className="text-sm mb-4 text-[var(--neg)]" role="alert">
               {authError}
             </p>
           )}
           {authNotice && (
-            <p
-              className="text-sm mb-4"
-              style={{ color: 'var(--text-muted)' }}
-              role="status"
-            >
+            <p className="text-sm mb-4 text-[var(--text-muted)]" role="status">
               {authNotice}
             </p>
           )}
@@ -500,40 +448,13 @@ function App() {
                 )}
                 {currentView === 'transactions' &&
                   transactions.length === 0 && (
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minHeight: 320,
-                        gap: 16,
-                        padding: '48px 24px',
-                        textAlign: 'center',
-                      }}
-                    >
-                      <Upload
-                        size={40}
-                        style={{ color: 'var(--text-faint)' }}
-                      />
+                    <div className="flex min-h-[320px] flex-col items-center justify-center gap-[16px] px-[24px] py-[48px] text-center">
+                      <Upload size={40} className="text-[var(--text-faint)]" />
                       <div>
-                        <p
-                          style={{
-                            fontSize: 16,
-                            fontWeight: 600,
-                            marginBottom: 6,
-                          }}
-                        >
+                        <p className="mb-[6px] text-[16px] font-semibold">
                           No hay transacciones
                         </p>
-                        <p
-                          style={{
-                            fontSize: 14,
-                            color: 'var(--text-muted)',
-                            maxWidth: 280,
-                            margin: '0 auto',
-                          }}
-                        >
+                        <p className="mx-auto my-0 max-w-[280px] text-[14px] text-[var(--text-muted)]">
                           Importá tu primer extracto CSV de Santander para
                           empezar a ver tus movimientos.
                         </p>
@@ -624,14 +545,7 @@ function App() {
           if (!open) setImportOpen(false)
         }}
       >
-        <DialogContent
-          style={{
-            maxWidth: 680,
-            padding: 0,
-            overflowX: 'hidden',
-            borderRadius: 'var(--radius-lg)',
-          }}
-        >
+        <DialogContent className="max-w-[680px]! overflow-x-hidden rounded-[var(--radius-lg)]! p-0">
           <DialogTitle className="sr-only">Importar archivo CSV</DialogTitle>
           <DialogDescription className="sr-only">
             Arrastrá o seleccioná un archivo CSV de Santander Uruguay para
