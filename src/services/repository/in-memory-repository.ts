@@ -23,6 +23,8 @@ import {
   type WriteOutcome,
 } from './repository'
 
+const CANDIDATE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
+
 /** Operations a test can make fail or pause. */
 export type InMemoryOp =
   | 'load'
@@ -225,15 +227,22 @@ export function createInMemoryRepository(
 
     async findImportCandidates(incoming): Promise<ExistingTransaction[]> {
       await request('findImportCandidates')
-      // Broader than Supabase's date window, which only ever narrows what
-      // dedup sees: every row of the file's sources, plus any id it holds.
+      // As Supabase: any row holding an incoming id, plus the non-part rows
+      // of the file's sources dated within its range ± 2 days.
+      if (incoming.length === 0) return []
       const sources = new Set(incoming.map((tx) => tx.source))
       const ids = new Set(incoming.map((tx) => tx.id))
+      const times = incoming.map((tx) => tx.date.getTime())
+      const from = Math.min(...times) - CANDIDATE_WINDOW_MS
+      const to = Math.max(...times) + CANDIDATE_WINDOW_MS
       return Array.from(table.values())
         .filter(
           (r) =>
             ids.has(r.tx.id) ||
-            (sources.has(r.tx.source) && !r.tx.splitParentId)
+            (sources.has(r.tx.source) &&
+              !r.tx.splitParentId &&
+              r.tx.date.getTime() >= from &&
+              r.tx.date.getTime() <= to)
         )
         .map((r) => ({ tx: clone(r.tx), deleted: r.deleted }))
     },

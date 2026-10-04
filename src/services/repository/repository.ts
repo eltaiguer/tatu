@@ -4,6 +4,7 @@
 // `in-memory-repository.ts` (tests). Batching — how a large write is cut
 // into requests — is the adapters' concern (`batching.ts`), not the callers'.
 import type { Transaction } from '../../models'
+import { UserFacingError } from '../../utils/user-error'
 import type { ExistingTransaction } from '../dedup/import-dedup'
 import type { CategoryOverrideRecord } from '../supabase/category-overrides'
 import type { DescriptionOverrideRecord } from '../supabase/description-overrides'
@@ -81,6 +82,18 @@ export type ImportFileType =
   | 'credit_card'
   | 'bank_account_usd'
   | 'bank_account_uyu'
+
+export const SESSION_ENDED_MESSAGE =
+  'Tu sesión terminó. Iniciá sesión de nuevo para guardar cambios.'
+
+/**
+ * The one contract for a write without a signed-in user: it is refused, the
+ * same way everywhere.
+ */
+export function requireRepository<R>(repository: R | null | undefined): R {
+  if (!repository) throw new UserFacingError(SESSION_ENDED_MESSAGE)
+  return repository
+}
 
 /** A split refused because the parent was split or deleted elsewhere. */
 export const SPLIT_CONFLICT_MESSAGE =

@@ -2,7 +2,7 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import type { Transaction } from '../models'
-import type { SplitPart } from '../services/supabase/transactions'
+import type { SplitPart } from '../services/mutations/transaction-mutations'
 import {
   addCustomCategory,
   replaceCustomCategories,

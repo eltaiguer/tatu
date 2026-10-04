@@ -11,23 +11,19 @@ import { Toaster } from 'sonner'
 import { Transactions } from './Transactions'
 import { ITEMS_PER_PAGE } from '../hooks/useTransactionFiltering'
 import type { Transaction } from '../models'
-import { NeedsConfirmationError } from '../utils/user-error'
+import { NeedsConfirmationError, PartialWriteError } from '../utils/user-error'
 import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
 import { captureCsvDownload } from '../test/csv-download'
+import { createInMemoryRepository } from '../services/repository/in-memory-repository'
+import { workspaceStore } from '../stores/workspace-state'
 
-// Category and rule changes are saved to Supabase before they count; give
-// these view tests a signed-in session and a server that accepts writes.
-vi.mock('../services/supabase/runtime', () => ({
-  getActiveSupabaseSession: () => ({ user: { id: 'user-1' } }),
-}))
-vi.mock('../services/supabase/custom-categories', () => ({
-  upsertCustomCategory: vi.fn().mockResolvedValue(undefined),
-  archiveCustomCategory: vi.fn().mockResolvedValue(undefined),
-}))
-vi.mock('../services/supabase/custom-patterns', () => ({
-  upsertCustomPattern: vi.fn().mockResolvedValue(undefined),
-  deleteCustomPattern: vi.fn().mockResolvedValue(undefined),
-}))
+// A category created inline is saved before it can be picked; tests that do
+// that get a signed-in user whose (in-memory) server accepts writes.
+function signedInRepository() {
+  const repo = createInMemoryRepository()
+  workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+  return repo
+}
 
 function makeTransaction(index: number, description?: string): Transaction {
   return {
@@ -464,6 +460,7 @@ describe('Transactions', () => {
       <Transactions
         transactions={transactions}
         onUpdateTransaction={onUpdateTransaction}
+        repository={signedInRepository()}
       />
     )
 
@@ -622,7 +619,7 @@ describe('Transactions', () => {
     await waitFor(() =>
       expect(onUpdateTransaction).toHaveBeenCalledWith('tx-1', {
         displayDescription: 'Devoto',
-        category: undefined,
+        category: null,
         tags: [],
         applyScope: 'matching_past_and_future',
       })
@@ -653,7 +650,7 @@ describe('Transactions', () => {
     await waitFor(() =>
       expect(onUpdateTransaction).toHaveBeenCalledWith('tx-1', {
         displayDescription: 'Devoto',
-        category: undefined,
+        category: null,
         tags: [],
         applyScope: 'future_matching_only',
       })
@@ -926,6 +923,76 @@ describe('Transactions', () => {
     expect(await screen.findByText('2 transacciones eliminadas')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
     expect(onRestoreTransactions).toHaveBeenCalledWith([a, b])
+  })
+
+  it('reports a partial bulk edit with how many saved, and retries only the rest', async () => {
+    const retry = vi.fn().mockResolvedValue({ updated: 1 })
+    const onBulkCategorize = vi
+      .fn()
+      .mockRejectedValue(
+        new PartialWriteError('Se actualizaron 247 de 300', 247, 300, retry)
+      )
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'Merchant A')]}
+          onBulkCategorize={onBulkCategorize}
+          onReload={vi.fn()}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Ignorar$/ }))
+
+    expect(
+      await screen.findByText('Se actualizaron 247 de 300 — reintentar')
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('Cambios guardados')).toBeTruthy()
+  })
+
+  it('keeps undo for the rows a partial delete did remove', async () => {
+    const a = makeTransaction(1, 'Merchant A')
+    const b = makeTransaction(2, 'Merchant B')
+    const onBulkDelete = vi.fn().mockRejectedValue(
+      new PartialWriteError('Se eliminaron 1 de 2', 1, 2, vi.fn(), {
+        removed: [a],
+        reversible: true,
+      })
+    )
+    const onRestoreTransactions = vi.fn().mockResolvedValue({ restored: 1 })
+
+    render(
+      <>
+        <Transactions
+          transactions={[a, b]}
+          onBulkDelete={onBulkDelete}
+          onRestoreTransactions={onRestoreTransactions}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
+    )
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant B' })[0]
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
+
+    expect(
+      await screen.findByText('Se eliminaron 1 de 2 — reintentar')
+    ).toBeTruthy()
+    expect(await screen.findByText('1 transacción eliminada')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+    expect(onRestoreTransactions).toHaveBeenCalledWith([a])
   })
 
   it('does not bulk delete when an irreversible delete is not confirmed', async () => {

@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
-import { NeedsConfirmationError, userErrorMessage } from '../utils/user-error'
+import {
+  NeedsConfirmationError,
+  PartialWriteError,
+  userErrorMessage,
+} from '../utils/user-error'
+import {
+  requireRepository,
+  type Repository,
+} from '../services/repository/repository'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import {
   Calendar,
@@ -599,6 +607,14 @@ function BulkBar({
 
 type DeleteResult = { removed: Transaction[]; reversible: boolean }
 
+function isDeleteResult(value: unknown): value is DeleteResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as DeleteResult).removed)
+  )
+}
+
 // "1 transacción eliminada" / "3 transacciones eliminadas" from a stem.
 function txDone(count: number, participleStem: string): string {
   return count === 1
@@ -622,7 +638,8 @@ interface BaseTransactionsProps {
     transactionId: string,
     updates: {
       displayDescription?: string
-      category?: string
+      // null clears it ("Sin categoría"); absent leaves it alone.
+      category?: string | null
       tags?: string[]
       applyScope: 'single' | 'matching_past_and_future' | 'future_matching_only'
     }
@@ -645,6 +662,8 @@ interface BaseTransactionsProps {
   onUnsplitTransaction?: (transactionId: string) => Promise<void>
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void
+  // The signed-in user's repository: a category created inline saves there.
+  repository?: Repository | null
 }
 
 // Deleting offers "Deshacer", so whoever wires a delete handler must also
@@ -687,6 +706,7 @@ export function Transactions({
   onUnsplitTransaction,
   onRestoreTransactions,
   onReload,
+  repository,
 }: TransactionsProps) {
   /* ---- Period state ---- */
   const [period, setPeriod] = useState<Period>(() => {
@@ -828,6 +848,33 @@ export function Transactions({
   }
 
   function reportError(error: unknown, fallback: string) {
+    // Some rows saved and are already shown (#60): say how many, offer to
+    // retry just the rest, and keep the undo for what a delete did remove.
+    if (error instanceof PartialWriteError) {
+      if (isDeleteResult(error.result) && error.result.removed.length > 0) {
+        reportDeleted(error.result)
+      }
+      const retry = error.retry
+      toast.error(
+        retry ? `${error.message} — reintentar` : error.message,
+        retry
+          ? {
+              action: {
+                label: 'Reintentar',
+                onClick: () => {
+                  retry().then(
+                    () => toast.success('Cambios guardados'),
+                    (retryError: unknown) => reportError(retryError, fallback)
+                  )
+                },
+              },
+            }
+          : onReload
+            ? { action: { label: 'Recargar', onClick: onReload } }
+            : {}
+      )
+      return
+    }
     toast.error(
       userErrorMessage(error, fallback),
       onReload ? { action: { label: 'Recargar', onClick: onReload } } : {}
@@ -1002,11 +1049,14 @@ export function Transactions({
     const value = newCategoryInput.trim()
     if (!value) return
     try {
-      const created = await addCustomCategoryWithSync({
-        label: value,
-        color: DEFAULT_CATEGORY_COLOR,
-        icon: '🏷️',
-      })
+      const created = await addCustomCategoryWithSync(
+        requireRepository(repository),
+        {
+          label: value,
+          color: DEFAULT_CATEGORY_COLOR,
+          icon: '🏷️',
+        }
+      )
       setEditCategory(created.id)
       setNewCategoryInput('')
     } catch (error) {
@@ -1041,7 +1091,7 @@ export function Transactions({
     try {
       const { affected } = await onUpdateTransaction(editingId, {
         displayDescription: trimmedDescription,
-        category: editCategory.trim() || undefined,
+        category: editCategory.trim() || null,
         tags: editTagList,
         applyScope,
       })

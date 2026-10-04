@@ -35,6 +35,10 @@ import {
   type CustomPattern,
   type MatchType,
 } from '../services/categorizer/custom-patterns'
+import {
+  requireRepository,
+  type Repository,
+} from '../services/repository/repository'
 
 interface CategoriesProps {
   transactions: Transaction[]
@@ -46,6 +50,8 @@ interface CategoriesProps {
   onApplyPatternToPast?: (
     pattern: CustomPattern
   ) => Promise<{ updated: number; failed: number }>
+  // The signed-in user's repository: rules and categories save through it.
+  repository?: Repository | null
 }
 
 function getCategoryTransactionCount(
@@ -66,6 +72,7 @@ export function Categories({
   fxRate = 40.5,
   onNavigateToTransactions,
   onApplyPatternToPast,
+  repository,
 }: CategoriesProps) {
   const [categoriesVersion, setCategoriesVersion] = useState(0)
   const [showForm, setShowForm] = useState(false)
@@ -136,23 +143,31 @@ export function Categories({
       if (isEditing) {
         const cat = categoryDefinitions.find((c) => c.id === form.id)
         if (cat?.isCustom) {
-          await updateCustomCategoryWithSync(form.id, {
-            label,
-            color: form.color,
-            icon: form.icon.trim() || '🏷️',
-            isIgnored: form.isIgnored,
-          })
+          await updateCustomCategoryWithSync(
+            requireRepository(repository),
+            form.id,
+            {
+              label,
+              color: form.color,
+              icon: form.icon.trim() || '🏷️',
+              isIgnored: form.isIgnored,
+            }
+          )
         } else {
-          await upsertBuiltinOverrideWithSync(form.id, {
-            label,
-            color: form.color,
-            icon: form.icon.trim() || undefined,
-            isIgnored: form.isIgnored,
-          })
+          await upsertBuiltinOverrideWithSync(
+            requireRepository(repository),
+            form.id,
+            {
+              label,
+              color: form.color,
+              icon: form.icon.trim() || undefined,
+              isIgnored: form.isIgnored,
+            }
+          )
         }
         toast.success(`Categoría "${label}" guardada`)
       } else {
-        await addCustomCategoryWithSync({
+        await addCustomCategoryWithSync(requireRepository(repository), {
           label,
           color: form.color,
           icon: form.icon.trim() || '🏷️',
@@ -171,7 +186,10 @@ export function Categories({
   async function handleDelete(categoryId: string) {
     const label = getCategoryDisplay(categoryId).label
     try {
-      await removeCustomCategoryWithSync(categoryId)
+      await removeCustomCategoryWithSync(
+        requireRepository(repository),
+        categoryId
+      )
       if (form.id === categoryId) resetForm()
       toast.success(`Categoría "${label}" eliminada`)
     } catch (error) {
@@ -185,7 +203,7 @@ export function Categories({
     if (!patternForm.pattern.trim()) return
     let created: CustomPattern
     try {
-      created = await addCustomPatternWithSync({
+      created = await addCustomPatternWithSync(requireRepository(repository), {
         pattern: patternForm.pattern,
         matchType: patternForm.matchType,
         category: patternForm.category,
@@ -232,7 +250,7 @@ export function Categories({
 
   async function handleRemovePattern(id: string) {
     try {
-      await removeCustomPatternWithSync(id)
+      await removeCustomPatternWithSync(requireRepository(repository), id)
       toast.success('Regla eliminada')
     } catch (error) {
       toast.error(userErrorMessage(error, 'No se pudo eliminar la regla'))
