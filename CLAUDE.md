@@ -98,6 +98,7 @@ src/
   App.tsx / main.tsx       # Shell (auth, sync, view switch) / BrowserRouter mount
   routes.ts                # View <-> URL path + document title
   lazy-views.tsx           # The five views as lazy chunks (retryable, preloadViews)
+  router-future.ts         # React Router v7 future flags (app + test routers)
   models/                  # TypeScript interfaces + Category enum
   stores/                  # Zustand store (transaction-store, in-memory only)
   index.css                # CSS entry (imported by main.tsx): fonts → tailwind → theme
@@ -107,7 +108,7 @@ src/
     theme.css              # CSS custom properties — light + dark tokens
                            # Other files here (incl. styles/index.css) are NOT imported — editing them does nothing
   utils/                   # date-utils, formatting, category-display, memo, transaction-display, user-display, user-error, auth-errors
-  test/                    # Vitest setup
+  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test)
 supabase/
   schema.sql               # PostgreSQL schema (tables, RLS policies)
 samples/                   # Example Santander CSV files for testing
