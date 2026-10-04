@@ -635,7 +635,8 @@ describe('Dashboard', () => {
       fireEvent.click(
         screen.getByRole('button', { name: 'Ver los gastos en Alquiler' })
       )
-      expect(go).toHaveBeenCalledWith({ merchant: 'Alquiler', type: 'debit' })
+      // The merchant key, which Transacciones matches rows on.
+      expect(go).toHaveBeenCalledWith({ merchant: 'alquiler', type: 'debit' })
     })
 
     it("account card → that account's expenses", () => {

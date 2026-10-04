@@ -915,25 +915,30 @@ describe('App', () => {
   })
 
   it('opens exactly a merchant\'s rows from "Mayores comercios"', async () => {
+    // One merchant under two auth codes (merged by the merchant key, #120)
+    // and a different merchant sharing its first word.
     loadUserTransactionsMock.mockResolvedValue([
-      tx('a', '2026-03-10T12:00:00.000Z', 'UBER', 'transport'),
-      tx('b', '2026-03-11T12:00:00.000Z', 'UBER', 'transport'),
+      tx('a', '2026-03-10T12:00:00.000Z', 'UBER 1234TT56', 'transport'),
+      tx('b', '2026-03-11T12:00:00.000Z', 'UBER 7890TT12', 'transport'),
       tx('c', '2026-03-12T12:00:00.000Z', 'UBER EATS', 'restaurants'),
     ])
     renderApp('/')
 
+    // Labelled by its most recent variant.
     fireEvent.click(
-      await screen.findByRole('button', { name: 'Ver los gastos en UBER' })
+      await screen.findByRole('button', {
+        name: 'Ver los gastos en UBER 7890TT12',
+      })
     )
 
     await waitFor(() =>
       expect(currentUrl()).toBe(
-        '/transacciones?comercio=UBER&tipo=debit&periodo=todo'
+        '/transacciones?comercio=uber&tipo=debit&periodo=todo'
       )
     )
     expect(
       await screen.findByRole('button', {
-        name: 'Quitar filtro de comercio UBER',
+        name: 'Quitar filtro de comercio UBER 7890TT12',
       })
     ).toBeInTheDocument()
     expect(screen.queryByText('UBER EATS')).not.toBeInTheDocument()

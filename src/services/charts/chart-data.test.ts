@@ -7,6 +7,7 @@ import {
   spendByAccount,
   summarizeSavings,
   niceTicks,
+  buildMerchantSpendingConverted,
 } from './chart-data'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
@@ -613,5 +614,104 @@ describe('niceTicks', () => {
 
   it('returns just zero when there is no range', () => {
     expect(niceTicks(0, 0)).toEqual([0])
+  })
+})
+
+describe('buildMerchantSpendingConverted', () => {
+  function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
+    return {
+      id,
+      date: new Date('2025-01-15T00:00:00.000Z'),
+      description: `tx-${id}`,
+      amount: 10,
+      currency: 'USD',
+      type: 'debit',
+      source: 'credit_card',
+      category: Category.Entertainment,
+      rawData: {},
+      ...overrides,
+    }
+  }
+
+  it('merges the noisy variants of one merchant and sums them in the home currency', () => {
+    const result = buildMerchantSpendingConverted(
+      [
+        tx('1', { description: 'NETFLIX.COM 1234TT56', amount: 10 }),
+        tx('2', {
+          description: 'NETFLIX.COM 7890TT12',
+          amount: 400,
+          currency: 'UYU',
+        }),
+        tx('3', {
+          description: 'NETFLIX.COM, MONTEVIDEO',
+          amount: 10,
+          date: new Date('2025-03-15T00:00:00.000Z'),
+          category: Category.Shopping,
+        }),
+        tx('4', { description: 'SPOTIFY P3D110F721', amount: 5 }),
+      ],
+      'USD',
+      40
+    )
+
+    expect(result).toEqual([
+      {
+        key: 'netflix.com',
+        label: 'NETFLIX.COM, MONTEVIDEO',
+        total: 30,
+        count: 3,
+        // The most recent row's category.
+        categoryId: Category.Shopping,
+      },
+      {
+        key: 'spotify',
+        label: 'SPOTIFY P3D110F721',
+        total: 5,
+        count: 1,
+        categoryId: Category.Entertainment,
+      },
+    ])
+  })
+
+  it('counts only expenses that count toward totals', () => {
+    const result = buildMerchantSpendingConverted(
+      [
+        tx('1', { description: 'SHOP', amount: 10 }),
+        tx('2', { description: 'SHOP', amount: 99, type: 'credit' }),
+        tx('3', { description: 'SHOP', amount: 99, category: 'transfer' }),
+        tx('4', { description: 'SHOP', amount: 99, isSplitParent: true }),
+      ],
+      'USD',
+      40
+    )
+
+    expect(result).toEqual([
+      expect.objectContaining({ key: 'shop', total: 10, count: 1 }),
+    ])
+  })
+
+  it('orders equal totals the same whatever the input order', () => {
+    const a = tx('1', { description: 'ZETA' })
+    const b = tx('2', { description: 'ALFA' })
+    const keys = (rows: Transaction[]) =>
+      buildMerchantSpendingConverted(rows, 'USD', 40).map((m) => m.key)
+
+    expect(keys([a, b])).toEqual(['alfa', 'zeta'])
+    expect(keys([b, a])).toEqual(['alfa', 'zeta'])
+  })
+
+  it('groups renamed rows under the rename', () => {
+    const result = buildMerchantSpendingConverted(
+      [
+        tx('1', { description: 'UBER *TRIP 1', displayDescription: 'Uber' }),
+        tx('2', { description: 'UBER BV 2', displayDescription: 'Uber' }),
+      ],
+      'USD',
+      40
+    )
+
+    expect(result).toEqual([
+      expect.objectContaining({ key: 'uber', label: 'Uber', count: 2 }),
+    ])
   })
 })

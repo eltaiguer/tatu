@@ -229,14 +229,14 @@ All conversion happens in the browser, at render or aggregation time, with
 `rate` means 1 USD = `rate` UYU. Stored amounts are always native: positive
 `amount` plus `currency`. Nothing converted is persisted.
 
-| Caller                                                                                                                                                | What it converts                                               |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `buildCurrencySplit`, `spendByAccount`) | Resumen totals, charts and account cards, in the home currency |
-| `category-changes.ts` (`categoryChanges`)                                                                                                             | "Qué cambió" month comparisons and its US$ 10 noise floor      |
-| `insight-data.ts` (`buildInsightInput`)                                                                                                               | Every number handed to the Insights model, rounded to cents    |
-| `Dashboard.tsx`                                                                                                                                       | Merchant totals and recent rows                                |
-| `Transactions.tsx`                                                                                                                                    | Filtered-set totals                                            |
-| `TransactionTable.tsx`                                                                                                                                | The faint `≈` converted amount next to a native one            |
+| Caller                                                                                                                                                                                  | What it converts                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `buildCurrencySplit`, `spendByAccount`, `buildMerchantSpendingConverted`) | Resumen totals, charts, account cards and "Mayores comercios" (also Insights' `topMerchants`), in the home currency |
+| `category-changes.ts` (`categoryChanges`)                                                                                                                                               | "Qué cambió" month comparisons and its US$ 10 noise floor                                                           |
+| `insight-data.ts` (`buildInsightInput`)                                                                                                                                                 | Every number handed to the Insights model, rounded to cents                                                         |
+| `Dashboard.tsx`                                                                                                                                                                         | Recent rows                                                                                                         |
+| `Transactions.tsx`                                                                                                                                                                      | Filtered-set totals                                                                                                 |
+| `TransactionTable.tsx`                                                                                                                                                                  | The faint `≈` converted amount next to a native one                                                                 |
 
 The home currency (`preferredCurrency` from `useUserWorkspace`, passed down as
 `homeCurrency`) and `fxRate` (default 40.5) come from `user_preferences`.
@@ -253,7 +253,31 @@ clicks equals the sum of the rows it opens. Callers never re-derive it from
 | `countsAsRow`                          | Every row except a split parent (an inert container its parts stand for). Ignored-category rows still count as rows.                    | Lists and row counts: `useTransactionFiltering`, Categorías counts and rule matches, the "Sin categoría" badge, `needsCategoryReview`, "Qué cambió" account coverage |
 | `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`isCategoryIgnored`: transfers, the legacy `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                             |
 | `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                          | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                                 |
-| `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                      | The Transacciones totals strip                                                                                                                                       |
+| `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                      | The Transacciones totals strip, each month of `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`                                                              |
+
+## Merchant key
+
+`src/services/merchants/merchant-key.ts` (#120) decides which rows are "the
+same merchant", so Resumen's "Mayores comercios", its drill-through to
+Transacciones (`?comercio=<key>`, matched by `useTransactionFiltering`),
+Insights' `topMerchants` and recurring-charge detection all group the same
+rows. Never group by `description` or `getDisplayDescription` directly.
+
+- `merchantKeyOf(tx)`: the user's rename (`displayDescription`, else a live
+  description override) folded (lowercase, no accents, `*` as a space, single
+  spaces); a split part's own description, folded; otherwise
+  `rawMerchantKey(description)`.
+- `rawMerchantKey`: drops tokens with digits (auth/reference codes, "Cuota 09
+  10", branch numbers) except after `NRO`, `NRR:…`, the `TARJ: ####1234` card
+  mask, and a trailing `, PLACE` (only a known Uruguayan place, or any short
+  place in the debit-card shape that has a `TARJ:` mask); then folds. If that
+  leaves nothing, a bare processor/bank prefix (`GENERIC_KEYS`) or one word
+  under 4 letters, the digits are kept instead.
+- `merchantLabelFor(rows)`: what the user sees and the Insights model echoes —
+  the most recent rename, else the most common raw description (ties: most
+  recent row).
+- `npx vite-node scripts/merchant-groups.ts [paths…]` prints, for Santander
+  CSVs or Tatu's own CSV export, every key that merges several variants.
 
 **Export** (`services/export/export.ts`) writes exactly the rows it is given
 and returns how many it wrote. Configuración exports every row (a full

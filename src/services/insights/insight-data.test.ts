@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import { buildInsightInput } from './insight-data'
+import {
+  clearAllDescriptionOverrides,
+  setDescriptionOverride,
+} from '../descriptions/description-overrides'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
 
@@ -142,6 +146,82 @@ describe('buildInsightInput', () => {
       merchant: 'UBER TRIP',
       amount: 15,
       count: 1,
+    })
+  })
+
+  describe('merchant key (#120)', () => {
+    afterEach(() => clearAllDescriptionOverrides())
+
+    // The #59 failure: one subscription, a different auth code or city suffix
+    // on every charge.
+    const netflix = [
+      makeTransaction('n1', {
+        date: new Date('2026-04-10'),
+        amount: 12,
+        description: 'NETFLIX.COM 1234TT56',
+      }),
+      makeTransaction('n2', {
+        date: new Date('2026-05-10'),
+        amount: 12,
+        description: 'NETFLIX.COM 7890TT12',
+      }),
+      makeTransaction('n3', {
+        date: new Date('2026-06-10'),
+        amount: 12,
+        description: 'NETFLIX.COM, MONTEVIDEO',
+      }),
+    ]
+
+    it('merges the noisy variants of a merchant in topMerchants', () => {
+      const result = buildInsightInput(netflix, 'USD', 40.5)
+
+      expect(result.topMerchants).toEqual([
+        { merchant: 'NETFLIX.COM, MONTEVIDEO', amount: 36, count: 3 },
+      ])
+    })
+
+    it('detects a subscription whose charges carry different reference codes', () => {
+      const result = buildInsightInput(netflix, 'USD', 40.5)
+
+      expect(result.recurringCharges).toEqual([
+        expect.objectContaining({
+          merchant: 'NETFLIX.COM, MONTEVIDEO',
+          monthsSeen: 3,
+          approxAmount: 12,
+        }),
+      ])
+    })
+
+    it('groups by a live description override, like Resumen does', () => {
+      setDescriptionOverride({
+        description: 'UBER TRIP',
+        friendlyDescription: 'Uber',
+      })
+
+      const result = buildInsightInput(
+        [makeTransaction('u1', { description: 'UBER TRIP', amount: 9 })],
+        'USD',
+        40.5
+      )
+
+      expect(result.topMerchants).toEqual([
+        { merchant: 'Uber', amount: 9, count: 1 },
+      ])
+    })
+
+    it('ignores a whitespace-only displayDescription', () => {
+      const result = buildInsightInput(
+        [
+          makeTransaction('w1', {
+            description: 'KIOSCO',
+            displayDescription: '   ',
+          }),
+        ],
+        'USD',
+        40.5
+      )
+
+      expect(result.topMerchants[0].merchant).toBe('KIOSCO')
     })
   })
 
