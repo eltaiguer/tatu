@@ -11,8 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
-.env
-.env.*.local
+# Env files hold keys: ignore all of them except the template.
+.env*
+!.env.example
 
 # Editor directories and files
 .vscode/*
@@ -34,7 +35,9 @@ coverage
 # Designs
 figma-designs
 
-# Screenshots (Claude Code sessions)
-*.png
-*.jpg
-screenshot-*
+# Screenshots (Claude Code sessions) — root clutter only; tracked images in
+# subfolders stay visible to git.
+/*.png
+/*.jpg
+/screenshot-*
+/screenshots/

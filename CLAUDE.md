@@ -39,6 +39,7 @@ npm run lint             # ESLint (zero warnings enforced)
 npm run format           # Prettier --write over the whole repo
 npm run format:check     # Prettier --check over the whole repo (Markdown too)
 npm run deploy:firebase  # Build + deploy to Firebase
+npm run dev:backend      # Local Supabase in Docker: schema + seeded dev user, writes .env.local
 npx vitest run <path>    # Run one test file (or a directory)
 ```
 
@@ -206,9 +207,12 @@ Behavior testing — tests verify what the system does, not how it does it.
 
 Requires `.env` with Supabase vars (see `.env.example`):
 
-- `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` — required for auth + all data
+- `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` — required for auth + all data
 - `VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL` — for password reset emails
 - `VITE_FIREBASE_*` — Firebase Hosting + analytics (optional for local dev)
+
+**Running the app locally** (no production data): `npm run dev:backend` then `npm run dev`, log in as `dev@tatu.local` / `tatu-dev-password`.
+Full recipe, screenshots and teardown: `.claude/skills/run/SKILL.md`.
 
 ## Current status
 
