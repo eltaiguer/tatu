@@ -328,6 +328,11 @@ export function createInMemoryRepository(
       const partIds = parts.map((p) => p.id)
       await request('splitParts', partIds)
       requireAuthorized()
+      // An insert, as on Supabase: parts already there (another device's
+      // split) fail it as a whole, and nothing is overwritten.
+      if (partIds.some((id) => table.has(id))) {
+        throw new UserFacingError(SPLIT_CONFLICT_MESSAGE)
+      }
       for (const part of parts) {
         table.set(part.id, { tx: clone(part), deleted: false })
       }

@@ -354,23 +354,29 @@ export async function hardDeleteTransactionsByIds(
   return returnedIds(data)
 }
 
-/** Saves split parts (deterministic ids, so an upsert), always live. */
-export async function upsertSplitParts(
+/**
+ * Saves new split parts, always live. A plain insert, never an upsert: part
+ * ids are deterministic (`${parent}_split_${i}`), so parts another device
+ * already saved for this parent make the whole insert fail ('taken') instead
+ * of being overwritten.
+ */
+export async function insertSplitParts(
   session: SupabaseSession,
   parts: Transaction[]
-): Promise<void> {
-  if (parts.length === 0) return
+): Promise<'saved' | 'taken'> {
+  if (parts.length === 0) return 'saved'
   const { error } = await getSupabaseClient()
     .from('transactions')
-    .upsert(
+    .insert(
       parts.map((part) => ({
         ...transactionToRow(session.user.id, part),
         is_deleted: false,
         deleted_at: null,
-      })),
-      { onConflict: 'user_id,transaction_id' }
+      }))
     )
+  if (error?.code === UNIQUE_VIOLATION) return 'taken'
   if (error) throw new Error(error.message)
+  return 'saved'
 }
 
 /**

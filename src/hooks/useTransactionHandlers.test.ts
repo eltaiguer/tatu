@@ -1146,6 +1146,41 @@ describe('useTransactionHandlers — split and unsplit', () => {
     expect(repo.row('parent_split_0')).toBeDefined()
   })
 
+  it('refuses a split another device already made, and leaves its parts alone', async () => {
+    const { repo, handlers } = signedIn(parent())
+    // Device 1 splits 1000 into 600 + 400.
+    await handlers.handleSplitTransaction('parent', parts)
+    // Device 2 still shows the parent unsplit and splits it 900 + 100.
+    transactionStore.getState().setTransactions(parent())
+
+    await expect(
+      handlers.handleSplitTransaction('parent', [
+        { description: 'Otra', amount: 900 },
+        { description: 'Cosa', amount: 100 },
+      ])
+    ).rejects.toThrow(/Recargá/)
+
+    expect(repo.row('parent')?.isSplitParent).toBe(true)
+    expect(repo.row('parent_split_0')?.amount).toBe(600)
+    expect(repo.row('parent_split_1')?.amount).toBe(400)
+    // Device 2's screen is left as it was; a reload shows device 1's split.
+    expect(storedIds()).toEqual(['parent'])
+  })
+
+  it("does not clear another device's split when its own mark fails", async () => {
+    const { repo, handlers } = signedIn(parent())
+    await handlers.handleSplitTransaction('parent', parts)
+    transactionStore.getState().setTransactions(parent())
+    repo.failOn('splitMark')
+
+    await handlers
+      .handleSplitTransaction('parent', parts)
+      .catch(() => undefined)
+
+    expect(repo.row('parent')?.isSplitParent).toBe(true)
+    expect(repo.row('parent_split_0')?.amount).toBe(600)
+  })
+
   it('unsplits on both sides, removing every part', async () => {
     const { repo, handlers } = signedIn(parent())
     await handlers.handleSplitTransaction('parent', parts)

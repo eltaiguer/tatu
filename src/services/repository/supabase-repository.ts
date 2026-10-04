@@ -15,7 +15,7 @@ import {
   setSplitParentFlag,
   setTransactionsDeleted,
   updateTransactionsByIds,
-  upsertSplitParts,
+  insertSplitParts,
 } from '../supabase/transactions'
 import {
   completeImportRun,
@@ -126,28 +126,38 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
 
     // Parts first, then the flag: whatever fails, the server never holds a
     // split parent without parts (a row nobody could see or repair).
+    //
+    // The parts are inserted, not upserted: a parent split on another device
+    // already holds parts with these (deterministic) ids, so the insert fails
+    // as a whole and nothing of that device's split is touched. Once the
+    // insert succeeded, the parts are this split's own — the only ones a
+    // compensation ever deletes.
     async splitTransaction(parent, parts) {
       const partIds = parts.map((part) => part.id)
-      await upsertSplitParts(session, parts)
+      if ((await insertSplitParts(session, parts)) === 'taken') {
+        throw new UserFacingError(SPLIT_CONFLICT_MESSAGE)
+      }
       let marked: number
       try {
         marked = await setSplitParentFlag(session, parent.id, true, {
           onlyIfSplit: false,
         })
       } catch (error) {
-        // The mark may have committed with its response lost: remove the
-        // parts AND clear the flag, in that order.
+        // The mark may have committed with its response lost: remove this
+        // split's parts, then clear the flag — only if no parts point at the
+        // parent any more, so another device's split is never undone.
         try {
           await deleteSplitParts(session, parent.id, partIds)
-          await setSplitParentFlag(session, parent.id, false)
+          if ((await countSplitParts(session, parent.id)) === 0) {
+            await setSplitParentFlag(session, parent.id, false)
+          }
         } catch {
           throw new SplitIncompleteError(error)
         }
         throw error
       }
       if (marked === 0) {
-        // Split (or deleted) on another device: take back only the parts
-        // written here, never that device's.
+        // Split (or deleted) meanwhile: take back only this split's parts.
         try {
           await deleteSplitParts(session, parent.id, partIds)
         } catch (error) {

@@ -273,7 +273,10 @@ describe('Supabase repository — split and unsplit (#60)', () => {
     )
   })
 
-  it('refuses to split a parent already split elsewhere, leaving its parts alone', async () => {
+  it('refuses to split a parent already split on another device, leaving its parts as they were', async () => {
+    // Device 1 split p into 1000 + 200; device 2, still showing p unsplit,
+    // splits it into 700 + 500. Part ids are deterministic, so both write
+    // p_split_0 and p_split_1.
     db.seed('transactions', [
       row('p', { is_split_parent: true }),
       row('p_split_0', { split_parent_id: 'p', amount: 1000 }),
@@ -281,12 +284,32 @@ describe('Supabase repository — split and unsplit (#60)', () => {
     ])
     const repo = createSupabaseRepository(session)
 
-    await expect(repo.splitTransaction(tx('p'), [parts[0]])).rejects.toThrow(
+    await expect(repo.splitTransaction(tx('p'), parts)).rejects.toThrow(
       /Recargá/
     )
-    // The part it wrote is removed; the other device's second part stays.
-    expect(stored('p_split_1')).toBeDefined()
+
     expect(stored('p')?.is_split_parent).toBe(true)
+    expect(stored('p_split_0')?.amount).toBe(1000)
+    expect(stored('p_split_1')?.amount).toBe(200)
+  })
+
+  it("never clears another device's split when its own mark fails", async () => {
+    db.seed('transactions', [
+      row('p', { is_split_parent: true }),
+      row('p_split_0', { split_parent_id: 'p', amount: 1000 }),
+      row('p_split_1', { split_parent_id: 'p', amount: 200 }),
+    ])
+    db.failWhen(
+      (r) =>
+        r.op === 'update' &&
+        (r.payload as { is_split_parent?: boolean }).is_split_parent === true
+    )
+    const repo = createSupabaseRepository(session)
+
+    await expect(repo.splitTransaction(tx('p'), parts)).rejects.toThrow()
+
+    expect(stored('p')?.is_split_parent).toBe(true)
+    expect(stored('p_split_0')?.amount).toBe(1000)
   })
 
   it('unsplits by unmarking the parent and deleting every part pointing at it', async () => {
