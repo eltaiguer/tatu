@@ -185,6 +185,44 @@ holding a category, 6 before 7, and 7 before 8 come from the code order only.
 | Rule applied to past rows   | `handleApplyPatternToPast`                                    | Sets the rule's category at 0.95 on matching rows, except split parts.                                                                                                                                                                                                                                                        |
 | Auto-categorizar            | `handleAutoCategorizeTransactions`                            | Re-runs the categorizer with context on the selected rows; writes only results that are not `uncategorized`.                                                                                                                                                                                                                  |
 
+## Dates
+
+A transaction's `date` is a **calendar day, held as that day's UTC midnight**
+(#58). The convention lives in `src/utils/date-utils.ts`:
+
+- **Write:** `parseSantanderDate` returns `Date.UTC(y, m, d)`, so a row is the
+  same instant whatever zone the importing browser is in. The transaction ID
+  hashes the raw `DD/MM/YYYY` text, not the `Date`, so the convention does not
+  change IDs.
+- **Load:** rows stored before #58 sit at the importing browser's local
+  midnight (`T03:00Z` from Uruguay). `loadUserTransactions` snaps every date to
+  its calendar day with `toCalendarDay` (rounds to the nearest UTC midnight,
+  right for any writer from UTC-11 to UTC+12). There is no backfill: a stored
+  `T03:00Z` row is rewritten as `T00:00Z` only if something upserts the whole
+  row again (splitting).
+- **Read:** only UTC accessors (`getUTC*`, `toDateKey`, `toMonthKey`,
+  `toISOString().slice(0, 10)`) or `Intl.DateTimeFormat`/`toLocaleDateString`
+  with `timeZone: 'UTC'` (`formatDate`, `formatDateCompact`). Never
+  `getDate()`/`getMonth()`/`getFullYear()` or a formatter without `timeZone` on
+  a transaction date — in Uruguay that shows `T00:00Z` as the previous day.
+- **Ranges:** month/period bounds are UTC (`periodRange` in `Transactions.tsx`,
+  `T00:00:00.000Z`…`T23:59:59.999Z` in `useTransactionFiltering`,
+  `getDateRangeForPeriod`), so a Transacciones drill-through holds exactly the
+  rows Resumen summed (`toMonthKey`) for that month.
+- **Day distances** (transfer pairing's ±2 days, recurring cadences) count
+  whole calendar days with `calendarDaysBetween` / `utcDayNumber`.
+- **Today** is the user's local calendar day: `todayAsUtcDate()` builds it from
+  local `getFullYear/getMonth/getDate` and expresses it as a UTC calendar date,
+  so "este mes" compares like with like. Real instants (`generatedAt`,
+  `updated_at`, the PDF "Generated" line) are timestamps, not calendar days,
+  and are shown in local time.
+
+Tests run with `TZ` pinned to `America/Montevideo` (`vite.config.ts`);
+`npm run test:tz` reruns the suite in `Europe/Madrid` (east of UTC) and
+`America/Los_Angeles` (west of Uruguay, where a `T03:00Z` row read in local
+time falls on the previous day). `TZ` can't be switched inside a test: test
+workers inherit it from the main process.
+
 ## Money conversion
 
 All conversion happens in the browser, at render or aggregation time, with

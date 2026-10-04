@@ -35,7 +35,8 @@ npm run test:run         # Single test run
 npm run test:ui          # Vitest UI
 npm run test:coverage    # Vitest with v8 coverage
 npm run tdd:watch        # Alias for vitest watch (TDD loop)
-npm run tdd:verify       # format:check + check:docs + test:run + lint
+npm run tdd:verify       # format:check + check:docs + test:run + test:tz + lint
+npm run test:tz          # The suite again in Europe/Madrid and America/Los_Angeles
 npm run ci:check         # tdd:verify + build (full CI)
 npm run check:docs       # Fail if agent-facing docs name repo paths that don't exist
 npm run lint             # ESLint (zero warnings enforced)
@@ -176,6 +177,7 @@ Every behavior change is driven by a test, written first:
 - **Bug fixes start from a failing regression test** that reproduces the bug, before touching the fix.
 - Behavior testing — tests verify what the system does, not how it does it. Test user-visible outcomes, not internal state or implementation details.
 - Any `console.error` / `console.warn` during a test fails it (`src/test/setup.ts`). When a test expects a log, spy on it and assert it: `vi.spyOn(console, 'error').mockImplementation(() => {})` + `expect(spy).toHaveBeenCalledWith(...)`. Test routers use `future={ROUTER_FUTURE}` (`src/router-future.ts`), same as the app
+- Tests run with `TZ=America/Montevideo` (pinned in `vite.config.ts`); `npm run test:tz` reruns the suite east of UTC (`Europe/Madrid`) and west of Uruguay (`America/Los_Angeles`). Setting `process.env.TZ` inside a test does nothing — workers inherit the zone. Date fixtures are UTC calendar days (`new Date('2026-03-01T00:00:00.000Z')`, `Date.UTC`), not local `new Date(y, m, d)`.
 - `App.test.tsx` and `App.supabase.test.tsx` are the slow integration suites (full-app render, several seconds per test); run single files while iterating (`npm run tdd:watch` or `npx vitest run <path>`). `testTimeout` is 20s on purpose (#78) — don't add retries.
 - Docs-only and tooling-only changes with no behavior to test are the exception; they still have to pass `npm run tdd:verify`.
 
@@ -185,7 +187,7 @@ A task is done only when:
 
 - The new/changed behavior is covered by tests that were seen failing first (red-green above); bug fixes include their regression test.
 - Existing behavior remains covered — no deleted or skipped tests without an explanation.
-- `npm run tdd:verify` (Prettier check + `check:docs` + tests + lint) was run and passes. `npm run build` also passes when TypeScript changed (`tsc` type-checks test files too, and CI runs it).
+- `npm run tdd:verify` (Prettier check + `check:docs` + tests in three time zones + lint) was run and passes. `npm run build` also passes when TypeScript changed (`tsc` type-checks test files too, and CI runs it).
 - Docs that describe the changed code (this file, `docs/architecture.md`, `docs/CONTEXT.md`, ADRs) are updated in the same change.
 
 ## Commit conventions
@@ -218,6 +220,7 @@ A task is done only when:
 
 - **Transaction sources**: Credit Card, USD Bank Account, UYU Bank Account (3 distinct CSV formats from Santander Uruguay)
 - **Categorization**: Pattern-based merchant matching (`merchant-patterns.ts`) with confidence scores (0–1). System learns from user overrides stored in Supabase. Optional AI enrichment on import (see Current status).
+- **Dates**: a transaction's `date` is a calendar day at UTC midnight — read it only with UTC accessors or `timeZone: 'UTC'`; "today" is `todayAsUtcDate()`. See "Dates" in `docs/architecture.md` (#58)
 - **Deduplication**: Hash-based transaction IDs prevent duplicate imports
 - **Internal transfers**: inferred in the store (`inferInternalTransfers`) by keyword + scored debit/credit pairing within ±2 days, recomputed on load — see `docs/architecture.md`
 - **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `handleUpdateTransaction` in `useTransactionHandlers`
