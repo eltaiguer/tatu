@@ -1,3 +1,4 @@
+import { UserFacingError } from '../../utils/user-error'
 /**
  * Parsing utilities for Santander Uruguay CSV files
  */
@@ -33,7 +34,7 @@ export function parseSantanderNumber(value: string): number {
 
   const parsed = Number(normalized)
   if (!Number.isFinite(parsed)) {
-    throw new Error(`Importe ilegible: "${value}"`)
+    throw new UserFacingError(`Importe ilegible: "${value}"`)
   }
 
   return parsed

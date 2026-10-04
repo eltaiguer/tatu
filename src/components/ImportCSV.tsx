@@ -5,7 +5,11 @@ import { Button } from './ui/button'
 import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { aiErrorMessage, userErrorMessage } from '../utils/user-error'
+import {
+  aiErrorMessage,
+  UserFacingError,
+  userErrorMessage,
+} from '../utils/user-error'
 import { parseCSV } from '../services/parsers/csv-parser'
 import { categorizeParsedData } from '../services/categorizer/import-categorization'
 import { transactionStore } from '../stores/transaction-store'
@@ -47,7 +51,8 @@ async function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(new Error('Error al leer el archivo'))
+    reader.onerror = () =>
+      reject(new UserFacingError('Error al leer el archivo'))
     reader.readAsText(file)
   })
 }
@@ -88,7 +93,7 @@ export function ImportCSV({
   }
 
   const handleFile = async (file: File) => {
-    if (!file.name.endsWith('.csv')) {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
       setImportState('error')
       setFileName(file.name)
       setErrorMessage('El archivo debe estar en formato CSV')
@@ -99,8 +104,9 @@ export function ImportCSV({
     setImportState('validating')
     setErrorMessage('')
 
-    // Parse errors are ours and already in Spanish; anything after parsing
-    // (saving, the network) is translated so raw backend text never shows.
+    // Parser errors are UserFacingErrors (Spanish, say what to do); anything
+    // else — a parser bug, saving, the network — is translated so raw
+    // English never shows.
     let parsed = false
     try {
       const csvContent = await readFileAsText(file)
@@ -172,11 +178,12 @@ export function ImportCSV({
       console.error('import failed:', error)
       setImportState('error')
       setErrorMessage(
-        parsed
-          ? userErrorMessage(error, 'No se pudo guardar la importación')
-          : error instanceof Error
-            ? error.message
-            : 'Error al procesar el archivo'
+        userErrorMessage(
+          error,
+          parsed
+            ? 'No se pudo guardar la importación'
+            : 'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
+        )
       )
     }
   }

@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import { UserFacingError } from '../../utils/user-error'
 import type {
   ParsedData,
   BankAccountMetadata,
@@ -61,7 +62,9 @@ function parseCurrency(moneda: string): 'USD' | 'UYU' {
   if (moneda === 'USD' || moneda === 'UYU') {
     return moneda
   }
-  throw new Error(`Moneda no reconocida: "${moneda}". Se esperaba USD o UYU.`)
+  throw new UserFacingError(
+    `Moneda no reconocida: "${moneda}". Se esperaba USD o UYU.`
+  )
 }
 
 /**
@@ -114,7 +117,7 @@ function parseTransactions(
   // That is different from a statement whose header is present but which has
   // no movements, which legitimately yields an empty list.
   if (startIndex === -1) {
-    throw new Error(
+    throw new UserFacingError(
       'No se encontró la sección de movimientos en el archivo. ' +
         '¿Es un extracto de cuenta de Santander?'
     )
@@ -206,8 +209,10 @@ function parseRow(
     return transaction
   } catch (error) {
     // Row number is 1-based to match what the user sees in a spreadsheet.
-    throw new Error(
-      `Fila ${rowIndex + 1}: ${error instanceof Error ? error.message : String(error)}`
+    // Our own row errors are already Spanish; anything else is a parser bug
+    // whose raw text must not reach the user.
+    throw new UserFacingError(
+      `Fila ${rowIndex + 1}: ${error instanceof UserFacingError ? error.message : 'no se pudo leer la fila'}`
     )
   }
 }

@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { ImportCSV } from './ImportCSV'
+import { UserFacingError } from '../utils/user-error'
 import type { ParsedData, Transaction } from '../models'
 
 const { parseCSVMock, addTransactionsMock, toastMock } = vi.hoisted(() => ({
@@ -118,9 +119,87 @@ describe('ImportCSV', () => {
     expect(addTransactionsMock).not.toHaveBeenCalled()
   })
 
+  describe('files that are not a Santander statement (#198)', () => {
+    async function useRealParser() {
+      const actual = await vi.importActual<
+        typeof import('../services/parsers/csv-parser')
+      >('../services/parsers/csv-parser')
+      parseCSVMock.mockImplementation(actual.parseCSV)
+    }
+
+    function pick(content: string, name: string) {
+      globalThis.FileReader = class {
+        onload: ((event: ProgressEvent<FileReader>) => void) | null = null
+        onerror: (() => void) | null = null
+        result: string | null = null
+        readAsText() {
+          this.result = content
+          this.onload?.({} as ProgressEvent<FileReader>)
+        }
+      } as unknown as typeof FileReader
+      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+        target: { files: [new File([content], name, { type: 'text/csv' })] },
+      })
+    }
+
+    it('explains in Spanish that another bank’s CSV is not recognized', async () => {
+      await useRealParser()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      render(<ImportCSV />)
+
+      pick('date,description,amount\n2026-01-01,Coffee,3.50\n', 'other.csv')
+
+      expect(
+        await screen.findByText(
+          'No reconocemos este archivo. Tatú importa extractos CSV de Santander Uruguay (tarjeta de crédito o caja de ahorro).'
+        )
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/Unable to detect/)).not.toBeInTheDocument()
+      expect(addTransactionsMock).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+    })
+
+    it('says an empty file is empty', async () => {
+      await useRealParser()
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      render(<ImportCSV />)
+
+      pick('', 'empty.csv')
+
+      expect(
+        await screen.findByText('El archivo está vacío.')
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/Unable to detect/)).not.toBeInTheDocument()
+      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+    })
+  })
+
+  it('accepts a .CSV extension in upper case', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    addTransactionsMock.mockReturnValue({
+      added: [makeTx('tx-1')],
+      duplicates: [],
+    })
+    render(<ImportCSV />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'MOVIMIENTOS.CSV', { type: 'text/csv' })],
+      },
+    })
+
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
+    expect(parseCSVMock).toHaveBeenCalledWith(
+      expect.any(String),
+      'MOVIMIENTOS.CSV'
+    )
+  })
+
   it('shows parser errors and does not persist', async () => {
     parseCSVMock.mockImplementation(() => {
-      throw new Error('CSV malformado')
+      throw new UserFacingError('Fila 17: Importe ilegible: "abc"')
     })
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const onImportComplete = vi.fn()
@@ -136,9 +215,35 @@ describe('ImportCSV', () => {
     expect(
       await screen.findByText('Error al validar archivo')
     ).toBeInTheDocument()
-    expect(screen.getByText('CSV malformado')).toBeInTheDocument()
+    expect(
+      screen.getByText('Fila 17: Importe ilegible: "abc"')
+    ).toBeInTheDocument()
     expect(addTransactionsMock).not.toHaveBeenCalled()
     expect(onImportComplete).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+  })
+
+  it('never shows the raw text of an unexpected parser failure', async () => {
+    parseCSVMock.mockImplementation(() => {
+      throw new TypeError(
+        "Cannot read properties of undefined (reading 'trim')"
+      )
+    })
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<ImportCSV />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    expect(
+      await screen.findByText(
+        'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Cannot read/)).not.toBeInTheDocument()
     expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
   })
 
