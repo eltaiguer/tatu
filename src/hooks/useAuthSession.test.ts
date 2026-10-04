@@ -18,6 +18,7 @@ vi.mock('../services/supabase/auth', () => auth)
 import { useAuthSession } from './useAuthSession'
 import { getActiveSupabaseSession } from '../services/supabase/runtime'
 import { transactionStore } from '../stores/transaction-store'
+import { teardownWorkspace, workspaceStore } from '../stores/workspace-store'
 
 function makeSession(userId = 'user-1'): SupabaseSession {
   return {
@@ -56,7 +57,7 @@ describe('useAuthSession', () => {
         return unsubscribe
       }
     )
-    transactionStore.getState().clearTransactions()
+    teardownWorkspace()
   })
 
   afterEach(() => {
@@ -164,6 +165,32 @@ describe('useAuthSession', () => {
 
       expect(result.current.session).toBeNull()
       expect(getActiveSupabaseSession()).toBeNull()
+    })
+
+    it('drops the previous user’s workspace before a different user’s session renders', () => {
+      auth.getCurrentSession.mockReturnValue(makeSession('user-a'))
+      workspaceStore.setState({ userId: 'user-a', status: 'ready' })
+      transactionStore.getState().setTransactions([someTransaction])
+      const { result } = renderHook(() => useAuthSession())
+
+      // e.g. user B signs in from another tab.
+      act(() => onSessionChange(makeSession('user-b')))
+
+      expect(result.current.session?.user.id).toBe('user-b')
+      expect(workspaceStore.getState().userId).toBeNull()
+      expect(transactionStore.getState().transactions).toEqual([])
+    })
+
+    it('keeps the workspace when the same user’s token is refreshed', () => {
+      auth.getCurrentSession.mockReturnValue(makeSession('user-a'))
+      workspaceStore.setState({ userId: 'user-a', status: 'ready' })
+      transactionStore.getState().setTransactions([someTransaction])
+      renderHook(() => useAuthSession())
+
+      act(() => onSessionChange(makeSession('user-a')))
+
+      expect(workspaceStore.getState().userId).toBe('user-a')
+      expect(transactionStore.getState().transactions).toHaveLength(1)
     })
 
     it('signs out and clears loaded transactions after a password change', async () => {

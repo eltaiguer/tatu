@@ -5,6 +5,7 @@ import { ROUTER_FUTURE } from './router-future'
 import App from './App'
 import { preloadViews } from './lazy-views'
 import { transactionStore } from './stores/transaction-store'
+import { teardownWorkspace } from './stores/workspace-store'
 import { listCustomCategories } from './services/categories/category-store'
 
 const MOCK_SESSION = {
@@ -151,7 +152,8 @@ beforeAll(async () => {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    transactionStore.getState().clearTransactions()
+    // The workspace is module state: start every test signed out of it.
+    teardownWorkspace()
     localStorage.clear()
     window.history.replaceState({}, '', '/')
 

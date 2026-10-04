@@ -3,7 +3,7 @@ import { ROUTER_FUTURE } from './router-future'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { preloadViews } from './lazy-views'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { transactionStore } from './stores/transaction-store'
+import { teardownWorkspace } from './stores/workspace-store'
 
 const {
   getCurrentSessionMock,
@@ -123,7 +123,8 @@ describe('App with supabase enabled', () => {
     vi.clearAllMocks()
     window.history.replaceState({}, '', '/')
     localStorage.clear()
-    transactionStore.getState().clearTransactions()
+    // The workspace is module state: start every test signed out of it.
+    teardownWorkspace()
     isSupabaseConfiguredMock.mockReturnValue(true)
     getCurrentSessionMock.mockReturnValue(null)
     loadUserTransactionsMock.mockResolvedValue([])

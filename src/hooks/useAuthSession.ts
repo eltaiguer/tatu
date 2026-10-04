@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { transactionStore } from '../stores/transaction-store'
+import { teardownWorkspace, workspaceStore } from '../stores/workspace-store'
 import {
   getCurrentSession,
   requestPasswordReset,
@@ -62,9 +62,20 @@ function clearPasswordResetModeFromUrl(): void {
 }
 
 export function useAuthSession() {
-  const [session, setSession] = useState<SupabaseSession | null>(() =>
+  const [session, setSessionState] = useState<SupabaseSession | null>(() =>
     getCurrentSession()
   )
+  // Every session change goes through here. When the session ends or turns
+  // into another user, the previous user's workspace is torn down before the
+  // new session is rendered, so no frame ever pairs one user's session with
+  // another user's data (#117).
+  const setSession = useCallback((next: SupabaseSession | null) => {
+    const loadedFor = workspaceStore.getState().userId
+    if (loadedFor !== null && next?.user.id !== loadedFor) {
+      teardownWorkspace()
+    }
+    setSessionState(next)
+  }, [])
   const [authSubmitting, setAuthSubmitting] = useState(false)
   const [authError, setAuthError] = useState('')
   const [authNotice, setAuthNotice] = useState('')
@@ -81,6 +92,8 @@ export function useAuthSession() {
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges(
       (nextSession) => {
+        // SIGNED_OUT (this tab or another): drop everything of the user.
+        if (!nextSession) teardownWorkspace()
         setSession(nextSession)
       },
       () => {
@@ -93,7 +106,7 @@ export function useAuthSession() {
     return () => {
       unsubscribe()
     }
-  }, [])
+  }, [setSession])
 
   async function handleAuth(action: 'signin' | 'signup') {
     setAuthSubmitting(true)
@@ -142,7 +155,7 @@ export function useAuthSession() {
         // Ignore sign-out errors after a successful password change.
       }
       setSession(null)
-      transactionStore.getState().clearTransactions()
+      teardownWorkspace()
       setPassword('')
       setAuthMode('signin')
       clearPasswordResetModeFromUrl()
