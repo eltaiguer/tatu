@@ -102,7 +102,7 @@ describe('BulkEditDialog', () => {
     const onSave = vi.fn()
     render(<StatefulDialog onSave={onSave} />)
 
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.click(screen.getByRole('button', { name: restaurants }))
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
@@ -113,7 +113,7 @@ describe('BulkEditDialog', () => {
     const onSave = vi.fn()
     render(<StatefulDialog onSave={onSave} />)
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.click(screen.getByRole('button', { name: '#viaje' }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: '  vacaciones ' },
@@ -226,6 +226,24 @@ describe('BulkEditDialog', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('names each picker by its visible label and current value', () => {
+    render(
+      <BulkEditDialog
+        {...baseProps({
+          bulkEditCategory: 'restaurants',
+          bulkEditTagList: ['viaje'],
+        })}
+      />
+    )
+
+    expect(
+      screen.getByRole('button', { name: `Categoría ${restaurants}` })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Etiquetas 1 etiqueta a agregar' })
+    ).toBeInTheDocument()
+  })
+
   it('shows only the sections asked for', () => {
     render(
       <BulkEditDialog
@@ -233,7 +251,9 @@ describe('BulkEditDialog', () => {
       />
     )
 
-    expect(screen.getByLabelText('Categoría bulk dropdown')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Etiquetas bulk dropdown')).toBeNull()
+    expect(
+      screen.getByRole('button', { name: /^Categoría/ })
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Etiquetas/ })).toBeNull()
   })
 })

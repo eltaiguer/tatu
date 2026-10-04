@@ -869,7 +869,7 @@ describe('Transactions', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
 
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
@@ -1046,13 +1046,13 @@ describe('Transactions', () => {
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
     const options = screen.getAllByText('Entretenimiento')
     fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'viaje' },
     })
@@ -1095,13 +1095,13 @@ describe('Transactions', () => {
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
     const options = screen.getAllByText('Entretenimiento')
     fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'viaje' },
     })
@@ -1145,13 +1145,13 @@ describe('Transactions', () => {
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
     const options = screen.getAllByText('Entretenimiento')
     fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'viaje' },
     })
@@ -1229,7 +1229,7 @@ describe('Transactions', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
 
     const tagButtons = screen.getAllByText('#monthly')
     fireEvent.click(tagButtons[tagButtons.length - 1])
@@ -1257,7 +1257,7 @@ describe('Transactions', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
 
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'new-tag' },

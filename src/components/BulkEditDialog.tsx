@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -69,6 +70,12 @@ export function BulkEditDialog({
     bulkCategorySearch
   )
   const filteredTags = filterTagSuggestions(tagSuggestions, bulkTagSearch)
+  // Each picker is named by its visible label plus its current value.
+  const id = useId()
+  const categoryLabelId = `${id}-category-label`
+  const categoryTriggerId = `${id}-category-trigger`
+  const tagLabelId = `${id}-tag-label`
+  const tagTriggerId = `${id}-tag-trigger`
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
@@ -86,7 +93,9 @@ export function BulkEditDialog({
         <div className="space-y-3">
           {showCategorySection && (
             <div>
-              <label className="text-sm font-medium">Categoría</label>
+              <label id={categoryLabelId} className="text-sm font-medium">
+                Categoría
+              </label>
               <Popover
                 open={bulkCategoryPickerOpen}
                 onOpenChange={onBulkCategoryPickerOpenChange}
@@ -94,7 +103,8 @@ export function BulkEditDialog({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    aria-label="Categoría bulk dropdown"
+                    id={categoryTriggerId}
+                    aria-labelledby={`${categoryLabelId} ${categoryTriggerId}`}
                     className="mt-1 w-full min-h-9 rounded-md border border-input bg-input-background px-2 py-1 text-left hover:bg-muted/50"
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -160,7 +170,9 @@ export function BulkEditDialog({
 
           {showTagSection && (
             <div>
-              <label className="text-sm font-medium">Etiquetas</label>
+              <label id={tagLabelId} className="text-sm font-medium">
+                Etiquetas
+              </label>
               <Popover
                 open={bulkTagPickerOpen}
                 onOpenChange={onBulkTagPickerOpenChange}
@@ -168,7 +180,8 @@ export function BulkEditDialog({
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    aria-label="Etiquetas bulk dropdown"
+                    id={tagTriggerId}
+                    aria-labelledby={`${tagLabelId} ${tagTriggerId}`}
                     className="mt-1 w-full h-9 rounded-md border border-input bg-input-background px-3 text-sm text-left hover:bg-muted/50"
                   >
                     {bulkEditTagList.length > 0

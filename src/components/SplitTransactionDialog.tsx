@@ -133,6 +133,7 @@ export function SplitTransactionDialog({
             >
               <div className="flex flex-col gap-[4px]">
                 <Input
+                  aria-label={`Descripción parte ${idx + 1}`}
                   placeholder="Descripción"
                   value={part.description}
                   onChange={(e) =>
@@ -205,6 +206,7 @@ export function SplitTransactionDialog({
 
               <Input
                 type="number"
+                aria-label={`Monto parte ${idx + 1}`}
                 min="0"
                 step="0.01"
                 placeholder="0.00"

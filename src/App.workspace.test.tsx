@@ -200,9 +200,12 @@ async function expectUserBIsClean() {
   expect(getAiConfig()).toBeNull()
 
   fireEvent.click(
-    within(screen.getByRole('tablist', { name: 'Tema' })).getByRole('tab', {
-      name: 'Oscuro',
-    })
+    within(screen.getByRole('radiogroup', { name: 'Tema' })).getByRole(
+      'radio',
+      {
+        name: 'Oscuro',
+      }
+    )
   )
   await waitFor(() =>
     expect(savesFor('user-b')).toContainEqual(

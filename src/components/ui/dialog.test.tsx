@@ -112,4 +112,15 @@ describe('DialogContent focus', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     await waitFor(() => expect(opener).toHaveFocus())
   })
+
+  it('names the close button in Spanish', async () => {
+    const user = userEvent.setup()
+    render(<ControlledDialog />)
+
+    await user.click(screen.getByRole('button', { name: 'Abrir' }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Cerrar' })
+    ).toBeInTheDocument()
+  })
 })

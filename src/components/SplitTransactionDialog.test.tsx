@@ -71,6 +71,23 @@ describe('SplitTransactionDialog', () => {
     expect(screen.getByText('Super y almacén')).toBeInTheDocument()
   })
 
+  it('names each part description and amount by its part number', async () => {
+    renderDialog({})
+
+    expect(
+      await screen.findByRole('textbox', { name: 'Descripción parte 1' })
+    ).toHaveValue('SUPERMERCADO ABC')
+    expect(
+      screen.getByRole('textbox', { name: 'Descripción parte 2' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Monto parte 1' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Monto parte 2' })
+    ).toBeInTheDocument()
+  })
+
   it('describes the dialog with the transaction being split', async () => {
     renderDialog({})
 
