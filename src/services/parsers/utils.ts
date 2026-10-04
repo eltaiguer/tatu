@@ -1,7 +1,8 @@
-import { UserFacingError } from '../../utils/user-error'
 /**
  * Parsing utilities for Santander Uruguay CSV files
  */
+
+import { UserFacingError } from '../../utils/user-error'
 
 /**
  * Parse a number from Santander format
