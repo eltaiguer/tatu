@@ -49,7 +49,7 @@ export function getAccountLabel(source: string, currency: string): string {
 function ReviewMarker() {
   return (
     <span
-      className="inline-flex items-center rounded-full border border-[color:var(--accent)] px-1.5 py-px text-[10.5px] font-semibold text-[color:var(--text)]"
+      className="inline-flex items-center rounded-full border border-[color:var(--accent)] px-1.5 py-px text-caption font-semibold text-[color:var(--text)]"
       title="Categoría sin asignar o asignada automáticamente con poca seguridad"
     >
       Revisar
@@ -152,7 +152,7 @@ export function TransactionTable({
               ? 'var(--brand-text, var(--brand))'
               : 'var(--text-muted)',
             cursor: ignoredCount === 0 ? 'not-allowed' : 'pointer',
-            fontSize: 12.5,
+            fontSize: 13,
             fontWeight: 500,
             opacity: ignoredCount === 0 ? 0.5 : 1,
           }}
@@ -195,7 +195,7 @@ export function TransactionTable({
                 />
               </th>
               <th
-                className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
                 aria-sort={
                   sortField === 'date'
                     ? sortDirection === 'asc'
@@ -206,14 +206,14 @@ export function TransactionTable({
               >
                 <button
                   onClick={() => onSort('date')}
-                  className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  className="flex items-center gap-2 text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
                 >
                   Fecha
                   {sortField === 'date' && <ArrowUpDown size={14} />}
                 </button>
               </th>
               <th
-                className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
                 aria-sort={
                   sortField === 'description'
                     ? sortDirection === 'asc'
@@ -224,14 +224,14 @@ export function TransactionTable({
               >
                 <button
                   onClick={() => onSort('description')}
-                  className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  className="flex items-center gap-2 text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
                 >
                   Descripción
                   {sortField === 'description' && <ArrowUpDown size={14} />}
                 </button>
               </th>
               <th
-                className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
                 aria-sort={
                   sortField === 'category'
                     ? sortDirection === 'asc'
@@ -242,17 +242,17 @@ export function TransactionTable({
               >
                 <button
                   onClick={() => onSort('category')}
-                  className="flex items-center gap-2 text-[11.5px] font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  className="flex items-center gap-2 text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
                 >
                   Categoría
                   {sortField === 'category' && <ArrowUpDown size={14} />}
                 </button>
               </th>
-              <th className="text-left px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground">
+              <th className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground">
                 Cuenta
               </th>
               <th
-                className="text-right px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                className="text-right px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
                 aria-sort={
                   sortField === 'amount'
                     ? sortDirection === 'asc'
@@ -263,13 +263,13 @@ export function TransactionTable({
               >
                 <button
                   onClick={() => onSort('amount')}
-                  className="flex items-center gap-2 ml-auto text-[11.5px] font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  className="flex items-center gap-2 ml-auto text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
                 >
                   Monto
                   {sortField === 'amount' && <ArrowUpDown size={14} />}
                 </button>
               </th>
-              <th className="text-center px-3.5 py-3 text-[11.5px] font-bold uppercase tracking-[0.05em] text-muted-foreground w-36">
+              <th className="text-center px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground w-36">
                 Acción
               </th>
             </tr>
@@ -403,7 +403,7 @@ export function TransactionTable({
                                   alignItems: 'center',
                                   gap: 3,
                                   flexShrink: 0,
-                                  fontSize: 10.5,
+                                  fontSize: 11,
                                   fontWeight: 500,
                                   padding: '1px 6px',
                                   borderRadius: 4,
@@ -422,7 +422,7 @@ export function TransactionTable({
                                   alignItems: 'center',
                                   gap: 3,
                                   flexShrink: 0,
-                                  fontSize: 10.5,
+                                  fontSize: 11,
                                   fontWeight: 500,
                                   padding: '1px 6px',
                                   borderRadius: 4,
@@ -502,7 +502,7 @@ export function TransactionTable({
                         <div
                           className="font-mono leading-tight"
                           style={{
-                            fontSize: 10.5,
+                            fontSize: 11,
                             marginTop: 1,
                             color: 'var(--text-muted)',
                           }}
@@ -663,7 +663,7 @@ export function TransactionTable({
                             alignItems: 'center',
                             gap: 3,
                             flexShrink: 0,
-                            fontSize: 10.5,
+                            fontSize: 11,
                             fontWeight: 500,
                             padding: '1px 6px',
                             borderRadius: 4,
@@ -682,7 +682,7 @@ export function TransactionTable({
                             alignItems: 'center',
                             gap: 3,
                             flexShrink: 0,
-                            fontSize: 10.5,
+                            fontSize: 11,
                             fontWeight: 500,
                             padding: '1px 6px',
                             borderRadius: 4,
@@ -728,7 +728,7 @@ export function TransactionTable({
                         <div
                           className="font-mono"
                           style={{
-                            fontSize: 10.5,
+                            fontSize: 11,
                             marginTop: 1,
                             color: 'var(--text-muted)',
                           }}

@@ -41,7 +41,7 @@ export function CategoryBreakdownList({
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 8,
-                  fontSize: 13.5,
+                  fontSize: 14,
                   fontWeight: 500,
                 }}
               >
@@ -74,7 +74,7 @@ export function CategoryBreakdownList({
                 {showPercent && (
                   <span
                     className="font-mono text-muted-foreground"
-                    style={{ fontSize: 11.5, width: 38, textAlign: 'right' }}
+                    style={{ fontSize: 12, width: 38, textAlign: 'right' }}
                   >
                     {row.pct.toFixed(1)}%
                   </span>

@@ -251,6 +251,20 @@
 }
 
 @theme inline {
+  /* Type scale (px, like the rest of the app's sizing). Use these via
+     text-<name> instead of ad-hoc sizes. */
+  --text-micro: 10px;
+  --text-caption: 11px;
+  --text-label: 12px;
+  --text-small: 13px;
+  --text-body: 14px;
+  --text-ui: 15px;
+  --text-title: 16px;
+  --text-subhead: 18px;
+  --text-heading: 20px;
+  --text-heading-lg: 22px;
+  --text-page: 28px;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

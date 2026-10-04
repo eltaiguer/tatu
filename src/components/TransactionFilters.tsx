@@ -165,7 +165,7 @@ function MultiSelectPopover({
                     }}
                   />
                 )}
-                <span style={{ fontSize: 13.5 }}>{o.label}</span>
+                <span style={{ fontSize: 14 }}>{o.label}</span>
               </button>
             )
           })}
@@ -410,7 +410,7 @@ export function TransactionFilters({
                 borderRadius: 999,
                 border: '1px solid var(--border)',
                 background: 'var(--muted)',
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: 500,
                 color: 'var(--text)',
               }}
@@ -441,7 +441,7 @@ export function TransactionFilters({
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: 12.5,
+                fontSize: 13,
                 color: 'var(--brand)',
                 padding: '0 4px',
                 fontWeight: 500,

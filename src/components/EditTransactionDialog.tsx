@@ -1,4 +1,5 @@
 import { Loader2 } from 'lucide-react'
+import { RadioGroup } from './ui/radio-group'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import {
@@ -204,53 +205,30 @@ export function EditTransactionDialog({
             </Popover>
           </div>
 
-          <fieldset>
-            <legend className="text-sm font-medium">
-              Aplicar nombre y categoría a
-            </legend>
-            <div className="mt-2 space-y-2">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="apply-scope"
-                  value="single"
-                  checked={applyScope === 'single'}
-                  onChange={() => onApplyScopeChange('single')}
-                />
-                Solo esta transacción
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="apply-scope"
-                  value="matching_past_and_future"
-                  checked={applyScope === 'matching_past_and_future'}
-                  onChange={() =>
-                    onApplyScopeChange('matching_past_and_future')
-                  }
-                />
-                {similarCount > 1
-                  ? `Todas las similares · se aplica a ${similarCount} transacciones (y a las futuras)`
-                  : 'Todas las similares · solo esta por ahora (y las futuras)'}
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  name="apply-scope"
-                  value="future_matching_only"
-                  checked={applyScope === 'future_matching_only'}
-                  onChange={() => onApplyScopeChange('future_matching_only')}
-                />
-                Esta y las que importes en el futuro
-              </label>
-              {applyScope === 'future_matching_only' && similarCount > 1 && (
-                <p className="pl-6 text-xs text-muted-foreground">
-                  La categoría cambia solo en esta. El nombre visible se
-                  comparte con todas las similares.
-                </p>
-              )}
-            </div>
-          </fieldset>
+          <RadioGroup
+            legend="Aplicar nombre y categoría a"
+            name="apply-scope"
+            value={applyScope}
+            onChange={onApplyScopeChange}
+            options={[
+              { value: 'single', label: 'Solo esta transacción' },
+              {
+                value: 'matching_past_and_future',
+                label:
+                  similarCount > 1
+                    ? `Todas las similares · se aplica a ${similarCount} transacciones (y a las futuras)`
+                    : 'Todas las similares · solo esta por ahora (y las futuras)',
+              },
+              {
+                value: 'future_matching_only',
+                label: 'Esta y las que importes en el futuro',
+                hint:
+                  similarCount > 1
+                    ? 'La categoría cambia solo en esta. El nombre visible se comparte con todas las similares.'
+                    : undefined,
+              },
+            ]}
+          />
 
           <div>
             <label className="text-sm font-medium">

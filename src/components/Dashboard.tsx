@@ -1,6 +1,7 @@
 // Dashboard — Resumen view: account cards + este mes + analysis section (merged)
 
 import { Card } from './ui/card'
+import { PageHeader } from './ui/page-header'
 import { Button } from './ui/button'
 import {
   Upload,
@@ -123,7 +124,7 @@ function SectionDivider({ label, sub }: { label: string; sub?: string }) {
       {sub && (
         <span
           style={{
-            fontSize: 12.5,
+            fontSize: 13,
             color: 'var(--text-faint)',
             whiteSpace: 'nowrap',
           }}
@@ -245,7 +246,7 @@ function AccountExpenseCard({
           </div>
           <div
             className="font-mono"
-            style={{ fontSize: 23, marginTop: 4, color: 'var(--text)' }}
+            style={{ fontSize: 22, marginTop: 4, color: 'var(--text)' }}
           >
             {formatCurrency(stat.conv, homeCurrency)}
           </div>
@@ -288,7 +289,7 @@ function AccountExpenseCard({
           </div>
           <div
             style={{
-              fontSize: 11.5,
+              fontSize: 12,
               color: 'var(--text-faint)',
               display: 'flex',
               justifyContent: 'space-between',
@@ -687,28 +688,10 @@ export function Dashboard({
 
   return (
     <div className="space-y-6">
-      {/* Page header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 30,
-              fontWeight: 600,
-              marginBottom: 4,
-            }}
-          >
-            {greeting}
-          </h1>
-          <p className="text-muted-foreground" style={{ fontSize: 14 }}>
+      <PageHeader
+        title={greeting}
+        subtitle={
+          <>
             Tus cuentas Santander de un vistazo ·{' '}
             {monthSummary.monthLabel ||
               latestDate.toLocaleDateString('es-UY', {
@@ -716,25 +699,21 @@ export function Dashboard({
                 year: 'numeric',
                 timeZone: 'UTC',
               })}
-          </p>
-        </div>
-        {hasTransactions && !allIgnored && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-            }}
-          >
-            <FxChip fxRate={fxRate} onSetFxRate={onSetFxRate} />
-            <CurrencyToggle
-              value={homeCurrency}
-              onChange={(c) => onSetHomeCurrency?.(c)}
-            />
-          </div>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          hasTransactions &&
+          !allIgnored && (
+            <>
+              <FxChip fxRate={fxRate} onSetFxRate={onSetFxRate} />
+              <CurrencyToggle
+                value={homeCurrency}
+                onChange={(c) => onSetHomeCurrency?.(c)}
+              />
+            </>
+          )
+        }
+      />
 
       {/* Empty state */}
       {!hasTransactions && (
@@ -1097,7 +1076,7 @@ export function Dashboard({
                     {saving ? '+' : '−'}
                     {formatCurrency(Math.abs(typicalNet), homeCurrency)}
                   </div>
-                  <p style={{ fontSize: 13.5, marginTop: 12, lineHeight: 1.5 }}>
+                  <p style={{ fontSize: 14, marginTop: 12, lineHeight: 1.5 }}>
                     {positiveMonths > negativeMonths
                       ? 'Te queda dinero la mayoría de los meses.'
                       : positiveMonths < negativeMonths
@@ -1369,7 +1348,7 @@ export function Dashboard({
                 </div>
                 <span
                   className="text-muted-foreground"
-                  style={{ fontSize: 12.5 }}
+                  style={{ fontSize: 13 }}
                 >
                   Total {formatCurrency(currencySplit.total, homeCurrency)}
                 </span>
@@ -1401,7 +1380,7 @@ export function Dashboard({
                     </div>
                     <div
                       className="font-mono text-muted-foreground"
-                      style={{ fontSize: 11.5 }}
+                      style={{ fontSize: 12 }}
                     >
                       {formatCurrency(currencySplit.USD, homeCurrency)}
                     </div>
@@ -1423,7 +1402,7 @@ export function Dashboard({
                     </div>
                     <div
                       className="font-mono text-muted-foreground"
-                      style={{ fontSize: 11.5 }}
+                      style={{ fontSize: 12 }}
                     >
                       {formatCurrency(currencySplit.UYU, homeCurrency)}
                     </div>
@@ -1475,7 +1454,7 @@ export function Dashboard({
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 7,
-                      fontSize: 12.5,
+                      fontSize: 13,
                       color: 'var(--text-faint)',
                     }}
                   >
@@ -1641,7 +1620,7 @@ export function Dashboard({
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div
                           style={{
-                            fontSize: 13.5,
+                            fontSize: 14,
                             fontWeight: 500,
                             whiteSpace: 'nowrap',
                             overflow: 'hidden',
@@ -1652,7 +1631,7 @@ export function Dashboard({
                         </div>
                         <div
                           className="text-muted-foreground"
-                          style={{ fontSize: 11.5 }}
+                          style={{ fontSize: 12 }}
                         >
                           {formatDateCompact(tx.date)}
                         </div>
@@ -1661,7 +1640,7 @@ export function Dashboard({
                         <span
                           className="font-mono"
                           style={{
-                            fontSize: 13.5,
+                            fontSize: 14,
                             color: isCredit ? 'var(--pos)' : 'var(--text)',
                             display: 'block',
                           }}
@@ -1757,7 +1736,7 @@ export function Dashboard({
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div
                             style={{
-                              fontSize: 13.5,
+                              fontSize: 14,
                               fontWeight: 500,
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
@@ -1768,7 +1747,7 @@ export function Dashboard({
                           </div>
                           <div
                             className="text-muted-foreground"
-                            style={{ fontSize: 11.5 }}
+                            style={{ fontSize: 12 }}
                           >
                             {m.count}{' '}
                             {m.count > 1 ? 'movimientos' : 'movimiento'}

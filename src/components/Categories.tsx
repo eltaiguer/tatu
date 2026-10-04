@@ -1,4 +1,7 @@
 import { useMemo, useState } from 'react'
+import { NativeSelect } from './ui/native-select'
+import { RadioGroup } from './ui/radio-group'
+import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
 import { userErrorMessage } from '../utils/user-error'
 import { Plus, Pencil, Trash, X } from 'lucide-react'
@@ -306,53 +309,32 @@ export function Categories({
   return (
     <div>
       {/* Page header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          justifyContent: 'space-between',
-          gap: 24,
-          marginBottom: 28,
-        }}
-      >
-        <div>
-          <h1
+      <PageHeader
+        className="mb-7"
+        title="Categorías y reglas"
+        subtitle="Personalizá cómo Tatú clasifica tus movimientos"
+        actions={
+          <Button
+            onClick={openNewForm}
             style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 32,
+              background: 'var(--brand)',
+              color: 'var(--primary-foreground)',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              padding: '9px 16px',
+              fontSize: 14,
               fontWeight: 600,
-              letterSpacing: '-0.02em',
-              lineHeight: 1.15,
-              marginBottom: 6,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
             }}
           >
-            Categorías y reglas
-          </h1>
-          <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-            Personalizá cómo Tatú clasifica tus movimientos
-          </p>
-        </div>
-        <Button
-          onClick={openNewForm}
-          style={{
-            background: 'var(--brand)',
-            color: 'var(--primary-foreground)',
-            border: 'none',
-            borderRadius: 'var(--radius-md)',
-            padding: '9px 16px',
-            fontSize: 14,
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            flexShrink: 0,
-          }}
-        >
-          <Plus size={15} strokeWidth={2.5} />
-          Nueva categoría
-        </Button>
-      </div>
+            <Plus size={15} strokeWidth={2.5} />
+            Nueva categoría
+          </Button>
+        }
+      />
 
       {/* New / Edit category form */}
       {showForm && (
@@ -800,7 +782,7 @@ export function Categories({
               >
                 Tipo
               </label>
-              <select
+              <NativeSelect
                 id="pattern-match"
                 value={patternForm.matchType}
                 onChange={(e) =>
@@ -809,20 +791,11 @@ export function Categories({
                     matchType: e.target.value as MatchType,
                   }))
                 }
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--surface)',
-                  color: 'var(--text)',
-                  fontSize: 13,
-                  height: 40,
-                }}
               >
                 <option value="contains">Contiene</option>
                 <option value="starts_with">Empieza con</option>
                 <option value="exact">Exacto</option>
-              </select>
+              </NativeSelect>
             </div>
             <div>
               <label
@@ -837,21 +810,12 @@ export function Categories({
               >
                 Categoría
               </label>
-              <select
+              <NativeSelect
                 id="pattern-category"
                 value={patternForm.category}
                 onChange={(e) =>
                   setPatternForm((p) => ({ ...p, category: e.target.value }))
                 }
-                style={{
-                  padding: '8px 10px',
-                  borderRadius: 'var(--radius-sm)',
-                  border: '1px solid var(--border)',
-                  background: 'var(--surface)',
-                  color: 'var(--text)',
-                  fontSize: 13,
-                  height: 40,
-                }}
               >
                 {getCategoryDefinitions()
                   .filter((c) => c.id !== Category.Uncategorized)
@@ -860,7 +824,7 @@ export function Categories({
                       {cat.icon} {cat.label}
                     </option>
                   ))}
-              </select>
+              </NativeSelect>
             </div>
           </div>
 
@@ -895,65 +859,19 @@ export function Categories({
                 placeholder='Ej. "Farmacia Del Sol"'
               />
             </div>
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  marginBottom: 6,
-                  color: 'var(--text-muted)',
-                }}
-              >
-                Aplicar a
-              </label>
-              <div
-                style={{
-                  display: 'flex',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-sm)',
-                  overflow: 'hidden',
-                  height: 40,
-                }}
-              >
-                {(
-                  [
-                    { value: 'future_only', label: 'Solo futuras' },
-                    { value: 'past_and_future', label: 'Pasadas y futuras' },
-                  ] as const
-                ).map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() =>
-                      setPatternForm((p) => ({ ...p, applyScope: value }))
-                    }
-                    style={{
-                      padding: '0 12px',
-                      fontSize: 13,
-                      cursor: 'pointer',
-                      border: 'none',
-                      borderRight:
-                        value === 'future_only'
-                          ? '1px solid var(--border)'
-                          : 'none',
-                      background:
-                        patternForm.applyScope === value
-                          ? 'var(--brand)'
-                          : 'var(--surface)',
-                      color:
-                        patternForm.applyScope === value
-                          ? 'var(--primary-foreground)'
-                          : 'var(--text)',
-                      fontWeight: patternForm.applyScope === value ? 600 : 400,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <RadioGroup
+              variant="segmented"
+              legend="Aplicar a"
+              name="pattern-apply-scope"
+              value={patternForm.applyScope}
+              onChange={(applyScope) =>
+                setPatternForm((p) => ({ ...p, applyScope }))
+              }
+              options={[
+                { value: 'future_only', label: 'Solo futuras' },
+                { value: 'past_and_future', label: 'Pasadas y futuras' },
+              ]}
+            />
             <Button
               onClick={handleAddPattern}
               disabled={!patternForm.pattern.trim()}
