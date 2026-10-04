@@ -1,9 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { captureError } from '../services/monitoring/error-reporting'
 import { UserFacingError, aiErrorMessage, userErrorMessage } from './user-error'
+
+vi.mock('../services/monitoring/error-reporting', () => ({
+  captureError: vi.fn(),
+}))
 
 describe('userErrorMessage', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('reports unexpected errors but not ones written for the user', () => {
+    vi.mocked(captureError).mockClear()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const unexpected = new Error('relation "x" does not exist')
+
+    userErrorMessage(unexpected, 'x')
+    userErrorMessage(new UserFacingError('Ya existe'), 'x')
+
+    expect(captureError).toHaveBeenCalledTimes(1)
+    expect(captureError).toHaveBeenCalledWith(unexpected)
   })
 
   it('passes user-facing messages through', () => {

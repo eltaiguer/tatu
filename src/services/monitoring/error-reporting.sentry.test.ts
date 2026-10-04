@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as Sentry from '@sentry/react'
 import type { ErrorEvent } from '@sentry/react'
 import { UserFacingError } from '../../utils/user-error'
@@ -42,6 +42,9 @@ describe('error reporting through the Sentry SDK', () => {
       '/transacciones?q=farmacia#access_token=secret'
     )
     setErrorReportingUser('user-123')
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    console.error('import failed:', 'FARMACIA 1.234,56')
+    expect(errorSpy).toHaveBeenCalled()
 
     captureError(new Error('Fila 3: Importe ilegible: "1.234,56"'), 'import')
     await Sentry.flush()
@@ -54,7 +57,13 @@ describe('error reporting through the Sentry SDK', () => {
     expect(event.tags).toMatchObject({ area: 'import' })
     expect(event.user).toEqual({ id: 'user-123' })
     expect(event.request?.url).toBe('http://localhost:3000/transacciones')
-    expect(JSON.stringify(event)).not.toMatch(/secret|farmacia|1\.234/)
+    expect(event.breadcrumbs).toContainEqual(
+      expect.objectContaining({
+        category: 'navigation',
+        data: expect.objectContaining({ to: '/transacciones' }),
+      })
+    )
+    expect(JSON.stringify(event)).not.toMatch(/secret|farmacia|1\.234/i)
   })
 
   it('wraps Supabase error objects so their details are not sent', async () => {
