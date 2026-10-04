@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react'
 import { Filter, Search, X } from 'lucide-react'
 import { Button } from './ui/button'
+import { cn } from './ui/utils'
 import { Card } from './ui/card'
 import { Input } from './ui/input'
 import { SegmentedToggle } from './ui/segmented-toggle'
@@ -42,28 +43,22 @@ function MultiSelectPopover({
   const isActive = selected.length > 0
 
   return (
-    <div style={{ position: 'relative' }} ref={ref}>
+    <div className="relative" ref={ref}>
       <button
         type="button"
         aria-label={ariaLabel ?? label}
         onClick={() => setOpen((o) => !o)}
-        className="border-input bg-input-background focus-visible:border-ring focus-visible:ring-ring/50 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]"
-        style={{
-          minWidth: 120,
-          borderColor: isActive ? 'var(--brand)' : undefined,
-          color: isActive ? 'var(--brand-text, var(--brand))' : undefined,
-        }}
+        className={cn(
+          'bg-input-background focus-visible:ring-ring/50 inline-flex h-9 min-w-[120px] items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]',
+          isActive
+            ? 'border-[var(--brand)] text-[var(--brand-text,var(--brand))]'
+            : 'border-input focus-visible:border-ring'
+        )}
       >
         <span>
           {label}
           {isActive && (
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                marginLeft: 4,
-              }}
-            >
+            <span className="ml-[4px] font-[family-name:var(--font-mono)] text-[11px]">
               · {selected.length}
             </span>
           )}
@@ -82,43 +77,14 @@ function MultiSelectPopover({
       </button>
 
       {open && (
-        <div
-          className="card"
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            left: 0,
-            zIndex: 30,
-            minWidth: 220,
-            padding: 6,
-            boxShadow: 'var(--shadow-lg)',
-            maxHeight: 320,
-            overflowY: 'auto',
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-          }}
-        >
+        <div className="card absolute top-[calc(100%+6px)] left-0 z-30 max-h-[320px] min-w-[220px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[6px] shadow-[var(--shadow-lg)]">
           {options.map((o) => {
             const isSel = selected.includes(o.value)
             return (
               <button
                 key={o.value}
                 onClick={() => toggle(o.value)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 9,
-                  width: '100%',
-                  padding: '7px 9px',
-                  border: 'none',
-                  background: 'transparent',
-                  borderRadius: 7,
-                  cursor: 'pointer',
-                  font: 'inherit',
-                  textAlign: 'left',
-                  color: 'var(--text)',
-                }}
+                className="flex w-full cursor-pointer items-center gap-[9px] rounded-[7px] border-none bg-transparent px-[9px] py-[7px] text-left [font:inherit] text-[var(--text)]"
                 onMouseEnter={(e) =>
                   ((e.currentTarget as HTMLElement).style.background =
                     'var(--muted)')
@@ -129,17 +95,12 @@ function MultiSelectPopover({
                 }
               >
                 <span
-                  style={{
-                    width: 16,
-                    height: 16,
-                    borderRadius: 4,
-                    border: '2px solid',
-                    borderColor: isSel ? 'var(--brand)' : 'var(--border)',
-                    background: isSel ? 'var(--brand)' : 'transparent',
-                    display: 'grid',
-                    placeItems: 'center',
-                    flexShrink: 0,
-                  }}
+                  className={cn(
+                    'grid h-[16px] w-[16px] shrink-0 place-items-center rounded-[4px] border-2 border-solid',
+                    isSel
+                      ? 'border-[var(--brand)] bg-[var(--brand)]'
+                      : 'border-[var(--border)] bg-transparent'
+                  )}
                 >
                   {isSel && (
                     <svg
@@ -156,16 +117,11 @@ function MultiSelectPopover({
                 </span>
                 {o.color && (
                   <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 3,
-                      background: o.color,
-                      flexShrink: 0,
-                    }}
+                    className="h-[8px] w-[8px] shrink-0 rounded-[3px]"
+                    style={{ background: o.color }}
                   />
                 )}
-                <span style={{ fontSize: 14 }}>{o.label}</span>
+                <span className="text-[14px]">{o.label}</span>
               </button>
             )
           })}
@@ -276,14 +232,7 @@ export function TransactionFilters({
   return (
     <Card className="p-4 space-y-3">
       {/* Row 1: Search + Category + Account + Type + Currency + Monto */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
+      <div className="flex flex-wrap items-center gap-[8px]">
         <div className="relative w-full sm:flex-1">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
@@ -293,8 +242,7 @@ export function TransactionFilters({
             placeholder="Buscar por comercio o descripción..."
             value={searchTerm}
             onChange={(event) => onSearchChange(event.target.value)}
-            className="pl-9"
-            style={{ fontSize: 13 }}
+            className="pl-9 text-[13px]!"
           />
         </div>
 
@@ -345,7 +293,7 @@ export function TransactionFilters({
           variant={amountPanelOpen || amountActive ? 'default' : 'outline'}
           size="sm"
           onClick={() => setAmountPanelOpen((o) => !o)}
-          style={{ gap: 5 }}
+          className="gap-[5px]"
         >
           <Filter size={14} />
           Monto
@@ -354,15 +302,7 @@ export function TransactionFilters({
 
       {/* Advanced amount panel */}
       {amountPanelOpen && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: 14,
-            paddingTop: 14,
-            borderTop: '1px solid var(--border)',
-          }}
-        >
+        <div className="grid grid-cols-[repeat(2,1fr)] gap-[14px] border-t border-[var(--border)] pt-[14px]">
           <div>
             <label
               htmlFor={minAmountId}
@@ -376,7 +316,7 @@ export function TransactionFilters({
               placeholder="0"
               value={minAmount}
               onChange={(e) => onMinAmountChange(e.target.value)}
-              style={{ fontSize: 13 }}
+              className="text-[13px]!"
             />
           </div>
           <div>
@@ -392,7 +332,7 @@ export function TransactionFilters({
               placeholder="∞"
               value={maxAmount}
               onChange={(e) => onMaxAmountChange(e.target.value)}
-              style={{ fontSize: 13 }}
+              className="text-[13px]!"
             />
           </div>
         </div>
@@ -400,45 +340,17 @@ export function TransactionFilters({
 
       {/* Active filter chips */}
       {chips.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 8,
-            flexWrap: 'wrap',
-            alignItems: 'center',
-          }}
-        >
+        <div className="flex flex-wrap items-center gap-[8px]">
           {chips.map((chip, i) => (
             <span
               key={i}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                height: 26,
-                padding: '0 8px',
-                borderRadius: 999,
-                border: '1px solid var(--border)',
-                background: 'var(--muted)',
-                fontSize: 13,
-                fontWeight: 500,
-                color: 'var(--text)',
-              }}
+              className="inline-flex h-[26px] items-center gap-[4px] rounded-[999px] border border-[var(--border)] bg-[var(--muted)] px-[8px] py-0 text-[13px] font-[500] text-[var(--text)]"
             >
               {chip.label}
               <button
                 onClick={chip.onClear}
                 aria-label={`Quitar filtro ${chip.label}`}
-                style={{
-                  display: 'grid',
-                  placeItems: 'center',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: 0,
-                  color: 'var(--text-muted)',
-                  borderRadius: 999,
-                }}
+                className="grid cursor-pointer place-items-center rounded-[999px] border-none [background:none] p-0 text-[var(--text-muted)]"
               >
                 <X size={12} />
               </button>
@@ -447,15 +359,7 @@ export function TransactionFilters({
           {hasActiveFilters && chips.length > 0 && (
             <button
               onClick={onClearAll}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 13,
-                color: 'var(--brand)',
-                padding: '0 4px',
-                fontWeight: 500,
-              }}
+              className="cursor-pointer border-none [background:none] px-[4px] py-0 text-[13px] font-[500] text-[var(--brand)]"
             >
               Limpiar todo
             </button>
@@ -470,7 +374,7 @@ export function TransactionFilters({
         type="date"
         value={dateFromFilter}
         onChange={(event) => onDateFromChange(event.target.value)}
-        style={{ display: 'none' }}
+        className="hidden"
       />
       <input
         id="transactions-date-to-filter"
@@ -478,7 +382,7 @@ export function TransactionFilters({
         type="date"
         value={dateToFilter}
         onChange={(event) => onDateToChange(event.target.value)}
-        style={{ display: 'none' }}
+        className="hidden"
       />
     </Card>
   )
