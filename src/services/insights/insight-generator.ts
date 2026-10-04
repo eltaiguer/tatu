@@ -1,5 +1,6 @@
 import type { Currency } from '../../models'
 import type { InsightInput } from './insight-data'
+import { INSIGHTS_MODEL } from '../ai/models'
 import {
   buildInsightSystemPrompt,
   buildInsightUserMessage,
@@ -29,11 +30,9 @@ export interface InsightsResult {
   insights: Insight[]
 }
 
-// Insight generation always uses a stronger model than per-transaction
-// categorization (user_preferences.ai_model, often Haiku) — see ADR-0001.
-// This is a single call per period reasoning over an entire period's
-// aggregated data, not a high-volume per-row classification.
-const INSIGHTS_MODEL = 'claude-opus-4-8'
+// INSIGHTS_MODEL is a stronger model than per-transaction categorization
+// (see ADR-0001): this is a single call reasoning over aggregated data, not
+// a high-volume per-row classification.
 
 const VALID_TYPES = new Set<InsightType>([
   'bleeding_money',

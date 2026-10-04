@@ -15,6 +15,7 @@ import { SectionCard } from './ui/card'
 import { IconTile } from './ui/icon-tile'
 import { SegmentedToggle } from './ui/segmented-toggle'
 import { useConfirm } from './ConfirmDialog'
+import { CATEGORIZATION_MODELS } from '../services/ai/models'
 
 interface SettingsProps {
   theme: 'light' | 'dark' | 'auto'
@@ -259,10 +260,10 @@ export function Settings({
               }
             >
               <SegmentedToggle
-                options={[
-                  { label: 'Haiku', value: 'claude-haiku-4-5' as const },
-                  { label: 'Sonnet', value: 'claude-sonnet-4-6' as const },
-                ]}
+                options={CATEGORIZATION_MODELS.map(({ label, id }) => ({
+                  label,
+                  value: id,
+                }))}
                 value={aiModel}
                 onChange={onSetAiModel}
                 aria-label="Modelo de IA"

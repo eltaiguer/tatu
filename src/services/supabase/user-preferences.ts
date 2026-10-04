@@ -1,4 +1,5 @@
 import { getSupabaseClient, type SupabaseSession } from './client'
+import { DEFAULT_CATEGORIZATION_MODEL } from '../ai/models'
 
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'auto'
@@ -44,7 +45,7 @@ export async function loadUserPreferences(
     fxRate: row.fx_rate ?? 40.5,
     claudeApiKey: row.claude_api_key ?? '',
     aiEnabled: row.ai_enabled ?? false,
-    aiModel: row.ai_model ?? 'claude-haiku-4-5',
+    aiModel: row.ai_model ?? DEFAULT_CATEGORIZATION_MODEL,
   }
 }
 

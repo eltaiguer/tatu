@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseSession } from './client'
+import { DEFAULT_CATEGORIZATION_MODEL } from '../ai/models'
 
 const { fromMock, selectMock, eqMock, singleMock, upsertMock } = vi.hoisted(
   () => ({
@@ -117,6 +118,29 @@ describe('user-preferences service', () => {
       expect(prefs?.theme).toBe('auto')
       expect(prefs?.currency).toBe('USD')
       expect(prefs?.fxRate).toBe(40.5)
+    })
+
+    it('falls back to the shared default categorization model when ai_model is null', async () => {
+      singleMock.mockResolvedValueOnce({
+        data: {
+          user_id: 'user-1',
+          theme: 'dark',
+          currency: 'UYU',
+          fx_rate: 42.5,
+          claude_api_key: null,
+          ai_enabled: true,
+          ai_model: null,
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+        error: null,
+      })
+
+      const { loadUserPreferences } = await import('./user-preferences')
+      const prefs = await loadUserPreferences(session)
+
+      expect(prefs?.aiModel).toBe(DEFAULT_CATEGORIZATION_MODEL)
+      // Behavior unchanged: the fallback is still Haiku.
+      expect(prefs?.aiModel).toBe('claude-haiku-4-5')
     })
   })
 
