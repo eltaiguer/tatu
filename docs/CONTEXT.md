@@ -123,7 +123,7 @@ labels ("General", "Gestión") are uppercased by CSS, not in the string.
   number with 2 decimals: `US$ 1.234,56`, `$U 1.234.567,50`. Dot for
   thousands, comma for decimals. It prints the absolute value; show the sign
   or direction separately.
-- Compact axes and chips use `formatCurrencyShort`: `US$ 1k`, `$U 1.2M`.
+- Chart axis ticks on Resumen use `formatCurrencyShort`: `US$ 1k`, `$U 1.2M`.
 - Symbols are always `US$` (dollars) and `$U` (pesos), never `USD`/`UYU` in
   prose. The UYU account card is "Cuenta $U"; the USD one is "Cuenta USD".
 - A converted amount next to a native one is marked with `≈`.
