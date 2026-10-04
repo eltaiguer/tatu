@@ -425,3 +425,23 @@ describe('useTransactionFiltering — drill-through links add up', () => {
     expect(ids(result.current.filteredTransactions)).toEqual(['a'])
   })
 })
+
+describe('useTransactionFiltering — initial date range', () => {
+  it('filters the very first render, so a deep-linked month never flashes other months', () => {
+    const transactions = [
+      makeTransaction('march', { date: new Date('2026-03-10T12:00:00.000Z') }),
+      makeTransaction('april', { date: new Date('2026-04-10T12:00:00.000Z') }),
+    ]
+    const renders: string[][] = []
+    renderHook(() => {
+      const state = useTransactionFiltering({
+        transactions,
+        initialDateRange: { from: '2026-03-01', to: '2026-03-31' },
+      })
+      renders.push(state.filteredTransactions.map((tx) => tx.id))
+      return state
+    })
+
+    expect(renders[0]).toEqual(['march'])
+  })
+})
