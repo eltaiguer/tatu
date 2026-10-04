@@ -196,6 +196,7 @@ A task is done only when:
 - `docs:` / `chore:` for docs and tooling
 - Each commit should have passing tests
 - Keep changes small and logically scoped — one concern per PR
+- PR bodies follow `.github/pull_request_template.md` (RED/GREEN evidence, `tdd:verify`, schema change, linked issue); new issues use the forms in `.github/ISSUE_TEMPLATE/`, which apply `needs-triage`
 - **Schema changes**: a PR that changes `supabase/schema.sql` must say so in its body (the SQL is applied by hand — see `supabase/README.md`; CI labels it `schema-change`). Never merge it unattended — tag it `needs-human-review` and leave the merge to a human.
 
 ## Code conventions
