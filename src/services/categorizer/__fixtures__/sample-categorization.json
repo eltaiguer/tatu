@@ -1,0 +1,701 @@
+{
+  "CreditCardsMovementsDetail.csv": [
+    {
+      "description": "Merpago Seguros Cuota 09 10",
+      "type": "debit",
+      "category": "insurance",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Merpago Tupase",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Devoto Supermercado",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Provicentro Carlitos",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Pago Supernet",
+      "type": "credit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Pago Supernet",
+      "type": "credit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Merpago Prohygiene",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.8,
+      "displayDescription": null
+    },
+    {
+      "description": "Farmashop Visa",
+      "type": "debit",
+      "category": "healthcare",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Jetbrains Americas Inc",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Devoto Supermercado",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Automovil Club Uruguay",
+      "type": "debit",
+      "category": "insurance",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "C J P P U  Aportes",
+      "type": "debit",
+      "category": "fees",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Sopranos",
+      "type": "debit",
+      "category": "restaurants",
+      "categoryConfidence": 0.85,
+      "displayDescription": null
+    },
+    {
+      "description": "Atlassian",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.95,
+      "displayDescription": null
+    },
+    {
+      "description": "Paypal  Cloudflare",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.85,
+      "displayDescription": null
+    },
+    {
+      "description": "Vans",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Linkedin Sn P636194253",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.76,
+      "displayDescription": null
+    },
+    {
+      "description": "Super Sol",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Jetbrains Americas Inc",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Panes 1",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "Ancap Casa Anon Sa",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Sopranos",
+      "type": "debit",
+      "category": "restaurants",
+      "categoryConfidence": 0.85,
+      "displayDescription": null
+    },
+    {
+      "description": "Colonia Express Super Fer",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Antel Fijo Deb Aut",
+      "type": "debit",
+      "category": "utilities",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Colonia Express I V",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Colonia Express Ii V",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "2106 908 1337 Movil Cpatu",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Merpago Cultocafe",
+      "type": "debit",
+      "category": "restaurants",
+      "categoryConfidence": 0.8075,
+      "displayDescription": null
+    },
+    {
+      "description": "Devoto Supermercado",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Upwork  866561258Membersh",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Ondero Cafe",
+      "type": "debit",
+      "category": "restaurants",
+      "categoryConfidence": 0.8075,
+      "displayDescription": null
+    },
+    {
+      "description": "Merpago Cultocafe",
+      "type": "debit",
+      "category": "restaurants",
+      "categoryConfidence": 0.8075,
+      "displayDescription": null
+    },
+    {
+      "description": "Ute Debito Automatico",
+      "type": "debit",
+      "category": "utilities",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Bamboohr Hris",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Lazo Fintech Inc",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Cpatu Movil 2221",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Devoto Supermercado",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Shopping 3 Cruces Adm",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Antel Movil Deb Aut",
+      "type": "debit",
+      "category": "utilities",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Stm",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.85,
+      "displayDescription": null
+    },
+    {
+      "description": "Adidas Us Online Store",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Adidas Us Online Store",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "La Pantera",
+      "type": "debit",
+      "category": "utilities",
+      "categoryConfidence": 0.43605,
+      "displayDescription": null
+    },
+    {
+      "description": "Devoto Supermercado",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Zurich Santander",
+      "type": "debit",
+      "category": "insurance",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Summum Medicina Privada",
+      "type": "debit",
+      "category": "healthcare",
+      "categoryConfidence": 0.8075,
+      "displayDescription": null
+    },
+    {
+      "description": "Merpago Cobrabits",
+      "type": "debit",
+      "category": "insurance",
+      "categoryConfidence": 0.405,
+      "displayDescription": null
+    },
+    {
+      "description": "Provicentro Carlitos",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Carniceria Velsen",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.8075,
+      "displayDescription": null
+    },
+    {
+      "description": "Harrington",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.85,
+      "displayDescription": null
+    },
+    {
+      "description": "Toto Calzado 15",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.8075,
+      "displayDescription": null
+    },
+    {
+      "description": "Fireflies Ai",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Super Sol",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Devoto Supermercado",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Amazon Web Services",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.95,
+      "displayDescription": null
+    },
+    {
+      "description": "Sp Cleanline Surf",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.8075,
+      "displayDescription": null
+    },
+    {
+      "description": "Sodimac Web",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Claude Ai Subscription",
+      "type": "debit",
+      "category": "software",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Sp Rip Curl North Amer",
+      "type": "debit",
+      "category": "shopping",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "Carniceria Velsen",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.8075,
+      "displayDescription": null
+    },
+    {
+      "description": "Pago Supernet",
+      "type": "credit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Spotify P3d110f721",
+      "type": "debit",
+      "category": "entertainment",
+      "categoryConfidence": 0.9025,
+      "displayDescription": null
+    },
+    {
+      "description": "Pago Supernet",
+      "type": "credit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "Seguro Saldo Deudor",
+      "type": "debit",
+      "category": "insurance",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    }
+  ],
+  "USDmovements.csv": [
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS P--",
+      "type": "debit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "TRANSFERENCIA ENVIADA 754934TT55557465 TRF. PLAZA- FEDERICO GAZZANO",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS 754930TT55557465 TRF. PLAZA- FEDERICO GAZZANO",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172",
+      "type": "debit",
+      "category": "personal",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "COMPRA CON TARJETA DEBITO PUESTO EZEQUI.HANDY., XQ9MONTEVIDEO TARJ: ############9172",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "COMPRA CON TARJETA DEBITO PUESTO JOSE BENITEZ, MONTEVIDEO TARJ: ############9172",
+      "type": "debit",
+      "category": "transport",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS P--",
+      "type": "debit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "COMPRA CON TARJETA DEBITO PEDIDOSYA.BAR MICHIG, MONTEVIDEO TARJ: ############9172",
+      "type": "debit",
+      "category": "restaurants",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS P--",
+      "type": "debit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS 466949TT55365654 TRF. PLAZA- MATEO RODRIGUEZ",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "TRANSF INSTANTANEA ENVIADA 381239LE NRR:182500517 JOSE PREX",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "TRANSF INSTANTANEA ENVIADA 380104LE NRR:182499946 JOSE PREX",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS 467794TT55306376 TRF. PLAZA- GONZ     LATI     SANT",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS 777484TT55220518 TRF. PLAZA- STEFANY ROJAS",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "TRANSFERENCIA ENVIADA 686721TT55201905 TRF. PLAZA- MARIA VERONICA MAURIS",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS 686716TT55201905 TRF. PLAZA- MARIA VERONICA MAURIS",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL",
+      "type": "credit",
+      "category": "income",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "PAGO ELECTRONICO TARJETA CREDITO",
+      "type": "debit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "PAGO ELECTRONICO TARJETA CREDITO",
+      "type": "debit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "TRANSF INSTANTANEA RECIBIDA 644388LR:000022992325 GONZALEZ MAJO ROSINA",
+      "type": "credit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY  MARIA CONSTANZA",
+      "type": "credit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "TRANSF INSTANTANEA RECIBIDA 618258LR:000022847973 CRAVIOTTO FREIRA MARCOS",
+      "type": "credit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    }
+  ],
+  "UYUmovements.csv": [
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA                  5506",
+      "type": "debit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE",
+      "type": "credit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "RETIRO CORRESPONSALES , MONTEVIDEO TARJ: ############9172",
+      "type": "debit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE",
+      "type": "credit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "COMISION POR COSTO PRODUCTO COMISION COSTO PRODUCTO",
+      "type": "debit",
+      "category": "fees",
+      "categoryConfidence": 0.95,
+      "displayDescription": null
+    },
+    {
+      "description": "COMPRA CON TARJETA DEBITO PEDIDOSYA, MONTEVIDEO TARJ: ############9172",
+      "type": "debit",
+      "category": "restaurants",
+      "categoryConfidence": 0.855,
+      "displayDescription": null
+    },
+    {
+      "description": "TRANSF INSTANTANEA ENVIADA 871947LE NRR:183230909 ROMINA FERRARO",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS ANHEC     GC  PAGOS DE A",
+      "type": "debit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE",
+      "type": "credit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "COMPRA CON TARJETA DEBITO PANADERIA MARACANA, MONTEVIDEO TARJ: ############9172",
+      "type": "debit",
+      "category": "groceries",
+      "categoryConfidence": 0.8075,
+      "displayDescription": null
+    },
+    {
+      "description": "RETIRO CORRESPONSALES , MONTEVIDEO TARJ: ############9172",
+      "type": "debit",
+      "category": "internal_transfer",
+      "categoryConfidence": 0.9,
+      "displayDescription": null
+    },
+    {
+      "description": "DEBITO OPERACION EN SUPERNET O SMS 648124TT55140428 TRF. PLAZA- ROMINA FERRARO",
+      "type": "debit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    },
+    {
+      "description": "TRANSFERENCIA RECIBIDA 569729TT RECIBIDA /GAZZANO DE MARCO, FEDERICO J",
+      "type": "credit",
+      "category": "uncategorized",
+      "categoryConfidence": 0,
+      "displayDescription": null
+    }
+  ]
+}
