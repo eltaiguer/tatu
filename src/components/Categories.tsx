@@ -316,19 +316,7 @@ export function Categories({
         actions={
           <Button
             onClick={openNewForm}
-            style={{
-              background: 'var(--brand)',
-              color: 'var(--primary-foreground)',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              padding: '9px 16px',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
+            className="flex cursor-pointer items-center gap-[6px] rounded-[var(--radius-md)] border-none bg-[var(--brand)] px-[16px] py-[9px] text-[14px] leading-[20px] font-semibold text-[var(--primary-foreground)] hover:bg-[var(--brand)] has-[>svg]:px-[16px]"
           >
             <Plus size={15} strokeWidth={2.5} />
             Nueva categoría
@@ -338,38 +326,14 @@ export function Categories({
 
       {/* New / Edit category form */}
       {showForm && (
-        <div
-          style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '20px 24px',
-            marginBottom: 24,
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginBottom: 16,
-            }}
-          >
-            <h3 style={{ fontSize: 15, fontWeight: 600 }}>
+        <div className="mb-[24px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-[24px] py-[20px]">
+          <div className="mb-[16px] flex items-center justify-between">
+            <h3 className="text-[15px] font-semibold">
               {isEditing ? 'Editar categoría' : 'Nueva categoría'}
             </h3>
             <button
               onClick={resetForm}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-faint)',
-                display: 'grid',
-                placeItems: 'center',
-                padding: 4,
-                borderRadius: 6,
-              }}
+              className="grid cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] text-[var(--text-faint)]"
               aria-label="Cancelar"
             >
               <X size={16} />
@@ -380,13 +344,7 @@ export function Categories({
             <div>
               <label
                 htmlFor="cat-label"
-                style={{
-                  display: 'block',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  marginBottom: 6,
-                  color: 'var(--text-muted)',
-                }}
+                className="mb-[6px] block text-[12px] font-medium text-[var(--text-muted)]"
               >
                 Nombre
               </label>
@@ -403,13 +361,7 @@ export function Categories({
             <div>
               <label
                 htmlFor="cat-color"
-                style={{
-                  display: 'block',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  marginBottom: 6,
-                  color: 'var(--text-muted)',
-                }}
+                className="mb-[6px] block text-[12px] font-medium text-[var(--text-muted)]"
               >
                 Color
               </label>
@@ -427,13 +379,7 @@ export function Categories({
             <div>
               <label
                 htmlFor="cat-icon"
-                style={{
-                  display: 'block',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  marginBottom: 6,
-                  color: 'var(--text-muted)',
-                }}
+                className="mb-[6px] block text-[12px] font-medium text-[var(--text-muted)]"
               >
                 Icono
               </label>
@@ -450,23 +396,10 @@ export function Categories({
             </div>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginTop: 4,
-            }}
-          >
+          <div className="mt-[4px] flex items-center justify-between">
             <label
               htmlFor="cat-ignored"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
+              className="flex cursor-pointer items-center gap-[8px] select-none"
             >
               <Checkbox
                 id="cat-ignored"
@@ -476,16 +409,10 @@ export function Categories({
                 }
               />
               <div>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>
+                <span className="text-[13px] font-medium">
                   Ignorar en totales
                 </span>
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: 'var(--text-faint)',
-                    marginLeft: 6,
-                  }}
-                >
+                <span className="ml-[6px] text-[12px] text-[var(--text-faint)]">
                   Las transacciones de esta categoría no suman en gastos ni
                   ingresos
                 </span>
@@ -503,23 +430,8 @@ export function Categories({
       )}
 
       {/* Category grid */}
-      <div
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '20px 24px',
-          marginBottom: 24,
-        }}
-      >
-        <h3
-          style={{
-            fontSize: 15,
-            fontWeight: 600,
-            marginBottom: 16,
-            color: 'var(--text)',
-          }}
-        >
+      <div className="mb-[24px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-[24px] py-[20px]">
+        <h3 className="mb-[16px] text-[15px] font-semibold text-[var(--text)]">
           Tus categorías
         </h3>
 
@@ -532,87 +444,35 @@ export function Categories({
             return (
               <div
                 key={cat.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '12px 14px',
-                  background: 'var(--bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
-                  position: 'relative',
-                }}
+                className="relative flex items-center gap-[10px] rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-[14px] py-[12px]"
               >
                 {/* Icon tile */}
                 <span
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: cat.color + '22',
-                    display: 'grid',
-                    placeItems: 'center',
-                    fontSize: 18,
-                    flexShrink: 0,
-                  }}
+                  className="grid h-[36px] w-[36px] shrink-0 place-items-center rounded-[10px] text-[18px]"
+                  style={{ background: cat.color + '22' }}
                 >
                   {cat.icon}
                 </span>
 
                 {/* Name + count */}
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: 'var(--text)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-[6px] overflow-hidden text-ellipsis text-[13px] font-semibold text-[var(--text)]">
                     {cat.label}
                     {cat.isOrphan && (
                       <span
                         title="Categoría eliminada que todavía tiene transacciones"
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 500,
-                          color: 'var(--text-faint)',
-                          background: 'var(--border)',
-                          borderRadius: 4,
-                          padding: '1px 5px',
-                          flexShrink: 0,
-                        }}
+                        className="shrink-0 rounded-[4px] bg-[var(--border)] px-[5px] py-[1px] text-[10px] font-medium text-[var(--text-faint)]"
                       >
                         sin definir
                       </span>
                     )}
                     {cat.isIgnored && (
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 500,
-                          color: 'var(--text-faint)',
-                          background: 'var(--border)',
-                          borderRadius: 4,
-                          padding: '1px 5px',
-                          flexShrink: 0,
-                        }}
-                      >
+                      <span className="shrink-0 rounded-[4px] bg-[var(--border)] px-[5px] py-[1px] text-[10px] font-medium text-[var(--text-faint)]">
                         ignorada
                       </span>
                     )}
                   </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--text-faint)',
-                      marginTop: 1,
-                    }}
-                  >
+                  <div className="mt-[1px] text-[11px] text-[var(--text-faint)]">
                     {spend && spend.total > 0 ? (
                       onNavigateToTransactions ? (
                         <button
@@ -664,24 +524,14 @@ export function Categories({
 
                 {/* Edit (all) / delete (custom only) */}
                 <div
-                  style={{
-                    display: cat.isOrphan ? 'none' : 'flex',
-                    gap: 4,
-                  }}
+                  className={
+                    cat.isOrphan ? 'hidden gap-[4px]' : 'flex gap-[4px]'
+                  }
                 >
                   <button
                     onClick={() => startEdit(cat.id)}
                     aria-label={`Editar categoría ${cat.label}`}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--text-faint)',
-                      display: 'grid',
-                      placeItems: 'center',
-                      padding: 4,
-                      borderRadius: 6,
-                    }}
+                    className="grid cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] text-[var(--text-faint)]"
                   >
                     <Pencil size={13} />
                   </button>
@@ -689,16 +539,7 @@ export function Categories({
                     <button
                       onClick={() => void handleDelete(cat.id)}
                       aria-label={`Eliminar categoría ${cat.label}`}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--neg)',
-                        display: 'grid',
-                        placeItems: 'center',
-                        padding: 4,
-                        borderRadius: 6,
-                      }}
+                      className="grid cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] text-[var(--neg)]"
                     >
                       <Trash size={13} />
                     </button>
@@ -711,52 +552,23 @@ export function Categories({
       </div>
 
       {/* Pattern rules */}
-      <div
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '20px 24px',
-        }}
-      >
-        <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+      <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-[24px] py-[20px]">
+        <h3 className="mb-[4px] text-[15px] font-semibold">
           Reglas de auto-categorización
         </h3>
-        <p
-          style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}
-        >
+        <p className="mb-[16px] text-[13px] text-[var(--text-muted)]">
           Creá reglas para categorizar transacciones automáticamente según el
           texto de la descripción.
         </p>
 
         {/* Add pattern form */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
-            marginBottom: 16,
-          }}
-        >
+        <div className="mb-[16px] flex flex-col gap-[10px]">
           {/* Row 1: pattern + type + category */}
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 10,
-              alignItems: 'flex-end',
-            }}
-          >
-            <div style={{ flex: '1 1 auto', minWidth: 160 }}>
+          <div className="flex flex-wrap items-end gap-[10px]">
+            <div className="min-w-[160px] flex-auto">
               <label
                 htmlFor="pattern-text"
-                style={{
-                  display: 'block',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  marginBottom: 6,
-                  color: 'var(--text-muted)',
-                }}
+                className="mb-[6px] block text-[12px] font-medium text-[var(--text-muted)]"
               >
                 Patrón
               </label>
@@ -772,13 +584,7 @@ export function Categories({
             <div>
               <label
                 htmlFor="pattern-match"
-                style={{
-                  display: 'block',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  marginBottom: 6,
-                  color: 'var(--text-muted)',
-                }}
+                className="mb-[6px] block text-[12px] font-medium text-[var(--text-muted)]"
               >
                 Tipo
               </label>
@@ -800,13 +606,7 @@ export function Categories({
             <div>
               <label
                 htmlFor="pattern-category"
-                style={{
-                  display: 'block',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  marginBottom: 6,
-                  color: 'var(--text-muted)',
-                }}
+                className="mb-[6px] block text-[12px] font-medium text-[var(--text-muted)]"
               >
                 Categoría
               </label>
@@ -829,24 +629,11 @@ export function Categories({
           </div>
 
           {/* Row 2: description + apply scope + add button */}
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 10,
-              alignItems: 'flex-end',
-            }}
-          >
-            <div style={{ flex: '1 1 auto', minWidth: 160 }}>
+          <div className="flex flex-wrap items-end gap-[10px]">
+            <div className="min-w-[160px] flex-auto">
               <label
                 htmlFor="pattern-description"
-                style={{
-                  display: 'block',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  marginBottom: 6,
-                  color: 'var(--text-muted)',
-                }}
+                className="mb-[6px] block text-[12px] font-medium text-[var(--text-muted)]"
               >
                 Descripción (opcional)
               </label>
@@ -875,7 +662,7 @@ export function Categories({
             <Button
               onClick={handleAddPattern}
               disabled={!patternForm.pattern.trim()}
-              style={{ height: 40 }}
+              className="h-[40px]"
             >
               <Plus size={15} />
               Agregar regla
@@ -884,7 +671,7 @@ export function Categories({
         </div>
 
         {customPatterns.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="flex flex-col gap-[6px]">
             {customPatterns.map((cp) => {
               const catDisplay = getCategoryDefinition(cp.category)
               const matchLabel =
@@ -896,68 +683,26 @@ export function Categories({
               return (
                 <div
                   key={cp.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10,
-                    padding: '10px 12px',
-                    background: 'var(--bg)',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border)',
-                  }}
+                  className="flex items-center justify-between gap-[10px] rounded-[var(--radius-sm)] border border-[var(--border)] bg-[var(--bg)] px-[12px] py-[10px]"
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      minWidth: 0,
-                      fontSize: 13,
-                    }}
-                  >
+                  <div className="flex min-w-0 items-center gap-[8px] text-[13px]">
                     <Badge variant="outline">{matchLabel}</Badge>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: 12,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
+                    <span className="overflow-hidden font-[family-name:var(--font-mono)] text-[12px] text-ellipsis whitespace-nowrap">
                       &quot;{cp.pattern}&quot;
                     </span>
-                    <span style={{ color: 'var(--text-faint)' }}>→</span>
+                    <span className="text-[var(--text-faint)]">→</span>
                     <Badge
-                      style={{
-                        backgroundColor: catDisplay.color + '20',
-                        color: 'var(--text)',
-                        border: 'none',
-                      }}
+                      className="border-none text-[color:var(--text)]"
+                      style={{ backgroundColor: catDisplay.color + '20' }}
                     >
                       {catDisplay.icon} {catDisplay.label}
                     </Badge>
                     {cp.description && (
-                      <span
-                        style={{
-                          fontSize: 12,
-                          color: 'var(--text-faint)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
+                      <span className="overflow-hidden text-[12px] text-ellipsis whitespace-nowrap text-[var(--text-faint)]">
                         · &quot;{cp.description}&quot;
                       </span>
                     )}
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: 'var(--text-muted)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
+                    <span className="text-[12px] whitespace-nowrap text-[var(--text-muted)]">
                       · {matchCounts.get(cp.id) ?? 0}{' '}
                       {matchCounts.get(cp.id) === 1
                         ? 'transacción coincide'
@@ -969,17 +714,7 @@ export function Categories({
                       void handleRemovePattern(cp.id)
                     }}
                     aria-label={`Eliminar regla ${cp.pattern}`}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--neg)',
-                      display: 'grid',
-                      placeItems: 'center',
-                      padding: 4,
-                      borderRadius: 6,
-                      flexShrink: 0,
-                    }}
+                    className="grid shrink-0 cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] text-[var(--neg)]"
                   >
                     <Trash size={13} />
                   </button>
@@ -988,14 +723,7 @@ export function Categories({
             })}
           </div>
         ) : (
-          <p
-            style={{
-              fontSize: 13,
-              color: 'var(--text-faint)',
-              textAlign: 'center',
-              padding: '16px 0',
-            }}
-          >
+          <p className="py-[16px] text-center text-[13px] text-[var(--text-faint)]">
             No hay reglas personalizadas. Creá una para categorizar
             automáticamente tus transacciones.
           </p>
