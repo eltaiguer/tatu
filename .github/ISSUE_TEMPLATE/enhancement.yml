@@ -1,0 +1,35 @@
+name: Enhancement
+description: A new feature, improvement or tooling change. Triage picks it up from needs-triage.
+labels: ['enhancement', 'needs-triage']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing or painful today, and for whom. Tatu's filter is "where did my money go / how can I spend less" — say how this helps answer either.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: What shows this is a real problem — screenshots, data, code references, related issues.
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-fix
+    attributes:
+      label: Proposed fix
+      description: The change you have in mind, and alternatives or trade-offs if you know them.
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: Observable conditions that mean this is done. Each should be testable.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
