@@ -116,18 +116,9 @@ export function TransactionTable({
   return (
     <Card className="overflow-hidden gap-0">
       {/* Toolbar row: selection count + transfers toggle */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          padding: '10px 16px',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
+      <div className="flex items-center justify-between gap-[12px] border-b border-[var(--border)] px-[16px] py-[10px]">
         <span
-          style={{ fontSize: 13, color: 'var(--text-muted)' }}
+          className="text-[13px] text-[color:var(--text-muted)]"
           role="status"
           aria-live="polite"
         >
@@ -139,34 +130,20 @@ export function TransactionTable({
           onClick={() => onShowIgnoredChange(!showIgnored)}
           disabled={ignoredCount === 0}
           title="Las transferencias se ignoran de los totales"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            height: 32,
-            padding: '0 10px',
-            borderRadius: 8,
-            border: `1px solid ${showIgnored ? 'var(--brand)' : 'var(--border)'}`,
-            background: 'transparent',
-            color: showIgnored
-              ? 'var(--brand-text, var(--brand))'
-              : 'var(--text-muted)',
-            cursor: ignoredCount === 0 ? 'not-allowed' : 'pointer',
-            fontSize: 13,
-            fontWeight: 500,
-            opacity: ignoredCount === 0 ? 0.5 : 1,
-          }}
+          className={`inline-flex h-[32px] items-center gap-[6px] rounded-[8px] border bg-transparent px-[10px] py-0 text-[13px] font-medium ${
+            showIgnored
+              ? 'border-[var(--brand)] text-[color:var(--brand-text,var(--brand))]'
+              : 'border-[var(--border)] text-[color:var(--text-muted)]'
+          } ${
+            ignoredCount === 0
+              ? 'cursor-not-allowed opacity-50'
+              : 'cursor-pointer opacity-100'
+          }`}
         >
           {showIgnored ? <Eye size={14} /> : <EyeOff size={14} />}
           {showIgnored ? 'Ocultar' : 'Mostrar'} transferencias ignoradas
           {ignoredCount > 0 && (
-            <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: 11,
-                color: 'var(--text-muted)',
-              }}
-            >
+            <span className="font-[family-name:var(--font-mono)] text-[11px] text-[color:var(--text-muted)]">
               · {ignoredCount}
             </span>
           )}
@@ -351,13 +328,7 @@ export function TransactionTable({
                           : undefined
                       }
                     >
-                      <div
-                        style={{
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: 10,
-                        }}
-                      >
+                      <div className="flex items-start gap-[10px]">
                         {(() => {
                           const catId = transaction.category ?? 'uncategorized'
                           const definition = getCategoryDefinition(catId)
@@ -366,80 +337,37 @@ export function TransactionTable({
                               aria-hidden="true"
                               size="sm"
                               color={definition.color}
-                              style={{ marginTop: 1 }}
+                              className="mt-[1px]"
                             >
                               {definition.icon ?? (
                                 <span
-                                  style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: '50%',
-                                    background: definition.color,
-                                    display: 'block',
-                                  }}
+                                  className="block h-[8px] w-[8px] rounded-full"
+                                  style={{ background: definition.color }}
                                 />
                               )}
                             </IconTile>
                           )
                         })()}
-                        <div style={{ minWidth: 0 }}>
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 7,
-                            }}
-                          >
-                            <div
-                              className="font-medium truncate leading-snug"
-                              style={{ maxWidth: 220 }}
-                            >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-[7px]">
+                            <div className="font-medium truncate leading-snug max-w-[220px]">
                               {displayDescription}
                             </div>
                             {isIgnored && (
-                              <span
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 3,
-                                  flexShrink: 0,
-                                  fontSize: 11,
-                                  fontWeight: 500,
-                                  padding: '1px 6px',
-                                  borderRadius: 4,
-                                  background: 'var(--muted)',
-                                  color: 'var(--text-muted)',
-                                }}
-                              >
+                              <span className="inline-flex shrink-0 items-center gap-[3px] rounded-[4px] bg-[var(--muted)] px-[6px] py-[1px] text-[11px] font-medium text-[color:var(--text-muted)]">
                                 <Slash size={9} />
                                 Ignorada
                               </span>
                             )}
                             {isSplitParent && (
-                              <span
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 3,
-                                  flexShrink: 0,
-                                  fontSize: 11,
-                                  fontWeight: 500,
-                                  padding: '1px 6px',
-                                  borderRadius: 4,
-                                  background: 'var(--muted)',
-                                  color: 'var(--text-muted)',
-                                }}
-                              >
+                              <span className="inline-flex shrink-0 items-center gap-[3px] rounded-[4px] bg-[var(--muted)] px-[6px] py-[1px] text-[11px] font-medium text-[color:var(--text-muted)]">
                                 <Scissors size={9} />
                                 Dividida
                               </span>
                             )}
                           </div>
                           {hasFriendlyOverride && (
-                            <div
-                              className="text-muted-foreground truncate leading-tight"
-                              style={{ fontSize: 11, maxWidth: 220 }}
-                            >
+                            <div className="text-muted-foreground truncate leading-tight text-[11px] max-w-[220px]">
                               {transaction.description}
                             </div>
                           )}
@@ -482,15 +410,13 @@ export function TransactionTable({
                     </td>
                     <td className="px-3.5 py-1.5 text-right whitespace-nowrap">
                       <div
-                        className={`font-mono leading-snug${isIgnored ? ' line-through' : ''}`}
-                        style={{
-                          color:
-                            isIgnored || isSplitParent
-                              ? 'var(--text-muted)'
-                              : transaction.type === 'credit'
-                                ? 'var(--pos)'
-                                : 'var(--text)',
-                        }}
+                        className={`font-mono leading-snug${isIgnored ? ' line-through' : ''} ${
+                          isIgnored || isSplitParent
+                            ? 'text-[color:var(--text-muted)]'
+                            : transaction.type === 'credit'
+                              ? 'text-[color:var(--pos)]'
+                              : 'text-[color:var(--text)]'
+                        }`}
                       >
                         {transaction.type === 'credit' ? '+' : '-'}
                         {formatCurrency(
@@ -499,14 +425,7 @@ export function TransactionTable({
                         )}
                       </div>
                       {convertedAmount !== null && (
-                        <div
-                          className="font-mono leading-tight"
-                          style={{
-                            fontSize: 11,
-                            marginTop: 1,
-                            color: 'var(--text-muted)',
-                          }}
-                        >
+                        <div className="font-mono leading-tight mt-[1px] text-[11px] text-[color:var(--text-muted)]">
                           ≈{' '}
                           {formatCurrency(
                             convertedAmount,
@@ -622,25 +541,16 @@ export function TransactionTable({
             return (
               <div
                 key={transaction.id}
-                style={
+                // A split part is indented with a guide line on the left.
+                className={`space-y-3 ${
+                  isSplitChildM
+                    ? 'border-l-[2px] border-l-[var(--border)] py-4 pr-4 pl-[20px]'
+                    : 'p-4'
+                }${
                   isIgnored || isSplitParentM
-                    ? {
-                        color: 'var(--text-muted)',
-                        ...(isSplitChildM
-                          ? {
-                              borderLeft: '2px solid var(--border)',
-                              paddingLeft: 20,
-                            }
-                          : {}),
-                      }
-                    : isSplitChildM
-                      ? {
-                          borderLeft: '2px solid var(--border)',
-                          paddingLeft: 20,
-                        }
-                      : undefined
-                }
-                className="p-4 space-y-3"
+                    ? ' text-[color:var(--text-muted)]'
+                    : ''
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <Checkbox
@@ -657,39 +567,13 @@ export function TransactionTable({
                         {displayDescription}
                       </div>
                       {isIgnored && (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 3,
-                            flexShrink: 0,
-                            fontSize: 11,
-                            fontWeight: 500,
-                            padding: '1px 6px',
-                            borderRadius: 4,
-                            background: 'var(--muted)',
-                            color: 'var(--text-muted)',
-                          }}
-                        >
+                        <span className="inline-flex shrink-0 items-center gap-[3px] rounded-[4px] bg-[var(--muted)] px-[6px] py-[1px] text-[11px] font-medium text-[color:var(--text-muted)]">
                           <Slash size={9} />
                           Ignorada
                         </span>
                       )}
                       {isSplitParentM && (
-                        <span
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 3,
-                            flexShrink: 0,
-                            fontSize: 11,
-                            fontWeight: 500,
-                            padding: '1px 6px',
-                            borderRadius: 4,
-                            background: 'var(--muted)',
-                            color: 'var(--text-muted)',
-                          }}
-                        >
+                        <span className="inline-flex shrink-0 items-center gap-[3px] rounded-[4px] bg-[var(--muted)] px-[6px] py-[1px] text-[11px] font-medium text-[color:var(--text-muted)]">
                           <Scissors size={9} />
                           Dividida
                         </span>
@@ -706,15 +590,13 @@ export function TransactionTable({
                   </div>
                   <div className="text-right">
                     <div
-                      className={`font-mono${isIgnored ? ' line-through' : ''}`}
-                      style={{
-                        color:
-                          isIgnored || isSplitParentM
-                            ? 'var(--text-muted)'
-                            : transaction.type === 'credit'
-                              ? 'var(--pos)'
-                              : 'var(--text)',
-                      }}
+                      className={`font-mono${isIgnored ? ' line-through' : ''} ${
+                        isIgnored || isSplitParentM
+                          ? 'text-[color:var(--text-muted)]'
+                          : transaction.type === 'credit'
+                            ? 'text-[color:var(--pos)]'
+                            : 'text-[color:var(--text)]'
+                      }`}
                     >
                       {transaction.type === 'credit' ? '+' : '-'}
                       {formatCurrency(
@@ -725,14 +607,7 @@ export function TransactionTable({
                     {homeCurrency &&
                       fxRate &&
                       transaction.currency !== homeCurrency && (
-                        <div
-                          className="font-mono"
-                          style={{
-                            fontSize: 11,
-                            marginTop: 1,
-                            color: 'var(--text-muted)',
-                          }}
-                        >
+                        <div className="font-mono mt-[1px] text-[11px] text-[color:var(--text-muted)]">
                           ≈{' '}
                           {formatCurrency(
                             convert(
