@@ -594,6 +594,31 @@ describe('buildInsightInput — recurring-charge tolerance (#59)', () => {
     ])
   })
 
+  it('keeps a subscription active after a price rise: lastSeenMonth counts every charge', () => {
+    // 12 for four months, then 16 (out of band) in the latest month.
+    const transactions = [12, 12, 12, 12, 16].map((amount, i) =>
+      makeTransaction(`p${i}`, {
+        date: new Date(Date.UTC(2026, i, 10)),
+        amount,
+        description: 'NETFLIX.COM',
+      })
+    )
+
+    const [charge] = buildInsightInput(
+      transactions,
+      'USD',
+      40.5
+    ).recurringCharges
+
+    expect(charge).toEqual(
+      expect.objectContaining({
+        approxAmount: 12,
+        lastSeenMonth: '2026-05',
+        monthsSinceLastSeen: 0,
+      })
+    )
+  })
+
   it('detects a monthly utility bill that varies a little, with one winter spike', () => {
     expect(
       recurringMerchants(monthly('ute', 'UTE', [3200, 3400, 3100, 4800, 3300]))

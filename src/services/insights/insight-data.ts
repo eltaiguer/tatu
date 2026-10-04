@@ -28,7 +28,10 @@ export interface RecurringCharge {
   approxAmount: number
   cadence: RecurringCadence
   monthsSeen: number
-  /** Month key ('YYYY-MM') of the most recent in-band charge. */
+  /**
+   * Month key ('YYYY-MM') of this merchant's most recent charge, in band or
+   * not, so a price rise doesn't read as a lapse.
+   */
   lastSeenMonth: string
   /**
    * Whole months between lastSeenMonth and the month of historyEnd — lets
@@ -155,10 +158,10 @@ function isWithinBand(amount: number, reference: number): boolean {
  * - the merchant is recurring when ≥ 75% of its charges are in band AND the
  *   in-band charges fall in ≥ 3 distinct months (several charges in one month
  *   count once).
- * Everything reported (approxAmount = median of the in-band charges,
- * monthsSeen, cadence, lastSeenMonth) describes the in-band charges only, so
- * a one-off annual fee or a single price spike neither blocks detection nor
- * skews the amount.
+ * approxAmount (median of the in-band charges), monthsSeen and cadence
+ * describe the in-band charges only, so a one-off annual fee or a price spike
+ * neither blocks detection nor skews the amount. lastSeenMonth is the latest
+ * charge of any amount: the merchant is still charging after a price rise.
  *
  * Installments ("Cuota N M") are excluded: a fixed monthly payment of a
  * purchase already made is not a subscription the user can cancel.
@@ -196,7 +199,11 @@ function detectRecurringCharges(
       const sortedDates = inBand
         .map((c) => c.date)
         .sort((a, b) => a.getTime() - b.getTime())
-      const lastSeenMonth = toMonthKey(sortedDates[sortedDates.length - 1])
+      let lastSeenMs = -Infinity
+      for (const c of converted) {
+        lastSeenMs = Math.max(lastSeenMs, c.date.getTime())
+      }
+      const lastSeenMonth = toMonthKey(new Date(lastSeenMs))
 
       charges.push({
         merchant,
