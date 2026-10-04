@@ -118,8 +118,8 @@ export function TransactionTableSkeleton({ rows = 8 }: { rows?: number }) {
             )
           )}
         </div>
-        {/* Desktop: table rows */}
-        <div className="hidden md:block">
+        {/* Desktop: table rows (spaced like the Card's own children were) */}
+        <div className="hidden md:flex md:flex-col md:gap-6">
           {Array.from({ length: rows }).map((_, i) => (
             <div
               key={i}
