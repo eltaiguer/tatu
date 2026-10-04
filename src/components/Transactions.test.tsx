@@ -12,6 +12,8 @@ import { Transactions } from './Transactions'
 import { ITEMS_PER_PAGE } from '../hooks/useTransactionFiltering'
 import type { Transaction } from '../models'
 import { NeedsConfirmationError } from '../utils/user-error'
+import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
+import { captureCsvDownload } from '../test/csv-download'
 
 // Category and rule changes are saved to Supabase before they count; give
 // these view tests a signed-in session and a server that accepts writes.
@@ -1067,5 +1069,44 @@ describe('Transactions', () => {
     await waitFor(() =>
       expect(onBulkTag).toHaveBeenCalledWith(['tx-1'], 'new-tag')
     )
+  })
+
+  describe('Exportar', () => {
+    const rows: Transaction[] = [
+      { ...makeTransaction(0, 'super'), category: 'groceries' },
+      { ...makeTransaction(1, 'pago tarjeta'), category: 'internal_transfer' },
+    ]
+
+    async function exportedDescriptions(showIgnored: boolean) {
+      const csv = captureCsvDownload()
+      try {
+        render(
+          <Transactions
+            transactions={rows}
+            initialFilters={{
+              ...DEFAULT_URL_FILTERS,
+              period: { mode: 'all' },
+              showIgnored,
+            }}
+          />
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Exportar' }))
+        const [header, ...data] = await csv.rows()
+        const description = header.indexOf('Description')
+        return data.map((row) => row[description])
+      } finally {
+        csv.restore()
+      }
+    }
+
+    it('writes the ignored rows on screen when "show ignored" is on', async () => {
+      expect(await exportedDescriptions(true)).toEqual(
+        expect.arrayContaining(['super', 'pago tarjeta'])
+      )
+    })
+
+    it('leaves out the ignored rows hidden from the list', async () => {
+      expect(await exportedDescriptions(false)).toEqual(['super'])
+    })
   })
 })

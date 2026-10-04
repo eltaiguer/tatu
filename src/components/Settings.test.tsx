@@ -13,6 +13,7 @@ import { UserFacingError } from '../utils/user-error'
 import { CATEGORIZATION_MODELS } from '../services/ai/models'
 import type { Transaction } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
+import { captureCsvDownload } from '../test/csv-download'
 
 vi.mock('../services/supabase/client', () => ({
   isSupabaseConfigured: () => false,
@@ -286,5 +287,50 @@ describe('Settings', () => {
       'claude-haiku-4-5',
       'claude-sonnet-4-6',
     ])
+  })
+
+  it('exports every row as a backup, flags what counts, and toasts the rows written', async () => {
+    const csv = captureCsvDownload()
+    try {
+      render(
+        <>
+          <Settings
+            theme="light"
+            onSetTheme={() => {}}
+            preferredCurrency="UYU"
+            onSetCurrency={() => {}}
+            session={null}
+            supabaseEnabled={false}
+            onSignOut={() => {}}
+            transactions={[
+              makeTx({ id: 'parent', amount: 1000, isSplitParent: true }),
+              makeTx({ id: 'p1', amount: 600, splitParentId: 'parent' }),
+              makeTx({ id: 'p2', amount: 400, splitParentId: 'parent' }),
+              makeTx({ id: 'trf', amount: 50, category: 'internal_transfer' }),
+            ]}
+            {...defaultAiProps}
+          />
+          <Toaster />
+        </>
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: /Exportar CSV/ }))
+
+      expect(
+        await screen.findByText('CSV exportado: 4 transacciones')
+      ).toBeInTheDocument()
+
+      const [header, ...rows] = await csv.rows()
+      const flag = header.indexOf('cuenta_en_totales')
+      expect(flag).toBeGreaterThan(-1)
+      expect(rows.map((r) => [r[2], r[flag]])).toEqual([
+        ['1000.00', 'no'],
+        ['600.00', 'sí'],
+        ['400.00', 'sí'],
+        ['50.00', 'no'],
+      ])
+    } finally {
+      csv.restore()
+    }
   })
 })
