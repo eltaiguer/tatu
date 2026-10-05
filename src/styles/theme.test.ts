@@ -312,7 +312,7 @@ function componentFiles(dir: string): string[] {
   })
 }
 
-describe('--text-faint contrast (WCAG AA, #200)', () => {
+describe('--text-faint and --text-muted contrast (WCAG AA, #200)', () => {
   // Where faint text lands: page (bg), cards + sidebar (surface), and
   // segmented toggles, chips and nav counts (surface-2).
   const BACKGROUNDS = ['bg', 'surface', 'surface-2']
@@ -329,6 +329,30 @@ describe('--text-faint contrast (WCAG AA, #200)', () => {
       })
     }
   }
+
+  for (const selector of [':root', '.dark'] as const) {
+    for (const background of BACKGROUNDS) {
+      it(`keeps --text-muted at 4.5:1 on --${background} in ${selector}`, () => {
+        const block = themeBlock(selector)
+        const ratio = contrastRatio(
+          oklchToken(block, 'text-muted'),
+          oklchToken(block, background)
+        )
+        expect(ratio).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+
+  // Faint and muted must stay visibly distinct in light mode (text < muted <
+  // faint in lightness), not collapse into one grey.
+  it('keeps light --text-muted a clear step darker than --text-faint', () => {
+    const block = themeBlock(':root')
+    const [text] = oklchToken(block, 'text')
+    const [muted] = oklchToken(block, 'text-muted')
+    const [faint] = oklchToken(block, 'text-faint')
+    expect(faint - muted).toBeGreaterThanOrEqual(0.08 - 1e-9)
+    expect(muted).toBeGreaterThan(text)
+  })
 
   // --border is too dark (light) for any text token to reach 4.5:1 on it.
   it('is never set on a --border background', () => {
