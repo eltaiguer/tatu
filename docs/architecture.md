@@ -17,6 +17,15 @@ then hands them to `importTransactions`
 The parsers are pure: they map columns, dates, amounts, currency and IDs and
 never call the categorizer.
 
+When the import finishes, the dialog stays open on a summary of the
+`ImportResult` counts (nuevas · duplicadas omitidas · eliminadas antes; one
+entry per count in `summaryLines`). A file with nothing new shows a neutral
+"No había movimientos nuevos" state instead of success. Nothing navigates on
+its own: "Ver transacciones" closes the dialog and opens Transacciones on the
+month of the newest new row (the file's newest row when nothing was new),
+through the same `navigateToTransactions` link Resumen uses; "Importar otro
+archivo" resets the dialog to the file picker. Errors stay in the dialog.
+
 ```mermaid
 flowchart TD
     A["CSV file dropped in ImportCSV"] --> B["detectFileType: credit_card, bank_account_usd or bank_account_uyu"]

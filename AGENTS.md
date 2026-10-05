@@ -61,7 +61,7 @@ src/
     Categories.tsx         # Categorías view — category grid + auto-categorization rules
     categories/            # Categorías sub-components: CategoryForm, CategoryCard, PatternRulesCard (rules form + list, owns its state)
     Settings.tsx           # Configuración view — theme, currency, account, data management
-    ImportCSV.tsx          # CSV import flow (wrapped in Radix Dialog, not a view)
+    ImportCSV.tsx          # CSV import flow (wrapped in Radix Dialog, not a view); stays open on a summary of counts after an import (#202)
     CategoryBreakdownList.tsx  # Ranked category list with progress bars
     FxChip.tsx             # Editable FX rate chip (click to edit inline)
     CurrencyToggle.tsx     # Home-currency switch
