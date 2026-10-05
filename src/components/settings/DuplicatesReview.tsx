@@ -16,6 +16,7 @@ import {
   findPossibleDuplicates,
   type DuplicateGroup,
   type DuplicateScan,
+  type ReviewReason,
 } from '../../services/dedup/duplicate-review'
 import { sumCountedTotals } from '../../services/spending/spending-rules'
 import type { DeleteResult } from '../../services/mutations/transaction-mutations'
@@ -40,6 +41,11 @@ function txDone(count: number, participleStem: string): string {
 
 function copies(count: number): string {
   return count === 1 ? '1 copia' : `${count} copias`
+}
+
+const REVIEW_NOTES: Record<ReviewReason, string> = {
+  split: 'Una copia está dividida: esa no se puede eliminar desde acá.',
+  no_reference: 'Una copia no tiene número de referencia para comparar.',
 }
 
 const rowName = (tx: Transaction) => tx.displayDescription || tx.description
@@ -84,7 +90,7 @@ export function DuplicatesReview({
   }
 
   const selectedRows = scan
-    ? [...scan.flagged, ...scan.unknownOrigin]
+    ? [...scan.flagged, ...scan.unknownOrigin, ...scan.review]
         .flatMap((group) => group.rows)
         .filter((tx) => selected.has(tx.id))
     : []
@@ -92,7 +98,8 @@ export function DuplicatesReview({
   const empty =
     scan !== null &&
     scan.flagged.length === 0 &&
-    scan.unknownOrigin.length === 0
+    scan.unknownOrigin.length === 0 &&
+    scan.review.length === 0
 
   function reportDeleted(result: DeleteResult) {
     const message = txDone(result.removed.length, 'eliminad')
@@ -200,6 +207,16 @@ export function DuplicatesReview({
                 disabled={deleting}
               />
             )}
+            {scan && scan.review.length > 0 && (
+              <GroupSection
+                title="Revisar a mano"
+                hint="Pueden ser duplicados, pero no podemos confirmarlo: marcá solo las copias que sobren."
+                groups={scan.review}
+                selected={selected}
+                onToggle={toggle}
+                disabled={deleting}
+              />
+            )}
           </div>
 
           <DialogFooter className="items-center border-t border-[var(--border)] px-[24px] py-[16px] sm:justify-between">
@@ -255,7 +272,7 @@ function GroupSection({
 }: {
   title: string
   hint: string
-  groups: DuplicateGroup[]
+  groups: Array<DuplicateGroup & { reason?: ReviewReason }>
   selected: ReadonlySet<string>
   onToggle: (id: string, checked: boolean) => void
   disabled: boolean
@@ -284,6 +301,11 @@ function GroupSection({
                   <div className="text-label text-[var(--text-muted)]">
                     {formatDate(first.date)}
                   </div>
+                  {group.reason && (
+                    <div className="mt-[2px] text-label text-[var(--text-muted)]">
+                      {REVIEW_NOTES[group.reason]}
+                    </div>
+                  )}
                 </div>
                 <span className="amt shrink-0 font-mono text-small tabular-nums text-[var(--text)]">
                   {first.type === 'debit' ? '−' : '+'}
@@ -301,7 +323,9 @@ function GroupSection({
                       <Checkbox
                         id={id}
                         checked={selected.has(tx.id)}
-                        disabled={disabled}
+                        // Deleting a split parent removes its parts for
+                        // good: never offered here, where undo is promised.
+                        disabled={disabled || tx.isSplitParent === true}
                         onCheckedChange={(checked) =>
                           onToggle(tx.id, checked === true)
                         }

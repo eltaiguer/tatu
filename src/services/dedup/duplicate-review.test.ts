@@ -17,7 +17,7 @@ function row(
     currency: 'UYU',
     type: 'debit',
     source: 'bank_account',
-    rawData: { fecha: '15/03/2026' },
+    rawData: { fecha: '15/03/2026', referencia: '531814119796' },
     importId,
     createdAt: createdAt ? new Date(createdAt) : undefined,
     ...overrides,
@@ -31,6 +31,7 @@ describe('findPossibleDuplicates', () => {
     expect(findPossibleDuplicates([])).toEqual({
       flagged: [],
       unknownOrigin: [],
+      review: [],
     })
   })
 
@@ -44,6 +45,7 @@ describe('findPossibleDuplicates', () => {
     expect(ids(scan.flagged[0].rows)).toEqual(['older', 'newer'])
     expect(scan.flagged[0].preselected).toEqual(['newer'])
     expect(scan.unknownOrigin).toEqual([])
+    expect(scan.review).toEqual([])
   })
 
   it('never flags identical rows that one import run stored (a genuine pair)', () => {
@@ -52,7 +54,7 @@ describe('findPossibleDuplicates', () => {
       row('a2', 'run-a', '2026-03-20T10:00:00Z'),
     ])
 
-    expect(scan).toEqual({ flagged: [], unknownOrigin: [] })
+    expect(scan).toEqual({ flagged: [], unknownOrigin: [], review: [] })
   })
 
   it('keeps as many copies as one run held: a genuine pair re-imported loses only the re-import', () => {
@@ -96,9 +98,16 @@ describe('findPossibleDuplicates', () => {
       row('a', 'run-a', '2026-03-20T10:00:00Z'),
       row('amount', 'run-b', '2026-04-02T10:00:00Z', { amount: 1300 }),
       row('day', 'run-b', '2026-04-02T10:00:00Z', {
-        rawData: { fecha: '16/03/2026' },
+        rawData: { fecha: '16/03/2026', referencia: '531814119796' },
       }),
-      row('card', 'run-b', '2026-04-02T10:00:00Z', { source: 'credit_card' }),
+      row('card', 'run-b', '2026-04-02T10:00:00Z', {
+        source: 'credit_card',
+        rawData: {
+          fecha: '15/03/2026',
+          numeroTarjeta: 'XXXXX-4362',
+          numeroAutorizacion: '770025140510',
+        },
+      }),
       // Same row, padded the way credit card cells are: still the same.
       row('padded', 'run-c', '2026-04-03T10:00:00Z', {
         description: '  COMPRA CON  TARJETA DEBITO DISCO ',
@@ -109,16 +118,90 @@ describe('findPossibleDuplicates', () => {
     expect(ids(scan.flagged[0].rows)).toEqual(['a', 'padded'])
   })
 
-  it('leaves split rows out: parts are not bank rows, and deleting a parent cannot be undone', () => {
+  it('never offers split parts, which are not bank rows', () => {
     const scan = findPossibleDuplicates([
-      row('parent', 'run-a', '2026-03-20T10:00:00Z', { isSplitParent: true }),
-      row('part', undefined, '2026-03-21T10:00:00Z', {
+      row('part-1', undefined, '2026-03-21T10:00:00Z', {
         splitParentId: 'parent',
       }),
-      row('copy', 'run-b', '2026-04-02T10:00:00Z'),
+      row('part-2', 'run-b', '2026-04-02T10:00:00Z', {
+        splitParentId: 'other-parent',
+      }),
     ])
 
-    expect(scan).toEqual({ flagged: [], unknownOrigin: [] })
+    expect(scan).toEqual({ flagged: [], unknownOrigin: [], review: [] })
+  })
+
+  it('leaves a group with a split copy to review by hand, nothing pre-selected', () => {
+    const scan = findPossibleDuplicates([
+      row('parent', 'run-a', '2026-03-20T10:00:00Z', { isSplitParent: true }),
+      row('copy-1', 'run-b', '2026-04-02T10:00:00Z'),
+      row('copy-2', 'run-c', '2026-05-02T10:00:00Z'),
+    ])
+
+    expect(scan.flagged).toEqual([])
+    expect(scan.review).toHaveLength(1)
+    expect(scan.review[0]).toMatchObject({ reason: 'split', preselected: [] })
+    expect(ids(scan.review[0].rows)).toEqual(['parent', 'copy-1', 'copy-2'])
+  })
+
+  it('tells two cards apart: same day, place and amount on another card is another charge', () => {
+    const card = (
+      id: string,
+      importId: string,
+      numeroTarjeta: string,
+      numeroAutorizacion = '770025140510'
+    ) =>
+      row(id, importId, `2026-0${importId === 'run-a' ? 3 : 4}-20T10:00:00Z`, {
+        source: 'credit_card',
+        description: 'Devoto Supermercado',
+        rawData: { fecha: '15/03/2026', numeroTarjeta, numeroAutorizacion },
+      })
+
+    const twoCards = findPossibleDuplicates([
+      card('visa', 'run-a', 'XXXXX-4362'),
+      card('master', 'run-b', 'XXXXX-9172'),
+    ])
+    const twoAuthorizations = findPossibleDuplicates([
+      card('first', 'run-a', 'XXXXX-4362', '111'),
+      card('second', 'run-b', 'XXXXX-4362', '222'),
+    ])
+    const sameCharge = findPossibleDuplicates([
+      card('first', 'run-a', 'XXXXX-4362'),
+      card('again', 'run-b', 'XXXXX-4362'),
+    ])
+
+    expect(twoCards).toEqual({ flagged: [], unknownOrigin: [], review: [] })
+    expect(twoAuthorizations).toEqual({
+      flagged: [],
+      unknownOrigin: [],
+      review: [],
+    })
+    expect(sameCharge.flagged[0].preselected).toEqual(['again'])
+  })
+
+  it('tells bank movements apart by their reference', () => {
+    const scan = findPossibleDuplicates([
+      row('a', 'run-a', '2026-03-20T10:00:00Z'),
+      row('other-ref', 'run-b', '2026-04-02T10:00:00Z', {
+        rawData: { fecha: '15/03/2026', referencia: '999999999999' },
+      }),
+    ])
+
+    expect(scan).toEqual({ flagged: [], unknownOrigin: [], review: [] })
+  })
+
+  it('leaves a group to review by hand when a copy has no reference to compare', () => {
+    const scan = findPossibleDuplicates([
+      row('a', 'run-a', '2026-03-20T10:00:00Z'),
+      row('no-ref', 'run-b', '2026-04-02T10:00:00Z', {
+        rawData: { fecha: '15/03/2026' },
+      }),
+    ])
+
+    expect(scan.flagged).toEqual([])
+    expect(scan.review).toEqual([
+      expect.objectContaining({ reason: 'no_reference', preselected: [] }),
+    ])
   })
 
   it('orders copies by when they were stored; one without a stored time counts as newest', () => {
@@ -135,11 +218,11 @@ describe('findPossibleDuplicates', () => {
   it('lists the most recent movements first', () => {
     const scan = findPossibleDuplicates([
       row('old-a', 'run-a', '2026-01-02T10:00:00Z', {
-        rawData: { fecha: '01/01/2026' },
+        rawData: { fecha: '01/01/2026', referencia: '1' },
         date: new Date('2026-01-01T03:00:00Z'),
       }),
       row('old-b', 'run-b', '2026-04-02T10:00:00Z', {
-        rawData: { fecha: '01/01/2026' },
+        rawData: { fecha: '01/01/2026', referencia: '1' },
         date: new Date('2026-01-01T03:00:00Z'),
       }),
       row('new-a', 'run-a', '2026-03-20T10:00:00Z'),

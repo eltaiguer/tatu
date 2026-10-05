@@ -45,7 +45,7 @@ function copy(
     currency: 'UYU',
     type: 'debit',
     source: 'bank_account',
-    rawData: { fecha: '15/03/2026' },
+    rawData: { fecha: '15/03/2026', referencia: '531814119796' },
     importId,
     createdAt: new Date(createdAt),
     ...overrides,
@@ -203,6 +203,43 @@ describe('Configuración → Datos: Buscar posibles duplicados (#167)', () => {
     const boxes = within(dialog).getAllByRole('checkbox')
     expect(boxes).toHaveLength(2)
     boxes.forEach((box) => expect(box).not.toBeChecked())
+    expect(
+      within(dialog).getByRole('button', { name: 'Eliminar 0 copias' })
+    ).toBeDisabled()
+  })
+
+  it('leaves split copies and copies without a reference to review by hand', () => {
+    renderSettings([
+      copy('split', 'run-a', '2026-03-20T12:00:00Z', { isSplitParent: true }),
+      copy('copy', 'run-b', '2026-04-02T12:00:00Z'),
+      copy('ref-a', 'run-a', '2026-03-20T12:00:00Z', { description: 'UTE' }),
+      copy('no-ref', 'run-b', '2026-04-02T12:00:00Z', {
+        description: 'UTE',
+        rawData: { fecha: '15/03/2026' },
+      }),
+    ])
+
+    const dialog = openReview()
+
+    expect(within(dialog).getByText('Revisar a mano')).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(
+        'Una copia está dividida: esa no se puede eliminar desde acá.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(
+        'Una copia no tiene número de referencia para comparar.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole('checkbox', {
+        name: 'Eliminar la copia de COMPRA CON TARJETA DEBITO DISCO importada el 20/03/2026',
+      })
+    ).toBeDisabled()
+    within(dialog)
+      .getAllByRole('checkbox')
+      .forEach((box) => expect(box).not.toBeChecked())
     expect(
       within(dialog).getByRole('button', { name: 'Eliminar 0 copias' })
     ).toBeDisabled()

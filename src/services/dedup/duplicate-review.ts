@@ -6,23 +6,29 @@ import { transactionFingerprint } from './import-dedup'
  * content dedup (#57) shipped, when an overlapping export inserted the same
  * bank row a second time under a new id.
  *
- * Rows are grouped by the import fingerprint (`transactionFingerprint`), so a
- * group is exactly what a re-import today would have recognised as the same
- * row. Conservative by design — nothing is deleted without the user:
+ * Rows are grouped by the import fingerprint (`transactionFingerprint`), then
+ * split by the statement's own per-movement reference, which the fingerprint
+ * leaves out: card number + authorization number on card rows, `referencia`
+ * on bank rows. Two rows whose references differ are different movements —
+ * e.g. the same charge on the same day on two cards, whose statements are
+ * separate files and so separate import runs. Conservative by design —
+ * nothing is deleted without the user:
  * - A group whose rows all come from one import run is a genuine identical
  *   pair inside one statement: never shown.
- * - A group whose rows come from two or more import runs is flagged. Each
- *   run's copy of the statement is complete, so the group really holds as
- *   many rows as the largest single run stored; those are kept (the oldest
- *   ones) and every other copy is pre-selected for deletion. For two copies
- *   that is "all but the oldest".
+ * - A group with a split copy, or a copy without a reference to compare, is
+ *   left to review by hand (`review`), nothing pre-selected. A split parent
+ *   is never offered for deletion at all: deleting it removes its parts for
+ *   good, which the review's undo could not bring back.
  * - A group with any row whose import run is unknown (stored before runs
  *   were recorded) can't be told apart from a genuine pair: it is shown in
  *   its own section with nothing pre-selected.
+ * - Any other group from two or more import runs is flagged. Each run's copy
+ *   of the statement is complete, so the group really holds as many rows as
+ *   the largest single run stored; those are kept (the oldest ones) and every
+ *   other copy is pre-selected for deletion. For two copies that is "all but
+ *   the oldest".
  *
- * Split rows are left out: parts have no fingerprint (they are not bank
- * rows), and deleting a split parent removes its parts for good, which the
- * review's undo could not bring back.
+ * Split parts are never grouped: they have no fingerprint (not bank rows).
  */
 export interface DuplicateGroup {
   /** Oldest stored first. */
@@ -31,11 +37,16 @@ export interface DuplicateGroup {
   preselected: string[]
 }
 
+/** Why a group is left to review by hand. */
+export type ReviewReason = 'split' | 'no_reference'
+
 export interface DuplicateScan {
   /** Stored by different import runs: overlapping exports. */
   flagged: DuplicateGroup[]
   /** At least one row's import run is unknown; nothing pre-selected. */
   unknownOrigin: DuplicateGroup[]
+  /** A split copy, or a copy with no reference to compare; none pre-selected. */
+  review: Array<DuplicateGroup & { reason: ReviewReason }>
 }
 
 export function findPossibleDuplicates(
@@ -43,7 +54,6 @@ export function findPossibleDuplicates(
 ): DuplicateScan {
   const groups = new Map<string, Transaction[]>()
   for (const tx of transactions) {
-    if (tx.isSplitParent) continue
     const fingerprint = transactionFingerprint(tx)
     if (fingerprint === null) continue
     const group = groups.get(fingerprint) ?? []
@@ -51,28 +61,83 @@ export function findPossibleDuplicates(
     groups.set(fingerprint, group)
   }
 
-  const scan: DuplicateScan = { flagged: [], unknownOrigin: [] }
+  const scan: DuplicateScan = { flagged: [], unknownOrigin: [], review: [] }
   for (const group of groups.values()) {
-    if (group.length < 2) continue
-    const rows = [...group].sort(byStoredTime)
-    if (rows.some((tx) => !tx.importId)) {
-      scan.unknownOrigin.push({ rows, preselected: [] })
-      continue
+    for (const candidates of splitByReference(group)) {
+      classify(candidates, scan)
     }
-    const perRun = new Map<string, number>()
-    for (const tx of rows) {
-      perRun.set(tx.importId!, (perRun.get(tx.importId!) ?? 0) + 1)
-    }
-    if (perRun.size < 2) continue
-    const keep = Math.max(...perRun.values())
-    scan.flagged.push({
-      rows,
-      preselected: rows.slice(keep).map((tx) => tx.id),
-    })
   }
   scan.flagged.sort(byMovementDate)
   scan.unknownOrigin.sort(byMovementDate)
+  scan.review.sort(byMovementDate)
   return scan
+}
+
+function classify(
+  candidates: { rows: Transaction[]; referenced: boolean },
+  scan: DuplicateScan
+): void {
+  if (candidates.rows.length < 2) return
+  const rows = [...candidates.rows].sort(byStoredTime)
+  const runs = new Set(rows.map((tx) => tx.importId))
+  // One known run: a genuine identical pair inside one statement.
+  if (runs.size === 1 && rows[0].importId) return
+  if (rows.some((tx) => tx.isSplitParent)) {
+    scan.review.push({ rows, preselected: [], reason: 'split' })
+    return
+  }
+  if (!candidates.referenced) {
+    scan.review.push({ rows, preselected: [], reason: 'no_reference' })
+    return
+  }
+  if (rows.some((tx) => !tx.importId)) {
+    scan.unknownOrigin.push({ rows, preselected: [] })
+    return
+  }
+  const perRun = new Map<string, number>()
+  for (const tx of rows) {
+    perRun.set(tx.importId!, (perRun.get(tx.importId!) ?? 0) + 1)
+  }
+  const keep = Math.max(...perRun.values())
+  scan.flagged.push({
+    rows,
+    preselected: rows.slice(keep).map((tx) => tx.id),
+  })
+}
+
+/**
+ * Splits a fingerprint group into the rows that may be the same movement.
+ * When every row carries its reference, rows with different references are
+ * different movements. When some row lacks it, nothing can be ruled out: the
+ * whole group stays together, marked unreferenced.
+ */
+function splitByReference(
+  group: Transaction[]
+): Array<{ rows: Transaction[]; referenced: boolean }> {
+  const references = group.map(movementReference)
+  if (references.some((ref) => ref === null)) {
+    return [{ rows: group, referenced: false }]
+  }
+  const byReference = new Map<string, Transaction[]>()
+  group.forEach((tx, i) => {
+    const key = references[i]!
+    byReference.set(key, [...(byReference.get(key) ?? []), tx])
+  })
+  return [...byReference.values()].map((rows) => ({ rows, referenced: true }))
+}
+
+// The statement's own id for a movement: card + authorization number on card
+// rows, `referencia` on bank rows. null when the stored raw data lacks it.
+function movementReference(tx: Transaction): string | null {
+  const raw = (tx.rawData ?? {}) as Record<string, unknown>
+  const fields =
+    tx.source === 'credit_card'
+      ? [raw.numeroTarjeta, raw.numeroAutorizacion]
+      : [raw.referencia]
+  const values = fields.map((value) =>
+    typeof value === 'string' ? value.trim() : ''
+  )
+  return values.every((value) => value !== '') ? JSON.stringify(values) : null
 }
 
 // Oldest stored first; a row without a stored time was imported in this
