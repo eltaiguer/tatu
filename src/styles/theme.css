@@ -10,7 +10,7 @@
   --border-strong: oklch(0.84 0.01 75);
   --text: oklch(0.24 0.012 60);
   --text-muted: oklch(0.52 0.012 65);
-  --text-faint: oklch(0.66 0.01 70);
+  --text-faint: oklch(0.54 0.01 70);
 
   --brand: oklch(0.5 0.085 197);
   --brand-hover: oklch(0.44 0.085 197);
@@ -213,7 +213,7 @@
   --border-strong: oklch(0.38 0.014 66);
   --text: oklch(0.95 0.006 80);
   --text-muted: oklch(0.69 0.012 72);
-  --text-faint: oklch(0.54 0.01 70);
+  --text-faint: oklch(0.625 0.01 70);
 
   --brand: oklch(0.74 0.09 196);
   --brand-hover: oklch(0.8 0.09 196);
