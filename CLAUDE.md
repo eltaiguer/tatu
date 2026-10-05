@@ -7,8 +7,8 @@ The line above imports `AGENTS.md`, the canonical project rules (mission, comman
 ## Session start hook and skills
 
 - `.claude/settings.json` is shared Claude Code config: the verification commands (plus read-only `gh`/`git`) run without a prompt, deploys always prompt, force-push and `.env*` edits (except `.env.example`) are denied, and a PostToolUse hook (`.claude/hooks/format-on-edit.sh`) runs Prettier on edited `src/` and Markdown files.
-- It also registers a `SessionStart` hook (`startup|clear`) that runs `.claude/hooks/session-start.sh`. It injects `.claude/skills/using-agent-skills/SKILL.md` (the skill-discovery flowchart) as additional context. It needs `jq` on the `PATH`; without it the hook silently does nothing.
-- Repo skills live in `.claude/skills/`: `using-agent-skills` (pick the right skill), `run` (run the app locally), `documentation-and-adrs`, `doubt-driven-development`, `frontend-ui-engineering`, `observability-and-instrumentation`, `source-driven-development`. Load the matching skill before starting the kind of work it describes.
+- It also registers a `SessionStart` hook (`startup|clear`) that runs `.claude/hooks/session-start.sh`. It injects `.claude/skills/using-agent-skills/SKILL.md` (the skill router) as additional context. It needs `jq` on the `PATH`; without it the hook silently does nothing.
+- Repo skills live in `.claude/skills/` and hold Tatu-specific checklists: `using-agent-skills` (pick the right skill), `run` (run the app locally), `add-supabase-column`, `change-categorization`, `add-view`, `money-math`, `change-ai-prompt-or-model`. Load the matching skill before starting the kind of work it describes. Generic skills (e.g. `doubt-driven-development`) live in a contributor's user scope and are optional.
 - Skill files are agent-facing docs: the `check:docs` guard validates the repo paths they name.
 
 ## Memory
