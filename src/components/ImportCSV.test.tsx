@@ -1,5 +1,12 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ImportCSV } from './ImportCSV'
 import { UserFacingError } from '../utils/user-error'
@@ -90,6 +97,13 @@ function makeParsedData(): ParsedData {
     parsedAt: new Date('2026-01-31T12:00:00.000Z'),
   }
 }
+
+// A line of the import summary, e.g. "2 nuevas" (count and label are
+// separate elements).
+const isSummaryLine = (text: string) => (_: string, el: Element | null) =>
+  el?.tagName === 'LI' && el.textContent === text
+const summaryLine = (text: string) => screen.getByText(isSummaryLine(text))
+const findSummaryLine = (text: string) => screen.findByText(isSummaryLine(text))
 
 describe('ImportCSV', () => {
   beforeEach(() => {
@@ -199,7 +213,10 @@ describe('ImportCSV', () => {
         ...makeParsedData(),
         fileType: 'credit_card',
       })
-      addTransactionsMock.mockReturnValue({ added: [], duplicates: [] })
+      addTransactionsMock.mockReturnValue({
+        added: [makeTx('tx-1')],
+        duplicates: [],
+      })
       render(<ImportCSV />)
 
       fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
@@ -314,8 +331,8 @@ describe('ImportCSV', () => {
       throw new UserFacingError('Fila 17: Importe ilegible: "abc"')
     })
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const onImportComplete = vi.fn()
-    render(<ImportCSV onImportComplete={onImportComplete} />)
+    const onViewTransactions = vi.fn()
+    render(<ImportCSV onViewTransactions={onViewTransactions} />)
 
     const input = screen.getByLabelText('Seleccionar archivo')
     fireEvent.change(input, {
@@ -331,7 +348,7 @@ describe('ImportCSV', () => {
       screen.getByText('Fila 17: Importe ilegible: "abc"')
     ).toBeInTheDocument()
     expect(addTransactionsMock).not.toHaveBeenCalled()
-    expect(onImportComplete).not.toHaveBeenCalled()
+    expect(onViewTransactions).not.toHaveBeenCalled()
     expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
   })
 
@@ -413,15 +430,15 @@ describe('ImportCSV', () => {
     ).toBeInTheDocument()
   })
 
-  it('persists immediately, reports duplicates, and triggers navigation callback', async () => {
+  it('persists immediately and reports duplicates without leaving the dialog', async () => {
     parseCSVMock.mockReturnValue(makeParsedData())
     addTransactionsMock.mockReturnValue({
       added: [makeTx('tx-1')],
       duplicates: [makeTx('tx-2'), makeTx('tx-3')],
     })
-    const onImportComplete = vi.fn()
+    const onViewTransactions = vi.fn()
 
-    render(<ImportCSV onImportComplete={onImportComplete} />)
+    render(<ImportCSV onViewTransactions={onViewTransactions} />)
 
     const input = screen.getByLabelText('Seleccionar archivo')
     fireEvent.change(input, {
@@ -433,13 +450,13 @@ describe('ImportCSV', () => {
     expect(
       await screen.findByText('Importación completada')
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('1 de 3 transacciones guardadas (2 duplicadas omitidas)')
-    ).toBeInTheDocument()
+    expect(summaryLine('1 nueva')).toBeInTheDocument()
+    expect(summaryLine('2 duplicadas omitidas')).toBeInTheDocument()
 
     expect(parseCSVMock).toHaveBeenCalledTimes(1)
     expect(addTransactionsMock).toHaveBeenCalledTimes(1)
-    await waitFor(() => expect(onImportComplete).toHaveBeenCalledTimes(1))
+    // Navigating is the user's choice ("Ver transacciones"), never automatic.
+    expect(onViewTransactions).not.toHaveBeenCalled()
   })
 
   it('uses custom import handler when provided', async () => {
@@ -465,9 +482,8 @@ describe('ImportCSV', () => {
     expect(
       await screen.findByText('Importación completada')
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('2 de 3 transacciones guardadas (1 duplicadas omitidas)')
-    ).toBeInTheDocument()
+    expect(summaryLine('2 nuevas')).toBeInTheDocument()
+    expect(summaryLine('1 duplicada omitida')).toBeInTheDocument()
     expect(onTransactionsImported).toHaveBeenCalledTimes(1)
     expect(onTransactionsImported).toHaveBeenCalledWith(
       expect.any(Array),
@@ -502,9 +518,8 @@ describe('ImportCSV', () => {
     expect(
       await screen.findByText('Importación completada')
     ).toBeInTheDocument()
-    expect(
-      screen.getByText('2 de 3 transacciones guardadas (1 duplicadas omitidas)')
-    ).toBeInTheDocument()
+    expect(summaryLine('2 nuevas')).toBeInTheDocument()
+    expect(summaryLine('1 duplicada omitida')).toBeInTheDocument()
 
     // ... but the user is told the AI step did not run, and why.
     await waitFor(() => expect(toastMock.warning).toHaveBeenCalledTimes(1))
@@ -530,10 +545,9 @@ describe('ImportCSV', () => {
       },
     })
 
-    await waitFor(() => expect(toastMock.success).toHaveBeenCalled())
-    expect(toastMock.success.mock.calls[0][0]).toBe(
-      '1 nueva · 0 duplicadas omitidas · 1 que eliminaste antes omitida'
-    )
+    expect(await findSummaryLine('1 eliminada antes')).toBeInTheDocument()
+    expect(summaryLine('1 nueva')).toBeInTheDocument()
+    expect(summaryLine('0 duplicadas omitidas')).toBeInTheDocument()
   })
 
   describe('file encoding (#192)', () => {
@@ -594,10 +608,43 @@ describe('ImportCSV', () => {
       },
     })
 
-    await waitFor(() => expect(toastMock.success).toHaveBeenCalled())
-    expect(toastMock.success.mock.calls[0][0]).toBe(
-      '0 nuevas · 1 duplicada omitida · 2 corregidas'
-    )
+    // Nothing new, but the import did something: say what (#202).
+    expect(
+      await screen.findByRole('heading', {
+        name: 'No había movimientos nuevos',
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Este archivo ya estaba importado.')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Se corrigieron 2 descripciones.')
+    ).toBeInTheDocument()
+    expect(summaryLine('2 corregidas')).toBeInTheDocument()
+    expect(summaryLine('1 duplicada omitida')).toBeInTheDocument()
+    expect(toastMock.success).not.toHaveBeenCalled()
+  })
+
+  it('lists a repaired description in the summary of a successful import', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-2')],
+      duplicates: [],
+      repaired: [makeTx('tx-1')],
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: 'Importación completada' })
+    ).toBeInTheDocument()
+    expect(summaryLine('1 corregida')).toBeInTheDocument()
+    expect(screen.queryByText(/Se corrigi/)).not.toBeInTheDocument()
   })
 
   it('warns when some garbled descriptions could not be repaired', async () => {
@@ -667,5 +714,181 @@ describe('ImportCSV', () => {
     const message = toastMock.warning.mock.calls[0][0] as string
     expect(message).toContain('incompleta')
     expect(message).not.toContain('no disponible')
+  })
+  describe('summary after an import (#202)', () => {
+    // Local dates, so the month does not depend on the test machine's zone.
+    function txOn(id: string, y: number, m: number, d: number): Transaction {
+      return { ...makeTx(id), date: new Date(y, m, d, 12) }
+    }
+
+    function importFile(user: ReturnType<typeof userEvent.setup>) {
+      return user.upload(
+        screen.getByLabelText('Seleccionar archivo'),
+        new File(['a,b'], 'movements.csv', { type: 'text/csv' })
+      )
+    }
+
+    function summaryLines() {
+      return within(
+        screen.getByRole('list', { name: 'Resumen de la importación' })
+      )
+        .getAllByRole('listitem')
+        .map((item) => item.textContent)
+    }
+
+    it('stays open on the summary with the counts, without navigating away', async () => {
+      const user = userEvent.setup()
+      parseCSVMock.mockReturnValue(makeParsedData())
+      const onViewTransactions = vi.fn()
+      const onTransactionsImported = vi.fn().mockResolvedValue({
+        added: [txOn('a', 2026, 2, 3), txOn('b', 2026, 2, 9)],
+        duplicates: [txOn('c', 2026, 2, 1)],
+        previouslyDeleted: [txOn('d', 2026, 1, 28)],
+      })
+      render(
+        <ImportCSV
+          onTransactionsImported={onTransactionsImported}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      await importFile(user)
+
+      const heading = await screen.findByRole('heading', {
+        name: 'Importación completada',
+      })
+      expect(heading).toHaveFocus()
+      expect(summaryLines()).toEqual([
+        '2 nuevas',
+        '1 duplicada omitida',
+        '1 eliminada antes',
+      ])
+      expect(onViewTransactions).not.toHaveBeenCalled()
+      // The dialog reports the counts; a toast saying the same is noise.
+      expect(toastMock.success).not.toHaveBeenCalled()
+    })
+
+    it('"Ver transacciones" goes to the month of the newest new row', async () => {
+      const user = userEvent.setup()
+      parseCSVMock.mockReturnValue(makeParsedData())
+      const onViewTransactions = vi.fn()
+      const onTransactionsImported = vi.fn().mockResolvedValue({
+        added: [txOn('a', 2026, 1, 27), txOn('b', 2026, 2, 2)],
+        duplicates: [],
+      })
+      render(
+        <ImportCSV
+          onTransactionsImported={onTransactionsImported}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      await importFile(user)
+      await user.click(
+        await screen.findByRole('button', { name: 'Ver transacciones' })
+      )
+
+      expect(onViewTransactions).toHaveBeenCalledTimes(1)
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2026, m: 2 },
+      })
+    })
+
+    it('a file with nothing new is a neutral state, not a success', async () => {
+      const user = userEvent.setup()
+      parseCSVMock.mockReturnValue({
+        ...makeParsedData(),
+        transactions: [txOn('a', 2025, 10, 4), txOn('b', 2025, 10, 27)],
+      })
+      const onViewTransactions = vi.fn()
+      const onTransactionsImported = vi.fn().mockResolvedValue({
+        added: [],
+        duplicates: [txOn('a', 2025, 10, 4), txOn('b', 2025, 10, 27)],
+      })
+      render(
+        <ImportCSV
+          onTransactionsImported={onTransactionsImported}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      await importFile(user)
+
+      const heading = await screen.findByRole('heading', {
+        name: 'No había movimientos nuevos',
+      })
+      expect(heading).toHaveFocus()
+      expect(
+        screen.getByText('Este archivo ya estaba importado.')
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('Importación completada')
+      ).not.toBeInTheDocument()
+      expect(summaryLines()).toEqual([
+        '0 nuevas',
+        '2 duplicadas omitidas',
+        '0 eliminadas antes',
+      ])
+
+      // Still lets the user look at the file's month.
+      await user.click(
+        screen.getByRole('button', { name: 'Ver transacciones' })
+      )
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2025, m: 10 },
+      })
+    })
+
+    it('"Importar otro archivo" goes back to the file picker', async () => {
+      const user = userEvent.setup()
+      parseCSVMock.mockReturnValue(makeParsedData())
+      const onTransactionsImported = vi.fn().mockResolvedValue({
+        added: [txOn('a', 2026, 2, 3)],
+        duplicates: [],
+      })
+      render(
+        <ImportCSV
+          onTransactionsImported={onTransactionsImported}
+          onViewTransactions={vi.fn()}
+        />
+      )
+
+      await importFile(user)
+      await user.click(
+        await screen.findByRole('button', { name: 'Importar otro archivo' })
+      )
+
+      expect(
+        screen.queryByRole('list', { name: 'Resumen de la importación' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Seleccionar archivo' })
+      ).toHaveFocus()
+    })
+
+    it('keeps a failed import in the dialog and never navigates', async () => {
+      const user = userEvent.setup()
+      parseCSVMock.mockReturnValue(makeParsedData())
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const onViewTransactions = vi.fn()
+      const onTransactionsImported = vi
+        .fn()
+        .mockRejectedValue(new Error('network down'))
+      render(
+        <ImportCSV
+          onTransactionsImported={onTransactionsImported}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      await importFile(user)
+
+      expect(await screen.findByText('No se pudo importar')).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Ver transacciones' })
+      ).not.toBeInTheDocument()
+      expect(onViewTransactions).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+    })
   })
 })

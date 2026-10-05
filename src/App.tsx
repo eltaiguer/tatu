@@ -538,9 +538,9 @@ function App() {
             importar tus movimientos.
           </DialogDescription>
           <ImportCSV
-            onImportComplete={() => {
+            onViewTransactions={(filter) => {
               setImportOpen(false)
-              go('transactions')
+              navigateToTransactions(filter)
             }}
             onTransactionsImported={handleTransactionsImported}
           />

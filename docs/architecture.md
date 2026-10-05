@@ -20,6 +20,17 @@ then hands them to `importTransactions`
 The parsers are pure: they map columns, dates, amounts, currency and IDs and
 never call the categorizer.
 
+When the import finishes, the dialog stays open on a summary of the
+`ImportResult` counts (nuevas · duplicadas omitidas · eliminadas antes, plus
+corregidas when the import repaired descriptions; one entry per count in
+`summaryLines`). A file with nothing new shows a neutral "No había movimientos
+nuevos" state instead of success, adding "Se corrigieron N descripciones" when
+it repaired some. Nothing navigates on
+its own: "Ver transacciones" closes the dialog and opens Transacciones on the
+month of the newest new row (the file's newest row when nothing was new),
+through the same `navigateToTransactions` link Resumen uses; "Importar otro
+archivo" resets the dialog to the file picker. Errors stay in the dialog.
+
 ```mermaid
 flowchart TD
     A["CSV file dropped in ImportCSV"] --> A2["decodeCsvBytes: UTF-8 (fatal) else windows-1252"]
@@ -143,8 +154,8 @@ Details that matter:
   - The import result and `completeImportRun` report new / duplicate /
     previously-deleted / repaired counts. The import run has no column for
     deleted or repaired rows; neither was inserted, so both count in
-    `duplicate_rows` (total = inserted + duplicates). The toast adds
-    "· N corregidas".
+    `duplicate_rows` (total = inserted + duplicates). The import
+    dialog's summary adds "N corregidas".
 
   The import run's SHA-256 (`sha256Hex`) is a file checksum for the audit
   record, not part of the ID.
