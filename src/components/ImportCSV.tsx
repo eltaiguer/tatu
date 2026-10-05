@@ -365,7 +365,7 @@ export function ImportCSV({
         {importState === 'error' && (
           <div className="text-center py-12">
             <div className="flex flex-col items-center gap-4">
-              <div className="p-4 rounded-full bg-red-100 dark:bg-red-900/20">
+              <div className="p-4 rounded-full bg-neg-soft">
                 <CircleAlert className="text-destructive" size={48} />
               </div>
               <div>
@@ -388,7 +388,7 @@ export function ImportCSV({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/20">
+            <div className="p-2 rounded-lg bg-brand-soft">
               <FileText className="text-primary" size={20} />
             </div>
             <h4>Tarjeta de crédito</h4>
@@ -400,7 +400,7 @@ export function ImportCSV({
 
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-accent-50 dark:bg-accent-900/20">
+            <div className="p-2 rounded-lg bg-accent-soft">
               <FileText className="text-accent" size={20} />
             </div>
             <h4>Cuenta USD</h4>
@@ -412,8 +412,8 @@ export function ImportCSV({
 
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-success-50 dark:bg-success-900/20">
-              <FileText className="text-success-600" size={20} />
+            <div className="p-2 rounded-lg bg-pos-soft">
+              <FileText className="text-pos" size={20} />
             </div>
             <h4>Cuenta $U</h4>
           </div>
@@ -459,7 +459,7 @@ export function ImportCSV({
         </ol>
       </Card>
 
-      <Card className="p-4 bg-primary-50 dark:bg-primary-900/10 border-primary/20">
+      <Card className="p-4 bg-brand-soft border-primary/20">
         <p className="text-sm">
           <strong>Tus datos son tuyos:</strong> Los movimientos se guardan en tu
           cuenta de Supabase bajo tu propio usuario. Nadie más tiene acceso a tu
@@ -496,8 +496,8 @@ function ImportSummaryPanel({
             <Info className="text-muted-foreground" size={48} />
           </div>
         ) : (
-          <div className="p-4 rounded-full bg-success-100 dark:bg-success-900/20">
-            <Check className="text-success-600" size={48} />
+          <div className="p-4 rounded-full bg-pos-soft">
+            <Check className="text-pos" size={48} />
           </div>
         )}
         <div>
