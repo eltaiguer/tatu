@@ -279,6 +279,8 @@ export interface TransactionColumnsPatch {
   category?: string | null
   categoryConfidence?: number | null
   tags?: string[]
+  description?: string
+  rawData?: Transaction['rawData']
 }
 
 function patchToColumns(
@@ -293,6 +295,8 @@ function patchToColumns(
     columns.category_confidence = patch.categoryConfidence
   }
   if (patch.tags !== undefined) columns.tags = patch.tags
+  if (patch.description !== undefined) columns.description = patch.description
+  if (patch.rawData !== undefined) columns.raw_data = patch.rawData
   return columns
 }
 

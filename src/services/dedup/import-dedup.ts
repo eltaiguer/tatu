@@ -93,6 +93,47 @@ export interface ImportClassification {
   duplicates: Transaction[]
   /** Rows the user deleted before; skipped so they stay deleted. */
   previouslyDeleted: Transaction[]
+  /**
+   * Live stored rows whose garbled text (#192) the incoming row repairs: the
+   * stored row (its id, category, names, tags) with the incoming row's
+   * `description` and `rawData`. Not inserted; the caller updates them.
+   */
+  repaired: Transaction[]
+}
+
+/**
+ * Rows imported before #192 read a Latin-1 file as UTF-8, so each accented
+ * letter was stored as U+FFFD (one per byte). A stored row matches an
+ * incoming row when everything but the description agrees and its normalized
+ * description equals the incoming one with each U+FFFD standing for exactly
+ * one non-ASCII character (the bytes that turned into U+FFFD were all
+ * >= 0x80, so it can't stand for an ASCII letter, nor for another U+FFFD).
+ *
+ * Known misses (the row then imports as new, next to the garbled one): an
+ * accented letter directly followed by a 0x80-0xBF byte (NBSP, º, ª, «, »,
+ * cp1252 quotes) decodes to one U+FFFD for two characters or to a wrong but
+ * valid character, and an NBSP is whitespace on the correct side only.
+ */
+const REPLACEMENT = '\uFFFD'
+
+function repairKey(tx: Transaction): string {
+  return JSON.stringify([
+    tx.source,
+    fingerprintDate(tx),
+    signedCents(tx),
+    tx.currency,
+  ])
+}
+
+function garbledPattern(description: string): RegExp | null {
+  const normalized = normalizeDescription(description)
+  if (!normalized.includes(REPLACEMENT)) return null
+  const source = Array.from(normalized, (char) =>
+    char === REPLACEMENT
+      ? '[^\\x00-\\x7F\\uFFFD]'
+      : char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  ).join('')
+  return new RegExp(`^${source}$`, 'u')
 }
 
 /**
@@ -153,16 +194,60 @@ export function classifyImport(
     }
   }
 
+  // Repair pass (#192): rows stored garbled, matched with U+FFFD as a
+  // one-character wildcard — only by rows no exact match took.
+  const garbled = new Map<
+    string,
+    Array<{ row: ExistingTransaction; pattern: RegExp }>
+  >()
+  for (const row of existing) {
+    if (claimed.has(row) || transactionFingerprint(row.tx) === null) continue
+    const pattern = garbledPattern(row.tx.description)
+    if (!pattern) continue
+    const key = repairKey(row.tx)
+    const pool = garbled.get(key) ?? []
+    pool.push({ row, pattern })
+    garbled.set(key, pool)
+  }
+  for (const pool of garbled.values()) {
+    pool.sort((a, b) => Number(a.row.deleted) - Number(b.row.deleted))
+  }
+  const repairs = new Set<Transaction>()
+  if (garbled.size > 0) {
+    for (const tx of incoming) {
+      if (match.has(tx) || transactionFingerprint(tx) === null) continue
+      const description = normalizeDescription(tx.description)
+      const candidate = garbled
+        .get(repairKey(tx))
+        ?.find(
+          ({ row, pattern }) => !claimed.has(row) && pattern.test(description)
+        )
+      if (candidate) {
+        claimed.add(candidate.row)
+        match.set(tx, candidate.row)
+        repairs.add(tx)
+      }
+    }
+  }
+
   const taken = new Set([...byId.keys(), ...takenIds])
   const result: ImportClassification = {
     added: [],
     duplicates: [],
     previouslyDeleted: [],
+    repaired: [],
   }
   for (const tx of incoming) {
     const row = match.get(tx)
     if (row) {
-      ;(row.deleted ? result.previouslyDeleted : result.duplicates).push(tx)
+      if (row.deleted) result.previouslyDeleted.push(tx)
+      else if (repairs.has(tx)) {
+        result.repaired.push({
+          ...row.tx,
+          description: tx.description,
+          rawData: tx.rawData,
+        })
+      } else result.duplicates.push(tx)
       continue
     }
     let id = tx.id

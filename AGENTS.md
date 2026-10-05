@@ -225,7 +225,7 @@ A task is done only when:
 
 - **Transaction sources**: Credit Card, USD Bank Account, UYU Bank Account (3 distinct CSV formats from Santander Uruguay)
 - **Categorization**: Pattern-based merchant matching (`merchant-patterns.ts`) with confidence scores (0–1). System learns from user overrides stored in Supabase. Optional AI enrichment on import (see Current status).
-- **Deduplication**: by content, not ID — imports match rows by fingerprint (source, raw date, raw description, signed amount, currency) as a multiset, deleted rows included; a taken ID gets a salted `_cN` suffix (`services/dedup/import-dedup.ts`, #57). IDs (hash incl. row position) are unchanged
+- **Deduplication**: by content, not ID — imports match rows by fingerprint (source, raw date, raw description, signed amount, currency) as a multiset, deleted rows included; a taken ID gets a salted `_cN` suffix (`services/dedup/import-dedup.ts`, #57). IDs (hash incl. row position) are unchanged. Files are decoded UTF-8-else-windows-1252 (`services/parsers/decode-csv.ts`); a re-import repairs rows stored garbled (U+FFFD) in place, same id (#192)
 - **Internal transfers**: inferred in the store (`inferInternalTransfers`) by keyword + scored debit/credit pairing within ±2 days, recomputed on load — see `docs/architecture.md`
 - **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `editTransaction` in `services/mutations/transaction-mutations.ts`
 

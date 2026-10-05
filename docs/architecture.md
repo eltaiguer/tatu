@@ -9,7 +9,10 @@ terms are defined in [`CONTEXT.md`](CONTEXT.md).
 ## Import
 
 A statement goes from file to screen in one pass in the browser.
-`ImportCSV.tsx` parses, categorizes the parsed rows
+`ImportCSV.tsx` reads the file's bytes and decodes them with `decodeCsvBytes`
+(`src/services/parsers/decode-csv.ts`, #192): strict UTF-8 first, falling back
+to windows-1252, because Santander exports are Latin-1 (a UTF-8 BOM is
+dropped). It then parses, categorizes the parsed rows
 (`categorizeParsedData` in `src/services/categorizer/import-categorization.ts`),
 then hands them to `importTransactions`
 (`src/services/mutations/transaction-mutations.ts`, through
@@ -19,7 +22,8 @@ never call the categorizer.
 
 ```mermaid
 flowchart TD
-    A["CSV file dropped in ImportCSV"] --> B["detectFileType: credit_card, bank_account_usd or bank_account_uyu"]
+    A["CSV file dropped in ImportCSV"] --> A2["decodeCsvBytes: UTF-8 (fatal) else windows-1252"]
+    A2 --> B["detectFileType: credit_card, bank_account_usd or bank_account_uyu"]
     B --> C["parseCreditCardCSV or parseBankAccountCSV"]
     C --> E["Per row: generateTransactionId(date, description, amount text, row index)"]
     E --> D["categorizeParsedData, per row: categorizeTransaction(description, type), no context"]
@@ -27,6 +31,7 @@ flowchart TD
     F --> G{"classifyImport: same content (fingerprint) already stored, as many times?"}
     G -- "yes, live" --> H["Skipped as duplicate"]
     G -- "yes, soft-deleted" --> I["Skipped so it stays deleted"]
+    G -- "matches a live row stored garbled (U+FFFD)" --> R["Repaired in place after the insert: description + raw_data patched, same id"]
     G -- "no" --> S["New row; id salted to id_cN if taken"]
     S --> J{"AI enabled with an API key?"}
     J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a description or merchant override"]
@@ -108,8 +113,38 @@ Details that matter:
     `deleteTransactions` (soft delete + "Deshacer"), so a later re-import
     matches the deleted copies and skips them. The total shown is
     `sumCountedTotals(selected).expense` in the home currency.
+  - **Repair of rows stored garbled (#192).** Before #192 the file was read
+    as UTF-8, so every accented letter of a Latin-1 export was stored as one
+    U+FFFD, in `description` and `raw_data`. After the exact passes,
+    `classifyImport` runs a third pass over the leftovers: a stored row whose
+    normalized description contains U+FFFD matches an incoming row with the
+    same source, raw date, signed cents and currency when the descriptions
+    agree with each U+FFFD standing for exactly one non-ASCII character (never
+    an ASCII one, never another U+FFFD). Same claiming rules (each stored row
+    once, live before deleted). A live match is returned in `repaired` — the
+    stored row with the incoming `description` and `rawData` — and
+    `importTransactions` patches those two columns through the repository
+    after the insert, keeping the row's id, category, display name and tags;
+    a deleted match is skipped like any deleted row (not repaired). Repairs are
+    best-effort: one that fails doesn't fail the import (`repairsFailed`; the
+    toast says to import again, which retries it). Rules keyed on the garbled
+    text — the description override (friendly name from a
+    `matching_past_and_future` rename) and the merchant category override —
+    are first copied to the corrected text's keys (server, then memory),
+    unless a rule already exists there; the garbled keys are kept for rows not
+    repaired yet. If copying fails, no row is repaired (the next re-import
+    retries both), so a name is never lost. Custom patterns written against
+    garbled text are not migrated.
+    Misses, which import as new next to the garbled row: an accented letter
+    directly followed by a 0x80–0xBF byte (NBSP, º, ª, «, », cp1252 quotes),
+    which UTF-8 decoded as one U+FFFD for two characters or as a wrong valid
+    character, and NBSPs (whitespace only on the correct side). The seed
+    script decodes and repairs the same way.
   - The import result and `completeImportRun` report new / duplicate /
-    previously-deleted counts (total = inserted + duplicates + deleted).
+    previously-deleted / repaired counts. The import run has no column for
+    deleted or repaired rows; neither was inserted, so both count in
+    `duplicate_rows` (total = inserted + duplicates). The toast adds
+    "· N corregidas".
 
   The import run's SHA-256 (`sha256Hex`) is a file checksum for the audit
   record, not part of the ID.

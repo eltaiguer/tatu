@@ -51,7 +51,9 @@ import {
 import {
   getDescriptionOverride,
   replaceDescriptionOverrides,
+  setDescriptionOverride,
 } from '../services/descriptions/description-overrides'
+import { getDisplayDescription } from '../utils/transaction-display'
 import {
   getMerchantCategoryOverride,
   replaceMerchantCategoryOverrides,
@@ -509,6 +511,163 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       id: string
     }>
     expect(sent.map((t) => t.id)).toEqual([`${incoming.id}_c1`])
+  })
+
+  describe('repairing rows stored garbled (#192)', () => {
+    // A Latin-1 export read as UTF-8 before #192: each accented letter stored
+    // as U+FFFD, in the description and in raw_data.
+    function garbledFile(...rows: string[]): Transaction[] {
+      const latin1 = Uint8Array.from(HEADER + rows.join('\n') + '\n', (c) =>
+        c.charCodeAt(0)
+      )
+      return parseBankAccountCSV(
+        new TextDecoder('utf-8').decode(latin1),
+        'UYU.csv'
+      ).transactions
+    }
+    const PENAROL =
+      '24/11/2025,5,COMPRA CON TARJETA DEBITO PEÑAROL,ADMINISTRACIÓN,-900.00,,100.00,'
+
+    it('fixes the stored text in place: same id and category, nothing inserted', async () => {
+      const [garbled] = garbledFile(PENAROL)
+      const edited = {
+        ...garbled,
+        category: 'entertainment',
+        displayDescription: 'Club',
+      }
+      const { repo, handlers } = signedIn([edited])
+
+      const result = await handlers.handleTransactionsImported(
+        file(PENAROL),
+        makeImportContext()
+      )
+
+      expect(result.added).toEqual([])
+      expect(result.repaired?.map((t) => t.id)).toEqual([garbled.id])
+      expect(repo.rows()).toHaveLength(1)
+      const row = repo.row(garbled.id)!
+      expect(row.description).toBe(
+        'COMPRA CON TARJETA DEBITO PEÑAROL ADMINISTRACIÓN'
+      )
+      expect((row.rawData as Record<string, unknown>).concepto).toBe(
+        'COMPRA CON TARJETA DEBITO PEÑAROL'
+      )
+      expect(row.category).toBe('entertainment')
+      expect(row.displayDescription).toBe('Club')
+      // Screen mirrors database.
+      expect(stored(garbled.id)?.description).toBe(row.description)
+      expect(stored(garbled.id)?.rawData).toEqual(row.rawData)
+      // Repaired rows were not inserted: counted with the skipped ones.
+      expect(repo.importRuns[0].stats).toEqual({
+        totalRows: 1,
+        insertedRows: 0,
+        duplicateRows: 1,
+      })
+    })
+
+    it('then treats the repaired row as a plain duplicate', async () => {
+      const { repo, handlers } = signedIn(garbledFile(PENAROL))
+      await handlers.handleTransactionsImported(file(PENAROL))
+
+      const again = await handlers.handleTransactionsImported(file(PENAROL))
+
+      expect(again.repaired).toEqual([])
+      expect(again.duplicates).toHaveLength(1)
+      expect(repo.rows()).toHaveLength(1)
+    })
+
+    it('still saves the new rows when a repair fails, and reports it', async () => {
+      const [garbled] = garbledFile(PENAROL)
+      const { repo, handlers } = signedIn([garbled])
+      failChunksWith(repo, 'update', garbled.id)
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const result = await handlers.handleTransactionsImported(
+        file(NEW, PENAROL)
+      )
+
+      expect(result.added).toHaveLength(1)
+      expect(result.repaired).toEqual([])
+      expect(result.repairsFailed).toBe(1)
+      expect(repo.row(garbled.id)?.description).toBe(garbled.description)
+      expect(stored(garbled.id)?.description).toBe(garbled.description)
+      expect(errorSpy).toHaveBeenCalled()
+    })
+
+    describe('rules learned from the garbled text', () => {
+      const CORRECT = 'COMPRA CON TARJETA DEBITO PEÑAROL ADMINISTRACIÓN'
+
+      async function renameEverywhere() {
+        const [garbled] = garbledFile(PENAROL)
+        const ctx = signedIn([garbled])
+        await ctx.handlers.handleUpdateTransaction(garbled.id, {
+          displayDescription: 'Club Peñarol',
+          category: 'entertainment',
+          applyScope: 'matching_past_and_future',
+        })
+        expect(getDisplayDescription(stored(garbled.id)!)).toBe('Club Peñarol')
+        return { ...ctx, garbled }
+      }
+
+      it('keeps a name and category set for all matching rows', async () => {
+        const { repo, handlers, garbled } = await renameEverywhere()
+
+        const result = await handlers.handleTransactionsImported(file(PENAROL))
+
+        expect(result.repaired?.map((t) => t.id)).toEqual([garbled.id])
+        const row = stored(garbled.id)!
+        expect(row.description).toBe(CORRECT)
+        expect(getDisplayDescription(row)).toBe('Club Peñarol')
+        expect(getMerchantCategoryOverride(CORRECT)).toBe('entertainment')
+        // Saved on the server too, so it survives a reload.
+        expect(
+          [...repo.descriptionOverrides.values()].find(
+            (o) => o.descriptionOriginal === CORRECT
+          )
+        ).toMatchObject({
+          friendlyDescription: 'Club Peñarol',
+          category: 'entertainment',
+        })
+        expect(
+          [...repo.categoryOverrides.values()].find(
+            (o) => o.merchantOriginal === CORRECT
+          )?.category
+        ).toBe('entertainment')
+        // The garbled rule stays for rows not repaired yet.
+        expect(getDescriptionOverride(garbled.description)).not.toBeNull()
+      })
+
+      it('does not overwrite a rule already saved for the correct text', async () => {
+        const { handlers } = await renameEverywhere()
+        // A rule on the correct text, from a later correctly decoded import.
+        setDescriptionOverride({
+          description: CORRECT,
+          friendlyDescription: 'Peñarol (nuevo)',
+        })
+
+        await handlers.handleTransactionsImported(file(PENAROL))
+
+        expect(getDescriptionOverride(CORRECT)?.friendlyDescription).toBe(
+          'Peñarol (nuevo)'
+        )
+      })
+
+      it('leaves the row garbled when its rules could not be moved', async () => {
+        const { repo, handlers, garbled } = await renameEverywhere()
+        repo.failOn('upsertDescriptionOverride', {
+          error: new Error('timeout'),
+        })
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+        const result = await handlers.handleTransactionsImported(file(PENAROL))
+
+        expect(result.repaired).toEqual([])
+        expect(result.repairsFailed).toBe(1)
+        expect(repo.row(garbled.id)?.description).toBe(garbled.description)
+        expect(getDisplayDescription(stored(garbled.id)!)).toBe('Club Peñarol')
+        expect(errorSpy).toHaveBeenCalled()
+      })
+    })
   })
 
   it('is not blocked by a row still in memory that the server no longer has', async () => {
