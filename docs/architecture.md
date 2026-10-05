@@ -106,8 +106,14 @@ Details that matter:
     after the insert, keeping the row's id, category, display name and tags;
     a deleted match is skipped like any deleted row (not repaired). Repairs are
     best-effort: one that fails doesn't fail the import (`repairsFailed`; the
-    toast says to import again, which retries it). Description and merchant
-    overrides learned from garbled text are keyed on it and are not migrated.
+    toast says to import again, which retries it). Rules keyed on the garbled
+    text — the description override (friendly name from a
+    `matching_past_and_future` rename) and the merchant category override —
+    are first copied to the corrected text's keys (server, then memory),
+    unless a rule already exists there; the garbled keys are kept for rows not
+    repaired yet. If copying fails, no row is repaired (the next re-import
+    retries both), so a name is never lost. Custom patterns written against
+    garbled text are not migrated.
     Misses, which import as new next to the garbled row: an accented letter
     directly followed by a 0x80–0xBF byte (NBSP, º, ª, «, », cp1252 quotes),
     which UTF-8 decoded as one U+FFFD for two characters or as a wrong valid

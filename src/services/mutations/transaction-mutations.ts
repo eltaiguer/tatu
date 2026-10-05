@@ -359,6 +359,10 @@ export async function importTransactions(
  * patches the store with exactly what the server confirmed. Best-effort: the
  * import itself already succeeded, and a repair that failed is retried by
  * importing the file again (the row still matches).
+ *
+ * Rules learned from the garbled text are keyed on it, so they are copied to
+ * the corrected text first (`moveRulesToRepairedText`); if that fails, no row
+ * is repaired, so a re-import retries both and no name is lost meanwhile.
  */
 async function repairRows(
   repo: Repository,
@@ -373,6 +377,7 @@ async function repairRows(
   )
   let outcome: WriteOutcome
   try {
+    await moveRulesToRepairedText(repo, repaired)
     outcome = await writePatches(repo, changes)
   } catch (error) {
     if (error instanceof WorkspaceChangedError) throw error
@@ -386,6 +391,70 @@ async function repairRows(
   }
   const saved = new Set(outcome.saved)
   return { saved: repaired.filter((tx) => saved.has(tx.id)), failed }
+}
+
+/**
+ * Copies the description override (friendly name) and the merchant category
+ * override keyed on a repaired row's garbled description to its corrected
+ * one, on the server and then in memory. A rule already saved for the
+ * corrected text is kept as is. The garbled keys are kept too: other stored
+ * rows may still carry that text until they are re-imported, and no new
+ * import produces it, so they are inert otherwise.
+ */
+async function moveRulesToRepairedText(
+  repo: Repository,
+  repaired: Transaction[]
+): Promise<void> {
+  const before = new Map(store().transactions.map((tx) => [tx.id, tx]))
+  const moves = new Map<string, { from: string; to: string }>()
+  for (const tx of repaired) {
+    const from = before.get(tx.id)?.description
+    if (from !== undefined && from !== tx.description) {
+      moves.set(JSON.stringify([from, tx.description]), {
+        from,
+        to: tx.description,
+      })
+    }
+  }
+  for (const { from, to } of moves.values()) {
+    const name = getDescriptionOverride(from)
+    const toKey = buildDescriptionOverrideKey(to)
+    if (
+      name &&
+      toKey &&
+      toKey !== buildDescriptionOverrideKey(from) &&
+      !getDescriptionOverride(to)
+    ) {
+      await repo.upsertDescriptionOverride({
+        descriptionNormalized: toKey,
+        descriptionOriginal: to,
+        friendlyDescription: name.friendlyDescription,
+        category: name.category,
+      })
+      assertOwner(repo)
+      setDescriptionOverride({
+        description: to,
+        friendlyDescription: name.friendlyDescription,
+        category: name.category,
+      })
+    }
+    const category = getMerchantCategoryOverride(from)
+    const toMerchant = normalizeMerchantName(to)
+    if (
+      category &&
+      toMerchant &&
+      toMerchant !== normalizeMerchantName(from) &&
+      !getMerchantCategoryOverride(to)
+    ) {
+      await repo.upsertCategoryOverride({
+        merchantNormalized: toMerchant,
+        merchantOriginal: to,
+        category,
+      })
+      assertOwner(repo)
+      setMerchantCategoryOverride(to, category)
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

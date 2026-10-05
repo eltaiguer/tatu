@@ -51,7 +51,9 @@ import {
 import {
   getDescriptionOverride,
   replaceDescriptionOverrides,
+  setDescriptionOverride,
 } from '../services/descriptions/description-overrides'
+import { getDisplayDescription } from '../utils/transaction-display'
 import {
   getMerchantCategoryOverride,
   replaceMerchantCategoryOverrides,
@@ -580,6 +582,81 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       expect(repo.row(garbled.id)?.description).toBe(garbled.description)
       expect(stored(garbled.id)?.description).toBe(garbled.description)
       expect(errorSpy).toHaveBeenCalled()
+    })
+
+    describe('rules learned from the garbled text', () => {
+      const CORRECT = 'COMPRA CON TARJETA DEBITO PEÑAROL ADMINISTRACIÓN'
+
+      async function renameEverywhere() {
+        const [garbled] = garbledFile(PENAROL)
+        const ctx = signedIn([garbled])
+        await ctx.handlers.handleUpdateTransaction(garbled.id, {
+          displayDescription: 'Club Peñarol',
+          category: 'entertainment',
+          applyScope: 'matching_past_and_future',
+        })
+        expect(getDisplayDescription(stored(garbled.id)!)).toBe('Club Peñarol')
+        return { ...ctx, garbled }
+      }
+
+      it('keeps a name and category set for all matching rows', async () => {
+        const { repo, handlers, garbled } = await renameEverywhere()
+
+        const result = await handlers.handleTransactionsImported(file(PENAROL))
+
+        expect(result.repaired?.map((t) => t.id)).toEqual([garbled.id])
+        const row = stored(garbled.id)!
+        expect(row.description).toBe(CORRECT)
+        expect(getDisplayDescription(row)).toBe('Club Peñarol')
+        expect(getMerchantCategoryOverride(CORRECT)).toBe('entertainment')
+        // Saved on the server too, so it survives a reload.
+        expect(
+          [...repo.descriptionOverrides.values()].find(
+            (o) => o.descriptionOriginal === CORRECT
+          )
+        ).toMatchObject({
+          friendlyDescription: 'Club Peñarol',
+          category: 'entertainment',
+        })
+        expect(
+          [...repo.categoryOverrides.values()].find(
+            (o) => o.merchantOriginal === CORRECT
+          )?.category
+        ).toBe('entertainment')
+        // The garbled rule stays for rows not repaired yet.
+        expect(getDescriptionOverride(garbled.description)).not.toBeNull()
+      })
+
+      it('does not overwrite a rule already saved for the correct text', async () => {
+        const { handlers } = await renameEverywhere()
+        // A rule on the correct text, from a later correctly decoded import.
+        setDescriptionOverride({
+          description: CORRECT,
+          friendlyDescription: 'Peñarol (nuevo)',
+        })
+
+        await handlers.handleTransactionsImported(file(PENAROL))
+
+        expect(getDescriptionOverride(CORRECT)?.friendlyDescription).toBe(
+          'Peñarol (nuevo)'
+        )
+      })
+
+      it('leaves the row garbled when its rules could not be moved', async () => {
+        const { repo, handlers, garbled } = await renameEverywhere()
+        repo.failOn('upsertDescriptionOverride', {
+          error: new Error('timeout'),
+        })
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+        const result = await handlers.handleTransactionsImported(file(PENAROL))
+
+        expect(result.repaired).toEqual([])
+        expect(result.repairsFailed).toBe(1)
+        expect(repo.row(garbled.id)?.description).toBe(garbled.description)
+        expect(getDisplayDescription(stored(garbled.id)!)).toBe('Club Peñarol')
+        expect(errorSpy).toHaveBeenCalled()
+      })
     })
   })
 
