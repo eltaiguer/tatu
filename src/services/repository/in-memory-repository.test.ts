@@ -39,4 +39,15 @@ describe('in-memory repository fidelity', () => {
 
     expect(repo.row('a')?.category).toBe('groceries')
   })
+
+  it('loads the import run that inserted each row, as Supabase does', async () => {
+    const repo = createInMemoryRepository()
+
+    await repo.insertTransactions([tx('a')], { importId: 'run-1' })
+    await repo.insertTransactions([tx('b')])
+    const { transactions } = await repo.loadWorkspace()
+
+    expect(transactions.find((t) => t.id === 'a')?.importId).toBe('run-1')
+    expect(transactions.find((t) => t.id === 'b')?.importId).toBeUndefined()
+  })
 })

@@ -24,6 +24,12 @@ export interface TransactionPatch {
   category?: string | null
   categoryConfidence?: number | null
   tags?: string[]
+  /**
+   * The bank's own text, rewritten only to repair a row stored garbled before
+   * #192 (import read Latin-1 as UTF-8). Never cleared.
+   */
+  description?: string
+  rawData?: Transaction['rawData']
 }
 
 const PATCH_KEYS = [
@@ -31,6 +37,8 @@ const PATCH_KEYS = [
   'category',
   'categoryConfidence',
   'tags',
+  'description',
+  'rawData',
 ] as const
 
 /** The store side of a patch: same keys, same clear-with-null rule. */
