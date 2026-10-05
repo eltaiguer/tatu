@@ -624,6 +624,22 @@ Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,
     expect(result.duplicates).toHaveLength(2)
   })
 
+  it('matches rows with a card before rows without one', () => {
+    // A card-less incoming row taking the Visa copy would leave the Visa row
+    // only the Master copy, on another card: it must take the Master copy.
+    const [unknown] = cardFile(cardRow(VISA)).map(withoutCard)
+    const [visa] = cardFile(cardRow(VISA))
+    const [master] = cardFile(cardRow(MASTER))
+
+    const result = classifyImport(
+      [unknown, { ...visa, id: 'incoming-visa' }],
+      [stored({ ...visa, id: 'visa' }), stored({ ...master, id: 'master' })]
+    )
+
+    expect(result.added).toEqual([])
+    expect(result.duplicates).toHaveLength(2)
+  })
+
   it('repairs a garbled row only from the same card', () => {
     const readAsUtf8 = (text: string) =>
       new TextDecoder('utf-8').decode(

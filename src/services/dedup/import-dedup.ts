@@ -199,7 +199,8 @@ function garbledPattern(description: string): RegExp | null {
  * date agrees; the others then claim any unclaimed row with their fingerprint,
  * live rows before deleted ones. Every pass, the repair one included, skips
  * stored rows on another card, and takes a row on the same card before one
- * whose card is unknown.
+ * whose card is unknown; incoming rows with a card are matched before
+ * card-less ones.
  *
  * A new row whose id is taken — by any stored row, by `takenIds`, or by a row
  * salted earlier in this import — gets `${id}_c${n}`, smallest free n, instead
@@ -240,7 +241,13 @@ export function classifyImport(
       match.set(tx, sameId)
     }
   }
-  for (const tx of incoming) {
+  // Rows that know their card pick first: a card-less row can stand for any
+  // card, so it takes what is left instead of a row a carded one needs.
+  const byCardFirst = [
+    ...incoming.filter((tx) => cardNumber(tx) !== null),
+    ...incoming.filter((tx) => cardNumber(tx) === null),
+  ]
+  for (const tx of byCardFirst) {
     if (match.has(tx)) continue
     const fingerprint = transactionFingerprint(tx)
     const pool = fingerprint === null ? undefined : pools.get(fingerprint)
@@ -276,7 +283,7 @@ export function classifyImport(
   }
   const repairs = new Set<Transaction>()
   if (garbled.size > 0) {
-    for (const tx of incoming) {
+    for (const tx of byCardFirst) {
       if (match.has(tx) || transactionFingerprint(tx) === null) continue
       const description = normalizeDescription(tx.description)
       const candidate = findOnCard(
