@@ -85,8 +85,23 @@ Details that matter:
   - **Known blind spots:** two cards, or two same-currency accounts, with an
     identical row on the same day share a fingerprint; credit card
     installments are told apart only by the "Cuota N M" counter Santander puts
-    in the description. Duplicates imported before #57 are not cleaned up
-    (#167 reuses `transactionFingerprint` for that).
+    in the description. Duplicates imported before #57 are cleaned up by hand
+    with the review below.
+  - **Cleaning up older duplicates** (#167, `services/dedup/duplicate-review.ts`
+    → `components/settings/DuplicatesReview.tsx`, Configuración → Datos →
+    "Buscar posibles duplicados"). `findPossibleDuplicates` groups the live,
+    non-split rows in the store by `transactionFingerprint`. Each loaded row
+    carries `importId` (`transactions.import_id`) and `createdAt` (when its run
+    inserted it); an import also tags the rows it adds with its run, so the
+    store matches a reload. A group is flagged only when its rows come from
+    two or more import runs (one run's identical rows are a genuine pair, never
+    shown); it keeps as many copies as the largest single run stored, oldest
+    first, and pre-selects the rest. A group with any row whose run is unknown
+    (stored before import runs) is listed apart with nothing pre-selected.
+    Deleting goes through `deleteTransactions` (soft delete + "Deshacer"), so a
+    later re-import matches the deleted copies and skips them. The total shown
+    is `sumCountedTotals(selected).expense` in the home currency. Split rows
+    are left out (deleting a parent can't be undone).
   - The import result and `completeImportRun` report new / duplicate /
     previously-deleted counts (total = inserted + duplicates + deleted).
 
