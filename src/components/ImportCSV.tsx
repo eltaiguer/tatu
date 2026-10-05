@@ -18,6 +18,7 @@ import {
   userErrorMessage,
 } from '../utils/user-error'
 import { parseCSV } from '../services/parsers/csv-parser'
+import { decodeCsvBytes } from '../services/parsers/decode-csv'
 import { categorizeParsedData } from '../services/categorizer/import-categorization'
 import { transactionStore } from '../stores/transaction-store'
 import type { ParsedData, Transaction, TransactionsFilter } from '../models'
@@ -31,6 +32,8 @@ interface ImportSummary {
   added: number
   duplicates: number
   previouslyDeleted: number
+  /** Stored rows whose garbled description this import repaired (#192). */
+  repaired: number
   // The month "Ver transacciones" opens: the newest new row's, or the file's
   // newest when nothing was new.
   month: { y: number; m: number } | null
@@ -51,6 +54,10 @@ function summaryLines(summary: ImportSummary) {
       one: 'eliminada antes',
       many: 'eliminadas antes',
     },
+    // Only when it happened: most imports repair nothing.
+    ...(summary.repaired > 0
+      ? [{ count: summary.repaired, one: 'corregida', many: 'corregidas' }]
+      : []),
   ]
 }
 
@@ -75,6 +82,10 @@ interface ImportCSVProps {
     duplicates: Transaction[]
     /** Rows deleted before; skipped so they stay deleted. */
     previouslyDeleted?: Transaction[]
+    /** Stored rows whose garbled description the import repaired (#192). */
+    repaired?: Transaction[]
+    /** Repairs that did not save; importing again retries them. */
+    repairsFailed?: number
     /**
      * Set when the import succeeded but AI enrichment did not, so the user can
      * tell a dead API key apart from the model categorizing badly.
@@ -86,17 +97,24 @@ interface ImportCSVProps {
   }>
 }
 
+// Bytes, not text: the encoding is decided by decodeCsvBytes (#192), since
+// Santander exports are Latin-1 and File.text() would read them as UTF-8.
 async function readFileAsText(file: File): Promise<string> {
-  if (typeof file.text === 'function') {
-    return file.text()
+  if (typeof file.arrayBuffer === 'function') {
+    return decodeCsvBytes(await file.arrayBuffer())
   }
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.onload = () => {
+      const result = reader.result
+      if (result == null) resolve('')
+      else if (typeof result === 'string') resolve(result)
+      else resolve(decodeCsvBytes(result))
+    }
     reader.onerror = () =>
       reject(new UserFacingError('Error al leer el archivo'))
-    reader.readAsText(file)
+    reader.readAsArrayBuffer(file)
   })
 }
 
@@ -190,6 +208,8 @@ export function ImportCSV({
         added,
         duplicates,
         previouslyDeleted = [],
+        repaired = [],
+        repairsFailed = 0,
         aiError,
         aiPartial,
       } = onTransactionsImported
@@ -201,6 +221,8 @@ export function ImportCSV({
         : {
             ...transactionStore.getState().addTransactions(result.transactions),
             // Local-only path never runs AI enrichment.
+            repaired: [] as Transaction[],
+            repairsFailed: 0,
             aiError: undefined as string | undefined,
             aiPartial: undefined as string | undefined,
           }
@@ -211,10 +233,17 @@ export function ImportCSV({
         added: added.length,
         duplicates: duplicates.length,
         previouslyDeleted: previouslyDeleted.length,
+        repaired: repaired.length,
         month: newestMonth(added.length > 0 ? added : result.transactions),
       })
 
       setImportState('success')
+
+      if (repairsFailed > 0) {
+        toast.warning(
+          `No se ${repairsFailed === 1 ? 'pudo' : 'pudieron'} corregir ${repairsFailed} descripci${repairsFailed === 1 ? 'ón' : 'ones'}. Importá el archivo de nuevo para reintentar.`
+        )
+      }
 
       // The import succeeded, but the AI step did not — say so, otherwise a
       // dead API key looks identical to poor categorization. Total failure
@@ -513,6 +542,13 @@ function ImportSummaryPanel({
           {nothingNew && (
             <p className="text-sm text-muted-foreground mb-1">
               Este archivo ya estaba importado.
+            </p>
+          )}
+          {nothingNew && summary.repaired > 0 && (
+            <p className="text-sm text-muted-foreground mb-1">
+              {summary.repaired === 1
+                ? 'Se corrigió 1 descripción.'
+                : `Se corrigieron ${summary.repaired} descripciones.`}
             </p>
           )}
           <p className="text-sm text-muted-foreground mb-4 break-all">

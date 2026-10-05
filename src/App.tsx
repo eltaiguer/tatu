@@ -508,6 +508,8 @@ function App() {
                     }}
                     transactions={transactions}
                     onResetAllData={handleResetAllData}
+                    onBulkDelete={handleBulkDeleteTransactions}
+                    onRestoreTransactions={handleRestoreTransactions}
                     claudeApiKey={claudeApiKey}
                     onSetClaudeApiKey={setClaudeApiKey}
                     aiEnabled={aiEnabled}

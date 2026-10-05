@@ -38,10 +38,11 @@ class SuccessfulFileReaderMock {
   onload: ((event: ProgressEvent<FileReader>) => void) | null = null
   onerror: (() => void) | null = null
 
-  readAsText() {
-    this.onload?.({
-      target: { result: 'mock-csv-content' },
-    } as unknown as ProgressEvent<FileReader>)
+  result: ArrayBuffer | null = null
+
+  readAsArrayBuffer() {
+    this.result = new TextEncoder().encode('mock-csv-content').buffer
+    this.onload?.({} as ProgressEvent<FileReader>)
   }
 }
 
@@ -54,14 +55,14 @@ class DeferredFileReaderMock {
     DeferredFileReaderMock.instances.push(this)
   }
 
-  readAsText() {}
+  readAsArrayBuffer() {}
 }
 
 class FailingFileReaderMock {
   onload: ((event: ProgressEvent<FileReader>) => void) | null = null
   onerror: (() => void) | null = null
 
-  readAsText() {
+  readAsArrayBuffer() {
     this.onerror?.()
   }
 }
@@ -259,9 +260,9 @@ describe('ImportCSV', () => {
       globalThis.FileReader = class {
         onload: ((event: ProgressEvent<FileReader>) => void) | null = null
         onerror: (() => void) | null = null
-        result: string | null = null
-        readAsText() {
-          this.result = content
+        result: ArrayBuffer | null = null
+        readAsArrayBuffer() {
+          this.result = new TextEncoder().encode(content).buffer
           this.onload?.({} as ProgressEvent<FileReader>)
         }
       } as unknown as typeof FileReader
@@ -547,6 +548,125 @@ describe('ImportCSV', () => {
     expect(await findSummaryLine('1 eliminada antes')).toBeInTheDocument()
     expect(summaryLine('1 nueva')).toBeInTheDocument()
     expect(summaryLine('0 duplicadas omitidas')).toBeInTheDocument()
+  })
+
+  describe('file encoding (#192)', () => {
+    // "Descripción,PEÑAROL" in Latin-1, as Santander exports it.
+    const LATIN1 = new Uint8Array([
+      0x44, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x63, 0x69, 0xf3, 0x6e, 0x2c,
+      0x50, 0x45, 0xd1, 0x41, 0x52, 0x4f, 0x4c,
+    ])
+
+    function pickBytes(bytes: Uint8Array) {
+      // jsdom's real FileReader reads the File's bytes.
+      globalThis.FileReader = OriginalFileReader
+      parseCSVMock.mockReturnValue(makeParsedData())
+      addTransactionsMock.mockReturnValue({ added: [], duplicates: [] })
+      render(<ImportCSV />)
+      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+        target: {
+          files: [
+            new File([bytes as BlobPart], 'movements.csv', {
+              type: 'text/csv',
+            }),
+          ],
+        },
+      })
+    }
+
+    it('reads a Latin-1 export with its accents', async () => {
+      pickBytes(LATIN1)
+      await waitFor(() => expect(parseCSVMock).toHaveBeenCalled())
+      expect(parseCSVMock).toHaveBeenCalledWith(
+        'Descripción,PEÑAROL',
+        'movements.csv'
+      )
+    })
+
+    it('reads a UTF-8 export unchanged', async () => {
+      pickBytes(new TextEncoder().encode('Descripción,PEÑAROL'))
+      await waitFor(() => expect(parseCSVMock).toHaveBeenCalled())
+      expect(parseCSVMock).toHaveBeenCalledWith(
+        'Descripción,PEÑAROL',
+        'movements.csv'
+      )
+    })
+  })
+
+  it('says how many garbled descriptions the import repaired', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [],
+      duplicates: [makeTx('tx-3')],
+      repaired: [makeTx('tx-1'), makeTx('tx-2')],
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    // Nothing new, but the import did something: say what (#202).
+    expect(
+      await screen.findByRole('heading', {
+        name: 'No había movimientos nuevos',
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Este archivo ya estaba importado.')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Se corrigieron 2 descripciones.')
+    ).toBeInTheDocument()
+    expect(summaryLine('2 corregidas')).toBeInTheDocument()
+    expect(summaryLine('1 duplicada omitida')).toBeInTheDocument()
+    expect(toastMock.success).not.toHaveBeenCalled()
+  })
+
+  it('lists a repaired description in the summary of a successful import', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-2')],
+      duplicates: [],
+      repaired: [makeTx('tx-1')],
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    expect(
+      await screen.findByRole('heading', { name: 'Importación completada' })
+    ).toBeInTheDocument()
+    expect(summaryLine('1 corregida')).toBeInTheDocument()
+    expect(screen.queryByText(/Se corrigi/)).not.toBeInTheDocument()
+  })
+
+  it('warns when some garbled descriptions could not be repaired', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-1')],
+      duplicates: [],
+      repaired: [],
+      repairsFailed: 2,
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    await waitFor(() => expect(toastMock.warning).toHaveBeenCalled())
+    expect(toastMock.warning.mock.calls[0][0]).toBe(
+      'No se pudieron corregir 2 descripciones. Importá el archivo de nuevo para reintentar.'
+    )
   })
 
   it('does not warn about AI when the import reports no AI failure', async () => {

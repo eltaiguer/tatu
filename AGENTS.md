@@ -60,6 +60,7 @@ src/
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
     Categories.tsx         # Categorías view — category grid + auto-categorization rules
     categories/            # Categorías sub-components: CategoryForm, CategoryCard, PatternRulesCard (rules form + list, owns its state)
+    settings/              # Configuración sub-components: DuplicatesReview ("Buscar posibles duplicados" row + review dialog, #167)
     Settings.tsx           # Configuración view — theme, currency, account, data management
     ImportCSV.tsx          # CSV import flow (wrapped in Radix Dialog, not a view); stays open on a summary of counts after an import (#202)
     CategoryBreakdownList.tsx  # Ranked category list with progress bars
@@ -92,7 +93,7 @@ src/
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
-    dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57)
+    dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57); duplicate-review.ts: groups stored rows from different import runs for the one-off cleanup (#167)
     repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
     mutations/             # transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored); category-counts.ts: rows per category
@@ -224,7 +225,7 @@ A task is done only when:
 
 - **Transaction sources**: Credit Card, USD Bank Account, UYU Bank Account (3 distinct CSV formats from Santander Uruguay)
 - **Categorization**: Pattern-based merchant matching (`merchant-patterns.ts`) with confidence scores (0–1). System learns from user overrides stored in Supabase. Optional AI enrichment on import (see Current status).
-- **Deduplication**: by content, not ID — imports match rows by fingerprint (source, raw date, raw description, signed amount, currency) as a multiset, deleted rows included; a taken ID gets a salted `_cN` suffix (`services/dedup/import-dedup.ts`, #57). IDs (hash incl. row position) are unchanged
+- **Deduplication**: by content, not ID — imports match rows by fingerprint (source, raw date, raw description, signed amount, currency) as a multiset, deleted rows included; a taken ID gets a salted `_cN` suffix (`services/dedup/import-dedup.ts`, #57). IDs (hash incl. row position) are unchanged. Files are decoded UTF-8-else-windows-1252 (`services/parsers/decode-csv.ts`); a re-import repairs rows stored garbled (U+FFFD) in place, same id (#192)
 - **Internal transfers**: inferred in the store (`inferInternalTransfers`) by keyword + scored debit/credit pairing within ±2 days, recomputed on load — see `docs/architecture.md`
 - **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `editTransaction` in `services/mutations/transaction-mutations.ts`
 
