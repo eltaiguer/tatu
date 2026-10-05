@@ -179,6 +179,27 @@ describe('findPossibleDuplicates', () => {
     expect(sameCharge.flagged[0].preselected).toEqual(['again'])
   })
 
+  it('reads card numbers the way the import does: spaces do not make another card', () => {
+    const card = (id: string, importId: string, numeroTarjeta: string) =>
+      row(id, importId, `2026-0${importId === 'run-a' ? 3 : 4}-20T10:00:00Z`, {
+        source: 'credit_card',
+        description: 'Devoto Supermercado',
+        rawData: {
+          fecha: '15/03/2026',
+          numeroTarjeta,
+          numeroAutorizacion: '770025140510',
+        },
+      })
+
+    const scan = findPossibleDuplicates([
+      card('first', 'run-a', 'XXXXX-4362'),
+      card('again', 'run-b', 'XXXXX- 4362'),
+    ])
+
+    expect(scan.flagged).toHaveLength(1)
+    expect(scan.flagged[0].preselected).toEqual(['again'])
+  })
+
   it('tells bank movements apart by their reference', () => {
     const scan = findPossibleDuplicates([
       row('a', 'run-a', '2026-03-20T10:00:00Z'),
