@@ -19,6 +19,17 @@ describe('decodeCsvBytes', () => {
     expect(decodeCsvBytes(new Uint8Array([0x80, 0x31, 0x30]))).toBe('€10')
   })
 
+  it('decodes the whole 0x80-0x9F block as windows-1252, on any runtime', () => {
+    // Node 20's TextDecoder('windows-1252') yields C1 controls here.
+    const bytes = new Uint8Array([0x80, 0x85, 0x91, 0x92, 0x93, 0x96, 0x9f])
+    expect(decodeCsvBytes(bytes)).toBe('€…‘’“–Ÿ')
+  })
+
+  it('keeps the five undefined windows-1252 bytes as their C1 code points', () => {
+    const bytes = new Uint8Array([0xe9, 0x81, 0x8d, 0x8f, 0x90, 0x9d])
+    expect(decodeCsvBytes(bytes)).toBe('é\u0081\u008d\u008f\u0090\u009d')
+  })
+
   it('leaves a UTF-8 file unchanged', () => {
     const text = 'Descripción,PEÑAROL,€'
     expect(decodeCsvBytes(new TextEncoder().encode(text))).toBe(text)

@@ -295,7 +295,13 @@ export async function importTransactions(
     shouldContinue: () => isWorkspaceOwner(repo.userId),
   })
   const owner = isWorkspaceOwner(repo.userId)
-  if (owner && saved.length > 0) store().addTransactions(saved)
+  if (owner && saved.length > 0) {
+    // Tagged with their run, as a reload would show them (#167).
+    const runId = importRunId
+    store().addTransactions(
+      runId ? saved.map((tx) => ({ ...tx, importId: runId })) : saved
+    )
+  }
 
   if (error !== undefined) {
     const reason =

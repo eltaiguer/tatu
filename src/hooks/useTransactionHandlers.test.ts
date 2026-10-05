@@ -405,6 +405,16 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       .transactions
   }
 
+  it('shows imported rows tagged with their import run, as a reload would (#167)', async () => {
+    const { repo, handlers } = signedIn()
+
+    await handlers.handleTransactionsImported(file(A), makeImportContext())
+
+    const runId = repo.importRuns[0].id
+    expect(transactionStore.getState().transactions[0].importId).toBe(runId)
+    expect(repo.rows()[0].importId).toBe(runId)
+  })
+
   it('imports only the new row from an overlapping export whose rows shifted', async () => {
     const { repo, handlers } = signedIn(file(A, B))
     const shifted = file(NEW, A, B)

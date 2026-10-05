@@ -59,6 +59,19 @@ export interface Transaction {
   /** ID of the parent transaction this row was split from */
   splitParentId?: string
 
+  /**
+   * The import run that stored this row (`transactions.import_id`). Absent for
+   * rows stored before import runs were recorded, and for split parts.
+   * Read-only provenance: never written back by an edit.
+   */
+  importId?: string
+
+  /**
+   * When the row was stored (`transactions.created_at`): the time its import
+   * run inserted it. Set on load; absent on rows imported in this session.
+   */
+  createdAt?: Date
+
   /** Reference to the original raw data */
   rawData:
     | CreditCardTransaction
