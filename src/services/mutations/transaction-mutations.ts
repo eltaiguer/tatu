@@ -176,6 +176,13 @@ export interface ImportResult {
   duplicates: Transaction[]
   /** Rows the user deleted before; skipped so they stay deleted. */
   previouslyDeleted: Transaction[]
+  /**
+   * Stored rows whose garbled description (#192) this import rewrote in
+   * place, as saved. Same id, category and names; not inserted.
+   */
+  repaired: Transaction[]
+  /** Repairs the server did not confirm; importing again retries them. */
+  repairsFailed?: number
   /** Enrichment did not run at all. */
   aiError?: string
   /** Enrichment ran but some batches failed; the rest were applied. */
@@ -234,7 +241,7 @@ export async function importTransactions(
 ): Promise<ImportResult> {
   assertOwner(repo)
   const classification = await classifyAgainstServer(repo, incoming)
-  const { added, duplicates, previouslyDeleted } = classification
+  const { added, duplicates, previouslyDeleted, repaired } = classification
 
   let importRunId: string | null = null
   if (context) {
@@ -313,6 +320,11 @@ export async function importTransactions(
   }
   if (!owner) throw new WorkspaceChangedError()
 
+  const { saved: repairedSaved, failed: repairsFailed } = await repairRows(
+    repo,
+    repaired
+  )
+
   // The rows are saved and visible; failing to close the audit record must
   // not report the import itself as failed.
   if (importRunId) {
@@ -320,16 +332,60 @@ export async function importTransactions(
       await repo.completeImportRun(importRunId, {
         totalRows: incoming.length,
         insertedRows: added.length,
-        // The schema has no column for skipped deleted rows; they were not
-        // inserted, so they count as duplicates (total = inserted + dup).
-        duplicateRows: duplicates.length + previouslyDeleted.length,
+        // The schema has no column for skipped deleted rows or repaired ones
+        // (#192); neither was inserted, so they count as duplicates
+        // (total = inserted + dup).
+        duplicateRows:
+          duplicates.length + previouslyDeleted.length + repaired.length,
       })
     } catch (closeError) {
       console.error('Could not complete import run record:', closeError)
     }
   }
 
-  return { added, duplicates, previouslyDeleted, aiError, aiPartial }
+  return {
+    added,
+    duplicates,
+    previouslyDeleted,
+    repaired: repairedSaved,
+    ...(repairsFailed > 0 ? { repairsFailed } : {}),
+    aiError,
+    aiPartial,
+  }
+}
+
+/**
+ * Rewrites the description and raw_data of rows stored garbled (#192), and
+ * patches the store with exactly what the server confirmed. Best-effort: the
+ * import itself already succeeded, and a repair that failed is retried by
+ * importing the file again (the row still matches).
+ */
+async function repairRows(
+  repo: Repository,
+  repaired: Transaction[]
+): Promise<{ saved: Transaction[]; failed: number }> {
+  if (repaired.length === 0) return { saved: [], failed: 0 }
+  const changes = new Map<string, TransactionPatch>(
+    repaired.map((tx) => [
+      tx.id,
+      { description: tx.description, rawData: tx.rawData },
+    ])
+  )
+  let outcome: WriteOutcome
+  try {
+    outcome = await writePatches(repo, changes)
+  } catch (error) {
+    if (error instanceof WorkspaceChangedError) throw error
+    console.error('Could not repair garbled descriptions:', error)
+    return { saved: [], failed: repaired.length }
+  }
+  // A row gone from the server (deleted elsewhere) needs no repair.
+  const failed = outcome.failed.length
+  if (failed > 0) {
+    console.error('Could not repair garbled descriptions:', outcome.error)
+  }
+  const saved = new Set(outcome.saved)
+  return { saved: repaired.filter((tx) => saved.has(tx.id)), failed }
 }
 
 // ---------------------------------------------------------------------------
