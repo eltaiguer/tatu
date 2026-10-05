@@ -1,5 +1,5 @@
 import type { Transaction } from '../../models'
-import { transactionFingerprint } from './import-dedup'
+import { cardNumber, transactionFingerprint } from './import-dedup'
 
 /**
  * The one-off "Buscar posibles duplicados" review (#167): rows stored before
@@ -11,7 +11,10 @@ import { transactionFingerprint } from './import-dedup'
  * leaves out: card number + authorization number on card rows, `referencia`
  * on bank rows. Two rows whose references differ are different movements —
  * e.g. the same charge on the same day on two cards, whose statements are
- * separate files and so separate import runs. Conservative by design —
+ * separate files and so separate import runs (the import keeps those apart
+ * too, reading the card through the same `cardNumber`; unlike the import, a
+ * row lacking its reference sends the group to hand review instead of
+ * matching either side). Conservative by design —
  * nothing is deleted without the user:
  * - A group whose rows all come from one import run is a genuine identical
  *   pair inside one statement: never shown.
@@ -128,11 +131,13 @@ function splitByReference(
 
 // The statement's own id for a movement: card + authorization number on card
 // rows, `referencia` on bank rows. null when the stored raw data lacks it.
+// The card number is read by the import's own `cardNumber`, so the review
+// never groups rows the import keeps apart as two cards' charges.
 function movementReference(tx: Transaction): string | null {
   const raw = (tx.rawData ?? {}) as Record<string, unknown>
   const fields =
     tx.source === 'credit_card'
-      ? [raw.numeroTarjeta, raw.numeroAutorizacion]
+      ? [cardNumber(tx) ?? '', raw.numeroAutorizacion]
       : [raw.referencia]
   const values = fields.map((value) =>
     typeof value === 'string' ? value.trim() : ''

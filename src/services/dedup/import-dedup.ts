@@ -26,8 +26,13 @@ import type { Transaction } from '../../models'
  * Santander's description has a changing "Cuota N M" counter. Rows that do
  * share them (a genuine identical pair) are counted as a multiset, so they
  * still import as many times as the file holds them beyond what is stored.
- * Not covered: two cards (or two same-currency accounts) with an identical row
- * on the same day are one fingerprint — see #167.
+ *
+ * The card number is not in the fingerprint but is checked on every match
+ * (`sameCard`): a different card is a different charge (owner decision
+ * 2026-10-05), so the same charge on two cards — two statements, two files —
+ * imports twice. It can't be part of the key because a row without it (see
+ * `cardNumber`) must still match either card. Not covered: two same-currency
+ * bank accounts with an identical row on the same day are one fingerprint.
  */
 export function transactionFingerprint(tx: Transaction): string | null {
   if (tx.splitParentId) {
@@ -52,6 +57,55 @@ function contentWithoutDate(tx: Transaction): string {
     signedCents(tx),
     tx.currency,
   ])
+}
+
+/**
+ * The masked card number of a credit card row (`rawData.numeroTarjeta`, e.g.
+ * `XXXXX-4362`) with all whitespace removed; null for bank rows and for card
+ * rows stored without it. The authorization number is not used: Santander
+ * repeats it on every row of an account, so it tells no movements apart.
+ * Shared with the duplicates review (#167) so both read cards the same way.
+ */
+export function cardNumber(tx: Transaction): string | null {
+  if (tx.source !== 'credit_card') return null
+  const value = (tx.rawData as Record<string, unknown> | undefined)
+    ?.numeroTarjeta
+  if (typeof value !== 'string') return null
+  const card = value.replace(/\s+/g, '')
+  return card === '' ? null : card
+}
+
+/**
+ * Whether two rows can be the same charge as far as the card goes: equal card
+ * numbers, or one side doesn't know its card (legacy rows), which falls back
+ * to matching on the fingerprint alone.
+ */
+function sameCard(a: Transaction, b: Transaction): boolean {
+  const cardA = cardNumber(a)
+  const cardB = cardNumber(b)
+  return cardA === null || cardB === null || cardA === cardB
+}
+
+/**
+ * The first unclaimed candidate on the incoming row's card, else the first
+ * unclaimed one whose card is unknown, so a card-less legacy row is only used
+ * once no row of the same card is left for it.
+ */
+function findOnCard<T>(
+  candidates: T[] | undefined,
+  tx: Transaction,
+  rowOf: (candidate: T) => ExistingTransaction,
+  isFree: (candidate: T) => boolean
+): T | undefined {
+  if (!candidates) return undefined
+  const card = cardNumber(tx)
+  const free = candidates.filter(
+    (candidate) => isFree(candidate) && sameCard(rowOf(candidate).tx, tx)
+  )
+  return (
+    free.find((candidate) => cardNumber(rowOf(candidate).tx) === card) ??
+    free[0]
+  )
 }
 
 function normalizeDescription(description: string): string {
@@ -143,7 +197,10 @@ function garbledPattern(description: string): RegExp | null {
  * times absorbs k copies and the rest import. An incoming row first claims
  * the stored row with its own id (an exact re-import) when everything but the
  * date agrees; the others then claim any unclaimed row with their fingerprint,
- * live rows before deleted ones.
+ * live rows before deleted ones. Every pass, the repair one included, skips
+ * stored rows on another card, and takes a row on the same card before one
+ * whose card is unknown; incoming rows with a card are matched before
+ * card-less ones.
  *
  * A new row whose id is taken — by any stored row, by `takenIds`, or by a row
  * salted earlier in this import — gets `${id}_c${n}`, smallest free n, instead
@@ -177,17 +234,29 @@ export function classifyImport(
       sameId &&
       !claimed.has(sameId) &&
       transactionFingerprint(sameId.tx) !== null &&
-      contentWithoutDate(sameId.tx) === contentWithoutDate(tx)
+      contentWithoutDate(sameId.tx) === contentWithoutDate(tx) &&
+      sameCard(sameId.tx, tx)
     ) {
       claimed.add(sameId)
       match.set(tx, sameId)
     }
   }
-  for (const tx of incoming) {
+  // Rows that know their card pick first: a card-less row can stand for any
+  // card, so it takes what is left instead of a row a carded one needs.
+  const byCardFirst = [
+    ...incoming.filter((tx) => cardNumber(tx) !== null),
+    ...incoming.filter((tx) => cardNumber(tx) === null),
+  ]
+  for (const tx of byCardFirst) {
     if (match.has(tx)) continue
     const fingerprint = transactionFingerprint(tx)
     const pool = fingerprint === null ? undefined : pools.get(fingerprint)
-    const row = pool?.find((candidate) => !claimed.has(candidate))
+    const row = findOnCard(
+      pool,
+      tx,
+      (candidate) => candidate,
+      (candidate) => !claimed.has(candidate)
+    )
     if (row) {
       claimed.add(row)
       match.set(tx, row)
@@ -214,14 +283,15 @@ export function classifyImport(
   }
   const repairs = new Set<Transaction>()
   if (garbled.size > 0) {
-    for (const tx of incoming) {
+    for (const tx of byCardFirst) {
       if (match.has(tx) || transactionFingerprint(tx) === null) continue
       const description = normalizeDescription(tx.description)
-      const candidate = garbled
-        .get(repairKey(tx))
-        ?.find(
-          ({ row, pattern }) => !claimed.has(row) && pattern.test(description)
-        )
+      const candidate = findOnCard(
+        garbled.get(repairKey(tx)),
+        tx,
+        ({ row }) => row,
+        ({ row, pattern }) => !claimed.has(row) && pattern.test(description)
+      )
       if (candidate) {
         claimed.add(candidate.row)
         match.set(tx, candidate.row)

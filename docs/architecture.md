@@ -98,8 +98,18 @@ Details that matter:
     changing how dates are parsed (#58) doesn't change it. A stored row without
     `raw_data.fecha` (not expected — it has always been written) falls back to
     its stored date rounded to the nearest UTC midnight.
-  - **Known blind spots:** two cards, or two same-currency accounts, with an
-    identical row on the same day share a fingerprint; credit card
+  - **A different card is a different charge** (owner decision 2026-10-05).
+    Each card's statement is its own file, so the same charge on two cards
+    arrives from two imports. `cardNumber` reads `rawData.numeroTarjeta` (the
+    masked number, e.g. `XXXXX-4362`, whitespace removed); every pass — same
+    ID, fingerprint, and the #192 repair — skips a stored row on another card
+    and prefers one on the same card over one whose card is unknown. It isn't
+    part of the fingerprint string because a row stored without it (legacy)
+    must still match either card: when either side lacks it, matching falls
+    back to the fingerprint alone. The authorization number is not used:
+    Santander repeats it on every row of an account.
+  - **Known blind spots:** two same-currency accounts with an identical row on
+    the same day share a fingerprint; credit card
     installments are told apart only by the "Cuota N M" counter Santander puts
     in the description. Duplicates imported before #57 are cleaned up by hand
     with the review below.
@@ -110,7 +120,9 @@ Details that matter:
     the statement's per-movement reference, which the fingerprint leaves out
     (card number + authorization number on card rows, `referencia` on bank
     rows): rows whose references differ are different movements, e.g. the
-    same charge on the same day on two cards. Each loaded row carries
+    same charge on the same day on two cards. The card number is read through
+    the import's `cardNumber`, so the review never groups what the import
+    keeps apart. Each loaded row carries
     `importId` (`transactions.import_id`) and `createdAt` (when its run
     inserted it); an import also tags the rows it adds with its run, so the
     store matches a reload. Identical rows from one import run are a genuine
