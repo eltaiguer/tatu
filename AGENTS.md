@@ -56,7 +56,8 @@ src/
   components/              # React UI components
     ui/                    # Radix primitives (shadcn/ui style) + app ones: page-header, segmented-toggle (a radiogroup), icon-tile, native-select; use-return-focus (dialogs return focus to their opener on close), option-list (arrow keys in popover picker lists)
     AppSidebar.tsx         # Fixed 252px sidebar, navigation, user footer
-    Dashboard.tsx          # Resumen view — account cards, month summary, top categories, KPI tiles, donut, area chart, merchants (charts live here, not a separate view)
+    Dashboard.tsx          # Resumen view — owns the data memos; charts live here, not a separate view
+    dashboard/             # Resumen sub-components: AccountCards, MonthSummaryCard, KpiTiles, SavingsCard, CategorySpendCard (donut), CurrencySplitCard, IncomeExpenseChart, RecentTransactionsCard, TopMerchantsCard, EmptyStates, DrillTarget
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
     transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state)
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
@@ -103,7 +104,7 @@ src/
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     merchants/             # merchant-key.ts: THE merchant key + label (Mayores comercios, its drill-through, Insights, recurring) — never group by description
-    charts/                # Home-currency aggregation (chart-data.ts: totals, categories, merchants); category-changes.ts feeds CategoryChangesCard
+    charts/                # Home-currency aggregation (chart-data.ts: totals, categories, merchants); category-changes.ts feeds CategoryChangesCard; dashboard-rows.ts shapes Resumen rows (donut, trend, period label)
     currency/              # convert(amount, from, to, rate) + Currency type
     suggestions/           # suggestions.ts: category/tag suggestion lists + search filters shared by the edit dialogs
     descriptions/          # Description override management
@@ -248,7 +249,7 @@ Requires `.env` with Supabase vars (see `.env.example`):
 
 Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip. Hooks extracted from App.tsx; store simplified. Deployed to Firebase Hosting. Test counts and line counts are deliberately not recorded here — they go stale within a PR.
 
-**Known shape of the code:** #140 moved the large views' inline sub-components out, one view per PR, into `src/components/<view>/`: Categorías (`components/categories/`), Resumen (#190) and Transacciones (`components/transactions/`, which also holds the view's state hooks and `TransactionTable`'s row/card) are done. With all three merged, no view file is over ~600 lines. Put new sub-components in the view's folder, not inline.
+**Known shape of the code:** #140 moved the large views' inline sub-components out, one view per PR, into `src/components/<view>/`: Categorías (`components/categories/`), Resumen (`components/dashboard/`) and Transacciones (`components/transactions/`, which also holds the view's state hooks and `TransactionTable`'s row/card) are done. No view file is over ~600 lines. Put new sub-components in the view's folder, not inline.
 
 **AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, `importTransactions` (`services/mutations/transaction-mutations.ts`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
 
