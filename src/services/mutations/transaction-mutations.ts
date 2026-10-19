@@ -176,6 +176,13 @@ export interface ImportResult {
   duplicates: Transaction[]
   /** Rows the user deleted before; skipped so they stay deleted. */
   previouslyDeleted: Transaction[]
+  /**
+   * Stored rows whose garbled description (#192) this import rewrote in
+   * place, as saved. Same id, category and names; not inserted.
+   */
+  repaired: Transaction[]
+  /** Repairs the server did not confirm; importing again retries them. */
+  repairsFailed?: number
   /** Enrichment did not run at all. */
   aiError?: string
   /** Enrichment ran but some batches failed; the rest were applied. */
@@ -234,7 +241,7 @@ export async function importTransactions(
 ): Promise<ImportResult> {
   assertOwner(repo)
   const classification = await classifyAgainstServer(repo, incoming)
-  const { added, duplicates, previouslyDeleted } = classification
+  const { added, duplicates, previouslyDeleted, repaired } = classification
 
   let importRunId: string | null = null
   if (context) {
@@ -288,7 +295,13 @@ export async function importTransactions(
     shouldContinue: () => isWorkspaceOwner(repo.userId),
   })
   const owner = isWorkspaceOwner(repo.userId)
-  if (owner && saved.length > 0) store().addTransactions(saved)
+  if (owner && saved.length > 0) {
+    // Tagged with their run, as a reload would show them (#167).
+    const runId = importRunId
+    store().addTransactions(
+      runId ? saved.map((tx) => ({ ...tx, importId: runId })) : saved
+    )
+  }
 
   if (error !== undefined) {
     const reason =
@@ -313,6 +326,11 @@ export async function importTransactions(
   }
   if (!owner) throw new WorkspaceChangedError()
 
+  const { saved: repairedSaved, failed: repairsFailed } = await repairRows(
+    repo,
+    repaired
+  )
+
   // The rows are saved and visible; failing to close the audit record must
   // not report the import itself as failed.
   if (importRunId) {
@@ -320,16 +338,129 @@ export async function importTransactions(
       await repo.completeImportRun(importRunId, {
         totalRows: incoming.length,
         insertedRows: added.length,
-        // The schema has no column for skipped deleted rows; they were not
-        // inserted, so they count as duplicates (total = inserted + dup).
-        duplicateRows: duplicates.length + previouslyDeleted.length,
+        // The schema has no column for skipped deleted rows or repaired ones
+        // (#192); neither was inserted, so they count as duplicates
+        // (total = inserted + dup).
+        duplicateRows:
+          duplicates.length + previouslyDeleted.length + repaired.length,
       })
     } catch (closeError) {
       console.error('Could not complete import run record:', closeError)
     }
   }
 
-  return { added, duplicates, previouslyDeleted, aiError, aiPartial }
+  return {
+    added,
+    duplicates,
+    previouslyDeleted,
+    repaired: repairedSaved,
+    ...(repairsFailed > 0 ? { repairsFailed } : {}),
+    aiError,
+    aiPartial,
+  }
+}
+
+/**
+ * Rewrites the description and raw_data of rows stored garbled (#192), and
+ * patches the store with exactly what the server confirmed. Best-effort: the
+ * import itself already succeeded, and a repair that failed is retried by
+ * importing the file again (the row still matches).
+ *
+ * Rules learned from the garbled text are keyed on it, so they are copied to
+ * the corrected text first (`moveRulesToRepairedText`); if that fails, no row
+ * is repaired, so a re-import retries both and no name is lost meanwhile.
+ */
+async function repairRows(
+  repo: Repository,
+  repaired: Transaction[]
+): Promise<{ saved: Transaction[]; failed: number }> {
+  if (repaired.length === 0) return { saved: [], failed: 0 }
+  const changes = new Map<string, TransactionPatch>(
+    repaired.map((tx) => [
+      tx.id,
+      { description: tx.description, rawData: tx.rawData },
+    ])
+  )
+  let outcome: WriteOutcome
+  try {
+    await moveRulesToRepairedText(repo, repaired)
+    outcome = await writePatches(repo, changes)
+  } catch (error) {
+    if (error instanceof WorkspaceChangedError) throw error
+    console.error('Could not repair garbled descriptions:', error)
+    return { saved: [], failed: repaired.length }
+  }
+  // A row gone from the server (deleted elsewhere) needs no repair.
+  const failed = outcome.failed.length
+  if (failed > 0) {
+    console.error('Could not repair garbled descriptions:', outcome.error)
+  }
+  const saved = new Set(outcome.saved)
+  return { saved: repaired.filter((tx) => saved.has(tx.id)), failed }
+}
+
+/**
+ * Copies the description override (friendly name) and the merchant category
+ * override keyed on a repaired row's garbled description to its corrected
+ * one, on the server and then in memory. A rule already saved for the
+ * corrected text is kept as is. The garbled keys are kept too: other stored
+ * rows may still carry that text until they are re-imported, and no new
+ * import produces it, so they are inert otherwise.
+ */
+async function moveRulesToRepairedText(
+  repo: Repository,
+  repaired: Transaction[]
+): Promise<void> {
+  const before = new Map(store().transactions.map((tx) => [tx.id, tx]))
+  const moves = new Map<string, { from: string; to: string }>()
+  for (const tx of repaired) {
+    const from = before.get(tx.id)?.description
+    if (from !== undefined && from !== tx.description) {
+      moves.set(JSON.stringify([from, tx.description]), {
+        from,
+        to: tx.description,
+      })
+    }
+  }
+  for (const { from, to } of moves.values()) {
+    const name = getDescriptionOverride(from)
+    const toKey = buildDescriptionOverrideKey(to)
+    if (
+      name &&
+      toKey &&
+      toKey !== buildDescriptionOverrideKey(from) &&
+      !getDescriptionOverride(to)
+    ) {
+      await repo.upsertDescriptionOverride({
+        descriptionNormalized: toKey,
+        descriptionOriginal: to,
+        friendlyDescription: name.friendlyDescription,
+        category: name.category,
+      })
+      assertOwner(repo)
+      setDescriptionOverride({
+        description: to,
+        friendlyDescription: name.friendlyDescription,
+        category: name.category,
+      })
+    }
+    const category = getMerchantCategoryOverride(from)
+    const toMerchant = normalizeMerchantName(to)
+    if (
+      category &&
+      toMerchant &&
+      toMerchant !== normalizeMerchantName(from) &&
+      !getMerchantCategoryOverride(to)
+    ) {
+      await repo.upsertCategoryOverride({
+        merchantNormalized: toMerchant,
+        merchantOriginal: to,
+        category,
+      })
+      assertOwner(repo)
+      setMerchantCategoryOverride(to, category)
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

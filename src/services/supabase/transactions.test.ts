@@ -179,6 +179,30 @@ describe('supabase transactions service', () => {
     expect(transactions[0].id).toBe('tx-1')
   })
 
+  it('loads which import run stored each row and when (#167)', async () => {
+    table.rows = [
+      {
+        ...makeRow(1),
+        import_id: 'run-a',
+        created_at: '2026-02-05T12:00:00+00:00',
+      },
+      { ...makeRow(2), import_id: null, created_at: '2025-11-01T09:00:00Z' },
+    ]
+
+    const { loadUserTransactions } = await import('./transactions')
+    const transactions = await loadUserTransactions(session)
+    const byId = new Map(transactions.map((tx) => [tx.id, tx]))
+
+    expect(byId.get('tx-0001')?.importId).toBe('run-a')
+    expect(byId.get('tx-0001')?.createdAt).toEqual(
+      new Date('2026-02-05T12:00:00Z')
+    )
+    expect(byId.get('tx-0002')?.importId).toBeUndefined()
+    expect(byId.get('tx-0002')?.createdAt).toEqual(
+      new Date('2025-11-01T09:00:00Z')
+    )
+  })
+
   it('loads every transaction when the account exceeds the server row cap', async () => {
     // PostgREST caps each response at max-rows (1000 by default) without
     // erroring, so a single unpaged select silently drops the rest.
