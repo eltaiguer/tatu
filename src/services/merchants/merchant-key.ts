@@ -197,12 +197,43 @@ export function merchantKeyOf(tx: Transaction): string {
   return rawMerchantKey(tx.description)
 }
 
+// The bank concept a transfer description opens with; the counterparty's name
+// comes after it (and after any reference codes).
+const TRANSFER_LABEL_PREFIX =
+  /^(?:debito operacion en (?:banca digital|supernet o sms|supernet)|credito por operacion en supernet|transf instantanea (?:enviada|recibida)|transferencia (?:enviada|recibida))\b/i
+
+// A transfer's label is its counterparty ("TRANSFERENCIA ENVIADA 7972TT55
+// TRF. PLAZA- FEDERICO GAZZANO" → "FEDERICO GAZZANO"): drops the bank
+// concept, reference codes, `NRR:…`, "TRF. PLAZA-", a repeated "RECIBIDA"
+// and anything before a "/". Keeps digits after "NRO" (they tell payees
+// apart). Other descriptions, or a transfer with no name left, keep their raw
+// text. Display only — the key is rawMerchantKey.
+function counterpartyLabel(description: string): string {
+  const prefix = TRANSFER_LABEL_PREFIX.exec(description)
+  if (!prefix) return description
+  let rest = description.slice(prefix[0].length)
+  rest = rest.slice(rest.lastIndexOf('/') + 1)
+  let afterNro = false
+  const label = rest
+    .replace(/\bnrr:\S*/gi, ' ')
+    .replace(/\btrf\. plaza-?/gi, ' ')
+    .split(/\s+/)
+    .filter((token) => {
+      if (/^nro$/i.test(token)) afterNro = true
+      return afterNro || !/\d|^(?:recibida|enviada)$/i.test(token)
+    })
+    .join(' ')
+    .replace(EDGE_PUNCTUATION, '')
+  return label.length < 2 ? description : label
+}
+
 function newestFirst(a: Transaction, b: Transaction): number {
   return b.date.getTime() - a.date.getTime() || a.id.localeCompare(b.id)
 }
 
 // The friendliest name for a group of rows sharing a key: the most recent
-// rename, else the most common raw description. Ties go to the most recent
+// rename, else the most common raw description (a transfer's reduced to its
+// counterparty). Ties go to the most recent
 // row, so the label does not depend on input order (it feeds InsightInput,
 // whose hash decides whether cached insights are stale).
 export function merchantLabelFor(rows: Transaction[]): string {
@@ -226,7 +257,7 @@ export function merchantLabelFor(rows: Transaction[]): string {
       best = count
     }
   }
-  return label
+  return counterpartyLabel(label)
 }
 
 export interface MerchantGroup {

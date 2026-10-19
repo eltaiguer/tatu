@@ -276,6 +276,80 @@ describe('merchantLabelFor', () => {
   })
 })
 
+describe('merchantLabelFor on transfers', () => {
+  const labelOf = (description: string) =>
+    merchantLabelFor([tx({ description })])
+
+  it.each([
+    [
+      'DEBITO OPERACION EN BANCA DIGITAL 526741TT55770545 TRF. PLAZA- ISABEL ARISMENDI',
+      'ISABEL ARISMENDI',
+    ],
+    [
+      'DEBITO OPERACION EN SUPERNET O SMS 466949TT55365654 TRF. PLAZA- MATEO RODRIGUEZ',
+      'MATEO RODRIGUEZ',
+    ],
+    [
+      'TRANSFERENCIA ENVIADA 797258TT55557944 TRF. PLAZA- FEDERICO GAZZANO',
+      'FEDERICO GAZZANO',
+    ],
+    [
+      'TRANSF INSTANTANEA ENVIADA 380104LE NRR:182499946 JOSE PREX',
+      'JOSE PREX',
+    ],
+    [
+      'TRANSF INSTANTANEA RECIBIDA 618258LR:000022847973 PEREZ, MERCEDES',
+      'PEREZ, MERCEDES',
+    ],
+    [
+      'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA /GAZZANO DE MARCO, FEDERICO J',
+      'GAZZANO DE MARCO, FEDERICO J',
+    ],
+    [
+      'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY MARIA CONSTANZA',
+      'HARGUINDEGUY MARIA CONSTANZA',
+    ],
+    [
+      'DEBITO OPERACION EN SUPERNET O SMS PAGO A GOMEZ, ROCHA',
+      'PAGO A GOMEZ, ROCHA',
+    ],
+  ])('names the counterparty of %s', (description, label) => {
+    expect(labelOf(description)).toBe(label)
+  })
+
+  it('keeps the payee number after NRO', () => {
+    expect(labelOf('DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA 5506')).toBe(
+      'NRO FAMILIA 5506'
+    )
+  })
+
+  it('keeps the raw description when no counterparty is left', () => {
+    expect(labelOf('TRANSF INSTANTANEA ENVIADA 871947LE')).toBe(
+      'TRANSF INSTANTANEA ENVIADA 871947LE'
+    )
+    expect(labelOf('TRANSFERENCIA RECIBIDA 569729TT RECIBIDA')).toBe(
+      'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA'
+    )
+    expect(labelOf('DEBITO OPERACION EN SUPERNET O SMS P--')).toBe(
+      'DEBITO OPERACION EN SUPERNET O SMS P--'
+    )
+  })
+
+  it('leaves non-transfer descriptions and renames untouched', () => {
+    expect(labelOf('CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL')).toBe(
+      'CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL'
+    )
+    expect(
+      merchantLabelFor([
+        tx({
+          description: 'TRANSFERENCIA ENVIADA 797258TT55557944 TRF. PLAZA- X',
+          displayDescription: 'Alquiler',
+        }),
+      ])
+    ).toBe('Alquiler')
+  })
+})
+
 describe('groupByMerchant', () => {
   it('merges the variants of one merchant under one key and label', () => {
     const groups = groupByMerchant([
