@@ -3,25 +3,30 @@
 // the app modules below get the same `import.meta.env` they get in the browser.
 //
 // It goes through the app's own code on purpose, the same steps ImportCSV
-// runs: `parseCSV` (ids), `categorizeParsedData` (categories) and
-// `persistTransactions` (row mapping, upsert on user_id+transaction_id), so
-// seeded rows are exactly what an import in the UI would write — re-importing a
-// sample in the app reports every row as a duplicate.
+// runs: `decodeCsvBytes` (Latin-1 or UTF-8, #192), `parseCSV` (ids),
+// `categorizeParsedData` (categories), content dedup (`classifyImport`, #57)
+// and `persistTransactions` (row mapping), so seeded rows are exactly what an
+// import in the UI would write — re-importing a sample in the app reports
+// every row as a duplicate. Rows an older seed stored garbled (samples read as
+// UTF-8) are repaired in place, like a re-import in the app does.
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 import type { Transaction } from '../src/models'
 import { categorizeParsedData } from '../src/services/categorizer/import-categorization'
+import { classifyImport } from '../src/services/dedup/import-dedup'
 import { parseCSV } from '../src/services/parsers'
+import { decodeCsvBytes } from '../src/services/parsers/decode-csv'
 import {
   getSupabaseAnonKey,
   getSupabaseClient,
   getSupabaseUrl,
 } from '../src/services/supabase/client'
 import {
-  findExistingTransactionIds,
+  findImportCandidates,
   persistTransactions,
+  updateTransactionsByIds,
 } from '../src/services/supabase/transactions'
 
 const SEED_EMAIL = 'dev@tatu.local'
@@ -58,7 +63,7 @@ function parseSamples(): Transaction[] {
   for (const name of files) {
     // Same two steps as ImportCSV: pure parse, then import categorization.
     const result = categorizeParsedData(
-      parseCSV(readFileSync(join(SAMPLES_DIR, name), 'utf-8'), name)
+      parseCSV(decodeCsvBytes(readFileSync(join(SAMPLES_DIR, name))), name)
     )
     console.log(
       `parsed ${name}: ${result.transactions.length} rows (${result.fileType})`
@@ -97,14 +102,17 @@ async function main() {
   // Like an import: rows already on the server (active or deleted) are left
   // alone, so re-running never duplicates data or undoes local edits.
   const transactions = parseSamples()
-  const existing = await findExistingTransactionIds(
-    session,
-    transactions.map((tx) => tx.id)
+  const { added, repaired } = classifyImport(
+    transactions,
+    await findImportCandidates(session, transactions)
   )
-  const toInsert = transactions.filter(
-    (tx) => !existing.active.has(tx.id) && !existing.deleted.has(tx.id)
-  )
-  await persistTransactions(session, toInsert)
+  await persistTransactions(session, added)
+  for (const tx of repaired) {
+    await updateTransactionsByIds(session, [tx.id], {
+      description: tx.description,
+      rawData: tx.rawData,
+    })
+  }
 
   const { count, error: countError } = await client
     .from('transactions')
@@ -113,8 +121,8 @@ async function main() {
   if (countError) fail(`count failed: ${countError.message}`)
 
   console.log(
-    `inserted ${toInsert.length} new transactions ` +
-      `(${transactions.length - toInsert.length} already present); ` +
+    `inserted ${added.length} new transactions, repaired ${repaired.length} ` +
+      `(${transactions.length - added.length} already present); ` +
       `${SEED_EMAIL} now has ${count} rows`
   )
   await client.auth.signOut()

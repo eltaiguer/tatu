@@ -76,7 +76,6 @@ export interface ImportRunRecord {
 interface StoredRow {
   tx: Transaction
   deleted: boolean
-  importId?: string
 }
 
 export interface InMemoryRepository extends Repository {
@@ -275,11 +274,10 @@ export function createInMemoryRepository(
             )
           }
           for (const tx of part) {
-            table.set(tx.id, {
-              tx: clone(tx),
-              deleted: false,
-              importId: options?.importId,
-            })
+            // As `import_id` on Supabase, read back on load.
+            const row = clone(tx)
+            if (options?.importId) row.importId = options.importId
+            table.set(tx.id, { tx: row, deleted: false })
           }
         },
         options?.shouldContinue

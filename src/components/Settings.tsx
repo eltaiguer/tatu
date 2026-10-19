@@ -16,8 +16,10 @@ import { IconTile } from './ui/icon-tile'
 import { SegmentedToggle } from './ui/segmented-toggle'
 import { useConfirm } from './ConfirmDialog'
 import { CATEGORIZATION_MODELS } from '../services/ai/models'
+import { DuplicatesReview } from './settings/DuplicatesReview'
+import type { DeleteResult } from '../services/mutations/transaction-mutations'
 
-interface SettingsProps {
+interface BaseSettingsProps {
   theme: 'light' | 'dark' | 'auto'
   onSetTheme: (t: 'light' | 'dark' | 'auto') => void
   preferredCurrency: 'UYU' | 'USD'
@@ -36,6 +38,19 @@ interface SettingsProps {
   aiModel: string
   onSetAiModel: (model: string) => void
 }
+
+// The duplicates review deletes with "Deshacer", so deleting and restoring
+// are wired together or not at all.
+type DeleteProps =
+  | { onBulkDelete?: never; onRestoreTransactions?: never }
+  | {
+      onBulkDelete: (transactionIds: string[]) => Promise<DeleteResult>
+      onRestoreTransactions: (
+        transactions: Transaction[]
+      ) => Promise<{ restored: number }>
+    }
+
+type SettingsProps = BaseSettingsProps & DeleteProps
 
 function SettingRow({
   label,
@@ -81,6 +96,8 @@ export function Settings({
   onSetAiEnabled,
   aiModel,
   onSetAiModel,
+  onBulkDelete,
+  onRestoreTransactions,
 }: SettingsProps) {
   const userEmail = session?.user?.email ?? ''
   const userName = getFriendlyName(session) || 'Usuario'
@@ -385,6 +402,15 @@ export function Settings({
             </Button>
           }
         />
+        {onBulkDelete && onRestoreTransactions && (
+          <DuplicatesReview
+            transactions={transactions}
+            homeCurrency={preferredCurrency}
+            fxRate={fxRate}
+            onBulkDelete={onBulkDelete}
+            onRestoreTransactions={onRestoreTransactions}
+          />
+        )}
         <div className="flex items-center justify-between gap-[24px] px-[24px] py-[16px]">
           <div>
             <div className="text-body font-semibold text-[var(--neg)]">
