@@ -41,6 +41,7 @@ import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
 import { fitMonoFontSize, formatCurrency } from '../utils/formatting'
+import { toDateKey, todayAsUtcDate } from '../utils/date-utils'
 import type { Currency } from '../models'
 import { exportTransactions } from '../services/export/export'
 import { useConfirm } from './ConfirmDialog'
@@ -96,25 +97,26 @@ type Period =
   | { mode: 'all' }
   | { mode: 'range'; from: string; to: string }
 
-function pad2(n: number) {
-  return String(n).padStart(2, '0')
-}
-function isoDay(d: Date) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+// Transaction dates are calendar days at UTC midnight (#58): months, ranges
+// and the newest row are all read in UTC, the same calendar months Resumen
+// sums — so a drill-through holds exactly the rows of the number clicked.
+function utcDay(y: number, m: number, d: number): Date {
+  return new Date(Date.UTC(y, m, d))
 }
 
 function periodRange(period: Period): { from: string; to: string } {
   if (period.mode === 'month') {
-    const from = new Date(period.y, period.m, 1)
-    const to = new Date(period.y, period.m + 1, 0)
-    return { from: isoDay(from), to: isoDay(to) }
+    return {
+      from: toDateKey(utcDay(period.y, period.m, 1)),
+      to: toDateKey(utcDay(period.y, period.m + 1, 0)),
+    }
   }
   if (period.mode === 'recent') {
-    const to = period.anchor
-    const from = new Date(to.getFullYear(), to.getMonth() - (period.n - 1), 1)
+    const y = period.anchor.getUTCFullYear()
+    const m = period.anchor.getUTCMonth()
     return {
-      from: isoDay(from),
-      to: isoDay(new Date(to.getFullYear(), to.getMonth() + 1, 0)),
+      from: toDateKey(utcDay(y, m - (period.n - 1), 1)),
+      to: toDateKey(utcDay(y, m + 1, 0)),
     }
   }
   if (period.mode === 'range') {
@@ -151,30 +153,31 @@ function MonthNav({
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
-  const anchorY = period.mode === 'month' ? period.y : newest.getFullYear()
-  const anchorM = period.mode === 'month' ? period.m : newest.getMonth()
+  const newestY = newest.getUTCFullYear()
+  const newestM = newest.getUTCMonth()
+  const today = todayAsUtcDate()
+  const anchorY = period.mode === 'month' ? period.y : newestY
+  const anchorM = period.mode === 'month' ? period.m : newestM
   const [gridYear, setGridYear] = useState(anchorY)
 
   useEffect(() => {
     if (open) {
-      setGridYear(period.mode === 'month' ? period.y : newest.getFullYear())
+      setGridYear(period.mode === 'month' ? period.y : newestY)
     }
-  }, [open, period, newest])
+  }, [open, period, newestY])
 
   function shift(dir: -1 | 1) {
     const base =
       period.mode === 'month'
         ? { y: period.y, m: period.m }
         : { y: anchorY, m: anchorM }
-    const d = new Date(base.y, base.m + dir, 1)
-    setPeriod({ mode: 'month', y: d.getFullYear(), m: d.getMonth() })
+    const d = utcDay(base.y, base.m + dir, 1)
+    setPeriod({ mode: 'month', y: d.getUTCFullYear(), m: d.getUTCMonth() })
   }
 
   const isMonthMode = period.mode === 'month'
   const nextDisabled =
-    isMonthMode &&
-    period.y === newest.getFullYear() &&
-    period.m >= newest.getMonth()
+    isMonthMode && period.y === newestY && period.m >= newestM
 
   return (
     <div className="relative inline-flex" ref={ref}>
@@ -242,19 +245,17 @@ function MonthNav({
             {[
               {
                 // The shortcut jumps to the newest month with data; only call
-                // it "este mes" when that is today's month. Tx dates are
-                // calendar days at UTC midnight (read in UTC, matching
-                // Resumen); today is the local calendar day. The rest of this
-                // picker still reads tx dates in local time — see #58.
+                // it "este mes" when that is today's month (today = the local
+                // calendar day, as a UTC calendar date).
                 label:
-                  newest.getUTCFullYear() === new Date().getFullYear() &&
-                  newest.getUTCMonth() === new Date().getMonth()
+                  newestY === today.getUTCFullYear() &&
+                  newestM === today.getUTCMonth()
                     ? 'Este mes'
                     : 'Último mes',
                 val: {
                   mode: 'month' as const,
-                  y: newest.getFullYear(),
-                  m: newest.getMonth(),
+                  y: newestY,
+                  m: newestM,
                 },
               },
               {
@@ -265,8 +266,8 @@ function MonthNav({
                 label: 'Este año',
                 val: {
                   mode: 'range' as const,
-                  from: `${newest.getFullYear()}-01-01`,
-                  to: isoDay(newest),
+                  from: `${newestY}-01-01`,
+                  to: toDateKey(newest),
                 },
               },
               { label: 'Todo', val: { mode: 'all' as const } },
@@ -302,7 +303,7 @@ function MonthNav({
               variant="ghost"
               size="sm"
               className="h-[28px] w-[28px] p-0!"
-              disabled={gridYear >= newest.getFullYear()}
+              disabled={gridYear >= newestY}
               onClick={() => setGridYear((y) => y + 1)}
             >
               <ChevronRight size={15} />
@@ -312,8 +313,7 @@ function MonthNav({
           <div className="grid grid-cols-[repeat(3,1fr)] gap-[6px]">
             {MONTHS_ES_SHORT.map((mo, i) => {
               const isFuture =
-                gridYear > newest.getFullYear() ||
-                (gridYear === newest.getFullYear() && i > newest.getMonth())
+                gridYear > newestY || (gridYear === newestY && i > newestM)
               const isSel =
                 period.mode === 'month' &&
                 period.y === gridYear &&
@@ -770,7 +770,7 @@ export function Transactions({
     const newest =
       transactions.length > 0
         ? new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
-        : new Date()
+        : todayAsUtcDate()
     const fromUrl = initialFilters.period
     if (fromUrl) {
       return fromUrl.mode === 'recent'
@@ -784,7 +784,11 @@ export function Transactions({
       initialFilters.accounts.length > 0 ||
       initialFilters.currency !== 'all'
     if (deepLinked || transactions.length === 0) return { mode: 'all' }
-    return { mode: 'month', y: newest.getFullYear(), m: newest.getMonth() }
+    return {
+      mode: 'month',
+      y: newest.getUTCFullYear(),
+      m: newest.getUTCMonth(),
+    }
   })
 
   const {
@@ -887,7 +891,7 @@ export function Transactions({
     newestDate ??
     (transactions.length > 0
       ? new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
-      : new Date())
+      : todayAsUtcDate())
 
   /* ---- Edit state ---- */
   // Rows with a mutation in flight. A set, not a single id, so two

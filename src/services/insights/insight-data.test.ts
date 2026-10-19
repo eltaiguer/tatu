@@ -430,3 +430,33 @@ describe('buildInsightInput — amounts are rounded for the model', () => {
     }
   })
 })
+
+// #58: recurring cadence is measured in whole calendar days, whatever shape a
+// row's date is stored in (UTC midnight after #58, 03:00Z before).
+describe('recurring cadence across stored date shapes', () => {
+  it('reads a 10-day rhythm as weekly when old and new rows mix', () => {
+    const transactions = [
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-11T03:00:00.000Z',
+      '2026-01-21T03:00:00.000Z',
+      '2026-01-31T03:00:00.000Z',
+      '2026-02-10T03:00:00.000Z',
+      '2026-02-20T03:00:00.000Z',
+      '2026-03-02T03:00:00.000Z',
+    ].map((iso, i) =>
+      makeTransaction(`feria-${i}`, {
+        date: new Date(iso),
+        amount: 25,
+        displayDescription: 'Feria',
+        category: Category.Groceries,
+      })
+    )
+
+    const feria = buildInsightInput(
+      transactions,
+      'USD',
+      40.5
+    ).recurringCharges.find((c) => c.merchant === 'Feria')
+    expect(feria?.cadence).toBe('weekly')
+  })
+})

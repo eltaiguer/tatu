@@ -10,7 +10,7 @@ import type { Transaction } from '../models'
 function makeTransaction(index: number): Transaction {
   return {
     id: `tx-${index}`,
-    date: new Date(2026, 0, index + 1),
+    date: new Date(Date.UTC(2026, 0, index + 1)),
     description: `comercio ${index}`,
     amount: 100 + index,
     currency: 'UYU',

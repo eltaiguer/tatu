@@ -10,6 +10,8 @@ import {
 } from './chart-data'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
+import { parseSantanderDate } from '../parsers/utils'
+import { toMonthKey } from '../../utils/date-utils'
 
 function makeTransaction(
   id: string,
@@ -613,5 +615,57 @@ describe('niceTicks', () => {
 
   it('returns just zero when there is no range', () => {
     expect(niceTicks(0, 0)).toEqual([0])
+  })
+})
+
+// #58: Resumen buckets by calendar month. A row dated the 1st in the CSV is in
+// that month in any browser zone, and so is a row stored before #58 by a
+// UTC-3 browser (03:00Z on its own day).
+describe('calendar-month bucketing of imported rows', () => {
+  const RATE = 40
+  function row(id: string, date: Date): Transaction {
+    return {
+      id,
+      date,
+      description: id,
+      amount: 10,
+      currency: 'USD',
+      type: 'debit',
+      source: 'bank_account',
+      rawData: {},
+    }
+  }
+
+  it('puts a Mar 1 CSV row in March', () => {
+    const mar1 = row('mar1', parseSantanderDate('01/03/2026'))
+    const feb28 = row('feb28', parseSantanderDate('28/02/2026'))
+
+    expect(toMonthKey(mar1.date)).toBe('2026-03')
+    const summary = buildCurrentMonthSummary(
+      [feb28, mar1],
+      'USD',
+      RATE,
+      new Date(2026, 2, 15, 12)
+    )
+    expect(summary.m).toBe(2)
+    expect(summary.count).toBe(1)
+    expect(summary.isCurrentMonth).toBe(true)
+    expect(
+      buildMonthlyTrendsConverted([feb28, mar1], 'USD', RATE).map((m) => [
+        m.month,
+        m.expense,
+      ])
+    ).toEqual([
+      ['2026-02', 10],
+      ['2026-03', 10],
+    ])
+  })
+
+  it('keeps pre-#58 rows (03:00Z) in their own month', () => {
+    const mar1 = row('mar1', new Date('2026-03-01T03:00:00.000Z'))
+    const feb28 = row('feb28', new Date('2026-02-28T03:00:00.000Z'))
+    const summary = buildCurrentMonthSummary([feb28, mar1], 'USD', RATE)
+    expect([summary.y, summary.m, summary.count]).toEqual([2026, 2, 1])
+    expect(summary.monthLabel).toMatch(/marzo/i)
   })
 })

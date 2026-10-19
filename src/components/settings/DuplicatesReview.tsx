@@ -20,7 +20,11 @@ import {
 } from '../../services/dedup/duplicate-review'
 import { sumCountedTotals } from '../../services/spending/spending-rules'
 import type { DeleteResult } from '../../services/mutations/transaction-mutations'
-import { formatCurrency, formatDate } from '../../utils/formatting'
+import {
+  formatCurrency,
+  formatDate,
+  formatLocalDate,
+} from '../../utils/formatting'
 import { PartialWriteError, userErrorMessage } from '../../utils/user-error'
 
 export interface DuplicatesReviewProps {
@@ -315,7 +319,7 @@ function GroupSection({
               <ul className="m-0 flex list-none flex-col gap-[6px] p-0">
                 {group.rows.map((tx) => {
                   const imported = tx.createdAt
-                    ? `importada el ${formatDate(tx.createdAt)}`
+                    ? `importada el ${formatLocalDate(tx.createdAt)}`
                     : 'importada recién'
                   const id = `dup-${tx.id}`
                   return (

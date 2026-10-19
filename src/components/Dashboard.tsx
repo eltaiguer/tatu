@@ -61,6 +61,7 @@ import {
   fitMonoFontSize,
   formatDateCompact,
 } from '../utils/formatting'
+import { todayAsUtcDate } from '../utils/date-utils'
 import { IconTile } from './ui/icon-tile'
 import { getDisplayDescription } from '../utils/transaction-display'
 import { CategoryBreakdownList } from './CategoryBreakdownList'
@@ -268,7 +269,8 @@ export function Dashboard({
     const source = countedTransactions.length
       ? countedTransactions
       : transactions
-    if (source.length === 0) return new Date()
+    // Formatted in UTC like every tx date, so "today" must be one too (#58).
+    if (source.length === 0) return todayAsUtcDate()
     return source.reduce(
       (latest, tx) => (tx.date > latest ? tx.date : latest),
       source[0].date

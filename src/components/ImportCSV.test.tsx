@@ -716,9 +716,9 @@ describe('ImportCSV', () => {
     expect(message).not.toContain('no disponible')
   })
   describe('summary after an import (#202)', () => {
-    // Local dates, so the month does not depend on the test machine's zone.
+    // Transaction dates are calendar days at UTC midnight (#58).
     function txOn(id: string, y: number, m: number, d: number): Transaction {
-      return { ...makeTx(id), date: new Date(y, m, d, 12) }
+      return { ...makeTx(id), date: new Date(Date.UTC(y, m, d)) }
     }
 
     function importFile(user: ReturnType<typeof userEvent.setup>) {
@@ -789,6 +789,32 @@ describe('ImportCSV', () => {
       )
 
       expect(onViewTransactions).toHaveBeenCalledTimes(1)
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2026, m: 2 },
+      })
+    })
+
+    it('"Ver transacciones" reads the newest row month as a UTC calendar day (#58)', async () => {
+      // 1 March at UTC midnight is still 28 February in Uruguay's local time.
+      const user = userEvent.setup()
+      parseCSVMock.mockReturnValue(makeParsedData())
+      const onViewTransactions = vi.fn()
+      const onTransactionsImported = vi.fn().mockResolvedValue({
+        added: [txOn('a', 2026, 1, 27), txOn('b', 2026, 2, 1)],
+        duplicates: [],
+      })
+      render(
+        <ImportCSV
+          onTransactionsImported={onTransactionsImported}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      await importFile(user)
+      await user.click(
+        await screen.findByRole('button', { name: 'Ver transacciones' })
+      )
+
       expect(onViewTransactions).toHaveBeenCalledWith({
         period: { mode: 'month', y: 2026, m: 2 },
       })

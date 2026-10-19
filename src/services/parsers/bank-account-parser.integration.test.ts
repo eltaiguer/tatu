@@ -59,7 +59,7 @@ describe('Bank Account Parser - Integration Tests with Real Samples', () => {
       // All transactions should have valid dates
       result.transactions.forEach((tx) => {
         expect(tx.date.toString()).not.toBe('Invalid Date')
-        expect(tx.date.getFullYear()).toBeGreaterThan(2020)
+        expect(tx.date.getUTCFullYear()).toBeGreaterThan(2020)
       })
 
       // All transactions should have positive amounts
@@ -142,7 +142,7 @@ describe('Bank Account Parser - Integration Tests with Real Samples', () => {
       // All transactions should have valid dates
       result.transactions.forEach((tx) => {
         expect(tx.date.toString()).not.toBe('Invalid Date')
-        expect(tx.date.getFullYear()).toBeGreaterThan(2020)
+        expect(tx.date.getUTCFullYear()).toBeGreaterThan(2020)
       })
 
       // All transactions should have positive amounts

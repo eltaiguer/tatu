@@ -5,7 +5,11 @@ import {
   buildCategorySpendingConverted,
   buildMonthlyTrendsConverted,
 } from '../charts/chart-data'
-import { toDateKey, toMonthKey } from '../../utils/date-utils'
+import {
+  calendarDaysBetween,
+  toDateKey,
+  toMonthKey,
+} from '../../utils/date-utils'
 
 export interface CategoryInsightTotal {
   category: string
@@ -133,10 +137,8 @@ function averageGapDays(sortedDates: Date[]): number {
   if (sortedDates.length < 2) return Infinity
   const gaps: number[] = []
   for (let i = 1; i < sortedDates.length; i++) {
-    const days =
-      (sortedDates[i].getTime() - sortedDates[i - 1].getTime()) /
-      (1000 * 60 * 60 * 24)
-    gaps.push(days)
+    // Whole calendar days, whatever shape each date is stored in (#58)
+    gaps.push(calendarDaysBetween(sortedDates[i], sortedDates[i - 1]))
   }
   return gaps.reduce((sum, g) => sum + g, 0) / gaps.length
 }
