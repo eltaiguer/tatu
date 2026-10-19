@@ -60,6 +60,9 @@ vi.mock('./services/supabase/auth', () => ({
 vi.mock('./services/supabase/transactions', () => ({
   loadUserTransactions: loadUserTransactionsMock,
   persistTransactions: vi.fn().mockResolvedValue(undefined),
+  // Nothing stored yet: every imported row is new.
+  findImportCandidates: vi.fn().mockResolvedValue([]),
+  findExistingTransactionIds: vi.fn().mockResolvedValue([]),
   setTransactionsDeleted: softDeleteTransactionMock,
   updateTransactionsByIds: updateTransactionMock,
 }))
@@ -124,6 +127,23 @@ function renderApp(path = '/') {
 }
 
 const currentUrl = () => screen.getByTestId('location').textContent
+
+// A Santander UYU account statement: four rows, all in November 2025.
+const UYU_STATEMENT_CSV = `Cliente,Test,
+Cuenta,Ca De Ahorro Atm,
+Número,007003529520,
+Moneda,UYU,
+Sucursal,02 - 18 De Julio,
+
+Movimientos,
+Desde:,01/11/2025,Hasta:,30/11/2025
+
+Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
+27/11/2025,000000,DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA                  5506,,-6820.00,,116.44,
+27/11/2025,598386,CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE,,,6820.00,6936.44,
+25/11/2025,001075501044,"RETIRO CORRESPONSALES , MONTEVIDEO TARJ: ############9172",,-1500.00,,116.44,
+24/11/2025,532500606784,"COMPRA CON TARJETA DEBITO PEDIDOSYA, MONTEVIDEO TARJ: ############9172",,-47.00,,339.92,
+`
 
 function tx(
   id: string,
@@ -254,6 +274,36 @@ describe('App', () => {
       expect(
         screen.queryByRole('heading', { name: 'Importar transacciones' })
       ).toBeNull()
+    )
+    await waitFor(() => expect(opener).toHaveFocus())
+  })
+
+  it('keeps the import dialog open on a summary until the user picks "Ver transacciones" (#202)', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    const opener = await screen.findByRole('button', { name: 'Importar' })
+    await user.click(opener)
+
+    await user.upload(
+      screen.getByLabelText('Seleccionar archivo'),
+      new File([UYU_STATEMENT_CSV], 'UYUmovements.csv', { type: 'text/csv' })
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'Importación completada' })
+    ).toHaveFocus()
+    expect(
+      screen.getByRole('list', { name: 'Resumen de la importación' })
+    ).toHaveTextContent('4 nuevas')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(currentUrl()).toBe('/')
+
+    await user.click(screen.getByRole('button', { name: 'Ver transacciones' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // The imported month, through the same link Resumen's drill-throughs use.
+    await waitFor(() =>
+      expect(currentUrl()).toBe('/transacciones?periodo=2025-11')
     )
     await waitFor(() => expect(opener).toHaveFocus())
   })
