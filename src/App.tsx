@@ -508,6 +508,8 @@ function App() {
                     }}
                     transactions={transactions}
                     onResetAllData={handleResetAllData}
+                    onBulkDelete={handleBulkDeleteTransactions}
+                    onRestoreTransactions={handleRestoreTransactions}
                     claudeApiKey={claudeApiKey}
                     onSetClaudeApiKey={setClaudeApiKey}
                     aiEnabled={aiEnabled}
@@ -536,9 +538,9 @@ function App() {
             importar tus movimientos.
           </DialogDescription>
           <ImportCSV
-            onImportComplete={() => {
+            onViewTransactions={(filter) => {
               setImportOpen(false)
-              go('transactions')
+              navigateToTransactions(filter)
             }}
             onTransactionsImported={handleTransactionsImported}
           />

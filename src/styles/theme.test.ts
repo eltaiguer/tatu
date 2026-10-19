@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 describe('Theme System', () => {
@@ -247,5 +249,120 @@ describe('Theme System', () => {
 
       expect(darkStyle.getPropertyValue('--ring').trim()).toBe('#30a3ff')
     })
+  })
+})
+
+// WCAG AA contrast of --text-faint, read from the real theme.css. Colours are
+// compared as the 8-bit sRGB a browser renders (what axe measures).
+const THEME_CSS = readFileSync(join(__dirname, 'theme.css'), 'utf8')
+
+function themeBlock(selector: ':root' | '.dark'): string {
+  const start = THEME_CSS.indexOf(`\n${selector} {`)
+  return THEME_CSS.slice(start, THEME_CSS.indexOf('\n}', start))
+}
+
+function oklchToken(block: string, name: string): [number, number, number] {
+  const match = block.match(
+    new RegExp(`--${name}: oklch\\(([\\d.]+) ([\\d.]+) ([\\d.]+)\\);`)
+  )
+  if (!match) throw new Error(`--${name} is not an oklch() token`)
+  return [Number(match[1]), Number(match[2]), Number(match[3])]
+}
+
+function relativeLuminance([L, C, h]: [number, number, number]): number {
+  const a = C * Math.cos((h * Math.PI) / 180)
+  const b = C * Math.sin((h * Math.PI) / 180)
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3
+  const [r, g, bl] = [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  ].map((linear) => {
+    // Encode to an 8-bit sRGB channel, then decode back to linear light.
+    const clamped = Math.min(1, Math.max(0, linear))
+    const encoded =
+      clamped <= 0.0031308
+        ? 12.92 * clamped
+        : 1.055 * clamped ** (1 / 2.4) - 0.055
+    const channel = Math.round(encoded * 255) / 255
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * bl
+}
+
+function contrastRatio(
+  fg: [number, number, number],
+  bg: [number, number, number]
+): number {
+  const [hi, lo] = [relativeLuminance(fg), relativeLuminance(bg)].sort(
+    (x, y) => y - x
+  )
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+function componentFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name)
+    if (statSync(path).isDirectory()) return componentFiles(path)
+    return /\.tsx$/.test(name) && !/\.test\./.test(name) ? [path] : []
+  })
+}
+
+describe('--text-faint and --text-muted contrast (WCAG AA, #200)', () => {
+  // Where faint text lands: page (bg), cards + sidebar (surface), and
+  // segmented toggles, chips and nav counts (surface-2).
+  const BACKGROUNDS = ['bg', 'surface', 'surface-2']
+
+  for (const selector of [':root', '.dark'] as const) {
+    for (const background of BACKGROUNDS) {
+      it(`reaches 4.5:1 on --${background} in ${selector}`, () => {
+        const block = themeBlock(selector)
+        const ratio = contrastRatio(
+          oklchToken(block, 'text-faint'),
+          oklchToken(block, background)
+        )
+        expect(ratio).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+
+  for (const selector of [':root', '.dark'] as const) {
+    for (const background of BACKGROUNDS) {
+      it(`keeps --text-muted at 4.5:1 on --${background} in ${selector}`, () => {
+        const block = themeBlock(selector)
+        const ratio = contrastRatio(
+          oklchToken(block, 'text-muted'),
+          oklchToken(block, background)
+        )
+        expect(ratio).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+
+  // Faint and muted must stay visibly distinct in light mode (text < muted <
+  // faint in lightness), not collapse into one grey.
+  it('keeps light --text-muted a clear step darker than --text-faint', () => {
+    const block = themeBlock(':root')
+    const [text] = oklchToken(block, 'text')
+    const [muted] = oklchToken(block, 'text-muted')
+    const [faint] = oklchToken(block, 'text-faint')
+    expect(faint - muted).toBeGreaterThanOrEqual(0.08 - 1e-9)
+    expect(muted).toBeGreaterThan(text)
+  })
+
+  // --border is too dark (light) for any text token to reach 4.5:1 on it.
+  it('is never set on a --border background', () => {
+    const offenders = componentFiles(join(__dirname, '..', 'components'))
+      .filter((file) =>
+        /bg-\[var\(--border\)\][^"]*text-\[var\(--text-faint\)\]/.test(
+          readFileSync(file, 'utf8')
+        )
+      )
+      .map((file) => file.split('/src/')[1])
+    expect(offenders).toEqual([])
   })
 })

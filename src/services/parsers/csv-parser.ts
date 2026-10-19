@@ -57,7 +57,7 @@ export function detectFileType(csvContent: string): FileType {
  *
  * @example
  * ```typescript
- * const csvContent = readFileSync('statement.csv', 'utf-8')
+ * const csvContent = decodeCsvBytes(readFileSync('statement.csv'))
  * const result = parseCSV(csvContent, 'statement.csv')
  * console.log(`Parsed ${result.transactions.length} transactions`)
  * ```
