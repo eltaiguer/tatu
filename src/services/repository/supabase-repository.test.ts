@@ -151,6 +151,31 @@ describe('Supabase repository — bulk updates (#60)', () => {
     })
   })
 
+  it('rewrites the description and raw_data of a repaired row (#192)', async () => {
+    db.seed('transactions', [
+      row('tx-1', {
+        description: 'PE�AROL',
+        raw_data: { concepto: 'PE�AROL' },
+        display_description: 'Club',
+      }),
+    ])
+    const repo = createSupabaseRepository(session)
+
+    const outcome = await repo.updateTransactions(
+      new Map([
+        ['tx-1', { description: 'PEÑAROL', rawData: { concepto: 'PEÑAROL' } }],
+      ])
+    )
+
+    expect(outcome.saved).toEqual(['tx-1'])
+    expect(stored('tx-1')).toMatchObject({
+      description: 'PEÑAROL',
+      raw_data: { concepto: 'PEÑAROL' },
+      display_description: 'Club',
+      category: 'groceries',
+    })
+  })
+
   it('groups rows by patch: one request per distinct value', async () => {
     db.seed(
       'transactions',
