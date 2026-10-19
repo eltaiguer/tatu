@@ -1,4 +1,40 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(npm run test:run *)",
+      "Bash(npm run lint *)",
+      "Bash(npm run build *)",
+      "Bash(npm run tdd:verify *)",
+      "Bash(npm run format *)",
+      "Bash(npm run format:check *)",
+      "Bash(npm run check:docs *)",
+      "Bash(npx vitest run *)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr list *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh pr diff *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)"
+    ],
+    "ask": [
+      "Bash(npm run deploy:firebase *)",
+      "Bash(*firebase deploy*)",
+      "Bash(*firebase-tools deploy*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Edit(.env*)",
+      "Edit(!.env.example)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -7,6 +43,18 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/format-on-edit.sh\"",
+            "timeout": 30
           }
         ]
       }

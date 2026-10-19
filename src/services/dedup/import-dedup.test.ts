@@ -363,3 +363,304 @@ Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,
     expect(ids(result.added)).toEqual([`${incoming.id}_c1`])
   })
 })
+
+describe('classifyImport — repairing rows stored garbled (#192)', () => {
+  // Before #192 a Latin-1 export was read as UTF-8, so each accented letter
+  // was stored as one U+FFFD. This reproduces that from the real bytes.
+  function readAsUtf8(text: string): string {
+    const latin1 = Uint8Array.from(text, (char) => char.charCodeAt(0))
+    return new TextDecoder('utf-8').decode(latin1)
+  }
+
+  function garbledBankFile(...rows: string[]): Transaction[] {
+    return parseBankAccountCSV(
+      readAsUtf8(HEADER + rows.join('\n') + '\n'),
+      'UYU.csv'
+    ).transactions
+  }
+
+  const ROW_PENAROL =
+    '24/11/2025,5,COMPRA CON TARJETA DEBITO PEÑAROL,ADMINISTRACIÓN,-900.00,,100.00,'
+
+  it('repairs a garbled stored row in place instead of importing it again', () => {
+    const [garbled] = garbledBankFile(ROW_PENAROL)
+    expect(garbled.description).toContain('�')
+    const [correct] = bankFile(ROW_PENAROL)
+
+    const result = classifyImport([correct], [stored(garbled)])
+
+    expect(result.added).toEqual([])
+    expect(result.duplicates).toEqual([])
+    expect(result.repaired).toHaveLength(1)
+    const [repaired] = result.repaired
+    expect(repaired.id).toBe(garbled.id)
+    expect(repaired.description).toBe(
+      'COMPRA CON TARJETA DEBITO PEÑAROL ADMINISTRACIÓN'
+    )
+    expect(repaired.rawData).toEqual(correct.rawData)
+  })
+
+  it('keeps everything but the text of the repaired row', () => {
+    const [garbled] = garbledBankFile(ROW_PENAROL)
+    const edited = {
+      ...garbled,
+      category: 'entertainment',
+      displayDescription: 'Peñarol',
+      tags: ['club'],
+    }
+
+    const [repaired] = classifyImport(bankFile(ROW_PENAROL), [
+      stored(edited),
+    ]).repaired
+
+    expect(repaired).toMatchObject({
+      id: garbled.id,
+      category: 'entertainment',
+      displayDescription: 'Peñarol',
+      tags: ['club'],
+    })
+  })
+
+  it('does not repair a stored row whose description really differs', () => {
+    const [garbled] = garbledBankFile(ROW_PENAROL)
+    // Same day, amount and length; differs outside the garbled letters.
+    const other = ROW_PENAROL.replace('PEÑAROL', 'PEÑAROX')
+
+    const result = classifyImport(bankFile(other), [stored(garbled)])
+
+    expect(result.repaired).toEqual([])
+    expect(result.added).toHaveLength(1)
+  })
+
+  it('does not let a garbled letter stand for a plain ASCII one', () => {
+    const [garbled] = garbledBankFile(ROW_PENAROL)
+    const ascii = ROW_PENAROL.replace('PEÑAROL', 'PENAROL').replace(
+      'ADMINISTRACIÓN',
+      'ADMINISTRACION'
+    )
+
+    const result = classifyImport(bankFile(ascii), [stored(garbled)])
+
+    expect(result.repaired).toEqual([])
+    expect(result.added).toHaveLength(1)
+  })
+
+  it('does not repair across a different amount or day', () => {
+    const [garbled] = garbledBankFile(ROW_PENAROL)
+    const otherAmount = ROW_PENAROL.replace('-900.00', '-901.00')
+    const otherDay = ROW_PENAROL.replace('24/11/2025', '23/11/2025')
+
+    const result = classifyImport(bankFile(otherAmount, otherDay), [
+      stored(garbled),
+    ])
+
+    expect(result.repaired).toEqual([])
+    expect(result.added).toHaveLength(2)
+  })
+
+  it('repairs both rows of a garbled identical pair, with no duplicates', () => {
+    const garbled = garbledBankFile(ROW_PENAROL, ROW_PENAROL)
+
+    const result = classifyImport(
+      bankFile(ROW_PENAROL, ROW_PENAROL),
+      garbled.map((tx) => stored(tx))
+    )
+
+    expect(result.added).toEqual([])
+    expect(result.duplicates).toEqual([])
+    expect(ids(result.repaired).sort()).toEqual(ids(garbled).sort())
+  })
+
+  it('imports the copies beyond the garbled ones stored (multiset)', () => {
+    const garbled = garbledBankFile(ROW_PENAROL, ROW_PENAROL)
+
+    const result = classifyImport(
+      bankFile(ROW_PENAROL, ROW_PENAROL, ROW_PENAROL),
+      garbled.map((tx) => stored(tx))
+    )
+
+    expect(result.repaired).toHaveLength(2)
+    expect(result.added).toHaveLength(1)
+  })
+
+  it('prefers an exact match: a stored correct row is a duplicate', () => {
+    const [correct] = bankFile(ROW_PENAROL)
+    const [garbled] = garbledBankFile(ROW_PENAROL)
+
+    const result = classifyImport(
+      [correct],
+      [stored({ ...garbled, id: 'other-id' }), stored(correct)]
+    )
+
+    expect(ids(result.duplicates)).toEqual([correct.id])
+    expect(result.repaired).toEqual([])
+  })
+
+  it('keeps a deleted garbled row deleted (not repaired, not resurrected)', () => {
+    const [garbled] = garbledBankFile(ROW_PENAROL)
+    const [correct] = bankFile(ROW_PENAROL)
+
+    const result = classifyImport([correct], [stored(garbled, true)])
+
+    expect(result.repaired).toEqual([])
+    expect(result.added).toEqual([])
+    expect(ids(result.previouslyDeleted)).toEqual([correct.id])
+  })
+
+  it('reads regex characters in a garbled description literally', () => {
+    const row = ROW_PENAROL.replace('PEÑAROL', 'MERPAGO*CAFÉ (2.0)')
+    const [garbled] = garbledBankFile(row)
+    const lookalike = row.replace('MERPAGO*CAFÉ (2.0)', 'MERPAGOOCAFÉ 2X0)')
+
+    expect(
+      classifyImport(bankFile(row), [stored(garbled)]).repaired
+    ).toHaveLength(1)
+    expect(
+      classifyImport(bankFile(lookalike), [stored(garbled)]).repaired
+    ).toEqual([])
+  })
+
+  it('leaves rows without garbled text to the exact matcher', () => {
+    const file = bankFile(ROW_A, ROW_PENAROL)
+
+    const result = classifyImport(
+      bankFile(ROW_A, ROW_PENAROL),
+      file.map((tx) => stored(tx))
+    )
+
+    expect(result.repaired).toEqual([])
+    expect(result.duplicates).toHaveLength(2)
+  })
+})
+
+describe('classifyImport — a different card number is a different charge', () => {
+  // Owner decision 2026-10-05 (follow-up to #57): each card's statement is its
+  // own file, so the same charge on two cards arrives from two imports.
+  const CARD_HEADER = `Cliente,Número de tarjeta de crédito,Alias,Tipo de producto,Fecha de corte,Fecha de vencimiento,Límite de crédito (US$),Límite de crédito ($),
+Gazzano Arismendi Jose,XXXXX-4362,Visa Soy Santander,Tarjeta de crédito,04/12/2025,22/12/2025,"0,00","270.000,00",
+
+Movimientos,
+Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,Pesos,Dólares,
+`
+  const VISA = 'XXXXX-4362'
+  const MASTER = 'XXXXX-9172'
+
+  function cardRow(card: string, description = 'Devoto Supermercado'): string {
+    return `04/11/2025,${card},770025140510,${description},"0,00","1.878,39","0,00",`
+  }
+
+  function cardFile(...rows: string[]): Transaction[] {
+    return parseCreditCardCSV(CARD_HEADER + rows.join('\n') + '\n', 'cc.csv')
+      .transactions
+  }
+
+  // A row stored without the card number in its raw data.
+  function withoutCard(tx: Transaction): Transaction {
+    const rawData = { ...tx.rawData } as Record<string, unknown>
+    delete rawData.numeroTarjeta
+    return { ...tx, rawData: rawData as Transaction['rawData'] }
+  }
+
+  it('imports the same charge on another card, from another file', () => {
+    const visa = cardFile(cardRow(VISA))
+
+    const result = classifyImport(
+      cardFile(cardRow(MASTER)),
+      visa.map((tx) => stored(tx))
+    )
+
+    expect(result.duplicates).toEqual([])
+    expect(result.added).toHaveLength(1)
+    // Same date, text, amount and row position: the id is taken, so salted.
+    expect(result.added[0].id).toBe(`${visa[0].id}_c1`)
+  })
+
+  it('still dedupes an overlapping export of the same card', () => {
+    const first = cardFile(cardRow(VISA))
+
+    const result = classifyImport(
+      cardFile(cardRow(VISA, 'Merpago Tupase'), cardRow(VISA)),
+      first.map((tx) => stored(tx))
+    )
+
+    expect(result.duplicates).toHaveLength(1)
+    expect(result.added.map((tx) => tx.description)).toEqual(['Merpago Tupase'])
+  })
+
+  it('compares card numbers ignoring spaces', () => {
+    const [visa] = cardFile(cardRow(VISA))
+    const spaced = {
+      ...visa,
+      rawData: { ...visa.rawData, numeroTarjeta: ' XXXXX- 4362 ' },
+    } as Transaction
+
+    const result = classifyImport(cardFile(cardRow(VISA)), [stored(spaced)])
+
+    expect(result.duplicates).toHaveLength(1)
+  })
+
+  it('falls back to matching without the card when a side lacks it', () => {
+    const [legacy] = cardFile(cardRow(VISA)).map(withoutCard)
+
+    const result = classifyImport(cardFile(cardRow(MASTER)), [stored(legacy)])
+
+    expect(result.duplicates).toHaveLength(1)
+    expect(result.added).toEqual([])
+  })
+
+  it('lets a row with a card claim its own card before a row without one', () => {
+    // Stored: a legacy copy (card unknown) and the Visa one. Re-importing the
+    // Visa and Master rows must use the Visa copy for the Visa row, leaving
+    // the legacy copy for the Master row — not the other way round.
+    const [legacy] = cardFile(cardRow(VISA)).map(withoutCard)
+    const [visa] = cardFile(cardRow(VISA))
+
+    const result = classifyImport(cardFile(cardRow(VISA), cardRow(MASTER)), [
+      stored({ ...legacy, id: 'legacy' }),
+      stored({ ...visa, id: 'visa' }),
+    ])
+
+    expect(result.added).toEqual([])
+    expect(result.duplicates).toHaveLength(2)
+  })
+
+  it('matches rows with a card before rows without one', () => {
+    // A card-less incoming row taking the Visa copy would leave the Visa row
+    // only the Master copy, on another card: it must take the Master copy.
+    const [unknown] = cardFile(cardRow(VISA)).map(withoutCard)
+    const [visa] = cardFile(cardRow(VISA))
+    const [master] = cardFile(cardRow(MASTER))
+
+    const result = classifyImport(
+      [unknown, { ...visa, id: 'incoming-visa' }],
+      [stored({ ...visa, id: 'visa' }), stored({ ...master, id: 'master' })]
+    )
+
+    expect(result.added).toEqual([])
+    expect(result.duplicates).toHaveLength(2)
+  })
+
+  it('repairs a garbled row only from the same card', () => {
+    const readAsUtf8 = (text: string) =>
+      new TextDecoder('utf-8').decode(
+        Uint8Array.from(text, (char) => char.charCodeAt(0))
+      )
+    const [garbled] = parseCreditCardCSV(
+      readAsUtf8(CARD_HEADER + cardRow(VISA, 'Café Peñarol') + '\n'),
+      'cc.csv'
+    ).transactions
+    expect(garbled.description).toContain('�')
+
+    const sameCard = classifyImport(cardFile(cardRow(VISA, 'Café Peñarol')), [
+      stored(garbled),
+    ])
+    const otherCard = classifyImport(
+      cardFile(cardRow(MASTER, 'Café Peñarol')),
+      [stored(garbled)]
+    )
+
+    expect(sameCard.repaired).toHaveLength(1)
+    expect(otherCard.repaired).toEqual([])
+    expect(otherCard.added).toHaveLength(1)
+  })
+})

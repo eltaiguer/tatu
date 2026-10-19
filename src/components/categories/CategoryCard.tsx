@@ -46,13 +46,13 @@ export function CategoryCard({
           {cat.isOrphan && (
             <span
               title="Categoría eliminada que todavía tiene transacciones"
-              className="shrink-0 rounded-[4px] bg-[var(--border)] px-[5px] py-[1px] text-[10px] font-medium text-[var(--text-faint)]"
+              className="shrink-0 rounded-[4px] bg-[var(--surface-2)] px-[5px] py-[1px] text-[10px] font-medium text-[var(--text-faint)]"
             >
               sin definir
             </span>
           )}
           {cat.isIgnored && (
-            <span className="shrink-0 rounded-[4px] bg-[var(--border)] px-[5px] py-[1px] text-[10px] font-medium text-[var(--text-faint)]">
+            <span className="shrink-0 rounded-[4px] bg-[var(--surface-2)] px-[5px] py-[1px] text-[10px] font-medium text-[var(--text-faint)]">
               ignorada
             </span>
           )}
