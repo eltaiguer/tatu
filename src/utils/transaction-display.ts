@@ -3,7 +3,10 @@ import { getDescriptionOverride } from '../services/descriptions/description-ove
 import type { Transaction } from '../models'
 import { countsAsRow } from '../services/spending/spending-rules'
 
-export function getDisplayDescription(transaction: Transaction): string {
+// The name the user gave this row: its own rename, else a live description
+// override (a "future matching" rename). Null when the user never renamed it;
+// whitespace-only names count as no rename.
+export function getUserRename(transaction: Transaction): string | null {
   if (transaction.displayDescription?.trim()) {
     return transaction.displayDescription.trim()
   }
@@ -13,7 +16,11 @@ export function getDisplayDescription(transaction: Transaction): string {
     return override.friendlyDescription.trim()
   }
 
-  return transaction.description
+  return null
+}
+
+export function getDisplayDescription(transaction: Transaction): string {
+  return getUserRename(transaction) ?? transaction.description
 }
 
 // Confidence below which an automatic category is worth a second look (the

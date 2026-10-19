@@ -16,7 +16,8 @@ Corrections applied after implementation — places where this document
 described code that does not exist, independent of the ADR-0002
 supersession:
 
-- Insights builds on `src/services/charts/chart-data.ts` only.
+- Insights builds on `src/services/charts/chart-data.ts` and the merchant key
+  in `src/services/merchants/merchant-key.ts` (#120) only.
   `src/services/aggregator/aggregation.ts`, named below, was never wired up <!-- historical -->
   and has been deleted — extending it would have been wasted work.
 - The Insights UI does **not** reuse `DateRangePicker`; that component had no

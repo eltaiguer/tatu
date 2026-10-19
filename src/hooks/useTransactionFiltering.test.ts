@@ -410,19 +410,21 @@ describe('useTransactionFiltering — drill-through links add up', () => {
     expect(result.current.displayedRowCount).toBe(2)
   })
 
-  it('filters a merchant by exact name, not substring', () => {
+  it('filters a merchant by its exact merchant key, not substring', () => {
     const transactions = [
       makeTransaction('a', { description: 'UBER' }),
+      // Same merchant, another auth code: same key as Resumen groups by.
+      makeTransaction('a2', { description: 'UBER 4455TT12' }),
       makeTransaction('b', { description: 'UBER EATS' }),
       makeTransaction('c', { description: 'Taxi', tags: ['uber'] }),
     ]
     const { result } = renderHook(() =>
       useTransactionFiltering({
         transactions,
-        initial: { ...DEFAULT_URL_FILTERS, merchant: 'UBER' },
+        initial: { ...DEFAULT_URL_FILTERS, merchant: 'uber' },
       })
     )
-    expect(ids(result.current.filteredTransactions)).toEqual(['a'])
+    expect(ids(result.current.filteredTransactions).sort()).toEqual(['a', 'a2'])
   })
 })
 

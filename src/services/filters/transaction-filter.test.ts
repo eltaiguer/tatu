@@ -118,14 +118,27 @@ describe('filterTransactions — search and merchant', () => {
     )
   })
 
-  it('matches the merchant by exact display name, not substring', () => {
+  it('matches the merchant by its exact merchant key, not substring', () => {
     const merchants = [
       tx('exact', { displayDescription: 'Disco' }),
       tx('longer', { displayDescription: 'Disco Pocitos' }),
     ]
     expect(
-      ids(filterTransactions(merchants, filters({ merchant: 'Disco' })))
+      ids(filterTransactions(merchants, filters({ merchant: 'disco' })))
     ).toEqual(['exact'])
+  })
+
+  it('groups a merchant across auth codes, as Resumen does (#120)', () => {
+    const merchants = [
+      tx('a', { description: 'UBER' }),
+      // Same merchant, another auth code: same key as Resumen groups by.
+      tx('a2', { description: 'UBER 4455TT12' }),
+      tx('b', { description: 'UBER EATS' }),
+      tx('c', { description: 'Taxi', tags: ['uber'] }),
+    ]
+    expect(
+      ids(filterTransactions(merchants, filters({ merchant: 'uber' }))).sort()
+    ).toEqual(['a', 'a2'])
   })
 })
 

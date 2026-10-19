@@ -8,8 +8,9 @@ export type { UrlPeriod }
 
 export interface UrlFilterState {
   search: string
-  // Exact display name, as "Mayores comercios" groups by (search is a
-  // substring match and would pull in other merchants).
+  // Exact merchant key (services/merchants/merchant-key.ts), as "Mayores
+  // comercios" groups by (search is a substring match and would pull in
+  // other merchants).
   merchant: string
   categories: string[]
   accounts: Array<'credit_card' | 'bank_account'>

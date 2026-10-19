@@ -2,6 +2,7 @@ import type { Transaction } from '../../models'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { countsAsRow, countsTowardTotals } from '../spending/spending-rules'
 import { getDisplayDescription } from '../../utils/transaction-display'
+import { merchantKeyOf } from '../merchants/merchant-key'
 import { toDateKey, todayAsUtcDate } from '../../utils/date-utils'
 import type { UrlFilterState, UrlPeriod } from './url-filters'
 
@@ -101,10 +102,8 @@ export function filterTransactions(
       !categorySet.has(normalizeCategoryId(transaction.category))
     )
       return false
-    if (
-      filters.merchant &&
-      getDisplayDescription(transaction) !== filters.merchant
-    )
+    // The merchant key Resumen's "Mayores comercios" groups by (#120).
+    if (filters.merchant && merchantKeyOf(transaction) !== filters.merchant)
       return false
     if (accounts.length > 0 && !accounts.includes(transaction.source))
       return false
