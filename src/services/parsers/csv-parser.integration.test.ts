@@ -168,8 +168,8 @@ describe('CSV Parser - Integration Tests with All Sample Files', () => {
       allTransactions.forEach((tx) => {
         expect(tx.date).toBeInstanceOf(Date)
         expect(tx.date.toString()).not.toBe('Invalid Date')
-        expect(tx.date.getFullYear()).toBeGreaterThan(2020)
-        expect(tx.date.getFullYear()).toBeLessThan(2030)
+        expect(tx.date.getUTCFullYear()).toBeGreaterThan(2020)
+        expect(tx.date.getUTCFullYear()).toBeLessThan(2030)
       })
     })
 
