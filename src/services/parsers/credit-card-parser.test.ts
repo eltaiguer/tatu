@@ -83,9 +83,9 @@ describe('Credit Card Parser', () => {
       expect(devotoTx.type).toBe('debit')
       expect(devotoTx.source).toBe('credit_card')
       expect(devotoTx.date).toBeInstanceOf(Date)
-      expect(devotoTx.date.getDate()).toBe(4)
-      expect(devotoTx.date.getMonth()).toBe(10) // November
-      expect(devotoTx.date.getFullYear()).toBe(2025)
+      expect(devotoTx.date.getUTCDate()).toBe(4)
+      expect(devotoTx.date.getUTCMonth()).toBe(10) // November
+      expect(devotoTx.date.getUTCFullYear()).toBe(2025)
     })
 
     it('should parse USD transaction correctly', () => {
@@ -178,7 +178,7 @@ Fecha,Número de tarjeta,Número de autorización,Descripción,Importe original,
 
       // Find transactions on 06/11/2025
       const sameDateTxs = result.transactions.filter(
-        (tx) => tx.date.getDate() === 6
+        (tx) => tx.date.getUTCDate() === 6
       )
 
       expect(sameDateTxs.length).toBe(2)

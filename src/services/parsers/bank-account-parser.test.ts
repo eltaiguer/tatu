@@ -82,8 +82,8 @@ describe('Bank Account Parser', () => {
       expect(debitTx.source).toBe('bank_account')
       expect(debitTx.balance).toBe(11749.61)
       expect(debitTx.date).toBeInstanceOf(Date)
-      expect(debitTx.date.getDate()).toBe(27)
-      expect(debitTx.date.getMonth()).toBe(10) // November
+      expect(debitTx.date.getUTCDate()).toBe(27)
+      expect(debitTx.date.getUTCMonth()).toBe(10) // November
     })
 
     it('should parse USD credit transaction correctly', () => {
@@ -262,7 +262,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,`
 
       // Find transactions on 27/11/2025
       const sameDateTxs = result.transactions.filter(
-        (tx) => tx.date.getDate() === 27
+        (tx) => tx.date.getUTCDate() === 27
       )
 
       expect(sameDateTxs.length).toBe(2)

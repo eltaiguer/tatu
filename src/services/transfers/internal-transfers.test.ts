@@ -259,3 +259,40 @@ describe('split transaction guards in transfer inference', () => {
     expect(child.category).not.toBe(Category.InternalTransfer)
   })
 })
+
+// #58: rows imported after #58 are stored at UTC midnight, older ones (from a
+// UTC-3 browser) at 03:00Z. The ±2-day pairing window counts calendar days,
+// so mixing the two shapes neither widens nor narrows it.
+describe('transfer pairing window across stored date shapes', () => {
+  function pair(debitIso: string, creditIso: string) {
+    return inferInternalTransfers([
+      makeTransaction('debit', {
+        description: 'Transferencia enviada supernet',
+        type: 'debit',
+        amount: 1500,
+        currency: 'UYU',
+        date: new Date(debitIso),
+      }),
+      makeTransaction('credit', {
+        description: 'Transferencia recibida supernet',
+        type: 'credit',
+        amount: 1500,
+        currency: 'UYU',
+        date: new Date(creditIso),
+      }),
+    ])
+  }
+
+  it('pairs a new debit with a pre-#58 credit two calendar days later', () => {
+    const result = pair('2026-03-01T00:00:00.000Z', '2026-03-03T03:00:00.000Z')
+    expect(result.map((tx) => tx.category)).toEqual([
+      Category.InternalTransfer,
+      Category.InternalTransfer,
+    ])
+  })
+
+  it('does not pair rows three calendar days apart', () => {
+    const result = pair('2026-03-01T03:00:00.000Z', '2026-03-04T00:00:00.000Z')
+    expect(result[1].category).not.toBe(Category.InternalTransfer)
+  })
+})

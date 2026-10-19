@@ -35,7 +35,8 @@ npm run test:run         # Single test run
 npm run test:ui          # Vitest UI
 npm run test:coverage    # Vitest with v8 coverage
 npm run tdd:watch        # Alias for vitest watch (TDD loop)
-npm run tdd:verify       # format:check + check:docs + test:run + lint
+npm run tdd:verify       # format:check + check:docs + test:run + test:tz + lint
+npm run test:tz          # The suite again in Europe/Madrid and America/Los_Angeles
 npm run ci:check         # tdd:verify + build (full CI)
 npm run check:docs       # Fail if agent-facing docs name repo paths that don't exist
 npm run lint             # ESLint (zero warnings enforced)
@@ -58,6 +59,7 @@ src/
     Dashboard.tsx          # Resumen view — owns the data memos; charts live here, not a separate view
     dashboard/             # Resumen sub-components: AccountCards, MonthSummaryCard, KpiTiles, SavingsCard, CategorySpendCard (donut), CurrencySplitCard, IncomeExpenseChart, RecentTransactionsCard, TopMerchantsCard, EmptyStates, DrillTarget
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
+    transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state)
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
     Categories.tsx         # Categorías view — category grid + auto-categorization rules
     categories/            # Categorías sub-components: CategoryForm, CategoryCard, PatternRulesCard (rules form + list, owns its state)
@@ -89,16 +91,16 @@ src/
     useAuthSession.ts      # Supabase auth session management
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
     useTransactionHandlers.ts  # The transaction mutations bound to the signed-in user's repository (thin; one contract without one)
-    useTransactionFiltering.ts # Filter + sort + paginate transactions
+    useTransactionFiltering.ts # React state (URL filter shape, period included) + sort + pagination around filterTransactions
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
     dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57); duplicate-review.ts: groups stored rows from different import runs for the one-off cleanup (#167)
     repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
-    mutations/             # transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
+    mutations/             # bulk-steps.ts: runs a bulk edit's steps in order (retry resumes the chain); transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
     categories/            # Category registry + user custom categories (source of isCategoryIgnored); category-counts.ts: rows per category
-    filters/               # url-filters.ts: Transacciones filters <-> URL query (the filtering itself is useTransactionFiltering)
+    filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; url-filters.ts: that state <-> URL query; period-label.ts: a period's Spanish label
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     merchants/             # merchant-key.ts: THE merchant key + label (Mayores comercios, its drill-through, Insights, recurring) — never group by description
@@ -185,6 +187,7 @@ Every behavior change is driven by a test, written first:
 - **Bug fixes start from a failing regression test** that reproduces the bug, before touching the fix.
 - Behavior testing — tests verify what the system does, not how it does it. Test user-visible outcomes, not internal state or implementation details.
 - Any `console.error` / `console.warn` during a test fails it (`src/test/setup.ts`). When a test expects a log, spy on it and assert it: `vi.spyOn(console, 'error').mockImplementation(() => {})` + `expect(spy).toHaveBeenCalledWith(...)`. Test routers use `future={ROUTER_FUTURE}` (`src/router-future.ts`), same as the app
+- Tests run with `TZ=America/Montevideo` (pinned in `vite.config.ts`); `npm run test:tz` reruns the suite east of UTC (`Europe/Madrid`) and west of Uruguay (`America/Los_Angeles`). Setting `process.env.TZ` inside a test does nothing — workers inherit the zone. Date fixtures are UTC calendar days (`new Date('2026-03-01T00:00:00.000Z')`, `Date.UTC`), not local `new Date(y, m, d)`.
 - `App.test.tsx` and `App.supabase.test.tsx` are the slow integration suites (full-app render, several seconds per test); run single files while iterating (`npm run tdd:watch` or `npx vitest run <path>`). `testTimeout` is 20s on purpose (#78) — don't add retries.
 - Docs-only and tooling-only changes with no behavior to test are the exception; they still have to pass `npm run tdd:verify`.
 
@@ -194,7 +197,7 @@ A task is done only when:
 
 - The new/changed behavior is covered by tests that were seen failing first (red-green above); bug fixes include their regression test.
 - Existing behavior remains covered — no deleted or skipped tests without an explanation.
-- `npm run tdd:verify` (Prettier check + `check:docs` + tests + lint) was run and passes. `npm run build` also passes when TypeScript changed (`tsc` type-checks test files too, and CI runs it).
+- `npm run tdd:verify` (Prettier check + `check:docs` + tests in three time zones + lint) was run and passes. `npm run build` also passes when TypeScript changed (`tsc` type-checks test files too, and CI runs it).
 - Docs that describe the changed code (this file, `docs/architecture.md`, `docs/CONTEXT.md`, ADRs) are updated in the same change.
 
 ## Commit conventions
@@ -227,6 +230,7 @@ A task is done only when:
 
 - **Transaction sources**: Credit Card, USD Bank Account, UYU Bank Account (3 distinct CSV formats from Santander Uruguay)
 - **Categorization**: Pattern-based merchant matching (`merchant-patterns.ts`) with confidence scores (0–1). System learns from user overrides stored in Supabase. Optional AI enrichment on import (see Current status).
+- **Dates**: a transaction's `date` is a calendar day at UTC midnight — read it only with UTC accessors or `timeZone: 'UTC'`; "today" is `todayAsUtcDate()`. See "Dates" in `docs/architecture.md` (#58)
 - **Deduplication**: by content, not ID — imports match rows by fingerprint (source, raw date, raw description, signed amount, currency) as a multiset, deleted rows included; on card rows a different card number (`rawData.numeroTarjeta`, via `cardNumber`, shared with the #167 review) is a different charge, while a row lacking it matches either card; a taken ID gets a salted `_cN` suffix (`services/dedup/import-dedup.ts`, #57). IDs (hash incl. row position) are unchanged. Files are decoded UTF-8-else-windows-1252 (`services/parsers/decode-csv.ts`); a re-import repairs rows stored garbled (U+FFFD) in place, same id (#192)
 - **Internal transfers**: inferred in the store (`inferInternalTransfers`) by keyword + scored debit/credit pairing within ±2 days, recomputed on load — see `docs/architecture.md`
 - **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `editTransaction` in `services/mutations/transaction-mutations.ts`
@@ -245,7 +249,7 @@ Requires `.env` with Supabase vars (see `.env.example`):
 
 Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip. Hooks extracted from App.tsx; store simplified. Deployed to Firebase Hosting. Test counts and line counts are deliberately not recorded here — they go stale within a PR.
 
-**Known shape of the code:** `Transactions.tsx` is very large — the refactor extracted hooks, not view components, so it defines its sub-components inline at the top of the file. #140 moves them out one view per PR into `src/components/<view>/`; Categorías and Resumen are done (`components/categories/`, `components/dashboard/`).
+**Known shape of the code:** #140 moved the large views' inline sub-components out, one view per PR, into `src/components/<view>/`: Categorías (`components/categories/`), Resumen (`components/dashboard/`) and Transacciones (`components/transactions/`, which also holds the view's state hooks and `TransactionTable`'s row/card) are done. No view file is over ~600 lines. Put new sub-components in the view's folder, not inline.
 
 **AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, `importTransactions` (`services/mutations/transaction-mutations.ts`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
 
