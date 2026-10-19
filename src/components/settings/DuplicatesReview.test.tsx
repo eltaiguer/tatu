@@ -114,6 +114,32 @@ describe('Configuración → Datos: Buscar posibles duplicados (#167)', () => {
     ).not.toBeInTheDocument()
   })
 
+  // #58: the movement date is a calendar day (UTC midnight), read in UTC; the
+  // import time is a real instant, shown on the user's local day. Local
+  // 00:30 and 23:30 fall on another UTC day east and west of UTC.
+  it('labels the movement day in UTC and each import on its local day', () => {
+    const date = new Date('2026-03-01T00:00:00.000Z')
+    const first = copy('first', 'run-a', '', { date })
+    const second = copy('second', 'run-b', '', { date })
+    first.createdAt = new Date(2026, 2, 20, 0, 30)
+    second.createdAt = new Date(2026, 3, 2, 23, 30)
+    renderSettings([second, first])
+
+    const dialog = openReview()
+
+    expect(dialog).toHaveTextContent('01/03/2026')
+    expect(
+      within(dialog).getByRole('checkbox', {
+        name: 'Eliminar la copia de COMPRA CON TARJETA DEBITO DISCO importada el 20/03/2026',
+      })
+    ).not.toBeChecked()
+    expect(
+      within(dialog).getByRole('checkbox', {
+        name: 'Eliminar la copia de COMPRA CON TARJETA DEBITO DISCO importada el 02/04/2026',
+      })
+    ).toBeChecked()
+  })
+
   it('pre-selects every copy but the oldest and shows how much they add to spending', () => {
     renderSettings([newer, older])
 

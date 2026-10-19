@@ -357,8 +357,8 @@ A transaction's `date` is a **calendar day, held as that day's UTC midnight**
 - **Today** is the user's local calendar day: `todayAsUtcDate()` builds it from
   local `getFullYear/getMonth/getDate` and expresses it as a UTC calendar date,
   so "este mes" compares like with like. Real instants (`generatedAt`,
-  `updated_at`, the PDF "Generated" line) are timestamps, not calendar days,
-  and are shown in local time.
+  `updated_at`, `createdAt`, the PDF "Generated" line) are timestamps, not
+  calendar days, and are shown in local time (`formatLocalDate`).
 
 Tests run with `TZ` pinned to `America/Montevideo` (`vite.config.ts`);
 `npm run test:tz` reruns the suite in `Europe/Madrid` (east of UTC) and
