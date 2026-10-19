@@ -6,6 +6,10 @@ import {
   isDateInPeriod,
   filterByPeriod,
   generatePeriodOptions,
+  todayAsUtcDate,
+  toCalendarDay,
+  calendarDaysBetween,
+  toMonthKey,
 } from './date-utils'
 
 describe('date-utils', () => {
@@ -16,18 +20,18 @@ describe('date-utils', () => {
       const range = getDateRangeForPeriod('week', referenceDate)
 
       // Week starts on Monday
-      expect(range.start.getDay()).toBe(1) // Monday
-      expect(range.end.getDay()).toBe(0) // Sunday
+      expect(range.start.getUTCDay()).toBe(1) // Monday
+      expect(range.end.getUTCDay()).toBe(0) // Sunday
     })
 
     it('should return correct range for month period', () => {
       const referenceDate = new Date('2025-01-15T12:00:00')
       const range = getDateRangeForPeriod('month', referenceDate)
 
-      expect(range.start.getDate()).toBe(1) // First day of month
-      expect(range.end.getDate()).toBe(31) // Last day of January
-      expect(range.start.getMonth()).toBe(0) // January
-      expect(range.end.getMonth()).toBe(0) // January
+      expect(range.start.getUTCDate()).toBe(1) // First day of month
+      expect(range.end.getUTCDate()).toBe(31) // Last day of January
+      expect(range.start.getUTCMonth()).toBe(0) // January
+      expect(range.end.getUTCMonth()).toBe(0) // January
     })
 
     it('should return correct range for quarter period', () => {
@@ -35,30 +39,30 @@ describe('date-utils', () => {
       const range = getDateRangeForPeriod('quarter', referenceDate)
 
       // Q1 is Jan-Mar
-      expect(range.start.getMonth()).toBe(0) // January
-      expect(range.end.getMonth()).toBe(2) // March
-      expect(range.start.getDate()).toBe(1)
-      expect(range.end.getDate()).toBe(31) // March 31
+      expect(range.start.getUTCMonth()).toBe(0) // January
+      expect(range.end.getUTCMonth()).toBe(2) // March
+      expect(range.start.getUTCDate()).toBe(1)
+      expect(range.end.getUTCDate()).toBe(31) // March 31
     })
 
     it('should return correct range for year period', () => {
       const referenceDate = new Date('2025-06-15T12:00:00')
       const range = getDateRangeForPeriod('year', referenceDate)
 
-      expect(range.start.getMonth()).toBe(0) // January
-      expect(range.start.getDate()).toBe(1)
-      expect(range.end.getMonth()).toBe(11) // December
-      expect(range.end.getDate()).toBe(31)
-      expect(range.start.getFullYear()).toBe(2025)
-      expect(range.end.getFullYear()).toBe(2025)
+      expect(range.start.getUTCMonth()).toBe(0) // January
+      expect(range.start.getUTCDate()).toBe(1)
+      expect(range.end.getUTCMonth()).toBe(11) // December
+      expect(range.end.getUTCDate()).toBe(31)
+      expect(range.start.getUTCFullYear()).toBe(2025)
+      expect(range.end.getUTCFullYear()).toBe(2025)
     })
 
     it('should use current date as default reference', () => {
       const range = getDateRangeForPeriod('month')
       const now = new Date()
 
-      expect(range.start.getMonth()).toBe(now.getMonth())
-      expect(range.end.getMonth()).toBe(now.getMonth())
+      expect(range.start.getUTCMonth()).toBe(now.getMonth())
+      expect(range.end.getUTCMonth()).toBe(now.getMonth())
     })
   })
 
@@ -226,5 +230,101 @@ describe('generatePeriodOptions', () => {
     const prevMonth = options.find((o) => o.id === 'prev-month')
     expect(thisMonth?.label).toMatch(/ene/i)
     expect(prevMonth?.label).toMatch(/dic/i)
+  })
+})
+
+// #58: a transaction date is a calendar day stored at UTC midnight (rows
+// written before #58 by a UTC-3 browser sit at 03:00Z on their own day).
+// "Today" is the user's local calendar day, expressed the same way.
+describe('UTC calendar dates', () => {
+  const day = (iso: string) => new Date(iso)
+
+  it('expresses the local calendar day as a UTC calendar date', () => {
+    // Late on Oct 31 in the browser's zone is already Nov 1 in UTC west of
+    // Greenwich; today is still Oct 31.
+    expect(todayAsUtcDate(new Date(2026, 9, 31, 22, 30)).toISOString()).toBe(
+      '2026-10-31T00:00:00.000Z'
+    )
+    expect(todayAsUtcDate(new Date(2026, 10, 1, 0, 30)).toISOString()).toBe(
+      '2026-11-01T00:00:00.000Z'
+    )
+  })
+
+  it('snaps a stored date to its calendar day at UTC midnight', () => {
+    const snapped = (iso: string) => toCalendarDay(day(iso)).toISOString()
+    // New rows
+    expect(snapped('2026-03-01T00:00:00.000Z')).toBe('2026-03-01T00:00:00.000Z')
+    // Pre-#58 rows from Uruguay (UTC-3, and UTC-2 in the old summer time)
+    expect(snapped('2026-03-01T03:00:00.000Z')).toBe('2026-03-01T00:00:00.000Z')
+    expect(snapped('2015-01-01T02:00:00.000Z')).toBe('2015-01-01T00:00:00.000Z')
+    // Pre-#58 rows from a browser east of UTC (local midnight Mar 1)
+    expect(snapped('2026-02-28T23:00:00.000Z')).toBe('2026-03-01T00:00:00.000Z')
+    expect(snapped('2026-02-28T22:00:00.000Z')).toBe('2026-03-01T00:00:00.000Z')
+  })
+
+  it('counts whole calendar days between a new row and a pre-#58 row', () => {
+    expect(
+      calendarDaysBetween(
+        day('2026-03-01T00:00:00.000Z'),
+        day('2026-03-03T03:00:00.000Z')
+      )
+    ).toBe(2)
+    expect(
+      calendarDaysBetween(
+        day('2026-03-03T00:00:00.000Z'),
+        day('2026-03-01T03:00:00.000Z')
+      )
+    ).toBe(2)
+  })
+
+  it('a month period holds the 1st and the last day, in both stored shapes', () => {
+    const rows = [
+      { id: 'feb28', date: day('2026-02-28T00:00:00.000Z') },
+      { id: 'feb28-legacy', date: day('2026-02-28T03:00:00.000Z') },
+      { id: 'mar1', date: day('2026-03-01T00:00:00.000Z') },
+      { id: 'mar1-legacy', date: day('2026-03-01T03:00:00.000Z') },
+      { id: 'mar31', date: day('2026-03-31T00:00:00.000Z') },
+      { id: 'mar31-legacy', date: day('2026-03-31T03:00:00.000Z') },
+      { id: 'apr1', date: day('2026-04-01T00:00:00.000Z') },
+      { id: 'apr1-legacy', date: day('2026-04-01T03:00:00.000Z') },
+    ]
+    const march = filterByPeriod(
+      rows,
+      'date',
+      'month',
+      new Date(Date.UTC(2026, 2, 15))
+    )
+    expect(march.map((r) => r.id)).toEqual([
+      'mar1',
+      'mar1-legacy',
+      'mar31',
+      'mar31-legacy',
+    ])
+    expect(new Set(march.map((r) => toMonthKey(r.date)))).toEqual(
+      new Set(['2026-03'])
+    )
+  })
+
+  it('late on the last local day of a month, "este mes" is still that month', () => {
+    const lateMarch31 = new Date(2026, 2, 31, 22, 30)
+    const options = generatePeriodOptions([], lateMarch31)
+    const thisMonth = options.find((o) => o.id === 'this-month')!
+    expect(thisMonth.label).toMatch(/Este mes \(mar/i)
+    const rows = [
+      { id: 'mar31', date: day('2026-03-31T00:00:00.000Z') },
+      { id: 'apr1', date: day('2026-04-01T00:00:00.000Z') },
+    ]
+    expect(
+      filterByPeriod(rows, 'date', thisMonth.period, thisMonth.referenceDate)
+    ).toEqual([rows[0]])
+  })
+
+  it('a previous-year option needs a row whose calendar day is in that year', () => {
+    // Jan 1 2025 at UTC midnight is still Dec 31 2024 local in Uruguay.
+    const options = generatePeriodOptions(
+      [day('2025-01-01T00:00:00.000Z')],
+      new Date(2025, 5, 15, 12)
+    )
+    expect(options.map((o) => o.id)).not.toContain('year-2024')
   })
 })

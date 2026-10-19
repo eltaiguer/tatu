@@ -64,7 +64,8 @@ function summaryLines(summary: ImportSummary) {
 function newestMonth(rows: Transaction[]): ImportSummary['month'] {
   if (rows.length === 0) return null
   const newest = new Date(Math.max(...rows.map((tx) => tx.date.getTime())))
-  return { y: newest.getFullYear(), m: newest.getMonth() }
+  // A calendar day at UTC midnight (#58): read in UTC, as Resumen does.
+  return { y: newest.getUTCFullYear(), m: newest.getUTCMonth() }
 }
 
 interface ImportCSVProps {

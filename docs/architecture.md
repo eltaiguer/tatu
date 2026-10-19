@@ -328,6 +328,65 @@ holding a category, 6 before 7, and 7 before 8 come from the code order only.
 | Rule applied to past rows   | `applyPatternToPast`                | Sets the rule's category at 0.95 on matching rows, except split parts.                                                                                                                                                                                                                                                        |
 | Auto-categorizar            | `autoCategorize`                    | Re-runs the categorizer with context on the selected rows; writes only results that are not `uncategorized`.                                                                                                                                                                                                                  |
 
+## Dates
+
+A transaction's `date` is a **calendar day, held as that day's UTC midnight**
+(#58). The convention lives in `src/utils/date-utils.ts`:
+
+- **Write:** `parseSantanderDate` returns `Date.UTC(y, m, d)`, so a row is the
+  same instant whatever zone the importing browser is in. The transaction ID
+  hashes the raw `DD/MM/YYYY` text, not the `Date`, so the convention does not
+  change IDs.
+- **Load:** rows stored before #58 sit at the importing browser's local
+  midnight (`T03:00Z` from Uruguay). `loadUserTransactions` snaps every date to
+  its calendar day with `toCalendarDay` (rounds to the nearest UTC midnight,
+  right for any writer from UTC-11 to UTC+12). There is no backfill: a stored
+  `T03:00Z` row is rewritten as `T00:00Z` only if something upserts the whole
+  row again (splitting).
+- **Read:** only UTC accessors (`getUTC*`, `toDateKey`, `toMonthKey`,
+  `toISOString().slice(0, 10)`) or `Intl.DateTimeFormat`/`toLocaleDateString`
+  with `timeZone: 'UTC'` (`formatDate`, `formatDateCompact`). Never
+  `getDate()`/`getMonth()`/`getFullYear()` or a formatter without `timeZone` on
+  a transaction date — in Uruguay that shows `T00:00Z` as the previous day.
+- **Ranges:** month/period bounds are UTC (`periodDateRange` and the
+  `T00:00:00.000Z`…`T23:59:59.999Z` bounds in `filterTransactions`,
+  `services/filters/transaction-filter.ts`; `getDateRangeForPeriod`), so a
+  Transacciones drill-through holds exactly the rows Resumen summed
+  (`toMonthKey`) for that month.
+
+## Transacciones filtering
+
+One pure function decides which rows match (#121):
+`filterTransactions(rows, filters: UrlFilterState, { recentAnchor })` in
+`services/filters/transaction-filter.ts`. Its input is the same state the URL
+holds (`url-filters.ts`), period included, so the filtered table, the URL and
+a reload all agree. Split parents never match; rows that don't count toward
+totals match only with `showIgnored`; categories are compared through
+`normalizeCategoryId`, the merchant by its exact merchant key (`merchantKeyOf`,
+see Merchant key below), amounts by absolute value, search over display name +
+raw description + tags. `sortTransactions` orders the result.
+
+`useTransactionFiltering` only holds that state in React (seeded once from the
+URL; the view fills in its default period first), sorts, groups split parts
+under their parent, and paginates. It freezes the "últimos n meses" anchor
+(the newest row) when that period is chosen, so an import does not shift the
+window. Export writes the rows it is handed; if it ever has to filter, it calls
+`filterTransactions`.
+
+- **Day distances** (transfer pairing's ±2 days, recurring cadences) count
+  whole calendar days with `calendarDaysBetween` / `utcDayNumber`.
+- **Today** is the user's local calendar day: `todayAsUtcDate()` builds it from
+  local `getFullYear/getMonth/getDate` and expresses it as a UTC calendar date,
+  so "este mes" compares like with like. Real instants (`generatedAt`,
+  `updated_at`, `createdAt`, the PDF "Generated" line) are timestamps, not
+  calendar days, and are shown in local time (`formatLocalDate`).
+
+Tests run with `TZ` pinned to `America/Montevideo` (`vite.config.ts`);
+`npm run test:tz` reruns the suite in `Europe/Madrid` (east of UTC) and
+`America/Los_Angeles` (west of Uruguay, where a `T03:00Z` row read in local
+time falls on the previous day). `TZ` can't be switched inside a test: test
+workers inherit it from the main process.
+
 ## Money conversion
 
 All conversion happens in the browser, at render or aggregation time, with
@@ -354,18 +413,18 @@ Which rows the totals add up is decided in one place, described next.
 clicks equals the sum of the rows it opens. Callers never re-derive it from
 `isSplitParent` or `isCategoryIgnored`; a new exclusion is added there.
 
-| Predicate                              | True for                                                                                                                                | Used by                                                                                                                                                              |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `countsAsRow`                          | Every row except a split parent (an inert container its parts stand for). Ignored-category rows still count as rows.                    | Lists and row counts: `useTransactionFiltering`, Categorías counts and rule matches, the "Sin categoría" badge, `needsCategoryReview`, "Qué cambió" account coverage |
-| `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`isCategoryIgnored`: transfers, the legacy `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                             |
-| `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                          | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                                 |
-| `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                      | The Transacciones totals strip, each month of `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`                                                              |
+| Predicate                              | True for                                                                                                                                | Used by                                                                                                                                                         |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `countsAsRow`                          | Every row except a split parent (an inert container its parts stand for). Ignored-category rows still count as rows.                    | Lists and row counts: `filterTransactions`, Categorías counts and rule matches, the "Sin categoría" badge, `needsCategoryReview`, "Qué cambió" account coverage |
+| `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`isCategoryIgnored`: transfers, the legacy `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                        |
+| `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                          | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                            |
+| `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                      | The Transacciones totals strip, each month of `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`                                                         |
 
 ## Merchant key
 
 `src/services/merchants/merchant-key.ts` (#120) decides which rows are "the
 same merchant", so Resumen's "Mayores comercios", its drill-through to
-Transacciones (`?comercio=<key>`, matched by `useTransactionFiltering`),
+Transacciones (`?comercio=<key>`, matched by `filterTransactions`),
 Insights' `topMerchants` and recurring-charge detection all group the same
 rows. Never group by `description` or `getDisplayDescription` directly.
 
