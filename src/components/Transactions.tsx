@@ -91,41 +91,11 @@ const MONTHS_ES_SHORT = [
   'Dic',
 ]
 
-type Period =
-  | { mode: 'month'; y: number; m: number }
-  | { mode: 'recent'; n: number; anchor: Date }
-  | { mode: 'all' }
-  | { mode: 'range'; from: string; to: string }
-
-// Transaction dates are calendar days at UTC midnight (#58): months, ranges
-// and the newest row are all read in UTC, the same calendar months Resumen
-// sums — so a drill-through holds exactly the rows of the number clicked.
-function utcDay(y: number, m: number, d: number): Date {
-  return new Date(Date.UTC(y, m, d))
-}
-
-function periodRange(period: Period): { from: string; to: string } {
-  if (period.mode === 'month') {
-    return {
-      from: toDateKey(utcDay(period.y, period.m, 1)),
-      to: toDateKey(utcDay(period.y, period.m + 1, 0)),
-    }
-  }
-  if (period.mode === 'recent') {
-    const y = period.anchor.getUTCFullYear()
-    const m = period.anchor.getUTCMonth()
-    return {
-      from: toDateKey(utcDay(y, m - (period.n - 1), 1)),
-      to: toDateKey(utcDay(y, m + 1, 0)),
-    }
-  }
-  if (period.mode === 'range') {
-    return { from: period.from, to: period.to }
-  }
-  return { from: '', to: '' }
-}
-
-function getPeriodLabel(period: Period): string {
+// Transaction dates are calendar days at UTC midnight (#58): months and the
+// newest row are read in UTC, the same calendar months Resumen sums — so a
+// drill-through holds exactly the rows of the number clicked. The period's
+// day bounds live with the filter (periodDateRange in transaction-filter).
+function getPeriodLabel(period: UrlPeriod): string {
   if (period.mode === 'month') return `${MONTHS_ES[period.m]} ${period.y}`
   if (period.mode === 'recent') return `Últimos ${period.n} meses`
   if (period.mode === 'all') return 'Todo el período'
@@ -145,8 +115,8 @@ function MonthNav({
   setPeriod,
   newest,
 }: {
-  period: Period
-  setPeriod: (p: Period) => void
+  period: UrlPeriod
+  setPeriod: (p: UrlPeriod) => void
   newest: Date
 }) {
   const [open, setOpen] = useState(false)
@@ -171,7 +141,7 @@ function MonthNav({
       period.mode === 'month'
         ? { y: period.y, m: period.m }
         : { y: anchorY, m: anchorM }
-    const d = utcDay(base.y, base.m + dir, 1)
+    const d = new Date(Date.UTC(base.y, base.m + dir, 1))
     setPeriod({ mode: 'month', y: d.getUTCFullYear(), m: d.getUTCMonth() })
   }
 
@@ -260,7 +230,7 @@ function MonthNav({
               },
               {
                 label: 'Últimos 3 meses',
-                val: { mode: 'recent' as const, n: 3, anchor: newest },
+                val: { mode: 'recent' as const, n: 3 },
               },
               {
                 label: 'Este año',
@@ -765,29 +735,29 @@ export function Transactions({
   onReload,
   repository,
 }: TransactionsProps) {
-  /* ---- Period state ---- */
-  const [period, setPeriod] = useState<Period>(() => {
-    const newest =
-      transactions.length > 0
-        ? new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
-        : todayAsUtcDate()
-    const fromUrl = initialFilters.period
-    if (fromUrl) {
-      return fromUrl.mode === 'recent'
-        ? { mode: 'recent', n: fromUrl.n, anchor: newest }
-        : fromUrl
-    }
-    // A link that filters by category/account/currency but names no period
-    // means all time; a plain visit starts on the newest month.
+  /* ---- Filter state (period included) ---- */
+  // The URL's filters, with the view's default period filled in once: a link
+  // that filters by category/account/currency but names no period means all
+  // time; a plain visit starts on the newest month.
+  const [initialState] = useState<UrlFilterState>(() => {
+    if (initialFilters.period) return initialFilters
     const deepLinked =
       initialFilters.categories.length > 0 ||
       initialFilters.accounts.length > 0 ||
       initialFilters.currency !== 'all'
-    if (deepLinked || transactions.length === 0) return { mode: 'all' }
+    if (deepLinked || transactions.length === 0) {
+      return { ...initialFilters, period: { mode: 'all' } }
+    }
+    const newest = new Date(
+      Math.max(...transactions.map((tx) => tx.date.getTime()))
+    )
     return {
-      mode: 'month',
-      y: newest.getUTCFullYear(),
-      m: newest.getUTCMonth(),
+      ...initialFilters,
+      period: {
+        mode: 'month',
+        y: newest.getUTCFullYear(),
+        m: newest.getUTCMonth(),
+      },
     }
   })
 
@@ -796,6 +766,9 @@ export function Transactions({
     setSearchTerm,
     merchantFilter,
     setMerchantFilter,
+    period,
+    setPeriod,
+    filters,
     dateFromFilter,
     setDateFromFilter,
     dateToFilter,
@@ -834,58 +807,15 @@ export function Transactions({
     clearAllFilters,
   } = useTransactionFiltering({
     transactions,
-    initial: initialFilters,
-    initialDateRange: periodRange(period),
+    initial: initialState,
   })
 
-  // Clearing filters also clears the period: it is part of what the URL
-  // records, and the table already shows every date once the dates clear.
-  function clearFiltersAndPeriod() {
-    clearAllFilters()
-    setPeriod({ mode: 'all' })
-  }
-
-  // Keep the URL in step with the filters (the parent decides how).
+  // Keep the URL in step with the filters (the parent decides how). The hook
+  // holds them in the URL's shape, period included.
   useEffect(() => {
     if (!onFiltersChange) return
-    const urlPeriod: UrlPeriod =
-      period.mode === 'recent' ? { mode: 'recent', n: period.n } : period
-    onFiltersChange(
-      serializeFilterParams({
-        search: searchTerm,
-        merchant: merchantFilter,
-        categories: categoryFilters,
-        accounts: accountFilters.filter(
-          (a): a is 'credit_card' | 'bank_account' =>
-            a === 'credit_card' || a === 'bank_account'
-        ),
-        currency: currencyFilter,
-        type: typeFilter,
-        min: minAmount,
-        max: maxAmount,
-        showIgnored,
-        period: urlPeriod,
-      })
-    )
-  }, [
-    onFiltersChange,
-    period,
-    searchTerm,
-    merchantFilter,
-    categoryFilters,
-    accountFilters,
-    currencyFilter,
-    typeFilter,
-    minAmount,
-    maxAmount,
-    showIgnored,
-  ])
-
-  useEffect(() => {
-    const range = periodRange(period)
-    setDateFromFilter(range.from)
-    setDateToFilter(range.to)
-  }, [period, setDateFromFilter, setDateToFilter])
+    onFiltersChange(serializeFilterParams(filters))
+  }, [onFiltersChange, filters])
 
   const newestForNav =
     newestDate ??
@@ -1451,7 +1381,7 @@ export function Transactions({
         onTypeChange={setTypeFilter}
         onMinAmountChange={setMinAmount}
         onMaxAmountChange={setMaxAmount}
-        onClearAll={clearFiltersAndPeriod}
+        onClearAll={clearAllFilters}
       />
 
       {/* Table */}
@@ -1474,7 +1404,7 @@ export function Transactions({
         onToggleSelect={toggleTransactionSelection}
         onHeaderCheckboxChange={handleHeaderCheckboxChange}
         onSort={handleSort}
-        onClearFilters={clearFiltersAndPeriod}
+        onClearFilters={clearAllFilters}
         onShowIgnoredChange={setShowIgnored}
         onEdit={setEditingTransaction}
         onDelete={(transaction) => {
