@@ -34,7 +34,8 @@ import {
 } from '../descriptions/similar-transactions'
 import { buildDescriptionOverrideKey } from '../descriptions/normalization'
 import { normalizeCategoryId } from '../categories/category-aliases'
-import { LOW_CONFIDENCE } from '../../utils/transaction-display'
+import { LOW_CONFIDENCE, effectiveConfidence } from '../categorizer/confidence'
+import { isCategoryIgnored } from '../categories/category-registry'
 import {
   clearDescriptionOverride,
   getDescriptionOverride,
@@ -218,6 +219,10 @@ async function classifyAgainstServer(
     classification = classifyImport(incoming, existing, taken)
   }
   return classification
+}
+
+function isUncategorized(tx: Transaction): boolean {
+  return normalizeCategoryId(tx.category) === 'uncategorized'
 }
 
 /** True when the row has a user rule that the AI must not override. */
@@ -933,14 +938,17 @@ export async function bulkTag(
  * merchants) on the selected rows and writes the results that aren't
  * `uncategorized` — one request per (category, confidence) per 100 rows.
  *
- * A result replaces a row's category only when it is more confident than
- * what the row has (an uncategorized row takes anything): a weaker guess
- * never erases a stronger one, and a user's own categorization (1) stays.
+ * A result is written when it is at least as confident as what the row has
+ * (an uncategorized row takes anything; a row without a recorded confidence
+ * counts as just inside the trusted band) and changes something: a changed
+ * rule reaches rows at the same confidence, a weaker guess never erases a
+ * stronger category, and the user's own categorization (1) is beaten only
+ * by the user's own rule (1).
  *
- * The similar-merchant pool is every merchant override plus the rows that
- * are categorized with confidence (not in the review band), one entry per
- * merchant, excluding the rows being categorized: a row must not find
- * itself, and a review-band guess must not seed the next guess.
+ * The similar-merchant pool: the merchant overrides first (they win), then
+ * every row categorized with confidence (not in the review band, not an
+ * ignored pseudo-category), one entry per merchant. A row never sees its own
+ * merchant in the pool, so it cannot "find itself"; its siblings still do.
  */
 export async function autoCategorize(
   repo: Repository,
@@ -950,61 +958,59 @@ export async function autoCategorize(
   const all = store().transactions
   const targetIds = new Set(transactionIds)
 
-  const byMerchant = new Map<
+  const pool = new Map<
     string,
     { name: string; category: string; confidence: number }
   >()
+  for (const [key, o] of Object.entries(listMerchantCategoryOverrides())) {
+    // The description, not the key: a key can be "raw:…" or stripped
+    const name = o.merchantName ?? key
+    pool.set(normalizeMerchantName(name), {
+      name,
+      category: o.category,
+      confidence: 1,
+    })
+  }
   for (const t of all) {
-    if (targetIds.has(t.id)) continue
-    if (!t.category || normalizeCategoryId(t.category) === 'uncategorized') {
-      continue
-    }
-    const confidence = t.categoryConfidence ?? 0
+    if (isUncategorized(t) || isCategoryIgnored(t.category)) continue
+    const confidence = effectiveConfidence(t)
     if (confidence < LOW_CONFIDENCE) continue
     const key = normalizeMerchantName(t.description)
-    const known = byMerchant.get(key)
+    const known = pool.get(key)
     if (!known || known.confidence < confidence) {
-      byMerchant.set(key, {
-        name: t.description,
-        category: t.category,
-        confidence,
-      })
+      pool.set(key, { name: t.description, category: t.category!, confidence })
     }
   }
+  const poolWithout = (key: string) =>
+    [...pool.entries()]
+      .filter(([k]) => k !== key)
+      .map(([, { name, category }]) => ({ name, category }))
 
-  const context: CategorizationContext = {
-    categorizedMerchants: [
-      ...Object.entries(listMerchantCategoryOverrides()).map(([name, o]) => ({
-        name,
-        category: o.category,
-      })),
-      ...[...byMerchant.values()].map(({ name, category }) => ({
-        name,
-        category,
-      })),
-    ],
-    temporalPatterns: analyzeTemporalPatterns(
-      all.map((t) => ({
-        description: t.description,
-        amount: t.amount,
-        currency: t.currency,
-        date: t.date instanceof Date ? t.date : new Date(t.date),
-      }))
-    ),
-  }
+  const temporalPatterns = analyzeTemporalPatterns(
+    all.map((t) => ({
+      description: t.description,
+      amount: t.amount,
+      currency: t.currency,
+      date: t.date instanceof Date ? t.date : new Date(t.date),
+    }))
+  )
 
   const changes = new Map<string, TransactionPatch>()
   for (const tx of all) {
     if (!targetIds.has(tx.id)) continue
     const result = categorizeTransaction(tx.description, tx.type, {
-      ...context,
+      categorizedMerchants: poolWithout(normalizeMerchantName(tx.description)),
+      temporalPatterns,
       amount: tx.amount,
       currency: tx.currency,
     })
-    const uncategorized =
-      !tx.category || normalizeCategoryId(tx.category) === 'uncategorized'
-    const current = uncategorized ? 0 : (tx.categoryConfidence ?? 0)
-    if (result.category !== 'uncategorized' && result.confidence > current) {
+    if (result.category === 'uncategorized') continue
+    const current = effectiveConfidence(tx)
+    const unchanged =
+      !isUncategorized(tx) &&
+      normalizeCategoryId(tx.category) === result.category &&
+      tx.categoryConfidence === result.confidence
+    if (result.confidence >= current && !unchanged) {
       changes.set(tx.id, {
         category: result.category,
         categoryConfidence: result.confidence,

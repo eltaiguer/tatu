@@ -59,8 +59,9 @@ one.
   with AI on.
 - A rule change never rewrites stored rows. They change only through
   Auto-categorizar (`autoCategorize`: the selected rows, and only where the
-  new result is more confident than the row's current category — user edits
-  at 1 are never changed), a rule applied to past rows
+  new result is at least as confident as the row's current category and
+  changes it — a changed rule reaches rows at the same confidence; user
+  edits at 1 give way only to a user rule at 1), a rule applied to past rows
   (`applyPatternToPast`: 0.95, split parts skipped), or a user edit
   (confidence 1). Both live in
   `src/services/mutations/transaction-mutations.ts`.
