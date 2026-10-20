@@ -26,7 +26,13 @@ const FEE_KEYWORDS = [
   'costo producto',
 ]
 
+// An own-account sweep between the user's combined accounts. Santander words
+// its debit side "CARGO POR TRASPASO …", so it is checked before the fee
+// keywords ("cargo") get a look.
+const OWN_ACCOUNT_SWEEP_KEYWORDS = ['traspaso']
+
 const TRANSFER_KEYWORDS = [
+  'traspaso',
   'transferencia',
   'trf',
   'transf',
@@ -139,8 +145,12 @@ export function categorizeTransaction(
     }
   }
 
-  // 4. Fee keywords
-  if (matchesAny(normalized, FEE_KEYWORDS)) {
+  // 4. Fee keywords (an own-account sweep is never a fee, whatever it is
+  // called; it falls through to the transfer keywords)
+  if (
+    matchesAny(normalized, FEE_KEYWORDS) &&
+    !matchesAny(normalized, OWN_ACCOUNT_SWEEP_KEYWORDS)
+  ) {
     return {
       category: Category.Fees,
       confidence: 0.95,
