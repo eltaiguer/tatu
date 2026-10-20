@@ -129,6 +129,8 @@ describe('tokenize - bank operation wording (audit)', () => {
       '644388lr',
       'juan',
     ])
+  })
+})
 
 describe('tokenize - more processors (review of #216)', () => {
   it('drops BCF like the other processors', () => {
