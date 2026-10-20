@@ -35,3 +35,20 @@ describe('normalizeDescriptionForOverride', () => {
     expect(buildDescriptionOverrideKey('   ')).toBeNull()
   })
 })
+
+describe('keyword stripping stops at word boundaries (review of #222)', () => {
+  it('does not eat a merchant word that starts with a code keyword', () => {
+    expect(normalizeDescriptionForOverride('AUTOSERVICIO DISCO 12/03')).toBe(
+      'autoservicio disco'
+    )
+    expect(normalizeDescriptionForOverride('FARMACIA IDEAL')).toBe(
+      'farmacia ideal'
+    )
+    expect(normalizeDescriptionForOverride('REFRIGERACION NORTE')).toBe(
+      'refrigeracion norte'
+    )
+    expect(normalizeDescriptionForOverride('COMPRA AUT 123 KIOSCO')).toBe(
+      'compra kiosco'
+    )
+  })
+})

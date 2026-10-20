@@ -13,22 +13,31 @@ export type CategoryOverrides = Record<string, CategoryOverride>
 let overrides: CategoryOverrides = {}
 
 /**
- * The key a merchant override is stored under: the description with its
- * per-transaction noise (dates, times, auth codes, long numbers) stripped,
- * the same key "Todas las similares" selects past rows by, so a category
- * set on one row reaches the merchant's later rows too. Overrides stored
- * before this (keyed on the exact normalized description) are still read.
+ * The key a merchant override is stored under: the normalized description
+ * (lowercase, POS prefix dropped) with its per-transaction noise (dates,
+ * times, auth codes, long numbers) stripped — the same key "Todas las
+ * similares" selects past rows by, so a category set on one row reaches
+ * the merchant's later rows too. Overrides stored before this, under the
+ * exact normalized description, are still read (`merchant_original` is
+ * nullable, so a one-time re-key on load could not reach every row).
  */
 export function merchantOverrideKey(merchantName: string): string | null {
-  return buildDescriptionOverrideKey(merchantName)
+  const normalized = normalizeMerchantName(merchantName)
+  return normalized ? buildDescriptionOverrideKey(normalized) : null
+}
+
+/** The exact-normalized key an older override of this row would sit under. */
+export function legacyMerchantOverrideKey(merchantName: string): string | null {
+  const exact = normalizeMerchantName(merchantName)
+  return exact && exact !== merchantOverrideKey(merchantName) ? exact : null
 }
 
 function keysFor(merchantName: string): string[] {
   const keys: string[] = []
   const stripped = merchantOverrideKey(merchantName)
   if (stripped) keys.push(stripped)
-  const exact = normalizeMerchantName(merchantName)
-  if (exact && exact !== stripped) keys.push(exact)
+  const legacy = legacyMerchantOverrideKey(merchantName)
+  if (legacy) keys.push(legacy)
   return keys
 }
 
@@ -42,15 +51,14 @@ export function getMerchantCategoryOverride(
   return null
 }
 
-export function setMerchantCategoryOverride(
+// The two primitives mirror one server row each, so a write can apply to
+// memory exactly what the server confirmed (transaction-mutations.ts).
+
+export function putMerchantCategoryOverrideKey(
+  key: string,
   merchantName: string,
   category: string
 ): void {
-  const key = merchantOverrideKey(merchantName)
-  if (!key) {
-    return
-  }
-
   overrides[key] = {
     category,
     merchantName,
@@ -59,15 +67,31 @@ export function setMerchantCategoryOverride(
   invalidateLearnedPatternsCache()
 }
 
-export function clearMerchantCategoryOverride(merchantName: string): void {
-  let cleared = false
-  for (const key of keysFor(merchantName)) {
-    if (overrides[key]) {
-      delete overrides[key]
-      cleared = true
-    }
+export function deleteMerchantCategoryOverrideKey(key: string): void {
+  if (overrides[key]) {
+    delete overrides[key]
+    invalidateLearnedPatternsCache()
   }
-  if (cleared) invalidateLearnedPatternsCache()
+}
+
+/** Stores under the stripped key and drops the row's exact-key override. */
+export function setMerchantCategoryOverride(
+  merchantName: string,
+  category: string
+): void {
+  const key = merchantOverrideKey(merchantName)
+  if (!key) {
+    return
+  }
+  putMerchantCategoryOverrideKey(key, merchantName, category)
+  const legacy = legacyMerchantOverrideKey(merchantName)
+  if (legacy) deleteMerchantCategoryOverrideKey(legacy)
+}
+
+export function clearMerchantCategoryOverride(merchantName: string): void {
+  for (const key of keysFor(merchantName)) {
+    deleteMerchantCategoryOverrideKey(key)
+  }
 }
 
 export function listMerchantCategoryOverrides(): CategoryOverrides {

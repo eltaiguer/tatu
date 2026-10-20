@@ -5,6 +5,7 @@ import { loadUserTransactions } from '../../services/supabase/transactions'
 import { listCategoryOverrides } from '../../services/supabase/category-overrides'
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
+import { merchantOverrideKey } from '../../services/categorizer/category-overrides'
 import type { Transaction } from '../../models'
 
 interface MerchantStat {
@@ -82,7 +83,11 @@ async function runAnalysis(session: SupabaseSession): Promise<AnalysisResult> {
       classifiedAs: result.category,
       dbCategory,
       frequency: txs.length,
-      isInOverrides: overrideKeys.has(key),
+      // Overrides are keyed on the code-stripped description since #222,
+      // and on the exact normalized one before it.
+      isInOverrides:
+        overrideKeys.has(key) ||
+        overrideKeys.has(merchantOverrideKey(description) ?? ''),
     })
   }
 
