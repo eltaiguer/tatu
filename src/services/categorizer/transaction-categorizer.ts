@@ -94,7 +94,7 @@ export interface CategorizationContext {
  * 6. Income keywords (confidence 0.9)
  * 7. Merchant patterns — substring + fuzzy (confidence varies)
  * 8. Learned patterns from overrides (confidence ≤ 0.75)
- * 9. Temporal patterns (confidence ≤ 0.65)
+ * 9. Temporal patterns (debits only, confidence ≤ 0.5)
  * 10. Similar merchant (confidence ≤ 0.6)
  * 11. Amount heuristics (confidence ≤ 0.25)
  * 12. Uncategorized (confidence 0)
@@ -194,8 +194,9 @@ export function categorizeTransaction(
     }
   }
 
-  // 9. Temporal patterns (requires context)
-  if (context?.temporalPatterns) {
+  // 9. Temporal patterns (requires context; debits only — the hinted
+  // categories are expense categories, a recurring credit is not one)
+  if (type === 'debit' && context?.temporalPatterns) {
     const temporalMatch = getTemporalSuggestion(
       description,
       context.temporalPatterns
