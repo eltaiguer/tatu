@@ -1,3 +1,7 @@
+import {
+  HIGH_CONFIDENCE,
+  LOW_CONFIDENCE,
+} from '../services/categorizer/confidence'
 interface ConfidenceBadgeProps {
   confidence: number
 }
@@ -8,15 +12,20 @@ const BAR_HEIGHTS = ['h-[8px]', 'h-[11px]', 'h-[14px]']
 export function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
   if (!confidence) return null
 
-  const filled = confidence >= 0.8 ? 3 : confidence >= 0.55 ? 2 : 1
+  const filled =
+    confidence >= HIGH_CONFIDENCE ? 3 : confidence >= LOW_CONFIDENCE ? 2 : 1
   const color =
-    confidence >= 0.8
+    confidence >= HIGH_CONFIDENCE
       ? 'var(--pos)'
-      : confidence >= 0.55
+      : confidence >= LOW_CONFIDENCE
         ? 'var(--accent)'
         : 'var(--neg)'
   const level =
-    confidence >= 0.8 ? 'alta' : confidence >= 0.55 ? 'media' : 'baja'
+    confidence >= HIGH_CONFIDENCE
+      ? 'alta'
+      : confidence >= LOW_CONFIDENCE
+        ? 'media'
+        : 'baja'
 
   return (
     <span
