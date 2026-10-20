@@ -3,7 +3,7 @@
  * Uses token similarity to suggest a category based on known merchants.
  */
 import { Category } from '../../models'
-import { tokenize, fuzzyTokenSimilarity } from './tokenizer'
+import { tokenize, fuzzyTokenSimilarity, anchoredCoverage } from './tokenizer'
 import { normalizeMerchantName, type PatternMatch } from './merchant-patterns'
 
 export interface CategorizedMerchant {
@@ -45,6 +45,8 @@ export function findSimilarMerchant(
 
     const merchantTokens = tokenize(merchant.name)
     if (merchantTokens.length === 0) continue
+    // Same gate as the merchant list: no bigram-only or half matches
+    if (anchoredCoverage(merchantTokens, inputTokens) <= 0.5) continue
 
     const score = fuzzyTokenSimilarity(inputTokens, merchantTokens)
     if (score > bestScore) {

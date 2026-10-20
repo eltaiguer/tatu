@@ -110,3 +110,17 @@ describe('Tokenizer', () => {
     })
   })
 })
+
+describe('tokenize - payment processors (audit)', () => {
+  it('drops payment processor prefixes that carry no merchant signal', () => {
+    expect(tokenize('MERPAGO*COBRABITS')).toEqual(['cobrabits'])
+    expect(tokenize('SQ *CAFE BRASILERO')).toEqual(['cafe', 'brasilero'])
+    expect(tokenize('DLO.PEDIDOSYA')).toEqual(['pedidosya'])
+  })
+})
+
+describe('tokenize - more processors (review of #216)', () => {
+  it('drops BCF like the other processors', () => {
+    expect(tokenize('BCF *KIOSCO')).toEqual(['kiosco'])
+  })
+})
