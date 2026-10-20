@@ -9,9 +9,9 @@
  * wrong cause.
  */
 export interface ClaudeResponseLike {
-  content: Array<{ type: string; text?: string; [key: string]: unknown }>
+  content: Array<{ type: string; text?: string }>
   stop_reason?: string | null
-  stop_details?: { type?: string; category?: string | null } | null
+  stop_details?: { category?: string | null } | null
 }
 
 export function firstTextBlock(response: ClaudeResponseLike): string {
