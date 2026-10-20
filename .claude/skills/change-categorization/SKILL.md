@@ -44,7 +44,13 @@ one.
    change. Commit the fixture with the rule. Unexpected rows mean the pattern
    is too broad.
 
-4. **Review the money impact.** Precedence and confidence are the
+4. **Measure it.** `src/services/categorizer/eval/agreement.ts` scores the
+   rule categorizer (and the AI) against the rows the user categorized
+   themselves (confidence 1), with the user's own rules withheld. In the
+   running app it is the "[Dev] Evaluación del clasificador" panel in
+   Configuración; a rule change that lowers that agreement is a regression
+   however the fixture looks.
+5. **Review the money impact.** Precedence and confidence are the
    correctness surface of the app — get a fresh-context review of the diff
    (the `doubt-driven-development` skill, if available) before calling it done.
 

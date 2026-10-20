@@ -122,6 +122,17 @@ describe('validateCategory', () => {
       'groceries'
     )
   })
+
+  it('resolves pre-rename aliases the model may still use (audit)', () => {
+    expect(validateCategory('food', noCustomCategories)).toBe('groceries')
+    expect(validateCategory('restaurant', noCustomCategories)).toBe(
+      'restaurants'
+    )
+    expect(validateCategory('transfer', noCustomCategories)).toBe(
+      'internal_transfer'
+    )
+    expect(validateCategory('health', noCustomCategories)).toBe('healthcare')
+  })
 })
 
 describe('applyAiEnrichment', () => {
@@ -232,6 +243,40 @@ describe('enrichTransactionsWithAi', () => {
     expect(results.get('tx1')?.confidence).toBe(0.9)
   })
 
+  it("caps the model's confidence below 1, so 1 stays the user's (review of #224)", async () => {
+    messagesCreateMock.mockResolvedValue({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([
+            {
+              id: 'tx1',
+              displayDescription: 'Netflix',
+              category: 'entertainment',
+              confidence: 1,
+            },
+          ]),
+        },
+      ],
+    })
+    const { results } = await enrichTransactionsWithAi(
+      [
+        {
+          id: 'tx1',
+          description: 'NETFLIX.COM',
+          type: 'debit',
+          amount: 500,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
+      ],
+      baseConfig,
+      emptyContext
+    )
+    expect(results.get('tx1')?.confidence).toBeLessThan(1)
+    expect(results.get('tx1')?.confidence).toBeGreaterThanOrEqual(0.95)
+  })
+
   it('falls back to 0.7 confidence when AI omits the field', async () => {
     messagesCreateMock.mockResolvedValue({
       content: [
@@ -264,7 +309,7 @@ describe('enrichTransactionsWithAi', () => {
     expect(results.get('tx1')?.confidence).toBe(0.7)
   })
 
-  it('clamps out-of-range confidence values to [0, 1]', async () => {
+  it('clamps out-of-range confidence values to [0, 0.99]', async () => {
     messagesCreateMock.mockResolvedValue({
       content: [
         {
@@ -308,7 +353,8 @@ describe('enrichTransactionsWithAi', () => {
       baseConfig,
       emptyContext
     )
-    expect(results.get('tx1')?.confidence).toBe(1)
+    // The upper bound is just below 1: confidence 1 is reserved for the user
+    expect(results.get('tx1')?.confidence).toBe(0.99)
     expect(results.get('tx2')?.confidence).toBe(0)
   })
 

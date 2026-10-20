@@ -3,8 +3,42 @@
  * Used by fuzzy matching, learned patterns, and similar-merchant suggestions.
  */
 
-/** Stopwords to strip — common Uruguayan merchant noise tokens */
+/**
+ * Stopwords to strip — common Uruguayan merchant noise tokens, plus the
+ * payment processors that prefix many unrelated merchants ("MERPAGO*X",
+ * "SQ *Y"): a token shared by every merchant behind a processor says
+ * nothing about any of them.
+ */
 const STOPWORDS = new Set([
+  'merpago',
+  'mercadopago',
+  'mp',
+  'dlo',
+  'dlocal',
+  'sq',
+  'tst',
+  'sp',
+  'bcf',
+  'paypal',
+  // Bank operation wording Santander prefixes to every counterparty: shared
+  // by thousands of unrelated rows, so it must never be learned or matched
+  // as if it named a merchant.
+  'compra',
+  'tarjeta',
+  'pago',
+  'operacion',
+  'banca',
+  'digital',
+  'supernet',
+  'sms',
+  'transf',
+  'transferencia',
+  'instantanea',
+  'enviada',
+  'recibida',
+  'trf',
+  'nrr',
+  'tarj',
   'sa',
   'srl',
   'aut',
@@ -139,4 +173,42 @@ export function fuzzyTokenSimilarity(a: string[], b: string[]): number {
 
   // Normalize by the average of both lengths to penalize mismatched sizes
   return (2 * totalScore) / (a.length + b.length)
+}
+
+/** A prefix this short ("spa" → "spar", "ute" → "utes") anchors nothing. */
+const MIN_ANCHOR_PREFIX = 4
+/** Bigram similarity from which two tokens are the same word misspelt. */
+const TYPO_SIMILARITY = 0.85
+
+/**
+ * Whether input token `a` anchors pattern token `b`: equal, one a prefix of
+ * the other with at least 4 characters shared, or a close misspelling
+ * ("devotto" / "devoto"). Character bigrams alone ("pantera" / "antel")
+ * never anchor.
+ */
+export function anchors(a: string, b: string): boolean {
+  if (a === b) return true
+  const shorter = Math.min(a.length, b.length)
+  if (shorter >= MIN_ANCHOR_PREFIX && (a.startsWith(b) || b.startsWith(a))) {
+    return true
+  }
+  return bigramSimilarity(a, b) >= TYPO_SIMILARITY
+}
+
+/**
+ * Share of `patternTokens` that some input token anchors (0–1). Fuzzy
+ * matching against a pattern or a known merchant requires more than half,
+ * so one shared token ("el club" vs "automovil club") or a bigram
+ * coincidence cannot carry a match on its own.
+ */
+export function anchoredCoverage(
+  patternTokens: string[],
+  inputTokens: string[]
+): number {
+  if (patternTokens.length === 0) return 0
+  let anchored = 0
+  for (const patternToken of patternTokens) {
+    if (inputTokens.some((token) => anchors(token, patternToken))) anchored++
+  }
+  return anchored / patternTokens.length
 }
