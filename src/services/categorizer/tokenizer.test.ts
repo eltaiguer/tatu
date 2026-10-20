@@ -110,3 +110,30 @@ describe('Tokenizer', () => {
     })
   })
 })
+
+describe('tokenize - payment processors (audit)', () => {
+  it('drops payment processor prefixes that carry no merchant signal', () => {
+    expect(tokenize('MERPAGO*COBRABITS')).toEqual(['cobrabits'])
+    expect(tokenize('SQ *CAFE BRASILERO')).toEqual(['cafe', 'brasilero'])
+    expect(tokenize('DLO.PEDIDOSYA')).toEqual(['pedidosya'])
+  })
+})
+
+describe('tokenize - bank operation wording (audit)', () => {
+  it('drops the words Santander puts in front of every counterparty', () => {
+    expect(
+      tokenize('DEBITO OPERACION EN BANCA DIGITAL 123 TRF. PLAZA- ACME')
+    ).toEqual(['plaza', 'acme'])
+    expect(tokenize('COMPRA CON TARJETA DEBITO DISCO 12')).toEqual(['disco'])
+    expect(tokenize('TRANSF INSTANTANEA RECIBIDA 644388LR JUAN')).toEqual([
+      '644388lr',
+      'juan',
+    ])
+  })
+})
+
+describe('tokenize - more processors (review of #216)', () => {
+  it('drops BCF like the other processors', () => {
+    expect(tokenize('BCF *KIOSCO')).toEqual(['kiosco'])
+  })
+})

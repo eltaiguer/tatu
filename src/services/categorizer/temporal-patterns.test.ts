@@ -45,7 +45,10 @@ describe('Temporal Patterns', () => {
       expect(pattern).toBeDefined()
       expect(pattern!.frequency).toBe('monthly')
       expect(pattern!.suggestedCategory).toBe(Category.Utilities)
-      expect(pattern!.confidence).toBeGreaterThan(0.5)
+      // A cadence is a hint, not an identification: it stays in the
+      // review band (< 0.55) so the row is still flagged (audit).
+      expect(pattern!.confidence).toBeGreaterThan(0)
+      expect(pattern!.confidence).toBeLessThan(0.55)
       expect(pattern!.occurrences).toBe(4)
     })
 
