@@ -1,3 +1,4 @@
+import { resolveCategorizationModel } from '../ai/models'
 import { getSupabaseClient, type SupabaseSession } from './client'
 import { DEFAULT_PREFERENCES } from '../preferences/defaults'
 
@@ -46,7 +47,7 @@ export async function loadUserPreferences(
     fxRate: row.fx_rate ?? DEFAULT_PREFERENCES.fxRate,
     claudeApiKey: row.claude_api_key ?? DEFAULT_PREFERENCES.claudeApiKey,
     aiEnabled: row.ai_enabled ?? DEFAULT_PREFERENCES.aiEnabled,
-    aiModel: row.ai_model ?? DEFAULT_PREFERENCES.aiModel,
+    aiModel: resolveCategorizationModel(row.ai_model),
   }
 }
 

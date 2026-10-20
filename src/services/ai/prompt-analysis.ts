@@ -1,5 +1,6 @@
 import type { Transaction } from '../../models'
 import type { AiConfig } from './ai-config'
+import { firstTextBlock } from './text-block'
 
 const MAX_CC_SAMPLES = 180
 const MAX_BA_SAMPLES = 120
@@ -82,18 +83,15 @@ ${formatSamples(creditCard) || '(ninguna)'}
 === BANK ACCOUNT (${bankAccount.length} unique descriptions) ===
 ${formatSamples(bankAccount) || '(ninguna)'}`
 
+  // Thinking shares max_tokens with the analysis on the 5.5 models.
   const response = await client.messages.create({
     model: config.model,
-    max_tokens: 4096,
+    max_tokens: 16000,
+    output_config: { effort: 'medium' },
     system:
       'You are a prompt engineer analyzing bank transaction data to write reusable AI categorization instructions.',
     messages: [{ role: 'user', content: userMessage }],
   })
 
-  const block = response.content[0]
-  if (block.type !== 'text') {
-    throw new Error(`Respuesta inesperada del modelo (tipo: ${block.type})`)
-  }
-
-  return block.text
+  return firstTextBlock(response)
 }

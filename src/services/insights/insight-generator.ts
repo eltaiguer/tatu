@@ -1,6 +1,7 @@
 import type { Currency } from '../../models'
 import type { InsightInput } from './insight-data'
 import { INSIGHTS_MODEL } from '../ai/models'
+import { firstTextBlock } from '../ai/text-block'
 import {
   buildInsightSystemPrompt,
   buildInsightUserMessage,
@@ -146,17 +147,16 @@ export async function generateInsights(
     dangerouslyAllowBrowser: true,
   })
 
+  // Opus 5.5 thinks before answering and the thinking is billed against
+  // max_tokens, so the cap leaves room for both; medium effort is the
+  // model's default, set explicitly so a default change cannot move it.
   const response = await client.messages.create({
     model: INSIGHTS_MODEL,
-    max_tokens: 4096,
+    max_tokens: 16000,
+    output_config: { effort: 'medium' },
     system: buildInsightSystemPrompt(),
     messages: [{ role: 'user', content: buildInsightUserMessage(input) }],
   })
 
-  const block = response.content[0]
-  if (block.type !== 'text') {
-    throw new Error(`Respuesta inesperada del modelo (tipo: ${block.type})`)
-  }
-
-  return parseInsightsResponse(block.text, input)
+  return parseInsightsResponse(firstTextBlock(response), input)
 }

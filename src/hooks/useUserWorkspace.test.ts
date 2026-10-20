@@ -120,7 +120,6 @@ describe('useUserWorkspace', () => {
   it('starts with the shared default categorization model before preferences load', () => {
     const { result } = renderWorkspace({ session: null, authMode: 'signin' })
 
-    // Behavior unchanged: the default is still Haiku.
-    expect(result.current.aiModel).toBe('claude-haiku-4-5')
+    expect(result.current.aiModel).toBe('claude-haiku-5-5')
   })
 })
