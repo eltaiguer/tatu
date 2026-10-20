@@ -33,6 +33,9 @@ import {
   findSimilarTransactions,
 } from '../descriptions/similar-transactions'
 import { buildDescriptionOverrideKey } from '../descriptions/normalization'
+import { normalizeCategoryId } from '../categories/category-aliases'
+import { LOW_CONFIDENCE, effectiveConfidence } from '../categorizer/confidence'
+import { isCategoryIgnored } from '../categories/category-registry'
 import {
   clearDescriptionOverride,
   getDescriptionOverride,
@@ -40,16 +43,16 @@ import {
   setDescriptionOverride,
 } from '../descriptions/description-overrides'
 import {
-  clearMerchantCategoryOverride,
+  deleteMerchantCategoryOverrideKey,
   getMerchantCategoryOverride,
+  legacyMerchantOverrideKey,
   listMerchantCategoryOverrides,
-  setMerchantCategoryOverride,
+  merchantOverrideKey,
+  putMerchantCategoryOverrideKey,
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
-import {
-  categorizeTransaction,
-  type CategorizationContext,
-} from '../categorizer/transaction-categorizer'
+import { matchCustomPattern } from '../categorizer/custom-patterns'
+import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
 import { applyAiEnrichment, enrichTransactionsWithAi, getAiConfig } from '../ai'
@@ -218,11 +221,20 @@ async function classifyAgainstServer(
   return classification
 }
 
-/** True when the row has a user rule that the AI must not override. */
+function isUncategorized(tx: Transaction): boolean {
+  return normalizeCategoryId(tx.category) === 'uncategorized'
+}
+
+/**
+ * True when the row has a user rule that the AI must not override: a
+ * description override, a merchant override, or a custom pattern. A rule
+ * the user wrote is enforced here, not handed to the model as advice.
+ */
 function hasUserOverride(tx: Transaction): boolean {
   return (
     !!getDescriptionOverride(tx.description) ||
-    !!getMerchantCategoryOverride(normalizeMerchantName(tx.description))
+    !!getMerchantCategoryOverride(tx.description) ||
+    !!matchCustomPattern(tx.description)
   )
 }
 
@@ -445,11 +457,11 @@ async function moveRulesToRepairedText(
       })
     }
     const category = getMerchantCategoryOverride(from)
-    const toMerchant = normalizeMerchantName(to)
+    const toMerchant = merchantOverrideKey(to)
     if (
       category &&
       toMerchant &&
-      toMerchant !== normalizeMerchantName(from) &&
+      toMerchant !== merchantOverrideKey(from) &&
       !getMerchantCategoryOverride(to)
     ) {
       await repo.upsertCategoryOverride({
@@ -458,7 +470,7 @@ async function moveRulesToRepairedText(
         category,
       })
       assertOwner(repo)
-      setMerchantCategoryOverride(to, category)
+      putMerchantCategoryOverrideKey(toMerchant, to, category)
     }
   }
 }
@@ -497,7 +509,11 @@ async function writeOverrides(
 ): Promise<void> {
   const description = current.description
   const descKey = buildDescriptionOverrideKey(description)
-  const merchantKey = normalizeMerchantName(description)
+  const merchantKey = merchantOverrideKey(description)
+  // An override stored before merchant keys were code-stripped sits under
+  // the exact normalized description: it goes whether the category is set
+  // (replaced by the stripped row) or cleared.
+  const legacyMerchantKey = legacyMerchantOverrideKey(description)
   const previousDesc = descKey ? listDescriptionOverrides()[descKey] : undefined
 
   const applyDescLocally = () => {
@@ -562,11 +578,29 @@ async function writeOverrides(
     assertOwner(repo)
   }
 
+  // Both writes are on the server: memory mirrors them now, so a failure
+  // in the legacy cleanup below cannot leave the screen behind the database.
   applyDescLocally()
-  if (intent.category) {
-    setMerchantCategoryOverride(description, intent.category)
-  } else {
-    clearMerchantCategoryOverride(description)
+  if (merchantKey) {
+    if (intent.category) {
+      putMerchantCategoryOverrideKey(merchantKey, description, intent.category)
+    } else {
+      deleteMerchantCategoryOverrideKey(merchantKey)
+    }
+  }
+
+  // The row's pre-#222 override, if any: a third write, mirrored on its own.
+  if (legacyMerchantKey) {
+    try {
+      await repo.deleteCategoryOverride(legacyMerchantKey)
+    } catch {
+      assertOwner(repo)
+      throw new UserFacingError(
+        'Se guardó la categoría, pero no se pudo quitar la regla anterior. Intentá de nuevo.'
+      )
+    }
+    assertOwner(repo)
+    deleteMerchantCategoryOverrideKey(legacyMerchantKey)
   }
 }
 
@@ -930,6 +964,18 @@ export async function bulkTag(
  * Re-runs the categorizer with context (temporal patterns, categorized
  * merchants) on the selected rows and writes the results that aren't
  * `uncategorized` — one request per (category, confidence) per 100 rows.
+ *
+ * A result is written when it is at least as confident as what the row has
+ * (an uncategorized row takes anything; a row without a recorded confidence
+ * counts as just inside the trusted band) and changes something: a changed
+ * rule reaches rows at the same confidence, a weaker guess never erases a
+ * stronger category, and the user's own categorization (1) is beaten only
+ * by the user's own rule (1).
+ *
+ * The similar-merchant pool: the merchant overrides first (they win), then
+ * every row categorized with confidence (not in the review band, not an
+ * ignored pseudo-category), one entry per merchant. A row never sees its own
+ * merchant in the pool, so it cannot "find itself"; its siblings still do.
  */
 export async function autoCategorize(
   repo: Repository,
@@ -939,35 +985,59 @@ export async function autoCategorize(
   const all = store().transactions
   const targetIds = new Set(transactionIds)
 
-  const context: CategorizationContext = {
-    categorizedMerchants: [
-      ...Object.entries(listMerchantCategoryOverrides()).map(([name, o]) => ({
-        name,
-        category: o.category,
-      })),
-      ...all
-        .filter((t) => t.category && t.category !== 'uncategorized')
-        .map((t) => ({ name: t.description, category: t.category! })),
-    ],
-    temporalPatterns: analyzeTemporalPatterns(
-      all.map((t) => ({
-        description: t.description,
-        amount: t.amount,
-        currency: t.currency,
-        date: t.date instanceof Date ? t.date : new Date(t.date),
-      }))
-    ),
+  const pool = new Map<
+    string,
+    { name: string; category: string; confidence: number }
+  >()
+  for (const [key, o] of Object.entries(listMerchantCategoryOverrides())) {
+    // The description, not the key: a key can be "raw:…" or stripped
+    const name = o.merchantName ?? key
+    pool.set(normalizeMerchantName(name), {
+      name,
+      category: o.category,
+      confidence: 1,
+    })
   }
+  for (const t of all) {
+    if (isUncategorized(t) || isCategoryIgnored(t.category)) continue
+    const confidence = effectiveConfidence(t)
+    if (confidence < LOW_CONFIDENCE) continue
+    const key = normalizeMerchantName(t.description)
+    const known = pool.get(key)
+    if (!known || known.confidence < confidence) {
+      pool.set(key, { name: t.description, category: t.category!, confidence })
+    }
+  }
+  const poolWithout = (key: string) =>
+    [...pool.entries()]
+      .filter(([k]) => k !== key)
+      .map(([, { name, category }]) => ({ name, category }))
+
+  const temporalPatterns = analyzeTemporalPatterns(
+    all.map((t) => ({
+      description: t.description,
+      amount: t.amount,
+      currency: t.currency,
+      date: t.date instanceof Date ? t.date : new Date(t.date),
+    }))
+  )
 
   const changes = new Map<string, TransactionPatch>()
   for (const tx of all) {
     if (!targetIds.has(tx.id)) continue
     const result = categorizeTransaction(tx.description, tx.type, {
-      ...context,
+      categorizedMerchants: poolWithout(normalizeMerchantName(tx.description)),
+      temporalPatterns,
       amount: tx.amount,
       currency: tx.currency,
     })
-    if (result.category !== 'uncategorized') {
+    if (result.category === 'uncategorized') continue
+    const current = effectiveConfidence(tx)
+    const unchanged =
+      !isUncategorized(tx) &&
+      normalizeCategoryId(tx.category) === result.category &&
+      tx.categoryConfidence === result.confidence
+    if (result.confidence >= current && !unchanged) {
       changes.set(tx.id, {
         category: result.category,
         categoryConfidence: result.confidence,

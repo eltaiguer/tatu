@@ -1,4 +1,7 @@
-import { buildDescriptionOverrideKey } from './normalization'
+import {
+  buildDescriptionOverrideKey,
+  legacyDescriptionOverrideKey,
+} from './normalization'
 
 export interface DescriptionOverride {
   descriptionOriginal?: string
@@ -19,7 +22,11 @@ export function getDescriptionOverride(
     return null
   }
 
-  return overrides[descriptionKey] ?? null
+  const current = overrides[descriptionKey]
+  if (current) return current
+  // Stored before the code-keyword fix (normalization.ts): read, never written.
+  const legacyKey = legacyDescriptionOverrideKey(description)
+  return (legacyKey && overrides[legacyKey]) || null
 }
 
 export function setDescriptionOverride(input: {
