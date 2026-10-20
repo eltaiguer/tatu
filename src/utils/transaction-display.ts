@@ -25,7 +25,8 @@ export function getDisplayDescription(transaction: Transaction): string {
 
 // Confidence below which an automatic category is worth a second look (the
 // old meter's "baja" band).
-const LOW_CONFIDENCE = 0.55
+/** Below this a categorized row is still flagged for review ("baja"). */
+export const LOW_CONFIDENCE = 0.55
 
 // Whether a row's category deserves the user's attention: it has none, or
 // it was assigned automatically with low confidence. Rows the user

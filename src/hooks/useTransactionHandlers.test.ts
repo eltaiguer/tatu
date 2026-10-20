@@ -1159,6 +1159,108 @@ describe('useTransactionHandlers — bulk operations (#60)', () => {
   })
 })
 
+describe('useTransactionHandlers — Auto-categorizar pool and write rule (audit)', () => {
+  // Amounts between 3001 and 15000 UYU get no amount heuristic, so only the
+  // sources under test can categorize these rows.
+  const quiet = { amount: 5000, currency: 'UYU' as const }
+
+  it('does not lower a row by matching it against itself', async () => {
+    const { repo, handlers } = signedIn([
+      makeTransaction('self', {
+        ...quiet,
+        description: 'MISTERIOSO BAR 77',
+        category: 'restaurants',
+        categoryConfidence: 0.7,
+      }),
+    ])
+
+    const result = await handlers.handleAutoCategorizeTransactions(['self'])
+
+    expect(result.categorized).toBe(0)
+    expect(stored('self')?.categoryConfidence).toBe(0.7)
+    expect(repo.row('self')?.categoryConfidence).toBe(0.7)
+  })
+
+  it('does not seed similar-merchant hints from review-band guesses', async () => {
+    const { handlers } = signedIn([
+      makeTransaction('guess', {
+        ...quiet,
+        description: 'ZZZ UNKNOWN FOO',
+        category: 'shopping',
+        categoryConfidence: 0.15,
+      }),
+      makeTransaction('target', {
+        ...quiet,
+        description: 'ZZZ UNKNOWN BAR',
+        category: undefined,
+        categoryConfidence: undefined,
+      }),
+    ])
+
+    const result = await handlers.handleAutoCategorizeTransactions(['target'])
+
+    expect(result.categorized).toBe(0)
+    expect(stored('target')?.category).toBeUndefined()
+  })
+
+  it('still seeds hints from rows categorized with confidence', async () => {
+    const { handlers } = signedIn([
+      makeTransaction('known', {
+        ...quiet,
+        description: 'ZZZ UNKNOWN FOO',
+        category: 'shopping',
+        categoryConfidence: 0.8,
+      }),
+      makeTransaction('target', {
+        ...quiet,
+        description: 'ZZZ UNKNOWN BAR',
+        category: undefined,
+        categoryConfidence: undefined,
+      }),
+    ])
+
+    const result = await handlers.handleAutoCategorizeTransactions(['target'])
+
+    expect(result.categorized).toBe(1)
+    expect(stored('target')?.category).toBe('shopping')
+  })
+
+  it('never replaces a category with a less confident one', async () => {
+    const { repo, handlers } = signedIn([
+      makeTransaction('locked', {
+        description: 'MISTERIOSO BAR 77',
+        amount: 300,
+        currency: 'UYU',
+        category: 'shopping',
+        categoryConfidence: 0.7,
+      }),
+    ])
+
+    // Amount heuristics would say restaurants at 0.2
+    const result = await handlers.handleAutoCategorizeTransactions(['locked'])
+
+    expect(result.categorized).toBe(0)
+    expect(stored('locked')?.category).toBe('shopping')
+    expect(repo.row('locked')?.category).toBe('shopping')
+  })
+
+  it('leaves a user-locked row (confidence 1) alone', async () => {
+    const { handlers } = signedIn([
+      makeTransaction('user', {
+        ...quiet,
+        description: 'DEBITO OPERACION EN SUPERNET O SMS 111111TT55 MISTERIOSO',
+        category: 'shopping',
+        categoryConfidence: 1,
+      }),
+    ])
+
+    const result = await handlers.handleAutoCategorizeTransactions(['user'])
+
+    expect(result.categorized).toBe(0)
+    expect(stored('user')?.category).toBe('shopping')
+  })
+})
+
 describe('useTransactionHandlers — delete and undo', () => {
   const abc = () => [
     makeTransaction('a'),
