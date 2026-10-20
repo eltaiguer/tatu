@@ -56,7 +56,6 @@ import {
 } from '../services/descriptions/description-overrides'
 import { getDisplayDescription } from '../utils/transaction-display'
 import { categorizeTransaction } from '../services/categorizer/transaction-categorizer'
-import { replaceCustomPatterns } from '../services/categorizer/custom-patterns'
 import {
   getMerchantCategoryOverride,
   listMerchantCategoryOverrides,
