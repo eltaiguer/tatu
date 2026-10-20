@@ -126,8 +126,9 @@ export function categorizeTransaction(
     }
   }
 
-  // 2. Merchant override
-  const override = getMerchantCategoryOverride(normalized)
+  // 2. Merchant override (keyed on the code-stripped description, so a
+  // category set on one row of a merchant reaches its later rows)
+  const override = getMerchantCategoryOverride(description)
   if (override) {
     return {
       category: override,

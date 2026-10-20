@@ -43,10 +43,12 @@ import {
   setDescriptionOverride,
 } from '../descriptions/description-overrides'
 import {
-  clearMerchantCategoryOverride,
+  deleteMerchantCategoryOverrideKey,
   getMerchantCategoryOverride,
+  legacyMerchantOverrideKey,
   listMerchantCategoryOverrides,
-  setMerchantCategoryOverride,
+  merchantOverrideKey,
+  putMerchantCategoryOverrideKey,
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
@@ -226,7 +228,7 @@ function isUncategorized(tx: Transaction): boolean {
 function hasUserOverride(tx: Transaction): boolean {
   return (
     !!getDescriptionOverride(tx.description) ||
-    !!getMerchantCategoryOverride(normalizeMerchantName(tx.description))
+    !!getMerchantCategoryOverride(tx.description)
   )
 }
 
@@ -449,11 +451,11 @@ async function moveRulesToRepairedText(
       })
     }
     const category = getMerchantCategoryOverride(from)
-    const toMerchant = normalizeMerchantName(to)
+    const toMerchant = merchantOverrideKey(to)
     if (
       category &&
       toMerchant &&
-      toMerchant !== normalizeMerchantName(from) &&
+      toMerchant !== merchantOverrideKey(from) &&
       !getMerchantCategoryOverride(to)
     ) {
       await repo.upsertCategoryOverride({
@@ -462,7 +464,7 @@ async function moveRulesToRepairedText(
         category,
       })
       assertOwner(repo)
-      setMerchantCategoryOverride(to, category)
+      putMerchantCategoryOverrideKey(toMerchant, to, category)
     }
   }
 }
@@ -501,7 +503,11 @@ async function writeOverrides(
 ): Promise<void> {
   const description = current.description
   const descKey = buildDescriptionOverrideKey(description)
-  const merchantKey = normalizeMerchantName(description)
+  const merchantKey = merchantOverrideKey(description)
+  // An override stored before merchant keys were code-stripped sits under
+  // the exact normalized description: it goes whether the category is set
+  // (replaced by the stripped row) or cleared.
+  const legacyMerchantKey = legacyMerchantOverrideKey(description)
   const previousDesc = descKey ? listDescriptionOverrides()[descKey] : undefined
 
   const applyDescLocally = () => {
@@ -566,11 +572,29 @@ async function writeOverrides(
     assertOwner(repo)
   }
 
+  // Both writes are on the server: memory mirrors them now, so a failure
+  // in the legacy cleanup below cannot leave the screen behind the database.
   applyDescLocally()
-  if (intent.category) {
-    setMerchantCategoryOverride(description, intent.category)
-  } else {
-    clearMerchantCategoryOverride(description)
+  if (merchantKey) {
+    if (intent.category) {
+      putMerchantCategoryOverrideKey(merchantKey, description, intent.category)
+    } else {
+      deleteMerchantCategoryOverrideKey(merchantKey)
+    }
+  }
+
+  // The row's pre-#222 override, if any: a third write, mirrored on its own.
+  if (legacyMerchantKey) {
+    try {
+      await repo.deleteCategoryOverride(legacyMerchantKey)
+    } catch {
+      assertOwner(repo)
+      throw new UserFacingError(
+        'Se guardó la categoría, pero no se pudo quitar la regla anterior. Intentá de nuevo.'
+      )
+    }
+    assertOwner(repo)
+    deleteMerchantCategoryOverrideKey(legacyMerchantKey)
   }
 }
 

@@ -55,8 +55,10 @@ import {
   setDescriptionOverride,
 } from '../services/descriptions/description-overrides'
 import { getDisplayDescription } from '../utils/transaction-display'
+import { categorizeTransaction } from '../services/categorizer/transaction-categorizer'
 import {
   getMerchantCategoryOverride,
+  listMerchantCategoryOverrides,
   replaceMerchantCategoryOverrides,
 } from '../services/categorizer/category-overrides'
 
@@ -530,6 +532,29 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
     const PENAROL =
       '24/11/2025,5,COMPRA CON TARJETA DEBITO PEÑAROL,ADMINISTRACIÓN,-900.00,,100.00,'
 
+    it('moves a merchant override to the repaired text (review of #222)', async () => {
+      const [garbled] = garbledFile(PENAROL)
+      const { handlers } = signedIn([garbled])
+      replaceMerchantCategoryOverrides({
+        [garbled.description.toLowerCase()]: {
+          merchantName: garbled.description,
+          category: 'entertainment',
+          updatedAt: '',
+        },
+      })
+
+      await handlers.handleTransactionsImported(
+        file(PENAROL),
+        makeImportContext()
+      )
+
+      expect(
+        getMerchantCategoryOverride(
+          'COMPRA CON TARJETA DEBITO PEÑAROL ADMINISTRACIÓN'
+        )
+      ).toBe('entertainment')
+    })
+
     it('fixes the stored text in place: same id and category, nothing inserted', async () => {
       const [garbled] = garbledFile(PENAROL)
       const edited = {
@@ -977,6 +1002,180 @@ describe('useTransactionHandlers — apply scope', () => {
     })
   })
 
+  describe('category carries forward to later rows of the merchant (audit)', () => {
+    const CORRECTED =
+      'COMPRA CON TARJETA DEBITO KIOSCO X 12/03 15:22 AUT 123456'
+    const LATER = 'COMPRA CON TARJETA DEBITO KIOSCO X 20/03 09:01 AUT 654321'
+
+    it.each(['future_matching_only', 'matching_past_and_future'] as const)(
+      "scope '%s' without a rename reaches a future row with other codes",
+      async (applyScope) => {
+        const { repo, handlers } = signedIn([
+          makeTransaction('tx', { description: CORRECTED }),
+        ])
+
+        await handlers.handleUpdateTransaction('tx', {
+          category: 'healthcare',
+          applyScope,
+        })
+
+        expect(categorizeTransaction(LATER, 'debit')).toEqual({
+          category: 'healthcare',
+          confidence: 1,
+        })
+        expect(
+          [...repo.categoryOverrides.values()].map((o) => o.category)
+        ).toEqual(['healthcare'])
+      }
+    )
+
+    it('clearing the category stops it reaching future rows', async () => {
+      const { repo, handlers } = signedIn([
+        makeTransaction('tx', { description: CORRECTED }),
+      ])
+      await handlers.handleUpdateTransaction('tx', {
+        category: 'healthcare',
+        applyScope: 'future_matching_only',
+      })
+
+      await handlers.handleUpdateTransaction('tx', {
+        category: null,
+        applyScope: 'future_matching_only',
+      })
+
+      expect(categorizeTransaction(LATER, 'debit').category).not.toBe(
+        'healthcare'
+      )
+      expect(repo.categoryOverrides.size).toBe(0)
+    })
+  })
+
+  describe('overrides stored under the exact key before #222', () => {
+    const CORRECTED =
+      'COMPRA CON TARJETA DEBITO KIOSCO X 12/03 15:22 AUT 123456'
+    const LEGACY_KEY =
+      'compra con tarjeta debito kiosco x 12/03 15:22 aut 123456'
+    const legacyRow = () => ({
+      merchantNormalized: LEGACY_KEY,
+      merchantOriginal: CORRECTED,
+      category: 'groceries',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+
+    it('clearing the category removes the legacy row on both sides', async () => {
+      const { repo, handlers } = signedIn(
+        [makeTransaction('tx', { description: CORRECTED })],
+        { categoryOverrides: [legacyRow()] }
+      )
+      replaceMerchantCategoryOverrides({
+        [LEGACY_KEY]: {
+          merchantName: CORRECTED,
+          category: 'groceries',
+          updatedAt: '',
+        },
+      })
+
+      await handlers.handleUpdateTransaction('tx', {
+        category: null,
+        applyScope: 'future_matching_only',
+      })
+
+      expect(repo.categoryOverrides.size).toBe(0)
+      expect(getMerchantCategoryOverride(CORRECTED)).toBeNull()
+    })
+
+    it('setting a category replaces the legacy row instead of keeping both', async () => {
+      const { repo, handlers } = signedIn(
+        [makeTransaction('tx', { description: CORRECTED })],
+        { categoryOverrides: [legacyRow()] }
+      )
+      replaceMerchantCategoryOverrides({
+        [LEGACY_KEY]: {
+          merchantName: CORRECTED,
+          category: 'groceries',
+          updatedAt: '',
+        },
+      })
+
+      await handlers.handleUpdateTransaction('tx', {
+        category: 'healthcare',
+        applyScope: 'future_matching_only',
+      })
+
+      expect([...repo.categoryOverrides.keys()]).toEqual([
+        'compra con tarjeta debito kiosco x',
+      ])
+      expect(Object.keys(listMerchantCategoryOverrides())).toEqual([
+        'compra con tarjeta debito kiosco x',
+      ])
+    })
+
+    it('mirrors exactly what the server holds when only the legacy delete fails', async () => {
+      const { repo, handlers } = signedIn(
+        [makeTransaction('tx', { description: CORRECTED })],
+        { categoryOverrides: [legacyRow()] }
+      )
+      replaceMerchantCategoryOverrides({
+        [LEGACY_KEY]: {
+          merchantName: CORRECTED,
+          category: 'groceries',
+          updatedAt: '',
+        },
+      })
+      repo.failOn('deleteCategoryOverride', {
+        when: (ids) => ids.includes(LEGACY_KEY),
+        error: new Error('network'),
+      })
+
+      await expect(
+        handlers.handleUpdateTransaction('tx', {
+          category: 'healthcare',
+          applyScope: 'future_matching_only',
+        })
+      ).rejects.toThrow()
+
+      // Server: new key written, legacy row still there. Memory: the same.
+      expect([...repo.categoryOverrides.keys()].sort()).toEqual(
+        ['compra con tarjeta debito kiosco x', LEGACY_KEY].sort()
+      )
+      expect(Object.keys(listMerchantCategoryOverrides()).sort()).toEqual(
+        ['compra con tarjeta debito kiosco x', LEGACY_KEY].sort()
+      )
+    })
+  })
+
+  describe('a carried-forward category and the AI gate', () => {
+    it('does not send a later row of the corrected merchant to the AI', async () => {
+      ai.getAiConfig.mockReturnValue({
+        apiKey: 'sk-test',
+        enabled: true,
+        model: 'claude-haiku-4-5',
+      })
+      const { handlers } = signedIn([
+        makeTransaction('tx', {
+          description:
+            'COMPRA CON TARJETA DEBITO KIOSCO X 12/03 15:22 AUT 123456',
+        }),
+      ])
+      await handlers.handleUpdateTransaction('tx', {
+        category: 'healthcare',
+        applyScope: 'future_matching_only',
+      })
+
+      await handlers.handleTransactionsImported([
+        makeTransaction('later', {
+          description:
+            'COMPRA CON TARJETA DEBITO KIOSCO X 20/03 09:01 AUT 654321',
+          category: 'healthcare',
+          categoryConfidence: 1,
+        }),
+      ])
+
+      expect(ai.enrichTransactionsWithAi).not.toHaveBeenCalled()
+    })
+  })
+
   describe('resetting a friendly name', () => {
     const named = () => [
       makeTransaction('tx', {
@@ -1260,6 +1459,33 @@ describe('useTransactionHandlers — Auto-categorizar pool and write rule (audit
 
     expect(result.categorized).toBe(0)
     expect(stored('user')?.category).toBe('shopping')
+  })
+})
+
+describe('useTransactionHandlers — override names in the Auto-categorizar pool (review of #222)', () => {
+  it('uses the override description, not its key, as the merchant name', async () => {
+    // An all-digits description keys as "raw:12345678"; "raw" must not
+    // become a token that matches unrelated rows.
+    replaceMerchantCategoryOverrides({
+      'raw:12345678': {
+        merchantName: '12345678',
+        category: 'shopping',
+        updatedAt: '',
+      },
+    })
+    const { handlers } = signedIn([
+      makeTransaction('target', {
+        description: 'RAW FOOD BAR',
+        amount: 5000,
+        currency: 'UYU',
+        category: undefined,
+        categoryConfidence: undefined,
+      }),
+    ])
+
+    const result = await handlers.handleAutoCategorizeTransactions(['target'])
+
+    expect(result.categorized).toBe(0)
   })
 })
 

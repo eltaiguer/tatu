@@ -14,7 +14,6 @@ import { getCategoryDefinition } from '../../services/categories/category-regist
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import { getDescriptionOverride } from '../../services/descriptions/description-overrides'
 import { getMerchantCategoryOverride } from '../../services/categorizer/category-overrides'
-import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
 import { formatDate } from '../../utils/formatting'
 
 interface Props {
@@ -116,9 +115,7 @@ export function AiCategorizationPreview({
 
       for (const tx of sample) {
         const hasDescOverride = !!getDescriptionOverride(tx.description)
-        const hasCatOverride = !!getMerchantCategoryOverride(
-          normalizeMerchantName(tx.description)
-        )
+        const hasCatOverride = !!getMerchantCategoryOverride(tx.description)
         if (hasDescOverride || hasCatOverride) {
           overriddenIds.add(tx.id)
         } else {
