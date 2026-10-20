@@ -5,6 +5,7 @@ import {
   getDescriptionOverride,
   listDescriptionOverrides,
   setDescriptionOverride,
+  replaceDescriptionOverrides,
 } from './description-overrides'
 
 describe('Description overrides', () => {
@@ -46,5 +47,21 @@ describe('Description overrides', () => {
     expect(
       getDescriptionOverride('---- 123456 ----')?.friendlyDescription
     ).toBe('Ajuste bancario')
+  })
+})
+
+describe('overrides stored under the pre-fix key (review of #222)', () => {
+  it('still finds a rename stored under the key that ate a merchant word', () => {
+    replaceDescriptionOverrides({
+      disco: {
+        descriptionOriginal: 'AUTOSERVICIO DISCO 12/03',
+        friendlyDescription: 'Disco',
+        updatedAt: '',
+      },
+    })
+
+    expect(
+      getDescriptionOverride('AUTOSERVICIO DISCO 20/03')?.friendlyDescription
+    ).toBe('Disco')
   })
 })

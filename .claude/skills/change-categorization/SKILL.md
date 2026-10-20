@@ -44,7 +44,13 @@ one.
    change. Commit the fixture with the rule. Unexpected rows mean the pattern
    is too broad.
 
-4. **Review the money impact.** Precedence and confidence are the
+4. **Measure it.** `src/services/categorizer/eval/agreement.ts` scores the
+   rule categorizer (and the AI) against the rows the user categorized
+   themselves (confidence 1), with the user's own rules withheld. In the
+   running app it is the "[Dev] Evaluación del clasificador" panel in
+   Configuración; a rule change that lowers that agreement is a regression
+   however the fixture looks.
+5. **Review the money impact.** Precedence and confidence are the
    correctness surface of the app — get a fresh-context review of the diff
    (the `doubt-driven-development` skill, if available) before calling it done.
 
@@ -55,11 +61,14 @@ one.
   `CategorizationContext`: temporal, similar-merchant and amount heuristics
   (steps 9–11) never run at import.
 - With AI enabled, `applyAiEnrichment` replaces the rule result for new rows
-  without a user override, so a pattern change may not show in a test import
-  with AI on.
+  without a user rule (description override, merchant override or custom
+  pattern), so a change to the built-in keywords or merchant list may not
+  show in a test import with AI on; a custom pattern always does.
 - A rule change never rewrites stored rows. They change only through
-  Auto-categorizar (`autoCategorize`: the selected rows, whatever their
-  confidence — user edits at 1 included), a rule applied to past rows
+  Auto-categorizar (`autoCategorize`: the selected rows, and only where the
+  new result is at least as confident as the row's current category and
+  changes it — a changed rule reaches rows at the same confidence; user
+  edits at 1 give way only to a user rule at 1), a rule applied to past rows
   (`applyPatternToPast`: 0.95, split parts skipped), or a user edit
   (confidence 1). Both live in
   `src/services/mutations/transaction-mutations.ts`.

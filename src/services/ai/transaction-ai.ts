@@ -4,6 +4,7 @@ import type { CustomCategory } from '../categories/category-store'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { AiConfig } from './ai-config'
 import { firstTextBlock, type ClaudeResponseLike } from './text-block'
+import { resolveBuiltinAlias } from '../categories/category-aliases'
 
 export interface AiEnrichmentInput {
   id: string
@@ -39,7 +40,12 @@ export interface AiCorrectionContext {
 // so 16,000 is the budget with the headroom that leaves — re-measure
 // `usage.output_tokens` before raising the batch size.
 const MAX_OUTPUT_TOKENS = 16000
-const BATCH_SIZE = 150
+/** Rows per request; exported so the dev panels can say how many calls a run is. */
+export const BATCH_SIZE = 150
+
+// Confidence 1 means "the user said so" everywhere (edits, bulk categorize,
+// the evaluation labels); the model's own 1.0 is capped just below it.
+const MAX_AI_CONFIDENCE = 0.99
 
 function buildSystemPrompt(customCategories: CustomCategory[]): string {
   const builtinLines = Object.values(Category)
@@ -177,7 +183,9 @@ export function validateCategory(
   raw: string,
   customCategories: CustomCategory[]
 ): string {
-  const normalized = raw.trim().toLowerCase()
+  // Pre-rename ids ("food", "transfer") still appear in the model's output;
+  // they resolve to the current built-in, as everywhere else.
+  const normalized = resolveBuiltinAlias(raw.trim().toLowerCase())
   if ((Object.values(Category) as string[]).includes(normalized)) {
     return normalized
   }
@@ -252,7 +260,7 @@ function parseBatchResponse(
       displayDescription:
         item.displayDescription.trim() ||
         (inputs.find((t) => t.id === item.id)?.description ?? item.id),
-      confidence: Math.min(1, Math.max(0, rawConfidence)),
+      confidence: Math.min(MAX_AI_CONFIDENCE, Math.max(0, rawConfidence)),
     })
   }
   return results

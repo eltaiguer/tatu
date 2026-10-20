@@ -5,12 +5,15 @@ import type { Transaction } from '../../models'
 import type { AiConfig } from '../../services/ai/ai-config'
 import type { AiEnrichmentInput } from '../../services/ai/transaction-ai'
 import { enrichTransactionsWithAi } from '../../services/ai/transaction-ai'
+import {
+  HIGH_CONFIDENCE,
+  LOW_CONFIDENCE,
+} from '../../services/categorizer/confidence'
 import { buildCorrectionContext } from '../../services/ai/correction-context'
 import { getCategoryDefinition } from '../../services/categories/category-registry'
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import { getDescriptionOverride } from '../../services/descriptions/description-overrides'
 import { getMerchantCategoryOverride } from '../../services/categorizer/category-overrides'
-import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
 import { formatDate } from '../../utils/formatting'
 
 interface Props {
@@ -112,9 +115,7 @@ export function AiCategorizationPreview({
 
       for (const tx of sample) {
         const hasDescOverride = !!getDescriptionOverride(tx.description)
-        const hasCatOverride = !!getMerchantCategoryOverride(
-          normalizeMerchantName(tx.description)
-        )
+        const hasCatOverride = !!getMerchantCategoryOverride(tx.description)
         if (hasDescOverride || hasCatOverride) {
           overriddenIds.add(tx.id)
         } else {
@@ -412,9 +413,9 @@ export function AiCategorizationPreview({
                         color:
                           row.source !== 'ai'
                             ? 'var(--text-muted)'
-                            : row.aiConfidence >= 0.8
+                            : row.aiConfidence >= HIGH_CONFIDENCE
                               ? 'var(--pos)'
-                              : row.aiConfidence >= 0.55
+                              : row.aiConfidence >= LOW_CONFIDENCE
                                 ? 'var(--accent)'
                                 : 'var(--neg)',
                       }}

@@ -26,7 +26,13 @@ const FEE_KEYWORDS = [
   'costo producto',
 ]
 
+// An own-account sweep between the user's combined accounts. Santander words
+// its debit side "CARGO POR TRASPASO …", so it is checked before the fee
+// keywords ("cargo") get a look.
+const OWN_ACCOUNT_SWEEP_KEYWORDS = ['traspaso']
+
 const TRANSFER_KEYWORDS = [
+  'traspaso',
   'transferencia',
   'trf',
   'transf',
@@ -88,7 +94,7 @@ export interface CategorizationContext {
  * 6. Income keywords (confidence 0.9)
  * 7. Merchant patterns — substring + fuzzy (confidence varies)
  * 8. Learned patterns from overrides (confidence ≤ 0.75)
- * 9. Temporal patterns (confidence ≤ 0.65)
+ * 9. Temporal patterns (debits only, confidence ≤ 0.5)
  * 10. Similar merchant (confidence ≤ 0.6)
  * 11. Amount heuristics (confidence ≤ 0.25)
  * 12. Uncategorized (confidence 0)
@@ -120,8 +126,9 @@ export function categorizeTransaction(
     }
   }
 
-  // 2. Merchant override
-  const override = getMerchantCategoryOverride(normalized)
+  // 2. Merchant override (keyed on the code-stripped description, so a
+  // category set on one row of a merchant reaches its later rows)
+  const override = getMerchantCategoryOverride(description)
   if (override) {
     return {
       category: override,
@@ -139,8 +146,12 @@ export function categorizeTransaction(
     }
   }
 
-  // 4. Fee keywords
-  if (matchesAny(normalized, FEE_KEYWORDS)) {
+  // 4. Fee keywords (an own-account sweep is never a fee, whatever it is
+  // called; it falls through to the transfer keywords)
+  if (
+    matchesAny(normalized, FEE_KEYWORDS) &&
+    !matchesAny(normalized, OWN_ACCOUNT_SWEEP_KEYWORDS)
+  ) {
     return {
       category: Category.Fees,
       confidence: 0.95,
@@ -184,8 +195,9 @@ export function categorizeTransaction(
     }
   }
 
-  // 9. Temporal patterns (requires context)
-  if (context?.temporalPatterns) {
+  // 9. Temporal patterns (requires context; debits only — the hinted
+  // categories are expense categories, a recurring credit is not one)
+  if (type === 'debit' && context?.temporalPatterns) {
     const temporalMatch = getTemporalSuggestion(
       description,
       context.temporalPatterns

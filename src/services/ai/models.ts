@@ -33,3 +33,8 @@ export function resolveCategorizationModel(
   if (current) return current.id
   return LEGACY_CATEGORIZATION_MODELS[stored] ?? DEFAULT_CATEGORIZATION_MODEL
 }
+
+// Jev (TypeSafe's decision model) as served by OpenRouter, pinned to a
+// release so the eval compares like with like; `~typesafe/jev-latest` moves.
+// Used by the [Dev] evaluation panel only (services/ai/jev-classifier.ts).
+export const JEV_MODEL = 'typesafe/jev-1.14'

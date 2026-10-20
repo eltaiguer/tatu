@@ -24,8 +24,9 @@ export function getDisplayDescription(transaction: Transaction): string {
 }
 
 // Confidence below which an automatic category is worth a second look (the
-// old meter's "baja" band).
-const LOW_CONFIDENCE = 0.55
+// meter's "baja" band); defined with the other band in the categorizer.
+export { LOW_CONFIDENCE } from '../services/categorizer/confidence'
+import { LOW_CONFIDENCE } from '../services/categorizer/confidence'
 
 // Whether a row's category deserves the user's attention: it has none, or
 // it was assigned automatically with low confidence. Rows the user
