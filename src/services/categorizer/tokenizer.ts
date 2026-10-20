@@ -3,8 +3,22 @@
  * Used by fuzzy matching, learned patterns, and similar-merchant suggestions.
  */
 
-/** Stopwords to strip — common Uruguayan merchant noise tokens */
+/**
+ * Stopwords to strip — common Uruguayan merchant noise tokens, plus the
+ * payment processors that prefix many unrelated merchants ("MERPAGO*X",
+ * "SQ *Y"): a token shared by every merchant behind a processor says
+ * nothing about any of them.
+ */
 const STOPWORDS = new Set([
+  'merpago',
+  'mercadopago',
+  'mp',
+  'dlo',
+  'dlocal',
+  'sq',
+  'tst',
+  'sp',
+  'paypal',
   'sa',
   'srl',
   'aut',

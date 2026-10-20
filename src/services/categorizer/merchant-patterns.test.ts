@@ -381,3 +381,29 @@ describe('Merchant Pattern Matcher', () => {
     })
   })
 })
+
+describe('matchMerchantPattern - fuzzy false positives (audit)', () => {
+  it('does not label an unknown MercadoPago merchant as insurance', () => {
+    expect(matchMerchantPattern('MERPAGO*RESTO')).toBeNull()
+    expect(matchMerchantPattern('Merpago Cobrabits')).toBeNull()
+  })
+
+  it('does not match a name on character bigrams alone', () => {
+    // "pantera" shares bigrams with "antel" but no token
+    expect(matchMerchantPattern('La Pantera')).toBeNull()
+  })
+
+  it('does not match half of a multi-word pattern', () => {
+    // "club" alone is not "automovil club"
+    expect(matchMerchantPattern('El Club')).toBeNull()
+  })
+
+  it('still matches a known merchant by its processor-prefixed form', () => {
+    expect(matchMerchantPattern('Merpago Seguros')?.category).toBe(
+      Category.Insurance
+    )
+    expect(matchMerchantPattern('MERPAGO TUPASE')?.category).toBe(
+      Category.Transport
+    )
+  })
+})
