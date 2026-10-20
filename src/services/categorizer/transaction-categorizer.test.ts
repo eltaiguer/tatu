@@ -362,3 +362,28 @@ describe('Transaction Categorizer', () => {
     expect(result.description).toBeUndefined()
   })
 })
+
+describe('own-account sweeps (audit)', () => {
+  it('categorizes CARGO POR TRASPASO CTA.COMBINADA as an internal transfer, not a fee', () => {
+    const result = categorizeTransaction(
+      'CARGO POR TRASPASO CTA.COMBINADA 1234567',
+      'debit'
+    )
+    expect(result.category).toBe(Category.InternalTransfer)
+  })
+
+  it('categorizes ABONO POR TRASPASO CTA.COMBINADA as an internal transfer', () => {
+    const result = categorizeTransaction(
+      'ABONO POR TRASPASO CTA.COMBINADA 1234567',
+      'credit'
+    )
+    expect(result.category).toBe(Category.InternalTransfer)
+  })
+
+  it('still categorizes a plain cargo as a fee', () => {
+    expect(
+      categorizeTransaction('CARGO POR MANTENIMIENTO DE CUENTA', 'debit')
+        .category
+    ).toBe(Category.Fees)
+  })
+})
