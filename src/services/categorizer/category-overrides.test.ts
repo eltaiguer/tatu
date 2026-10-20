@@ -76,3 +76,30 @@ describe('Category overrides reach later rows of the same merchant (audit)', () 
     expect(getMerchantCategoryOverride('KIOSCO X 12/03 AUT 123456')).toBe(null)
   })
 })
+
+describe('merchant override keys (review of #222)', () => {
+  beforeEach(() => {
+    clearAllCategoryOverrides()
+  })
+
+  it('ignores the POS processor prefix, as the exact key always did', () => {
+    setMerchantCategoryOverride('Sq Sopranos', 'restaurants')
+
+    expect(getMerchantCategoryOverride('Sopranos')).toBe('restaurants')
+    expect(getMerchantCategoryOverride('Tst Sopranos')).toBe('restaurants')
+  })
+
+  it('setting a category drops the exact-key override of the same row', () => {
+    replaceMerchantCategoryOverrides({
+      'kiosco x 12/03 aut 123456': {
+        merchantName: 'KIOSCO X 12/03 AUT 123456',
+        category: 'groceries',
+        updatedAt: '',
+      },
+    })
+
+    setMerchantCategoryOverride('KIOSCO X 12/03 AUT 123456', 'healthcare')
+
+    expect(Object.keys(listMerchantCategoryOverrides())).toEqual(['kiosco x'])
+  })
+})

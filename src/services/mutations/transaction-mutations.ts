@@ -42,11 +42,12 @@ import {
   setDescriptionOverride,
 } from '../descriptions/description-overrides'
 import {
-  clearMerchantCategoryOverride,
+  deleteMerchantCategoryOverrideKey,
   getMerchantCategoryOverride,
+  legacyMerchantOverrideKey,
   listMerchantCategoryOverrides,
   merchantOverrideKey,
-  setMerchantCategoryOverride,
+  putMerchantCategoryOverrideKey,
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
 import { matchCustomPattern } from '../categorizer/custom-patterns'
@@ -467,7 +468,7 @@ async function moveRulesToRepairedText(
         category,
       })
       assertOwner(repo)
-      setMerchantCategoryOverride(to, category)
+      putMerchantCategoryOverrideKey(toMerchant, to, category)
     }
   }
 }
@@ -508,8 +509,9 @@ async function writeOverrides(
   const descKey = buildDescriptionOverrideKey(description)
   const merchantKey = merchantOverrideKey(description)
   // An override stored before merchant keys were code-stripped sits under
-  // the exact normalized description; clearing must reach it too.
-  const legacyMerchantKey = normalizeMerchantName(description)
+  // the exact normalized description: it goes whether the category is set
+  // (replaced by the stripped row) or cleared.
+  const legacyMerchantKey = legacyMerchantOverrideKey(description)
   const previousDesc = descKey ? listDescriptionOverrides()[descKey] : undefined
 
   const applyDescLocally = () => {
@@ -548,9 +550,6 @@ async function writeOverrides(
         })
       } else {
         await repo.deleteCategoryOverride(merchantKey)
-        if (legacyMerchantKey && legacyMerchantKey !== merchantKey) {
-          await repo.deleteCategoryOverride(legacyMerchantKey)
-        }
       }
     } catch (error) {
       if (!descKey) throw error
@@ -577,11 +576,29 @@ async function writeOverrides(
     assertOwner(repo)
   }
 
+  // Both writes are on the server: memory mirrors them now, so a failure
+  // in the legacy cleanup below cannot leave the screen behind the database.
   applyDescLocally()
-  if (intent.category) {
-    setMerchantCategoryOverride(description, intent.category)
-  } else {
-    clearMerchantCategoryOverride(description)
+  if (merchantKey) {
+    if (intent.category) {
+      putMerchantCategoryOverrideKey(merchantKey, description, intent.category)
+    } else {
+      deleteMerchantCategoryOverrideKey(merchantKey)
+    }
+  }
+
+  // The row's pre-#222 override, if any: a third write, mirrored on its own.
+  if (legacyMerchantKey) {
+    try {
+      await repo.deleteCategoryOverride(legacyMerchantKey)
+    } catch {
+      assertOwner(repo)
+      throw new UserFacingError(
+        'Se guardó la categoría, pero no se pudo quitar la regla anterior. Intentá de nuevo.'
+      )
+    }
+    assertOwner(repo)
+    deleteMerchantCategoryOverrideKey(legacyMerchantKey)
   }
 }
 
@@ -987,8 +1004,9 @@ export async function autoCategorize(
 
   const context: CategorizationContext = {
     categorizedMerchants: [
-      ...Object.entries(listMerchantCategoryOverrides()).map(([name, o]) => ({
-        name,
+      ...Object.entries(listMerchantCategoryOverrides()).map(([key, o]) => ({
+        // The description, not the key: a key can be "raw:…" or stripped
+        name: o.merchantName ?? key,
         category: o.category,
       })),
       ...[...byMerchant.values()].map(({ name, category }) => ({
