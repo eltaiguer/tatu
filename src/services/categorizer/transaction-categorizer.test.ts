@@ -314,7 +314,27 @@ describe('Transaction Categorizer', () => {
       })
 
       expect(result.category).toBe(Category.Utilities)
-      expect(result.confidence).toBeGreaterThan(0.5)
+      // Review band: a monthly cadence alone does not identify a utility
+      expect(result.confidence).toBeGreaterThan(0)
+      expect(result.confidence).toBeLessThan(0.55)
+    })
+
+    it('does not apply temporal patterns to credits (audit)', () => {
+      const txs = Array.from({ length: 4 }, (_, i) => ({
+        description: 'Acme Consulting Payment',
+        amount: 2500,
+        currency: 'USD',
+        date: new Date(Date.UTC(2025, i, 5)),
+      }))
+      const temporalPatterns = analyzeTemporalPatterns(txs)
+
+      const result = categorizeTransaction(
+        'Acme Consulting Payment',
+        'credit',
+        { temporalPatterns }
+      )
+
+      expect(result.category).toBe(Category.Uncategorized)
     })
 
     it('should not use amount heuristics for credits', () => {
