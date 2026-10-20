@@ -138,3 +138,21 @@ describe('Learned Patterns', () => {
     })
   })
 })
+
+describe('learned patterns ignore bank wording (audit)', () => {
+  it('learns the merchant token, not the debit-card prefix', () => {
+    const learned = buildLearnedPatterns({
+      a: {
+        merchantName: 'COMPRA CON TARJETA DEBITO FARMACIA A',
+        category: Category.Healthcare,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      b: {
+        merchantName: 'COMPRA CON TARJETA DEBITO FARMACIA B',
+        category: Category.Healthcare,
+        updatedAt: '2026-01-02T00:00:00.000Z',
+      },
+    })
+    expect([...learned.keys()]).toEqual(['farmacia'])
+  })
+})
