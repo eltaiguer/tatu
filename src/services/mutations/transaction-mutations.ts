@@ -49,10 +49,7 @@ import {
   setMerchantCategoryOverride,
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
-import {
-  categorizeTransaction,
-  type CategorizationContext,
-} from '../categorizer/transaction-categorizer'
+import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
 import { applyAiEnrichment, enrichTransactionsWithAi, getAiConfig } from '../ai'
