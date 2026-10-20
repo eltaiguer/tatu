@@ -3,7 +3,7 @@ import type { Transaction } from '../../models'
 import type { CustomCategory } from '../categories/category-store'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { AiConfig } from './ai-config'
-import { firstTextBlock } from './text-block'
+import { firstTextBlock, type ClaudeResponseLike } from './text-block'
 
 export interface AiEnrichmentInput {
   id: string
@@ -32,12 +32,12 @@ export interface AiCorrectionContext {
   customPatterns: CustomPattern[]
 }
 
-// Each result object costs roughly 45-60 output tokens, so a 150-row batch
-// needs ~8,250 — which overflowed the previous 8192 cap and truncated the
-// JSON. The fix is the cap, not the batch size: shrinking batches instead
-// would have tripled the request count, and since the system prompt is
-// below the cache minimum on the default model (see below) that would have
-// tripled its cost too.
+// Each result object cost roughly 45-60 output tokens on Haiku 4.5, so a
+// 150-row batch needed ~8,250 and overflowed the previous 8192 cap. The 5.5
+// tokenizer counts about 30% more (~11,000 per batch), and the low-effort
+// thinking the model does before answering is billed against the same cap,
+// so 16,000 is the budget with the headroom that leaves — re-measure
+// `usage.output_tokens` before raising the batch size.
 const MAX_OUTPUT_TOKENS = 16000
 const BATCH_SIZE = 150
 
@@ -203,10 +203,7 @@ export function applyAiEnrichment(
   })
 }
 
-interface AiEnrichmentBatchResponse {
-  stop_reason?: string | null
-  content: Array<{ type: string; text?: string }>
-}
+type AiEnrichmentBatchResponse = ClaudeResponseLike
 
 /** Parses one batch response into results, or throws a diagnosable error. */
 function parseBatchResponse(
@@ -223,7 +220,7 @@ function parseBatchResponse(
     )
   }
 
-  const text = firstTextBlock(response.content)
+  const text = firstTextBlock(response)
 
   let parsed: Array<{
     id: string

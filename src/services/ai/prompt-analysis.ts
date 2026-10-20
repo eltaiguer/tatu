@@ -83,13 +83,15 @@ ${formatSamples(creditCard) || '(ninguna)'}
 === BANK ACCOUNT (${bankAccount.length} unique descriptions) ===
 ${formatSamples(bankAccount) || '(ninguna)'}`
 
+  // Thinking shares max_tokens with the analysis on the 5.5 models.
   const response = await client.messages.create({
     model: config.model,
-    max_tokens: 4096,
+    max_tokens: 16000,
+    output_config: { effort: 'medium' },
     system:
       'You are a prompt engineer analyzing bank transaction data to write reusable AI categorization instructions.',
     messages: [{ role: 'user', content: userMessage }],
   })
 
-  return firstTextBlock(response.content)
+  return firstTextBlock(response)
 }

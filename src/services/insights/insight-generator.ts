@@ -147,12 +147,16 @@ export async function generateInsights(
     dangerouslyAllowBrowser: true,
   })
 
+  // Opus 5.5 thinks before answering and the thinking is billed against
+  // max_tokens, so the cap leaves room for both; medium effort is the
+  // model's default, set explicitly so a default change cannot move it.
   const response = await client.messages.create({
     model: INSIGHTS_MODEL,
-    max_tokens: 4096,
+    max_tokens: 16000,
+    output_config: { effort: 'medium' },
     system: buildInsightSystemPrompt(),
     messages: [{ role: 'user', content: buildInsightUserMessage(input) }],
   })
 
-  return parseInsightsResponse(firstTextBlock(response.content), input)
+  return parseInsightsResponse(firstTextBlock(response), input)
 }
