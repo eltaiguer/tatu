@@ -147,7 +147,7 @@ async function classifyBatch(
     // Own keys only (never a prototype name) and tolerant of case/spacing,
     // as validateCategory is for Claude.
     const choice = answer.choice.trim().toLowerCase()
-    const category = Object.hasOwn(options, choice)
+    const category = Object.prototype.hasOwnProperty.call(options, choice)
       ? choice
       : Category.Uncategorized
     const confidence =
