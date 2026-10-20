@@ -1,5 +1,6 @@
 import { normalizeMerchantName } from './merchant-patterns'
 import { invalidateLearnedPatternsCache } from './learned-patterns'
+import { buildDescriptionOverrideKey } from '../descriptions/normalization'
 
 export interface CategoryOverride {
   merchantName?: string
@@ -11,27 +12,46 @@ export type CategoryOverrides = Record<string, CategoryOverride>
 
 let overrides: CategoryOverrides = {}
 
+/**
+ * The key a merchant override is stored under: the description with its
+ * per-transaction noise (dates, times, auth codes, long numbers) stripped,
+ * the same key "Todas las similares" selects past rows by, so a category
+ * set on one row reaches the merchant's later rows too. Overrides stored
+ * before this (keyed on the exact normalized description) are still read.
+ */
+export function merchantOverrideKey(merchantName: string): string | null {
+  return buildDescriptionOverrideKey(merchantName)
+}
+
+function keysFor(merchantName: string): string[] {
+  const keys: string[] = []
+  const stripped = merchantOverrideKey(merchantName)
+  if (stripped) keys.push(stripped)
+  const exact = normalizeMerchantName(merchantName)
+  if (exact && exact !== stripped) keys.push(exact)
+  return keys
+}
+
 export function getMerchantCategoryOverride(
   merchantName: string
 ): string | null {
-  const normalized = normalizeMerchantName(merchantName)
-  if (!normalized) {
-    return null
+  for (const key of keysFor(merchantName)) {
+    const category = overrides[key]?.category
+    if (category) return category
   }
-
-  return overrides[normalized]?.category ?? null
+  return null
 }
 
 export function setMerchantCategoryOverride(
   merchantName: string,
   category: string
 ): void {
-  const normalized = normalizeMerchantName(merchantName)
-  if (!normalized) {
+  const key = merchantOverrideKey(merchantName)
+  if (!key) {
     return
   }
 
-  overrides[normalized] = {
+  overrides[key] = {
     category,
     merchantName,
     updatedAt: new Date().toISOString(),
@@ -40,15 +60,14 @@ export function setMerchantCategoryOverride(
 }
 
 export function clearMerchantCategoryOverride(merchantName: string): void {
-  const normalized = normalizeMerchantName(merchantName)
-  if (!normalized) {
-    return
+  let cleared = false
+  for (const key of keysFor(merchantName)) {
+    if (overrides[key]) {
+      delete overrides[key]
+      cleared = true
+    }
   }
-
-  if (overrides[normalized]) {
-    delete overrides[normalized]
-    invalidateLearnedPatternsCache()
-  }
+  if (cleared) invalidateLearnedPatternsCache()
 }
 
 export function listMerchantCategoryOverrides(): CategoryOverrides {

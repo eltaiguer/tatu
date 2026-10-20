@@ -54,6 +54,7 @@ import {
   setDescriptionOverride,
 } from '../services/descriptions/description-overrides'
 import { getDisplayDescription } from '../utils/transaction-display'
+import { categorizeTransaction } from '../services/categorizer/transaction-categorizer'
 import {
   getMerchantCategoryOverride,
   replaceMerchantCategoryOverrides,
@@ -972,6 +973,54 @@ describe('useTransactionHandlers — apply scope', () => {
       expect(repo.row('same-1')?.category).toBe('restaurants')
       expect(repo.row('same-2')?.category).toBe('groceries')
       expect(stored('same-2')?.category).toBe('groceries')
+    })
+  })
+
+  describe('category carries forward to later rows of the merchant (audit)', () => {
+    const CORRECTED =
+      'COMPRA CON TARJETA DEBITO KIOSCO X 12/03 15:22 AUT 123456'
+    const LATER = 'COMPRA CON TARJETA DEBITO KIOSCO X 20/03 09:01 AUT 654321'
+
+    it.each(['future_matching_only', 'matching_past_and_future'] as const)(
+      "scope '%s' without a rename reaches a future row with other codes",
+      async (applyScope) => {
+        const { repo, handlers } = signedIn([
+          makeTransaction('tx', { description: CORRECTED }),
+        ])
+
+        await handlers.handleUpdateTransaction('tx', {
+          category: 'healthcare',
+          applyScope,
+        })
+
+        expect(categorizeTransaction(LATER, 'debit')).toEqual({
+          category: 'healthcare',
+          confidence: 1,
+        })
+        expect(
+          [...repo.categoryOverrides.values()].map((o) => o.category)
+        ).toEqual(['healthcare'])
+      }
+    )
+
+    it('clearing the category stops it reaching future rows', async () => {
+      const { repo, handlers } = signedIn([
+        makeTransaction('tx', { description: CORRECTED }),
+      ])
+      await handlers.handleUpdateTransaction('tx', {
+        category: 'healthcare',
+        applyScope: 'future_matching_only',
+      })
+
+      await handlers.handleUpdateTransaction('tx', {
+        category: null,
+        applyScope: 'future_matching_only',
+      })
+
+      expect(categorizeTransaction(LATER, 'debit').category).not.toBe(
+        'healthcare'
+      )
+      expect(repo.categoryOverrides.size).toBe(0)
     })
   })
 

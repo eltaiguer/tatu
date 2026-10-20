@@ -45,6 +45,7 @@ import {
   clearMerchantCategoryOverride,
   getMerchantCategoryOverride,
   listMerchantCategoryOverrides,
+  merchantOverrideKey,
   setMerchantCategoryOverride,
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
@@ -224,7 +225,7 @@ async function classifyAgainstServer(
 function hasUserOverride(tx: Transaction): boolean {
   return (
     !!getDescriptionOverride(tx.description) ||
-    !!getMerchantCategoryOverride(normalizeMerchantName(tx.description))
+    !!getMerchantCategoryOverride(tx.description)
   )
 }
 
@@ -447,11 +448,11 @@ async function moveRulesToRepairedText(
       })
     }
     const category = getMerchantCategoryOverride(from)
-    const toMerchant = normalizeMerchantName(to)
+    const toMerchant = merchantOverrideKey(to)
     if (
       category &&
       toMerchant &&
-      toMerchant !== normalizeMerchantName(from) &&
+      toMerchant !== merchantOverrideKey(from) &&
       !getMerchantCategoryOverride(to)
     ) {
       await repo.upsertCategoryOverride({
@@ -499,7 +500,10 @@ async function writeOverrides(
 ): Promise<void> {
   const description = current.description
   const descKey = buildDescriptionOverrideKey(description)
-  const merchantKey = normalizeMerchantName(description)
+  const merchantKey = merchantOverrideKey(description)
+  // An override stored before merchant keys were code-stripped sits under
+  // the exact normalized description; clearing must reach it too.
+  const legacyMerchantKey = normalizeMerchantName(description)
   const previousDesc = descKey ? listDescriptionOverrides()[descKey] : undefined
 
   const applyDescLocally = () => {
@@ -538,6 +542,9 @@ async function writeOverrides(
         })
       } else {
         await repo.deleteCategoryOverride(merchantKey)
+        if (legacyMerchantKey && legacyMerchantKey !== merchantKey) {
+          await repo.deleteCategoryOverride(legacyMerchantKey)
+        }
       }
     } catch (error) {
       if (!descKey) throw error
