@@ -42,6 +42,7 @@ import {
   UserFacingError,
 } from '../utils/user-error'
 import { transactionStore } from '../stores/transaction-store'
+import { replaceCustomPatterns } from '../services/categorizer/custom-patterns'
 import { workspaceStore } from '../stores/workspace-state'
 import { parseBankAccountCSV } from '../services/parsers/bank-account-parser'
 import {
@@ -134,6 +135,7 @@ beforeEach(() => {
   transactionStore.getState().clearTransactions()
   replaceDescriptionOverrides({})
   replaceMerchantCategoryOverrides({})
+  replaceCustomPatterns([])
   workspaceStore.setState({ userId: null, status: 'idle' })
   ai.getAiConfig.mockReturnValue(null)
   ai.enrichTransactionsWithAi.mockResolvedValue({ results: new Map() })
@@ -1484,6 +1486,153 @@ describe('useTransactionHandlers — override names in the Auto-categorizar pool
     const result = await handlers.handleAutoCategorizeTransactions(['target'])
 
     expect(result.categorized).toBe(0)
+  })
+})
+
+describe('useTransactionHandlers — Auto-categorizar, review of #221', () => {
+  const quiet = { amount: 5000, currency: 'UYU' as const }
+
+  it('applies a changed rule to rows categorized at the same confidence', async () => {
+    // A rule once said shopping (applied to past rows at 0.95); the user
+    // edited it to restaurants. Same confidence, different category.
+    replaceCustomPatterns([
+      {
+        id: 'cp',
+        pattern: 'misterioso',
+        matchType: 'contains',
+        category: 'restaurants',
+        createdAt: '',
+      },
+    ])
+    const { handlers } = signedIn([
+      makeTransaction('ruled', {
+        ...quiet,
+        description: 'MISTERIOSO BAR 77',
+        category: 'shopping',
+        categoryConfidence: 0.95,
+      }),
+    ])
+
+    const result = await handlers.handleAutoCategorizeTransactions(['ruled'])
+
+    expect(result.categorized).toBe(1)
+    expect(stored('ruled')?.category).toBe('restaurants')
+  })
+
+  it('does not replace a legacy category without a recorded confidence by a guess', async () => {
+    const { handlers } = signedIn([
+      makeTransaction('legacy', {
+        description: 'XYZZY QWERTY',
+        amount: 300,
+        currency: 'UYU',
+        category: 'shopping',
+        categoryConfidence: undefined,
+      }),
+    ])
+
+    // Amount heuristics would say restaurants at 0.2
+    const result = await handlers.handleAutoCategorizeTransactions(['legacy'])
+
+    expect(result.categorized).toBe(0)
+    expect(stored('legacy')?.category).toBe('shopping')
+  })
+
+  it('still seeds hints from legacy rows without a recorded confidence', async () => {
+    const { handlers } = signedIn([
+      makeTransaction('legacy', {
+        ...quiet,
+        description: 'ZZZ UNKNOWN FOO',
+        category: 'shopping',
+        categoryConfidence: undefined,
+      }),
+      makeTransaction('target', {
+        ...quiet,
+        description: 'ZZZ UNKNOWN BAR',
+        category: undefined,
+        categoryConfidence: undefined,
+      }),
+    ])
+
+    const result = await handlers.handleAutoCategorizeTransactions(['target'])
+
+    expect(result.categorized).toBe(1)
+    expect(stored('target')?.category).toBe('shopping')
+  })
+
+  it('lets a selected, confident row seed its uncategorized sibling (select all)', async () => {
+    const { handlers } = signedIn([
+      makeTransaction('known', {
+        ...quiet,
+        description: 'MISTERIOSO BAR 77',
+        category: 'restaurants',
+        categoryConfidence: 1,
+      }),
+      makeTransaction('sibling', {
+        ...quiet,
+        description: 'MISTERIOSO BAR 78',
+        category: undefined,
+        categoryConfidence: undefined,
+      }),
+    ])
+
+    const result = await handlers.handleAutoCategorizeTransactions([
+      'known',
+      'sibling',
+    ])
+
+    expect(result.categorized).toBe(1)
+    expect(stored('sibling')?.category).toBe('restaurants')
+    expect(stored('known')?.categoryConfidence).toBe(1)
+  })
+
+  it('prefers a merchant override over stale stored rows of the same merchant', async () => {
+    replaceMerchantCategoryOverrides({
+      'cafe brasilero': {
+        merchantName: 'CAFE BRASILERO',
+        category: 'restaurants',
+        updatedAt: '',
+      },
+    })
+    const { handlers } = signedIn([
+      makeTransaction('stale', {
+        ...quiet,
+        description: 'TST CAFE BRASILERO',
+        category: 'shopping',
+        categoryConfidence: 0.8,
+      }),
+      makeTransaction('target', {
+        ...quiet,
+        description: 'CAFE BRASILERO 2',
+        category: undefined,
+        categoryConfidence: undefined,
+      }),
+    ])
+
+    await handlers.handleAutoCategorizeTransactions(['target'])
+
+    expect(stored('target')?.category).toBe('restaurants')
+  })
+
+  it('does not spread an ignored pseudo-category by similarity', async () => {
+    const { handlers } = signedIn([
+      makeTransaction('ignored', {
+        ...quiet,
+        description: 'ZZZ FOO 1',
+        category: 'ignored',
+        categoryConfidence: 1,
+      }),
+      makeTransaction('target', {
+        ...quiet,
+        description: 'ZZZ FOO 2',
+        category: undefined,
+        categoryConfidence: undefined,
+      }),
+    ])
+
+    const result = await handlers.handleAutoCategorizeTransactions(['target'])
+
+    expect(result.categorized).toBe(0)
+    expect(stored('target')?.category).toBeUndefined()
   })
 })
 
