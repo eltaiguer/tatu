@@ -235,6 +235,37 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     expect(sent.map((t) => t.id)).toEqual(['free'])
   })
 
+  it('does not send rows a custom rule matches to the AI (audit)', async () => {
+    replaceCustomPatterns([
+      {
+        id: 'cp-1',
+        pattern: 'kiosco',
+        matchType: 'contains',
+        category: 'personal',
+        description: 'Kiosco',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ])
+    const { repo, handlers } = signedIn()
+
+    await handlers.handleTransactionsImported([
+      makeTransaction('ruled', {
+        description: 'KIOSCO 25 DE MAYO',
+        category: 'personal',
+        categoryConfidence: 0.95,
+        displayDescription: 'Kiosco',
+      }),
+      makeTransaction('free', { description: 'UBER TRIP' }),
+    ])
+
+    const sent = ai.enrichTransactionsWithAi.mock.calls[0][0] as Array<{
+      id: string
+    }>
+    expect(sent.map((t) => t.id)).toEqual(['free'])
+    expect(repo.row('ruled')?.category).toBe('personal')
+    expect(repo.row('ruled')?.displayDescription).toBe('Kiosco')
+  })
+
   it('skips the AI call entirely when every new row has an override', async () => {
     replaceMerchantCategoryOverrides({
       'supermercado disco': { category: 'groceries', updatedAt: '' },

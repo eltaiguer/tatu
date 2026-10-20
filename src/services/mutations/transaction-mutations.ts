@@ -51,6 +51,7 @@ import {
   putMerchantCategoryOverrideKey,
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
+import { matchCustomPattern } from '../categorizer/custom-patterns'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
@@ -224,11 +225,16 @@ function isUncategorized(tx: Transaction): boolean {
   return normalizeCategoryId(tx.category) === 'uncategorized'
 }
 
-/** True when the row has a user rule that the AI must not override. */
+/**
+ * True when the row has a user rule that the AI must not override: a
+ * description override, a merchant override, or a custom pattern. A rule
+ * the user wrote is enforced here, not handed to the model as advice.
+ */
 function hasUserOverride(tx: Transaction): boolean {
   return (
     !!getDescriptionOverride(tx.description) ||
-    !!getMerchantCategoryOverride(tx.description)
+    !!getMerchantCategoryOverride(tx.description) ||
+    !!matchCustomPattern(tx.description)
   )
 }
 
