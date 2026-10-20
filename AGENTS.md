@@ -110,7 +110,7 @@ src/
     suggestions/           # suggestions.ts: category/tag suggestion lists + search filters shared by the edit dialogs
     descriptions/          # Description override management
     transfers/             # Internal transfer detection
-    ai/                    # Client-side Claude (BYO API key): categorization/enrichment; models.ts is the only place model IDs live
+    ai/                    # Client-side Claude (BYO API key): categorization/enrichment; models.ts is the only place model IDs live; jev-classifier.ts: Jev (TypeSafe, via OpenRouter) category-only classifier, eval panel only for now
     preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
     insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
     supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapter composes. No ambient session: callers pass a session or a repository

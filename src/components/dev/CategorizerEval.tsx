@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button } from '../ui/button'
+import { Input } from '../ui/input'
 import type { Transaction } from '../../models'
 import type { AiConfig } from '../../services/ai/ai-config'
 import {
@@ -8,6 +9,11 @@ import {
   type AiEnrichmentInput,
 } from '../../services/ai/transaction-ai'
 import { listCustomCategories } from '../../services/categories/category-store'
+import {
+  BATCH_SIZE as JEV_BATCH_SIZE,
+  classifyWithJev,
+} from '../../services/ai/jev-classifier'
+import { JEV_MODEL } from '../../services/ai/models'
 import { getCategoryDefinition } from '../../services/categories/category-registry'
 import {
   labelledRows,
@@ -99,9 +105,14 @@ export function CategorizerEval({
   const rows = useMemo(() => labelledRows(transactions), [transactions])
   const sample = useMemo(() => rows.slice(0, SAMPLE_CAP), [rows])
   const claudeCalls = Math.ceil(sample.length / CLAUDE_BATCH_SIZE)
+  const jevCalls = Math.ceil(sample.length / JEV_BATCH_SIZE)
 
   const [rules, setRules] = useState<EngineRun>(idle)
   const [claude, setClaude] = useState<EngineRun>(idle)
+  // Typed for this evaluation only; never persisted (a Jev key in
+  // preferences is a schema change, decided once the numbers are in).
+  const [jevKey, setJevKey] = useState('')
+  const [jev, setJev] = useState<EngineRun>(idle)
 
   async function runEngine(set: (run: EngineRun) => void, classify: Classify) {
     set({ ...idle(), state: 'running' })
@@ -156,9 +167,23 @@ export function CategorizerEval({
       }
     })
 
+  const handleJev = () =>
+    runEngine(setJev, async (s) => {
+      const { results, partialFailure } = await classifyWithJev(
+        toInputs(s),
+        { apiKey: jevKey, model: JEV_MODEL },
+        listCustomCategories()
+      )
+      return {
+        predictions: new Map([...results].map(([id, r]) => [id, r.category])),
+        partialFailure,
+      }
+    })
+
   const engines: Array<{ key: string; name: string; run: EngineRun }> = [
     { key: 'rules', name: 'Reglas', run: rules },
     { key: 'ai', name: `Claude (${aiModel})`, run: claude },
+    { key: 'jev', name: `Jev (${JEV_MODEL})`, run: jev },
   ]
   const shown = engines.filter((e) => e.run.report)
   const mismatchIds = new Set(
@@ -203,6 +228,35 @@ export function CategorizerEval({
           {claude.state === 'running'
             ? 'Evaluando IA...'
             : `Evaluar IA (${sample.length} filas, ${claudeCalls} ${claudeCalls === 1 ? 'llamada' : 'llamadas'})`}
+        </Button>
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          marginTop: 8,
+        }}
+      >
+        <Input
+          type="password"
+          autoComplete="off"
+          aria-label="OpenRouter API key (solo para esta evaluación)"
+          placeholder="OpenRouter API key (solo para esta evaluación)"
+          value={jevKey}
+          onChange={(e) => setJevKey(e.target.value)}
+          style={{ maxWidth: 360 }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleJev}
+          disabled={!jevKey || sample.length === 0 || jev.state === 'running'}
+        >
+          {jev.state === 'running'
+            ? 'Evaluando Jev...'
+            : `Evaluar Jev (${sample.length} filas, ${jevCalls} ${jevCalls === 1 ? 'llamada' : 'llamadas'})`}
         </Button>
       </div>
       {errors.map((e) => (
