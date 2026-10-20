@@ -62,6 +62,22 @@ describe('labelledRows', () => {
   })
 })
 
+describe('labelledRows — what is not a label (review of #224)', () => {
+  it('leaves out split parts and the legacy ignored marker', () => {
+    const rows = labelledRows([
+      tx('part', {
+        category: 'groceries',
+        categoryConfidence: 1,
+        splitParentId: 'parent',
+      }),
+      tx('ignored', { category: 'ignored', categoryConfidence: 1 }),
+      tx('real', { category: 'groceries', categoryConfidence: 1 }),
+    ])
+
+    expect(rows.map((r) => r.id)).toEqual(['real'])
+  })
+})
+
 describe('rulePredictions', () => {
   it('categorizes without the user rules the labels came from, then restores them', () => {
     replaceMerchantCategoryOverrides({

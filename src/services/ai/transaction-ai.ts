@@ -38,7 +38,12 @@ export interface AiCorrectionContext {
 // below the cache minimum on the default model (see below) that would have
 // tripled its cost too.
 const MAX_OUTPUT_TOKENS = 16000
-const BATCH_SIZE = 150
+/** Rows per request; exported so the dev panels can say how many calls a run is. */
+export const BATCH_SIZE = 150
+
+// Confidence 1 means "the user said so" everywhere (edits, bulk categorize,
+// the evaluation labels); the model's own 1.0 is capped just below it.
+const MAX_AI_CONFIDENCE = 0.99
 
 function buildSystemPrompt(customCategories: CustomCategory[]): string {
   const builtinLines = Object.values(Category)
@@ -259,7 +264,7 @@ function parseBatchResponse(
       displayDescription:
         item.displayDescription.trim() ||
         (inputs.find((t) => t.id === item.id)?.description ?? item.id),
-      confidence: Math.min(1, Math.max(0, rawConfidence)),
+      confidence: Math.min(MAX_AI_CONFIDENCE, Math.max(0, rawConfidence)),
     })
   }
   return results

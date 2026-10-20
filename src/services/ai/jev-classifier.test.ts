@@ -80,6 +80,48 @@ describe('classifyWithJev', () => {
     })
   })
 
+  it('accepts an answer in any case or spacing, never a prototype name (review of #226)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        okResponse({
+          tx1: { type: 'choice', choice: ' Groceries ', confidence: 0.9 },
+        })
+      )
+      .mockResolvedValueOnce(
+        okResponse({
+          tx1: { type: 'choice', choice: 'constructor', confidence: 0.9 },
+        })
+      )
+
+    const first = await classifyWithJev([input('tx1', 'X')], config, [])
+    expect(first.results.get('tx1')?.category).toBe('groceries')
+    const second = await classifyWithJev([input('tx1', 'X')], config, [])
+    expect(second.results.get('tx1')?.category).toBe('uncategorized')
+  })
+
+  it("reports the server's reason, not just the status (review of #226)", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { message: 'model typesafe/jev-test not found' },
+        }),
+        { status: 404 }
+      )
+    )
+
+    await expect(
+      classifyWithJev([input('tx1', 'X')], config, [])
+    ).rejects.toThrow(/404.*typesafe\/jev-test not found/)
+  })
+
+  it('says it could not reach OpenRouter instead of a raw TypeError', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+
+    await expect(
+      classifyWithJev([input('tx1', 'X')], config, [])
+    ).rejects.toThrow(/No se pudo conectar con OpenRouter/)
+  })
+
   it('rejects a category that is not an offered option', async () => {
     fetchMock.mockResolvedValueOnce(
       okResponse({

@@ -41,7 +41,7 @@ export interface JevOutcome {
 export const OPENROUTER_SYSTEMONE_URL = 'https://openrouter.ai/api/v1/systemone'
 
 /** Rows per call: each question sees the whole state, so keep it small. */
-const BATCH_SIZE = 10
+export const BATCH_SIZE = 10
 
 const INSTRUCTIONS =
   'Which category does the transaction with this id belong to? ' +
@@ -116,16 +116,25 @@ async function classifyBatch(
     })),
   }
 
-  const response = await fetch(config.baseUrl ?? OPENROUTER_SYSTEMONE_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ model: config.model, state, questions }),
-  })
+  let response: Response
+  try {
+    response = await fetch(config.baseUrl ?? OPENROUTER_SYSTEMONE_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ model: config.model, state, questions }),
+    })
+  } catch (error) {
+    // A blocked preflight or no network surfaces as a bare TypeError.
+    throw new Error(
+      `No se pudo conectar con OpenRouter (${error instanceof Error ? error.message : String(error)}).`
+    )
+  }
   if (!response.ok) {
-    throw new JevHttpError(response.status)
+    // The body carries the reason (unknown model, bad shape); keep it.
+    throw new JevHttpError(response.status, await response.text())
   }
   const payload = (await response.json()) as {
     answers?: Record<string, ChoiceAnswer>
@@ -135,8 +144,12 @@ async function classifyBatch(
   for (const row of batch) {
     const answer = payload.answers?.[row.id]
     if (!answer || typeof answer.choice !== 'string') continue
-    const category =
-      answer.choice in options ? answer.choice : Category.Uncategorized
+    // Own keys only (never a prototype name) and tolerant of case/spacing,
+    // as validateCategory is for Claude.
+    const choice = answer.choice.trim().toLowerCase()
+    const category = Object.hasOwn(options, choice)
+      ? choice
+      : Category.Uncategorized
     const confidence =
       typeof answer.confidence === 'number'
         ? Math.min(1, Math.max(0, answer.confidence))
@@ -147,8 +160,11 @@ async function classifyBatch(
 }
 
 class JevHttpError extends Error {
-  constructor(readonly status: number) {
-    super(`Jev respondió ${status}`)
+  constructor(
+    readonly status: number,
+    body: string
+  ) {
+    super(`Jev respondió ${status}: ${body.trim().slice(0, 300)}`)
   }
 }
 

@@ -4,11 +4,15 @@ import { Input } from '../ui/input'
 import type { Transaction } from '../../models'
 import type { AiConfig } from '../../services/ai/ai-config'
 import {
+  BATCH_SIZE as CLAUDE_BATCH_SIZE,
   enrichTransactionsWithAi,
   type AiEnrichmentInput,
 } from '../../services/ai/transaction-ai'
 import { listCustomCategories } from '../../services/categories/category-store'
-import { classifyWithJev } from '../../services/ai/jev-classifier'
+import {
+  BATCH_SIZE as JEV_BATCH_SIZE,
+  classifyWithJev,
+} from '../../services/ai/jev-classifier'
 import { JEV_MODEL } from '../../services/ai/models'
 import { getCategoryDefinition } from '../../services/categories/category-registry'
 import {
@@ -16,6 +20,7 @@ import {
   rulePredictions,
   scoreAgreement,
   type AgreementReport,
+  type LabelledRow,
 } from '../../services/categorizer/eval/agreement'
 
 interface Props {
@@ -24,14 +29,33 @@ interface Props {
   aiModel: string
 }
 
-/** Newest labelled rows sent to the model: two batches at most. */
-const AI_SAMPLE_CAP = 300
-const AI_BATCH_SIZE = 150
-/** Mirrors the adapter's batch: one call per 10 rows. */
-const JEV_BATCH_SIZE = 10
+/** Newest labelled rows every engine is scored on: two Claude batches at most. */
+const SAMPLE_CAP = 300
 const MAX_MISMATCHES = 40
 
 type RunState = 'idle' | 'running' | 'done' | 'error'
+
+/** One engine's run: its report, which rows it answered, and how it went. */
+interface EngineRun {
+  report: AgreementReport | null
+  answered: Set<string>
+  partial: boolean
+  state: RunState
+  error: string | null
+}
+
+const idle = (): EngineRun => ({
+  report: null,
+  answered: new Set(),
+  partial: false,
+  state: 'idle',
+  error: null,
+})
+
+/** What an engine returns for a sample: a category per row it answered. */
+type Classify = (
+  sample: LabelledRow[]
+) => Promise<{ predictions: Map<string, string>; partialFailure?: string }>
 
 function percent(ratio: number): string {
   return `${Math.round(ratio * 100)} %`
@@ -41,6 +65,17 @@ function label(id: string): string {
   return getCategoryDefinition(id).label
 }
 
+function toInputs(sample: LabelledRow[]): AiEnrichmentInput[] {
+  return sample.map((row) => ({
+    id: row.id,
+    description: row.description,
+    type: row.type,
+    amount: row.amount,
+    currency: row.currency,
+    source: row.source,
+  }))
+}
+
 const cell = { padding: '4px 8px', verticalAlign: 'top' as const }
 const head = {
   ...cell,
@@ -48,13 +83,19 @@ const head = {
   fontWeight: 600,
   textAlign: 'left' as const,
 }
+const tableStyle = {
+  width: '100%',
+  borderCollapse: 'collapse' as const,
+  marginTop: 12,
+}
 
 /**
  * [Dev] How often each engine lands on the category the user chose. The
- * user's rows at confidence 1 are the labels; both engines run without the
- * user rules those rows created, as a fresh import would (see
- * services/categorizer/eval/agreement.ts). A candidate engine (another
- * model, another provider) is compared on the same rows.
+ * user's rows at confidence 1 are the labels; every engine is scored on the
+ * same newest rows, without the user rules those rows created, as a fresh
+ * import would see them (services/categorizer/eval/agreement.ts). A run
+ * whose transport failed for some rows is scored on the rows it answered
+ * and marked partial, never on phantom mismatches.
  */
 export function CategorizerEval({
   transactions,
@@ -62,45 +103,56 @@ export function CategorizerEval({
   aiModel,
 }: Props) {
   const rows = useMemo(() => labelledRows(transactions), [transactions])
-  const aiSample = useMemo(() => rows.slice(0, AI_SAMPLE_CAP), [rows])
-  const aiCalls = Math.ceil(aiSample.length / AI_BATCH_SIZE)
-  const jevCalls = Math.ceil(aiSample.length / JEV_BATCH_SIZE)
+  const sample = useMemo(() => rows.slice(0, SAMPLE_CAP), [rows])
+  const claudeCalls = Math.ceil(sample.length / CLAUDE_BATCH_SIZE)
+  const jevCalls = Math.ceil(sample.length / JEV_BATCH_SIZE)
 
-  const [rules, setRules] = useState<AgreementReport | null>(null)
-  const [ai, setAi] = useState<AgreementReport | null>(null)
-  const [aiState, setAiState] = useState<RunState>('idle')
-  const [error, setError] = useState<string | null>(null)
+  const [rules, setRules] = useState<EngineRun>(idle)
+  const [claude, setClaude] = useState<EngineRun>(idle)
   // Typed for this evaluation only; never persisted (a Jev key in
   // preferences is a schema change, decided once the numbers are in).
   const [jevKey, setJevKey] = useState('')
-  const [jev, setJev] = useState<AgreementReport | null>(null)
-  const [jevState, setJevState] = useState<RunState>('idle')
+  const [jev, setJev] = useState<EngineRun>(idle)
 
-  function handleRules() {
-    setRules(scoreAgreement(rows, rulePredictions(rows)))
+  async function runEngine(set: (run: EngineRun) => void, classify: Classify) {
+    set({ ...idle(), state: 'running' })
+    try {
+      const { predictions, partialFailure } = await classify(sample)
+      // Only rows the engine answered are scored; a transport failure must
+      // not read as the engine being wrong.
+      const answered = partialFailure
+        ? sample.filter((row) => predictions.has(row.id))
+        : sample
+      set({
+        report: scoreAgreement(answered, predictions),
+        answered: new Set(answered.map((row) => row.id)),
+        partial: !!partialFailure,
+        state: 'done',
+        error: partialFailure ?? null,
+      })
+    } catch (e) {
+      set({
+        ...idle(),
+        state: 'error',
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
   }
 
-  async function handleAi() {
-    setAiState('running')
-    setError(null)
-    try {
+  const handleRules = () =>
+    runEngine(setRules, async (s) => ({ predictions: rulePredictions(s) }))
+
+  const handleClaude = () =>
+    runEngine(setClaude, async (s) => {
       const config: AiConfig = {
         apiKey: claudeApiKey,
         enabled: true,
         model: aiModel,
       }
-      const inputs: AiEnrichmentInput[] = aiSample.map((row) => ({
-        id: row.id,
-        description: row.description,
-        type: row.type,
-        amount: row.amount,
-        currency: row.currency,
-        source: row.source,
-      }))
       // No correction examples and no custom patterns: the labels came
       // from those, so handing them to the model would score its memory.
       const { results, partialFailure } = await enrichTransactionsWithAi(
-        inputs,
+        toInputs(s),
         config,
         {
           descriptionExamples: [],
@@ -109,68 +161,51 @@ export function CategorizerEval({
           customPatterns: [],
         }
       )
-      setAi(
-        scoreAgreement(
-          aiSample,
-          new Map([...results].map(([id, r]) => [id, r.category]))
-        )
-      )
-      setAiState('done')
-      if (partialFailure) setError(partialFailure)
-    } catch (e) {
-      setAiState('error')
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
+      return {
+        predictions: new Map([...results].map(([id, r]) => [id, r.category])),
+        partialFailure,
+      }
+    })
 
-  async function handleJev() {
-    setJevState('running')
-    setError(null)
-    try {
-      const inputs: AiEnrichmentInput[] = aiSample.map((row) => ({
-        id: row.id,
-        description: row.description,
-        type: row.type,
-        amount: row.amount,
-        currency: row.currency,
-        source: row.source,
-      }))
+  const handleJev = () =>
+    runEngine(setJev, async (s) => {
       const { results, partialFailure } = await classifyWithJev(
-        inputs,
+        toInputs(s),
         { apiKey: jevKey, model: JEV_MODEL },
         listCustomCategories()
       )
-      setJev(
-        scoreAgreement(
-          aiSample,
-          new Map([...results].map(([id, r]) => [id, r.category]))
-        )
-      )
-      setJevState('done')
-      if (partialFailure) setError(partialFailure)
-    } catch (e) {
-      setJevState('error')
-      setError(e instanceof Error ? e.message : String(e))
-    }
-  }
+      return {
+        predictions: new Map([...results].map(([id, r]) => [id, r.category])),
+        partialFailure,
+      }
+    })
 
-  const rulesById = new Map(
-    rules?.mismatches.map((m) => [m.id, m.predicted]) ?? []
+  const engines: Array<{ key: string; name: string; run: EngineRun }> = [
+    { key: 'rules', name: 'Reglas', run: rules },
+    { key: 'ai', name: `Claude (${aiModel})`, run: claude },
+    { key: 'jev', name: `Jev (${JEV_MODEL})`, run: jev },
+  ]
+  const shown = engines.filter((e) => e.run.report)
+  const mismatchIds = new Set(
+    shown.flatMap((e) => e.run.report!.mismatches.map((m) => m.id))
   )
-  const aiById = new Map(ai?.mismatches.map((m) => [m.id, m.predicted]) ?? [])
-  const jevById = new Map(jev?.mismatches.map((m) => [m.id, m.predicted]) ?? [])
-  const mismatchRows = rows
-    .filter(
-      (row) =>
-        rulesById.has(row.id) || aiById.has(row.id) || jevById.has(row.id)
-    )
-    .slice(0, MAX_MISMATCHES)
+  const mismatchRows = sample.filter((row) => mismatchIds.has(row.id))
+  const predictedBy = (engine: EngineRun, id: string): string => {
+    if (!engine.answered.has(id)) return '—'
+    const miss = engine.report!.mismatches.find((m) => m.id === id)
+    return miss ? label(miss.predicted) : '✓'
+  }
+  const errors = engines.filter((e) => e.run.error)
 
   return (
     <div style={{ fontSize: 13 }}>
       <p style={{ margin: '0 0 8px', color: 'var(--text-muted)' }}>
         {rows.length} transacciones categorizadas por vos (confianza 1) son la
-        referencia. Las reglas y la IA se evalúan sin tus overrides ni reglas
+        referencia
+        {rows.length > sample.length
+          ? `; se evalúan las ${sample.length} más recientes`
+          : ''}
+        . Las reglas y la IA se evalúan sin tus overrides ni reglas
         personalizadas, como en una importación nueva.
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -178,21 +213,21 @@ export function CategorizerEval({
           type="button"
           variant="outline"
           onClick={handleRules}
-          disabled={rows.length === 0}
+          disabled={sample.length === 0 || rules.state === 'running'}
         >
           Evaluar reglas
         </Button>
         <Button
           type="button"
           variant="outline"
-          onClick={handleAi}
+          onClick={handleClaude}
           disabled={
-            !claudeApiKey || aiSample.length === 0 || aiState === 'running'
+            !claudeApiKey || sample.length === 0 || claude.state === 'running'
           }
         >
-          {aiState === 'running'
+          {claude.state === 'running'
             ? 'Evaluando IA...'
-            : `Evaluar IA (${aiSample.length} filas, ${aiCalls} ${aiCalls === 1 ? 'llamada' : 'llamadas'})`}
+            : `Evaluar IA (${sample.length} filas, ${claudeCalls} ${claudeCalls === 1 ? 'llamada' : 'llamadas'})`}
         </Button>
       </div>
       <div
@@ -206,6 +241,7 @@ export function CategorizerEval({
       >
         <Input
           type="password"
+          autoComplete="off"
           aria-label="OpenRouter API key (solo para esta evaluación)"
           placeholder="OpenRouter API key (solo para esta evaluación)"
           value={jevKey}
@@ -216,27 +252,24 @@ export function CategorizerEval({
           type="button"
           variant="outline"
           onClick={handleJev}
-          disabled={!jevKey || aiSample.length === 0 || jevState === 'running'}
+          disabled={!jevKey || sample.length === 0 || jev.state === 'running'}
         >
-          {jevState === 'running'
+          {jev.state === 'running'
             ? 'Evaluando Jev...'
-            : `Evaluar Jev (${aiSample.length} filas, ${jevCalls} ${jevCalls === 1 ? 'llamada' : 'llamadas'})`}
+            : `Evaluar Jev (${sample.length} filas, ${jevCalls} ${jevCalls === 1 ? 'llamada' : 'llamadas'})`}
         </Button>
       </div>
-      {error && (
-        <p style={{ color: 'var(--danger, #c33)', margin: '8px 0 0' }}>
-          {error}
-        </p>
-      )}
-
-      {(rules || ai || jev) && (
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            marginTop: 12,
-          }}
+      {errors.map((e) => (
+        <p
+          key={e.key}
+          style={{ color: 'var(--destructive)', margin: '8px 0 0' }}
         >
+          {e.name}: {e.run.error}
+        </p>
+      ))}
+
+      {shown.length > 0 && (
+        <table style={tableStyle}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
               <th style={head}>Motor</th>
@@ -245,136 +278,94 @@ export function CategorizerEval({
             </tr>
           </thead>
           <tbody>
-            {rules && (
-              <tr data-testid="eval-rules">
-                <td style={cell}>Reglas</td>
+            {shown.map((e) => (
+              <tr key={e.key} data-testid={`eval-${e.key}`}>
+                <td style={cell}>{e.name}</td>
                 <td style={cell} className="amt">
-                  {rules.agreed} de {rules.total}
+                  {e.run.report!.agreed} de {e.run.report!.total}
+                  {e.run.partial
+                    ? ` (parcial: ${e.run.answered.size} de ${sample.length} respondidas)`
+                    : ''}
                 </td>
                 <td style={cell} className="amt">
-                  {percent(rules.agreement)}
-                </td>
-              </tr>
-            )}
-            {ai && (
-              <tr data-testid="eval-ai">
-                <td style={cell}>Claude ({aiModel})</td>
-                <td style={cell} className="amt">
-                  {ai.agreed} de {ai.total}
-                </td>
-                <td style={cell} className="amt">
-                  {percent(ai.agreement)}
+                  {percent(e.run.report!.agreement)}
                 </td>
               </tr>
-            )}
-            {jev && (
-              <tr data-testid="eval-jev">
-                <td style={cell}>Jev ({JEV_MODEL})</td>
-                <td style={cell} className="amt">
-                  {jev.agreed} de {jev.total}
-                </td>
-                <td style={cell} className="amt">
-                  {percent(jev.agreement)}
-                </td>
-              </tr>
-            )}
+            ))}
           </tbody>
         </table>
       )}
 
-      {rules && rules.byLabel.length > 0 && (
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            marginTop: 12,
-          }}
-        >
+      {rules.report && rules.report.byLabel.length > 0 && (
+        <table style={tableStyle}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
               <th style={head}>Categoría</th>
               <th style={head}>Filas</th>
-              <th style={head}>Reglas</th>
-              {ai && <th style={head}>Claude</th>}
-              {jev && <th style={head}>Jev</th>}
+              {shown.map((e) => (
+                <th key={e.key} style={head}>
+                  {e.name}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {rules.byLabel.map((entry) => {
-              const aiEntry = ai?.byLabel.find((e) => e.label === entry.label)
-              const jevEntry = jev?.byLabel.find((e) => e.label === entry.label)
-              return (
-                <tr key={entry.label}>
-                  <td style={cell}>{label(entry.label)}</td>
-                  <td style={cell} className="amt">
-                    {entry.total}
-                  </td>
-                  <td style={cell} className="amt">
-                    {percent(entry.agreed / entry.total)}
-                  </td>
-                  {ai && (
-                    <td style={cell} className="amt">
-                      {aiEntry ? percent(aiEntry.agreed / aiEntry.total) : '—'}
+            {rules.report.byLabel.map((entry) => (
+              <tr key={entry.label}>
+                <td style={cell}>{label(entry.label)}</td>
+                <td style={cell} className="amt">
+                  {entry.total}
+                </td>
+                {shown.map((e) => {
+                  const own = e.run.report!.byLabel.find(
+                    (b) => b.label === entry.label
+                  )
+                  return (
+                    <td key={e.key} style={cell} className="amt">
+                      {own ? percent(own.agreed / own.total) : '—'}
                     </td>
-                  )}
-                  {jev && (
-                    <td style={cell} className="amt">
-                      {jevEntry
-                        ? percent(jevEntry.agreed / jevEntry.total)
-                        : '—'}
-                    </td>
-                  )}
-                </tr>
-              )
-            })}
+                  )
+                })}
+              </tr>
+            ))}
           </tbody>
         </table>
       )}
 
       {mismatchRows.length > 0 && (
-        <table
-          data-testid="eval-mismatches"
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            marginTop: 12,
-          }}
-        >
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              <th style={head}>Transacción</th>
-              <th style={head}>Vos</th>
-              {rules && <th style={head}>Reglas</th>}
-              {ai && <th style={head}>Claude</th>}
-              {jev && <th style={head}>Jev</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {mismatchRows.map((row) => (
-              <tr key={row.id}>
-                <td style={cell}>{row.description}</td>
-                <td style={cell}>{label(row.label)}</td>
-                {rules && (
-                  <td style={cell}>
-                    {rulesById.has(row.id)
-                      ? label(rulesById.get(row.id)!)
-                      : '✓'}
-                  </td>
-                )}
-                {ai && (
-                  <td style={cell}>
-                    {aiById.has(row.id) ? label(aiById.get(row.id)!) : '✓'}
-                  </td>
-                )}
-                {jev && (
-                  <td style={cell}>
-                    {jevById.has(row.id) ? label(jevById.get(row.id)!) : '✓'}
-                  </td>
-                )}
+        <>
+          <table data-testid="eval-mismatches" style={tableStyle}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                <th style={head}>Transacción</th>
+                <th style={head}>Vos</th>
+                {shown.map((e) => (
+                  <th key={e.key} style={head}>
+                    {e.name}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {mismatchRows.slice(0, MAX_MISMATCHES).map((row) => (
+                <tr key={row.id} data-row={row.id}>
+                  <td style={cell}>{row.description}</td>
+                  <td style={cell}>{label(row.label)}</td>
+                  {shown.map((e) => (
+                    <td key={e.key} style={cell}>
+                      {predictedBy(e.run, row.id)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {mismatchRows.length > MAX_MISMATCHES && (
+            <p style={{ margin: '6px 0 0', color: 'var(--text-muted)' }}>
+              Mostrando {MAX_MISMATCHES} de {mismatchRows.length} desacuerdos.
+            </p>
+          )}
+        </>
       )}
     </div>
   )
