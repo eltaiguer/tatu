@@ -122,6 +122,17 @@ describe('validateCategory', () => {
       'groceries'
     )
   })
+
+  it('resolves pre-rename aliases the model may still use (audit)', () => {
+    expect(validateCategory('food', noCustomCategories)).toBe('groceries')
+    expect(validateCategory('restaurant', noCustomCategories)).toBe(
+      'restaurants'
+    )
+    expect(validateCategory('transfer', noCustomCategories)).toBe(
+      'internal_transfer'
+    )
+    expect(validateCategory('health', noCustomCategories)).toBe('healthcare')
+  })
 })
 
 describe('applyAiEnrichment', () => {

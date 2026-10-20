@@ -3,6 +3,7 @@ import type { Transaction } from '../../models'
 import type { CustomCategory } from '../categories/category-store'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { AiConfig } from './ai-config'
+import { resolveBuiltinAlias } from '../categories/category-aliases'
 
 export interface AiEnrichmentInput {
   id: string
@@ -176,7 +177,9 @@ export function validateCategory(
   raw: string,
   customCategories: CustomCategory[]
 ): string {
-  const normalized = raw.trim().toLowerCase()
+  // Pre-rename ids ("food", "transfer") still appear in the model's output;
+  // they resolve to the current built-in, as everywhere else.
+  const normalized = resolveBuiltinAlias(raw.trim().toLowerCase())
   if ((Object.values(Category) as string[]).includes(normalized)) {
     return normalized
   }
