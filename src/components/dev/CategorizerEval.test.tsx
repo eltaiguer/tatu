@@ -1,9 +1,14 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CategorizerEval } from './CategorizerEval'
 import type { Transaction } from '../../models'
 import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
+
+const jev = vi.hoisted(() => ({ classifyWithJev: vi.fn() }))
+vi.mock('../../services/ai/jev-classifier', () => ({
+  classifyWithJev: jev.classifyWithJev,
+}))
 
 function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -27,6 +32,7 @@ const labelled = () => [
 
 beforeEach(() => {
   replaceMerchantCategoryOverrides({})
+  jev.classifyWithJev.mockReset()
 })
 
 describe('CategorizerEval', () => {
@@ -86,5 +92,49 @@ describe('CategorizerEval', () => {
       (screen.getByRole('button', { name: /Evaluar IA/ }) as HTMLButtonElement)
         .disabled
     ).toBe(true)
+  })
+})
+
+describe('CategorizerEval — Jev', () => {
+  it('scores Jev on the same rows once an OpenRouter key is typed', async () => {
+    jev.classifyWithJev.mockResolvedValue({
+      results: new Map([
+        [
+          'NETFLIX.COM',
+          { id: 'NETFLIX.COM', category: 'entertainment', confidence: 0.9 },
+        ],
+        [
+          'KIOSCO 25',
+          { id: 'KIOSCO 25', category: 'personal', confidence: 0.6 },
+        ],
+      ]),
+    })
+    render(
+      <CategorizerEval
+        transactions={labelled()}
+        claudeApiKey=""
+        aiModel="claude-haiku"
+      />
+    )
+
+    const jevButton = screen.getByRole('button', { name: /Evaluar Jev/ })
+    expect((jevButton as HTMLButtonElement).disabled).toBe(true)
+
+    await userEvent.type(
+      screen.getByLabelText(/OpenRouter API key/),
+      'or-test-key'
+    )
+    await userEvent.click(screen.getByRole('button', { name: /Evaluar Jev/ }))
+
+    expect(jev.classifyWithJev).toHaveBeenCalledTimes(1)
+    const [inputs, config] = jev.classifyWithJev.mock.calls[0]
+    expect(inputs.map((i: { id: string }) => i.id)).toEqual([
+      'NETFLIX.COM',
+      'KIOSCO 25',
+    ])
+    expect(config.apiKey).toBe('or-test-key')
+    const row = await screen.findByTestId('eval-jev')
+    expect(row.textContent).toContain('2 de 2')
+    expect(row.textContent).toContain('100 %')
   })
 })

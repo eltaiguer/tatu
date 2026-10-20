@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button } from '../ui/button'
+import { Input } from '../ui/input'
 import type { Transaction } from '../../models'
 import type { AiConfig } from '../../services/ai/ai-config'
 import {
@@ -7,6 +8,8 @@ import {
   type AiEnrichmentInput,
 } from '../../services/ai/transaction-ai'
 import { listCustomCategories } from '../../services/categories/category-store'
+import { classifyWithJev } from '../../services/ai/jev-classifier'
+import { JEV_MODEL } from '../../services/ai/models'
 import { getCategoryDefinition } from '../../services/categories/category-registry'
 import {
   labelledRows,
@@ -24,6 +27,8 @@ interface Props {
 /** Newest labelled rows sent to the model: two batches at most. */
 const AI_SAMPLE_CAP = 300
 const AI_BATCH_SIZE = 150
+/** Mirrors the adapter's batch: one call per 10 rows. */
+const JEV_BATCH_SIZE = 10
 const MAX_MISMATCHES = 40
 
 type RunState = 'idle' | 'running' | 'done' | 'error'
@@ -59,11 +64,17 @@ export function CategorizerEval({
   const rows = useMemo(() => labelledRows(transactions), [transactions])
   const aiSample = useMemo(() => rows.slice(0, AI_SAMPLE_CAP), [rows])
   const aiCalls = Math.ceil(aiSample.length / AI_BATCH_SIZE)
+  const jevCalls = Math.ceil(aiSample.length / JEV_BATCH_SIZE)
 
   const [rules, setRules] = useState<AgreementReport | null>(null)
   const [ai, setAi] = useState<AgreementReport | null>(null)
   const [aiState, setAiState] = useState<RunState>('idle')
   const [error, setError] = useState<string | null>(null)
+  // Typed for this evaluation only; never persisted (a Jev key in
+  // preferences is a schema change, decided once the numbers are in).
+  const [jevKey, setJevKey] = useState('')
+  const [jev, setJev] = useState<AgreementReport | null>(null)
+  const [jevState, setJevState] = useState<RunState>('idle')
 
   function handleRules() {
     setRules(scoreAgreement(rows, rulePredictions(rows)))
@@ -112,12 +123,47 @@ export function CategorizerEval({
     }
   }
 
+  async function handleJev() {
+    setJevState('running')
+    setError(null)
+    try {
+      const inputs: AiEnrichmentInput[] = aiSample.map((row) => ({
+        id: row.id,
+        description: row.description,
+        type: row.type,
+        amount: row.amount,
+        currency: row.currency,
+        source: row.source,
+      }))
+      const { results, partialFailure } = await classifyWithJev(
+        inputs,
+        { apiKey: jevKey, model: JEV_MODEL },
+        listCustomCategories()
+      )
+      setJev(
+        scoreAgreement(
+          aiSample,
+          new Map([...results].map(([id, r]) => [id, r.category]))
+        )
+      )
+      setJevState('done')
+      if (partialFailure) setError(partialFailure)
+    } catch (e) {
+      setJevState('error')
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   const rulesById = new Map(
     rules?.mismatches.map((m) => [m.id, m.predicted]) ?? []
   )
   const aiById = new Map(ai?.mismatches.map((m) => [m.id, m.predicted]) ?? [])
+  const jevById = new Map(jev?.mismatches.map((m) => [m.id, m.predicted]) ?? [])
   const mismatchRows = rows
-    .filter((row) => rulesById.has(row.id) || aiById.has(row.id))
+    .filter(
+      (row) =>
+        rulesById.has(row.id) || aiById.has(row.id) || jevById.has(row.id)
+    )
     .slice(0, MAX_MISMATCHES)
 
   return (
@@ -149,13 +195,41 @@ export function CategorizerEval({
             : `Evaluar IA (${aiSample.length} filas, ${aiCalls} ${aiCalls === 1 ? 'llamada' : 'llamadas'})`}
         </Button>
       </div>
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          marginTop: 8,
+        }}
+      >
+        <Input
+          type="password"
+          aria-label="OpenRouter API key (solo para esta evaluación)"
+          placeholder="OpenRouter API key (solo para esta evaluación)"
+          value={jevKey}
+          onChange={(e) => setJevKey(e.target.value)}
+          style={{ maxWidth: 360 }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleJev}
+          disabled={!jevKey || aiSample.length === 0 || jevState === 'running'}
+        >
+          {jevState === 'running'
+            ? 'Evaluando Jev...'
+            : `Evaluar Jev (${aiSample.length} filas, ${jevCalls} ${jevCalls === 1 ? 'llamada' : 'llamadas'})`}
+        </Button>
+      </div>
       {error && (
         <p style={{ color: 'var(--danger, #c33)', margin: '8px 0 0' }}>
           {error}
         </p>
       )}
 
-      {(rules || ai) && (
+      {(rules || ai || jev) && (
         <table
           style={{
             width: '100%',
@@ -184,12 +258,23 @@ export function CategorizerEval({
             )}
             {ai && (
               <tr data-testid="eval-ai">
-                <td style={cell}>IA ({aiModel})</td>
+                <td style={cell}>Claude ({aiModel})</td>
                 <td style={cell} className="amt">
                   {ai.agreed} de {ai.total}
                 </td>
                 <td style={cell} className="amt">
                   {percent(ai.agreement)}
+                </td>
+              </tr>
+            )}
+            {jev && (
+              <tr data-testid="eval-jev">
+                <td style={cell}>Jev ({JEV_MODEL})</td>
+                <td style={cell} className="amt">
+                  {jev.agreed} de {jev.total}
+                </td>
+                <td style={cell} className="amt">
+                  {percent(jev.agreement)}
                 </td>
               </tr>
             )}
@@ -210,12 +295,14 @@ export function CategorizerEval({
               <th style={head}>Categoría</th>
               <th style={head}>Filas</th>
               <th style={head}>Reglas</th>
-              {ai && <th style={head}>IA</th>}
+              {ai && <th style={head}>Claude</th>}
+              {jev && <th style={head}>Jev</th>}
             </tr>
           </thead>
           <tbody>
             {rules.byLabel.map((entry) => {
               const aiEntry = ai?.byLabel.find((e) => e.label === entry.label)
+              const jevEntry = jev?.byLabel.find((e) => e.label === entry.label)
               return (
                 <tr key={entry.label}>
                   <td style={cell}>{label(entry.label)}</td>
@@ -228,6 +315,13 @@ export function CategorizerEval({
                   {ai && (
                     <td style={cell} className="amt">
                       {aiEntry ? percent(aiEntry.agreed / aiEntry.total) : '—'}
+                    </td>
+                  )}
+                  {jev && (
+                    <td style={cell} className="amt">
+                      {jevEntry
+                        ? percent(jevEntry.agreed / jevEntry.total)
+                        : '—'}
                     </td>
                   )}
                 </tr>
@@ -251,7 +345,8 @@ export function CategorizerEval({
               <th style={head}>Transacción</th>
               <th style={head}>Vos</th>
               {rules && <th style={head}>Reglas</th>}
-              {ai && <th style={head}>IA</th>}
+              {ai && <th style={head}>Claude</th>}
+              {jev && <th style={head}>Jev</th>}
             </tr>
           </thead>
           <tbody>
@@ -269,6 +364,11 @@ export function CategorizerEval({
                 {ai && (
                   <td style={cell}>
                     {aiById.has(row.id) ? label(aiById.get(row.id)!) : '✓'}
+                  </td>
+                )}
+                {jev && (
+                  <td style={cell}>
+                    {jevById.has(row.id) ? label(jevById.get(row.id)!) : '✓'}
                   </td>
                 )}
               </tr>

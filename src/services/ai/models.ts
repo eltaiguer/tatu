@@ -16,3 +16,8 @@ export type CategorizationModelId = (typeof CATEGORIZATION_MODELS)[number]['id']
 // Used when the user has no stored preference (fresh state or null column).
 export const DEFAULT_CATEGORIZATION_MODEL: CategorizationModelId =
   'claude-haiku-4-5'
+
+// Jev (TypeSafe's decision model) as served by OpenRouter, pinned to a
+// release so the eval compares like with like; `~typesafe/jev-latest` moves.
+// Used by the [Dev] evaluation panel only (services/ai/jev-classifier.ts).
+export const JEV_MODEL = 'typesafe/jev-1.14'
