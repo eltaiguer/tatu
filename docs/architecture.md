@@ -45,7 +45,7 @@ flowchart TD
     G -- "matches a live row stored garbled (U+FFFD)" --> R["Repaired in place after the insert: description + raw_data patched, same id"]
     G -- "no" --> S["New row; id salted to id_cN if taken"]
     S --> J{"AI enabled with an API key?"}
-    J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a description or merchant override"]
+    J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a user rule (description override, merchant override, custom pattern)"]
     J -- "no" --> L["insertTransactions: sequential 500-row INSERT chunks, tagged with the import run; stops at the first failed chunk"]
     K --> L
     L --> M["store.addTransactions(exactly the saved rows), which runs inferInternalTransfers"]
@@ -64,10 +64,12 @@ Details that matter:
   The golden fixture in `import-categorization.equivalence.test.ts` pins the
   sample CSVs' import categories.
 - **AI enrichment replaces the rule-based result** (category, confidence and
-  display name) for every new row that has no description override and no
-  merchant override. That includes rows a custom pattern or merchant pattern
-  already matched. If the AI call fails, the rule-based result stays and the
-  error is returned as `aiError` so the UI can say so.
+  display name) for every new row that has no user rule: no description
+  override, no merchant override and no matching custom pattern (steps 1–3
+  of the precedence table are enforced in code, not handed to the model as
+  advice). Rows the built-in keywords or merchant list matched are still
+  sent and overwritten. If the AI call fails, the rule-based result stays
+  and the error is returned as `aiError` so the UI can say so.
 - **Dedup is by content, not by ID** (#57, `src/services/dedup/import-dedup.ts`).
   `generateTransactionId` hashes the date, description, amount text and row
   _position_, so an overlapping export that shifts rows gives the same bank

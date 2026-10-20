@@ -55,8 +55,9 @@ one.
   `CategorizationContext`: temporal, similar-merchant and amount heuristics
   (steps 9–11) never run at import.
 - With AI enabled, `applyAiEnrichment` replaces the rule result for new rows
-  without a user override, so a pattern change may not show in a test import
-  with AI on.
+  without a user rule (description override, merchant override or custom
+  pattern), so a change to the built-in keywords or merchant list may not
+  show in a test import with AI on; a custom pattern always does.
 - A rule change never rewrites stored rows. They change only through
   Auto-categorizar (`autoCategorize`: the selected rows, and only where the
   new result is more confident than the row's current category — user edits

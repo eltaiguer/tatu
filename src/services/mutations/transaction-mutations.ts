@@ -49,6 +49,7 @@ import {
   setMerchantCategoryOverride,
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
+import { matchCustomPattern } from '../categorizer/custom-patterns'
 import {
   categorizeTransaction,
   type CategorizationContext,
@@ -221,11 +222,16 @@ async function classifyAgainstServer(
   return classification
 }
 
-/** True when the row has a user rule that the AI must not override. */
+/**
+ * True when the row has a user rule that the AI must not override: a
+ * description override, a merchant override, or a custom pattern. A rule
+ * the user wrote is enforced here, not handed to the model as advice.
+ */
 function hasUserOverride(tx: Transaction): boolean {
   return (
     !!getDescriptionOverride(tx.description) ||
-    !!getMerchantCategoryOverride(tx.description)
+    !!getMerchantCategoryOverride(tx.description) ||
+    !!matchCustomPattern(tx.description)
   )
 }
 
