@@ -407,3 +407,17 @@ describe('matchMerchantPattern - fuzzy false positives (audit)', () => {
     )
   })
 })
+
+describe('matchMerchantPattern - fuzzy gate, review of #216', () => {
+  it('still tolerates a typo in a known merchant', () => {
+    expect(matchMerchantPattern('Farmasshop')?.category).toBe(
+      Category.Healthcare
+    )
+    expect(matchMerchantPattern('Devotto')?.category).toBe(Category.Groceries)
+  })
+
+  it('does not let a 3-letter pattern claim a longer word', () => {
+    expect(matchMerchantPattern('Spar')).toBeNull()
+    expect(matchMerchantPattern('Utes')).toBeNull()
+  })
+})

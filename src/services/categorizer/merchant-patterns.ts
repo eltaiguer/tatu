@@ -1,5 +1,5 @@
 import { Category } from '../../models'
-import { tokenize, fuzzyTokenSimilarity } from './tokenizer'
+import { tokenize, fuzzyTokenSimilarity, anchoredCoverage } from './tokenizer'
 
 /**
  * Pattern matching result
@@ -228,27 +228,6 @@ function matchesWithBoundary(normalized: string, pattern: string): boolean {
   )
 }
 
-/** Minimum shared prefix for one token to anchor another ("sup" → "supermercado"). */
-const MIN_ANCHOR_PREFIX = 3
-
-function anchors(a: string, b: string): boolean {
-  if (a === b) return true
-  if (a.length < MIN_ANCHOR_PREFIX || b.length < MIN_ANCHOR_PREFIX) return false
-  return a.startsWith(b) || b.startsWith(a)
-}
-
-/** Share of pattern tokens that some input token anchors (0–1). */
-function anchoredCoverage(
-  patternTokens: string[],
-  inputTokens: string[]
-): number {
-  let anchored = 0
-  for (const patternToken of patternTokens) {
-    if (inputTokens.some((token) => anchors(token, patternToken))) anchored++
-  }
-  return anchored / patternTokens.length
-}
-
 /**
  * Normalize merchant name for matching
  * - Converts to lowercase
@@ -311,8 +290,8 @@ export function matchMerchantPattern(
   // Similarity alone is not enough: character bigrams let "pantera" pass as
   // "antel", and one shared token lets "el club" pass as "automovil club" or
   // "merpago resto" as "merpago seguros". More than half of the pattern's
-  // tokens must be anchored (equal, or a prefix of at least 3 characters) by
-  // an input token before similarity is even considered.
+  // tokens must be anchored by an input token (tokenizer.ts: equal, a 4+
+  // character prefix, or a close misspelling) before similarity counts.
   if (!bestMatch) {
     const inputTokens = tokenize(normalized)
     if (inputTokens.length > 0) {
