@@ -18,6 +18,7 @@ const STOPWORDS = new Set([
   'sq',
   'tst',
   'sp',
+  'bcf',
   'paypal',
   'sa',
   'srl',
@@ -153,4 +154,42 @@ export function fuzzyTokenSimilarity(a: string[], b: string[]): number {
 
   // Normalize by the average of both lengths to penalize mismatched sizes
   return (2 * totalScore) / (a.length + b.length)
+}
+
+/** A prefix this short ("spa" → "spar", "ute" → "utes") anchors nothing. */
+const MIN_ANCHOR_PREFIX = 4
+/** Bigram similarity from which two tokens are the same word misspelt. */
+const TYPO_SIMILARITY = 0.85
+
+/**
+ * Whether input token `a` anchors pattern token `b`: equal, one a prefix of
+ * the other with at least 4 characters shared, or a close misspelling
+ * ("devotto" / "devoto"). Character bigrams alone ("pantera" / "antel")
+ * never anchor.
+ */
+export function anchors(a: string, b: string): boolean {
+  if (a === b) return true
+  const shorter = Math.min(a.length, b.length)
+  if (shorter >= MIN_ANCHOR_PREFIX && (a.startsWith(b) || b.startsWith(a))) {
+    return true
+  }
+  return bigramSimilarity(a, b) >= TYPO_SIMILARITY
+}
+
+/**
+ * Share of `patternTokens` that some input token anchors (0–1). Fuzzy
+ * matching against a pattern or a known merchant requires more than half,
+ * so one shared token ("el club" vs "automovil club") or a bigram
+ * coincidence cannot carry a match on its own.
+ */
+export function anchoredCoverage(
+  patternTokens: string[],
+  inputTokens: string[]
+): number {
+  if (patternTokens.length === 0) return 0
+  let anchored = 0
+  for (const patternToken of patternTokens) {
+    if (inputTokens.some((token) => anchors(token, patternToken))) anchored++
+  }
+  return anchored / patternTokens.length
 }

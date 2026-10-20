@@ -118,3 +118,9 @@ describe('tokenize - payment processors (audit)', () => {
     expect(tokenize('DLO.PEDIDOSYA')).toEqual(['pedidosya'])
   })
 })
+
+describe('tokenize - more processors (review of #216)', () => {
+  it('drops BCF like the other processors', () => {
+    expect(tokenize('BCF *KIOSCO')).toEqual(['kiosco'])
+  })
+})
