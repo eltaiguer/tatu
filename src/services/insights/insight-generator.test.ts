@@ -173,12 +173,25 @@ describe('generateInsights', () => {
 
     expect(messagesCreateMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'claude-opus-4-8',
+        model: 'claude-opus-5-5',
         messages: [
           { role: 'user', content: expect.stringContaining('"historyStart"') },
         ],
       })
     )
+  })
+
+  it('reads the first text block when the model thinks first', async () => {
+    messagesCreateMock.mockResolvedValueOnce({
+      content: [
+        { type: 'thinking', thinking: '', signature: 'sig' },
+        { type: 'text', text: JSON.stringify({ insights: [] }) },
+      ],
+    })
+
+    await expect(generateInsights(baseInput, 'sk-test-key')).resolves.toEqual({
+      insights: [],
+    })
   })
 
   it('throws if the model returns a non-text content block', async () => {

@@ -1,6 +1,7 @@
 import type { Currency } from '../../models'
 import type { InsightInput } from './insight-data'
 import { INSIGHTS_MODEL } from '../ai/models'
+import { firstTextBlock } from '../ai/text-block'
 import {
   buildInsightSystemPrompt,
   buildInsightUserMessage,
@@ -153,10 +154,5 @@ export async function generateInsights(
     messages: [{ role: 'user', content: buildInsightUserMessage(input) }],
   })
 
-  const block = response.content[0]
-  if (block.type !== 'text') {
-    throw new Error(`Respuesta inesperada del modelo (tipo: ${block.type})`)
-  }
-
-  return parseInsightsResponse(block.text, input)
+  return parseInsightsResponse(firstTextBlock(response.content), input)
 }

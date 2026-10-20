@@ -218,7 +218,7 @@ describe('Insights', () => {
       session,
       expect.objectContaining({ historyStart: '2026-06-10' }),
       sampleResult,
-      'claude-opus-4-8'
+      'claude-opus-5-5'
     )
   })
 })

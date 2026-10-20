@@ -1,5 +1,6 @@
 import type { Transaction } from '../../models'
 import type { AiConfig } from './ai-config'
+import { firstTextBlock } from './text-block'
 
 const MAX_CC_SAMPLES = 180
 const MAX_BA_SAMPLES = 120
@@ -90,10 +91,5 @@ ${formatSamples(bankAccount) || '(ninguna)'}`
     messages: [{ role: 'user', content: userMessage }],
   })
 
-  const block = response.content[0]
-  if (block.type !== 'text') {
-    throw new Error(`Respuesta inesperada del modelo (tipo: ${block.type})`)
-  }
-
-  return block.text
+  return firstTextBlock(response.content)
 }

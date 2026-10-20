@@ -232,6 +232,58 @@ describe('enrichTransactionsWithAi', () => {
     expect(results.get('tx1')?.confidence).toBe(0.9)
   })
 
+  it('reads the first text block when the model thinks first (5.5 models)', async () => {
+    messagesCreateMock.mockResolvedValue({
+      content: [
+        { type: 'thinking', thinking: '', signature: 'sig' },
+        {
+          type: 'text',
+          text: JSON.stringify([
+            { id: 'tx1', displayDescription: 'Devoto', category: 'groceries' },
+          ]),
+        },
+      ],
+    })
+    const { results } = await enrichTransactionsWithAi(
+      [
+        {
+          id: 'tx1',
+          description: 'SUPERMERCADO DEVOTO',
+          type: 'debit',
+          amount: 500,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
+      ],
+      baseConfig,
+      emptyContext
+    )
+    expect(results.get('tx1')?.category).toBe('groceries')
+  })
+
+  it('asks for low effort: classification, not reasoning', async () => {
+    messagesCreateMock.mockResolvedValue({
+      content: [{ type: 'text', text: '[]' }],
+    })
+    await enrichTransactionsWithAi(
+      [
+        {
+          id: 'tx1',
+          description: 'X',
+          type: 'debit',
+          amount: 1,
+          currency: 'UYU',
+          source: 'bank_account',
+        },
+      ],
+      baseConfig,
+      emptyContext
+    )
+    expect(messagesCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ output_config: { effort: 'low' } })
+    )
+  })
+
   it('falls back to 0.7 confidence when AI omits the field', async () => {
     messagesCreateMock.mockResolvedValue({
       content: [

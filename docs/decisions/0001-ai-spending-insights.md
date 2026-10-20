@@ -1,5 +1,7 @@
 # ADR-0001: AI-Powered Spending Insights
 
+> **Update 2026-10-19:** the model ids below are the ones chosen at the time. The app moved to the 5.5 generation (`claude-opus-5-5` for insights, `claude-haiku-5-5` / `claude-sonnet-5-5` for categorization); `src/services/ai/models.ts` is the source of truth and maps stored pre-5.5 ids to their successors.
+
 ## Status
 
 Accepted — Phase 1 shipped in #42.

@@ -3,6 +3,7 @@ import type { Transaction } from '../../models'
 import type { CustomCategory } from '../categories/category-store'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { AiConfig } from './ai-config'
+import { firstTextBlock } from './text-block'
 
 export interface AiEnrichmentInput {
   id: string
@@ -222,12 +223,7 @@ function parseBatchResponse(
     )
   }
 
-  const block = response.content[0]
-  if (!block || block.type !== 'text' || typeof block.text !== 'string') {
-    throw new Error(
-      `Respuesta inesperada del modelo (tipo: ${block?.type ?? 'vacío'})`
-    )
-  }
+  const text = firstTextBlock(response.content)
 
   let parsed: Array<{
     id: string
@@ -237,7 +233,7 @@ function parseBatchResponse(
   }>
   try {
     // Claude occasionally wraps output in markdown fences despite instructions
-    const raw = block.text.trim()
+    const raw = text.trim()
     const jsonText = raw.startsWith('[')
       ? raw
       : (raw.match(/\[[\s\S]*\]/)?.[0] ?? raw)
@@ -297,12 +293,10 @@ export async function enrichTransactionsWithAi(
   // makes it a stable cache prefix. Volatile per-batch data lives in the user
   // message, after this breakpoint.
   //
-  // Caveat: at ~1,200 tokens this prompt is below the minimum cacheable
-  // prefix for claude-haiku-4-5 (4,096), the default model — there the
-  // breakpoint is silently inert, with no error and cache_read_input_tokens
-  // of 0. It does engage on claude-sonnet-4-6 (minimum 1,024), the other
-  // option in Settings. Kept because it is free and correct; verify with
-  // usage.cache_read_input_tokens before claiming a saving on Haiku.
+  // At ~1,200 tokens this prompt clears the minimum cacheable prefix of the
+  // 5.5 models (512 tokens); it was below Haiku 4.5's 4,096, where the
+  // breakpoint was silently inert. Verify with usage.cache_read_input_tokens
+  // before claiming a saving.
   const systemPrompt = [
     {
       type: 'text' as const,
@@ -320,9 +314,13 @@ export async function enrichTransactionsWithAi(
     const batch = inputs.slice(i, i + BATCH_SIZE)
 
     try {
+      // The 5.5 models think by default and the thinking counts against
+      // max_tokens; this is classification, so the lowest effort keeps the
+      // output budget for the JSON.
       const response = (await client.messages.create({
         model: config.model,
         max_tokens: MAX_OUTPUT_TOKENS,
+        output_config: { effort: 'low' },
         system: systemPrompt,
         messages: [{ role: 'user', content: buildUserMessage(batch, context) }],
       })) as AiEnrichmentBatchResponse
