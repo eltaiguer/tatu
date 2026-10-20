@@ -11,6 +11,7 @@ import { exportTransactions } from '../services/export/export'
 import { CoverageAnalysis } from './dev/CoverageAnalysis'
 import { AiCategorizationPreview } from './dev/AiCategorizationPreview'
 import { AiPatternAnalysis } from './dev/AiPatternAnalysis'
+import { CategorizerEval } from './dev/CategorizerEval'
 import { SectionCard } from './ui/card'
 import { IconTile } from './ui/icon-tile'
 import { SegmentedToggle } from './ui/segmented-toggle'
@@ -434,6 +435,16 @@ export function Settings({
       {import.meta.env.DEV && (
         <SectionCard title="[Dev] Cobertura del clasificador">
           <CoverageAnalysis session={session} />
+        </SectionCard>
+      )}
+
+      {import.meta.env.DEV && (
+        <SectionCard title="[Dev] Evaluación del clasificador">
+          <CategorizerEval
+            transactions={transactions}
+            claudeApiKey={claudeApiKey}
+            aiModel={aiModel}
+          />
         </SectionCard>
       )}
 

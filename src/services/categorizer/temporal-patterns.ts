@@ -1,6 +1,7 @@
 /**
  * Detect recurring temporal patterns in transaction history.
- * Monthly recurring transactions suggest utilities/subscriptions.
+ * Monthly recurring transactions suggest utilities/subscriptions (as a
+ * review-band hint, since rent, gyms and loans recur monthly too).
  * Weekly patterns suggest groceries. One-time large amounts suggest shopping.
  */
 import { Category } from '../../models'
@@ -118,7 +119,9 @@ function detectFrequency(
       averageAmount: avgAmount,
       currency,
       suggestedCategory: Category.Utilities,
-      confidence: 0.65,
+      // A review-band hint (< 0.55): rent, a gym or a loan recur monthly
+      // too, so the cadence suggests but does not identify a utility.
+      confidence: 0.5,
       occurrences: count,
     }
   }
