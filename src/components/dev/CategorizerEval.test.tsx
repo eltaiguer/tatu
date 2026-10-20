@@ -1,9 +1,19 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CategorizerEval } from './CategorizerEval'
 import type { Transaction } from '../../models'
 import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
+
+const claude = vi.hoisted(() => ({ enrichTransactionsWithAi: vi.fn() }))
+vi.mock('../../services/ai/transaction-ai', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../services/ai/transaction-ai')>()
+  return {
+    ...actual,
+    enrichTransactionsWithAi: claude.enrichTransactionsWithAi,
+  }
+})
 
 function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -27,6 +37,7 @@ const labelled = () => [
 
 beforeEach(() => {
   replaceMerchantCategoryOverrides({})
+  claude.enrichTransactionsWithAi.mockReset()
 })
 
 describe('CategorizerEval', () => {
@@ -86,5 +97,45 @@ describe('CategorizerEval', () => {
       (screen.getByRole('button', { name: /Evaluar IA/ }) as HTMLButtonElement)
         .disabled
     ).toBe(true)
+  })
+})
+
+describe('CategorizerEval — Claude run (review of #224)', () => {
+  it('scores only the rows the model answered and marks the run partial', async () => {
+    claude.enrichTransactionsWithAi.mockResolvedValue({
+      results: new Map([
+        [
+          'NETFLIX.COM',
+          {
+            id: 'NETFLIX.COM',
+            category: 'entertainment',
+            displayDescription: 'Netflix',
+            confidence: 0.9,
+          },
+        ],
+      ]),
+      partialFailure: '1 de 2 lotes fallaron: 529',
+    })
+    render(
+      <CategorizerEval
+        transactions={labelled()}
+        claudeApiKey="sk-test"
+        aiModel="claude-haiku"
+      />
+    )
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Evaluar reglas/ })
+    )
+    await userEvent.click(screen.getByRole('button', { name: /Evaluar IA/ }))
+
+    const row = await screen.findByTestId('eval-ai')
+    expect(row.textContent).toContain('1 de 1')
+    expect(row.textContent).toContain('parcial')
+    // KIOSCO 25 was never answered: no tick, no mismatch, a dash
+    const mismatches = screen.getByTestId('eval-mismatches')
+    const kiosco = mismatches.querySelector('tr[data-row="KIOSCO 25"]')!
+    expect(kiosco.textContent).toContain('—')
+    expect(kiosco.textContent).not.toContain('✓')
   })
 })

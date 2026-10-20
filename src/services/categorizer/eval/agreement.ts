@@ -20,7 +20,10 @@ import {
   replaceDescriptionOverrides,
 } from '../../descriptions/description-overrides'
 import { listCustomPatterns, replaceCustomPatterns } from '../custom-patterns'
-import { normalizeCategoryId } from '../../categories/category-aliases'
+import {
+  LEGACY_IGNORED_ID,
+  normalizeCategoryId,
+} from '../../categories/category-aliases'
 import { countsAsRow } from '../../spending/spending-rules'
 
 export interface LabelledRow {
@@ -50,14 +53,23 @@ export interface AgreementReport {
 
 const USER_LOCKED = 1
 
-/** The rows the user categorized, newest first. Split parents are inert. */
+/**
+ * The rows the user categorized, newest first. Left out: split parents
+ * (inert), split parts (their description is user text no engine can read
+ * as a bank line), the legacy "ignored" marker (no engine can emit it), and
+ * anything not at confidence 1 — which the AI never stores (its confidence
+ * is capped below 1 in transaction-ai.ts), so 1 is the user's. Rows an AI
+ * run stored at 1 before that cap cannot be told apart.
+ */
 export function labelledRows(transactions: Transaction[]): LabelledRow[] {
   return transactions
     .filter(
       (tx) =>
         countsAsRow(tx) &&
+        !tx.splitParentId &&
         tx.categoryConfidence === USER_LOCKED &&
-        normalizeCategoryId(tx.category) !== 'uncategorized'
+        normalizeCategoryId(tx.category) !== 'uncategorized' &&
+        normalizeCategoryId(tx.category) !== LEGACY_IGNORED_ID
     )
     .sort((a, b) => b.date.getTime() - a.date.getTime())
     .map((tx) => ({
