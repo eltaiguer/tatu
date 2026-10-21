@@ -30,6 +30,7 @@ import type {
   WorkspaceSnapshot,
 } from '../services/repository/repository'
 import {
+  categoryOverridesFrom,
   clearAllCategoryOverrides,
   replaceMerchantCategoryOverrides,
 } from '../services/categorizer/category-overrides'
@@ -231,16 +232,7 @@ export function hydrateWorkspace(repository: Repository): Hydration {
 // Applies a whole load synchronously, so no render ever sees half a user.
 function applyLoaded(loaded: WorkspaceSnapshot) {
   replaceMerchantCategoryOverrides(
-    Object.fromEntries(
-      loaded.categoryOverrides.map((override) => [
-        override.merchantNormalized,
-        {
-          merchantName: override.merchantOriginal,
-          category: override.category,
-          updatedAt: override.updatedAt,
-        },
-      ])
-    )
+    categoryOverridesFrom(loaded.categoryOverrides)
   )
   replaceDescriptionOverrides(
     Object.fromEntries(

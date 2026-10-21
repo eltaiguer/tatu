@@ -52,7 +52,11 @@ import {
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
-import { currentUserRules, hasUserRule } from '../categorizer/user-rules'
+import {
+  currentUserRules,
+  hasUserRule,
+  type UserRules,
+} from '../categorizer/user-rules'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
 import { applyAiEnrichment, enrichTransactionsWithAi, getAiConfig } from '../ai'
@@ -239,10 +243,13 @@ function isUncategorized(tx: Transaction): boolean {
  * (#61): if one fails, the chunks before it stay saved, exactly those rows
  * reach the store, the run is marked failed with "N de M guardadas", and the
  * error says to import the file again (dedup skips what was saved).
+ * `rules` are the user's rules the rows were categorized with: the same
+ * value gates the AI (hasUserRule).
  */
 export async function importTransactions(
   repo: Repository,
   incoming: Transaction[],
+  rules: UserRules,
   context?: ImportContext
 ): Promise<ImportResult> {
   assertOwner(repo)
@@ -269,7 +276,6 @@ export async function importTransactions(
   if (aiConfig?.enabled && aiConfig.apiKey && added.length > 0) {
     // A rule the user wrote is enforced here, not handed to the model as
     // advice: a row it covers keeps the rule's result (hasUserRule).
-    const rules = currentUserRules()
     const toEnrich = added.filter((tx) => !hasUserRule(rules, tx.description))
     if (toEnrich.length > 0) {
       try {

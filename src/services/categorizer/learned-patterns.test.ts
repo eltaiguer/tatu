@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { Category } from '../../models'
-import {
-  buildLearnedPatterns,
-  matchLearnedPattern,
-  invalidateLearnedPatternsCache,
-} from './learned-patterns'
+import { buildLearnedPatterns, matchLearnedPattern } from './learned-patterns'
 import {
   clearAllCategoryOverrides,
   listMerchantCategoryOverrides,
@@ -14,7 +10,6 @@ import {
 describe('Learned Patterns', () => {
   beforeEach(() => {
     clearAllCategoryOverrides()
-    invalidateLearnedPatternsCache()
   })
 
   describe('buildLearnedPatterns', () => {
@@ -97,7 +92,6 @@ describe('Learned Patterns', () => {
     it('should match using learned patterns from overrides', () => {
       setMerchantCategoryOverride('Farmacia Central', Category.Healthcare)
       setMerchantCategoryOverride('Farmacia Nueva', Category.Healthcare)
-      invalidateLearnedPatternsCache()
 
       const result = matchLearnedPattern(
         'Farmacia del Sol',
@@ -112,7 +106,6 @@ describe('Learned Patterns', () => {
     it('should return null when no learned patterns match', () => {
       setMerchantCategoryOverride('Farmacia Central', Category.Healthcare)
       setMerchantCategoryOverride('Farmacia Nueva', Category.Healthcare)
-      invalidateLearnedPatternsCache()
 
       const result = matchLearnedPattern(
         'Random Unknown Place',
@@ -134,17 +127,15 @@ describe('Learned Patterns', () => {
       expect(result).toBeNull()
     })
 
-    it('should invalidate cache correctly', () => {
+    it('stops learning once the overrides are cleared', () => {
       setMerchantCategoryOverride('Farmacia Central', Category.Healthcare)
       setMerchantCategoryOverride('Farmacia Nueva', Category.Healthcare)
-      invalidateLearnedPatternsCache()
 
       expect(
         matchLearnedPattern('Farmacia X', listMerchantCategoryOverrides())
       ).not.toBeNull()
 
       clearAllCategoryOverrides()
-      invalidateLearnedPatternsCache()
 
       expect(
         matchLearnedPattern('Farmacia X', listMerchantCategoryOverrides())

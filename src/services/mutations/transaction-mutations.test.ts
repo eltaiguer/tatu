@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Transaction } from '../../models'
+import type { Repository } from '../repository/repository'
 
 // The behaviour suite of the transaction mutations, called directly with the
 // signed-in user's repository (the hook that binds it is tested in
@@ -52,6 +53,7 @@ import {
   splitTransaction,
   unsplitTransaction,
   type DeleteResult,
+  type ImportContext,
 } from './transaction-mutations'
 import {
   NeedsConfirmationError,
@@ -103,6 +105,15 @@ function makeImportContext() {
     csvContent: 'raw,csv',
     fileName: 'movements.csv',
   }
+}
+
+/** Imports with the rules the test put in the stores, as importStatement does. */
+function importRows(
+  repo: Repository,
+  incoming: Transaction[],
+  context?: ImportContext
+) {
+  return importTransactions(repo, incoming, currentUserRules(), context)
 }
 
 /**
@@ -165,7 +176,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
   it('imports transactions and reports no AI failure on the happy path', async () => {
     const repo = signedIn()
 
-    const outcome = await importTransactions(
+    const outcome = await importRows(
       repo,
       [makeTransaction('tx-1')],
       makeImportContext()
@@ -187,7 +198,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     })
     const repo = signedIn()
 
-    await importTransactions(repo, [makeTransaction('tx-1')])
+    await importRows(repo, [makeTransaction('tx-1')])
 
     expect(stored('tx-1')?.category).toBe('restaurants')
     expect(repo.row('tx-1')?.category).toBe('restaurants')
@@ -205,7 +216,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     })
     const repo = signedIn()
 
-    await importTransactions(repo, [
+    await importRows(repo, [
       makeTransaction('desc', { description: 'FARMACIA SAN ROQUE' }),
       makeTransaction('merchant', { description: 'DEVOTO EXPRESS' }),
       makeTransaction('free', { description: 'UBER TRIP' }),
@@ -230,7 +241,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     ])
     const repo = signedIn()
 
-    await importTransactions(repo, [
+    await importRows(repo, [
       makeTransaction('ruled', {
         description: 'KIOSCO 25 DE MAYO',
         category: 'personal',
@@ -254,7 +265,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     })
     const repo = signedIn()
 
-    const outcome = await importTransactions(repo, [makeTransaction('tx-1')])
+    const outcome = await importRows(repo, [makeTransaction('tx-1')])
 
     expect(ai.enrichTransactionsWithAi).not.toHaveBeenCalled()
     expect(outcome.added).toHaveLength(1)
@@ -266,7 +277,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const repo = signedIn()
 
-    const outcome = await importTransactions(
+    const outcome = await importRows(
       repo,
       [makeTransaction('tx-1')],
       makeImportContext()
@@ -291,11 +302,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     const repo = signedIn()
     reporting.captureError.mockClear()
 
-    await importTransactions(
-      repo,
-      [makeTransaction('tx-1')],
-      makeImportContext()
-    )
+    await importRows(repo, [makeTransaction('tx-1')], makeImportContext())
 
     expect(reporting.captureError).not.toHaveBeenCalled()
   })
@@ -304,7 +311,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     ai.getAiConfig.mockReturnValue({ ...AI_ON, enabled: false, apiKey: '' })
     const repo = signedIn()
 
-    const outcome = await importTransactions(repo, [makeTransaction('tx-1')])
+    const outcome = await importRows(repo, [makeTransaction('tx-1')])
 
     expect(outcome.aiError).toBeUndefined()
     expect(ai.enrichTransactionsWithAi).not.toHaveBeenCalled()
@@ -317,7 +324,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     })
     const repo = signedIn()
 
-    const outcome = await importTransactions(repo, [makeTransaction('tx-1')])
+    const outcome = await importRows(repo, [makeTransaction('tx-1')])
 
     expect(outcome.aiPartial).toContain('529 overloaded')
     expect(outcome.aiError).toBeUndefined()
@@ -330,7 +337,7 @@ describe('transaction-mutations — import persistence (#61)', () => {
     repo.failOn('insert', { error: new Error('network down') })
 
     await expect(
-      importTransactions(repo, [makeTransaction('tx-1')], makeImportContext())
+      importRows(repo, [makeTransaction('tx-1')], makeImportContext())
     ).rejects.toThrow('network down')
 
     expect(storedIds()).toEqual([])
@@ -348,11 +355,9 @@ describe('transaction-mutations — import persistence (#61)', () => {
     }))
     failChunksWith(repo, 'insert', rows[600].id)
 
-    const error = await importTransactions(
-      repo,
-      rows,
-      makeImportContext()
-    ).catch((e: unknown) => e)
+    const error = await importRows(repo, rows, makeImportContext()).catch(
+      (e: unknown) => e
+    )
 
     expect(error).toBeInstanceOf(UserFacingError)
     expect((error as Error).message).toBe(
@@ -373,9 +378,9 @@ describe('transaction-mutations — import persistence (#61)', () => {
       when: (chunk) => chunk.includes(rows[600].id),
       times: 1,
     })
-    await importTransactions(repo, rows).catch(() => undefined)
+    await importRows(repo, rows).catch(() => undefined)
 
-    const second = await importTransactions(repo, rows)
+    const second = await importRows(repo, rows)
 
     expect(second.added).toHaveLength(200)
     expect(second.duplicates).toHaveLength(500)
@@ -388,7 +393,7 @@ describe('transaction-mutations — import persistence (#61)', () => {
     const repo = signedIn()
     repo.failOn('completeImportRun')
 
-    const result = await importTransactions(
+    const result = await importRows(
       repo,
       [makeTransaction('tx-1')],
       makeImportContext()
@@ -409,7 +414,7 @@ describe('transaction-mutations — import persistence (#61)', () => {
     repo.failOn('failImportRun')
 
     await expect(
-      importTransactions(repo, [makeTransaction('tx-1')], makeImportContext())
+      importRows(repo, [makeTransaction('tx-1')], makeImportContext())
     ).rejects.toThrow('network down')
 
     expect(reporting.captureError).toHaveBeenCalledWith(
@@ -423,7 +428,7 @@ describe('transaction-mutations — import persistence (#61)', () => {
     repo.failOn('findImportCandidates', { error: new Error('timeout') })
 
     await expect(
-      importTransactions(repo, [makeTransaction('a')], makeImportContext())
+      importRows(repo, [makeTransaction('a')], makeImportContext())
     ).rejects.toThrow('timeout')
     expect(repo.importRuns).toEqual([])
   })
@@ -456,7 +461,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
   it('shows imported rows tagged with their import run, as a reload would (#167)', async () => {
     const repo = signedIn()
 
-    await importTransactions(repo, file(A), makeImportContext())
+    await importRows(repo, file(A), makeImportContext())
 
     const runId = repo.importRuns[0].id
     expect(transactionStore.getState().transactions[0].importId).toBe(runId)
@@ -467,7 +472,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
     const repo = signedIn(file(A, B))
     const shifted = file(NEW, A, B)
 
-    const result = await importTransactions(repo, shifted, makeImportContext())
+    const result = await importRows(repo, shifted, makeImportContext())
 
     expect(result.added.map((t) => t.id)).toEqual([shifted[0].id])
     expect(result.duplicates).toHaveLength(2)
@@ -482,7 +487,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
   it('imports nothing when the exact same file is imported again', async () => {
     const repo = signedIn(file(A, B))
 
-    const result = await importTransactions(repo, file(A, B))
+    const result = await importRows(repo, file(A, B))
 
     expect(result.added).toEqual([])
     expect(repo.rows()).toHaveLength(2)
@@ -491,7 +496,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
   it('imports both rows of a genuine identical same-day pair', async () => {
     const repo = signedIn()
 
-    const result = await importTransactions(repo, file(A, A))
+    const result = await importRows(repo, file(A, A))
 
     expect(result.added).toHaveLength(2)
     expect(repo.rows()).toHaveLength(2)
@@ -504,7 +509,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
     })
     const shifted = file(NEW, A, B)
 
-    const result = await importTransactions(repo, shifted)
+    const result = await importRows(repo, shifted)
 
     expect(result.added.map((t) => t.id)).toEqual([shifted[0].id])
     expect(result.previouslyDeleted?.map((t) => t.id)).toEqual([shifted[1].id])
@@ -517,7 +522,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
     const other = { ...file(B)[0], id: incoming.id }
     const repo = signedIn([other])
 
-    const result = await importTransactions(repo, [incoming])
+    const result = await importRows(repo, [incoming])
 
     expect(result.added.map((t) => t.id)).toEqual([`${incoming.id}_c1`])
     expect(repo.row(`${incoming.id}_c1`)?.description).toBe(
@@ -535,7 +540,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       }),
     ])
 
-    const result = await importTransactions(repo, [incoming])
+    const result = await importRows(repo, [incoming])
 
     expect(result.added.map((t) => t.id)).toEqual([`${incoming.id}_c2`])
     expect(repo.row(`${incoming.id}_c2`)).toBeDefined()
@@ -550,7 +555,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
     const [incoming] = file(A)
     const repo = signedIn([{ ...file(B)[0], id: incoming.id }])
 
-    await importTransactions(repo, [incoming])
+    await importRows(repo, [incoming])
 
     const sent = ai.enrichTransactionsWithAi.mock.calls[0][0] as Array<{
       id: string
@@ -584,7 +589,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
         },
       })
 
-      await importTransactions(repo, file(PENAROL), makeImportContext())
+      await importRows(repo, file(PENAROL), makeImportContext())
 
       expect(
         getMerchantCategoryOverride(
@@ -602,11 +607,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       }
       const repo = signedIn([edited])
 
-      const result = await importTransactions(
-        repo,
-        file(PENAROL),
-        makeImportContext()
-      )
+      const result = await importRows(repo, file(PENAROL), makeImportContext())
 
       expect(result.added).toEqual([])
       expect(result.repaired?.map((t) => t.id)).toEqual([garbled.id])
@@ -633,9 +634,9 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
 
     it('then treats the repaired row as a plain duplicate', async () => {
       const repo = signedIn(garbledFile(PENAROL))
-      await importTransactions(repo, file(PENAROL))
+      await importRows(repo, file(PENAROL))
 
-      const again = await importTransactions(repo, file(PENAROL))
+      const again = await importRows(repo, file(PENAROL))
 
       expect(again.repaired).toEqual([])
       expect(again.duplicates).toHaveLength(1)
@@ -648,7 +649,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       failChunksWith(repo, 'update', garbled.id)
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      const result = await importTransactions(repo, file(NEW, PENAROL))
+      const result = await importRows(repo, file(NEW, PENAROL))
 
       expect(result.added).toHaveLength(1)
       expect(result.repaired).toEqual([])
@@ -664,7 +665,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       failChunksWith(repo, 'update', garbled.id)
       vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      await importTransactions(repo, file(NEW, PENAROL))
+      await importRows(repo, file(NEW, PENAROL))
 
       expect(reporting.captureError).toHaveBeenCalledWith(
         expect.anything(),
@@ -690,7 +691,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       it('keeps a name and category set for all matching rows', async () => {
         const { repo, garbled } = await renameEverywhere()
 
-        const result = await importTransactions(repo, file(PENAROL))
+        const result = await importRows(repo, file(PENAROL))
 
         expect(result.repaired?.map((t) => t.id)).toEqual([garbled.id])
         const row = stored(garbled.id)!
@@ -723,7 +724,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
           friendlyDescription: 'Peñarol (nuevo)',
         })
 
-        await importTransactions(repo, file(PENAROL))
+        await importRows(repo, file(PENAROL))
 
         expect(getDescriptionOverride(CORRECT)?.friendlyDescription).toBe(
           'Peñarol (nuevo)'
@@ -737,7 +738,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
         })
         const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-        const result = await importTransactions(repo, file(PENAROL))
+        const result = await importRows(repo, file(PENAROL))
 
         expect(result.repaired).toEqual([])
         expect(result.repairsFailed).toBe(1)
@@ -753,7 +754,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
     transactionStore.getState().setTransactions(file(A))
     const shifted = file(NEW, A)
 
-    const result = await importTransactions(repo, shifted)
+    const result = await importRows(repo, shifted)
 
     expect(result.added).toHaveLength(2)
     expect(new Set(storedIds()).size).toBe(3)
@@ -1212,7 +1213,7 @@ describe('transaction-mutations — apply scope', () => {
         applyScope: 'future_matching_only',
       })
 
-      await importTransactions(repo, [
+      await importRows(repo, [
         makeTransaction('later', {
           description:
             'COMPRA CON TARJETA DEBITO KIOSCO X 20/03 09:01 AUT 654321',
@@ -2022,7 +2023,7 @@ describe('transaction-mutations — switching accounts mid-write', () => {
   it("drops an import's rows when the account changed while it was saving", async () => {
     const repo = signedIn()
     const gate = repo.hold('insert')
-    const pending = importTransactions(repo, [makeTransaction('a')]).catch(
+    const pending = importRows(repo, [makeTransaction('a')]).catch(
       (e: unknown) => e
     )
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -2046,11 +2047,9 @@ describe('transaction-mutations — switching accounts mid-write', () => {
     repo.failOn('failImportRun')
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await importTransactions(
-      repo,
-      [makeTransaction('a')],
-      makeImportContext()
-    ).catch(() => {})
+    await importRows(repo, [makeTransaction('a')], makeImportContext()).catch(
+      () => {}
+    )
 
     expect(reporting.captureError).not.toHaveBeenCalled()
   })
@@ -2065,11 +2064,9 @@ describe('transaction-mutations — switching accounts mid-write', () => {
     })
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    await importTransactions(
-      repo,
-      [makeTransaction('a')],
-      makeImportContext()
-    ).catch(() => {})
+    await importRows(repo, [makeTransaction('a')], makeImportContext()).catch(
+      () => {}
+    )
 
     expect(reporting.captureError).not.toHaveBeenCalled()
   })

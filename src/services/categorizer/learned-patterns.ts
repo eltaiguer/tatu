@@ -16,17 +16,16 @@ const MIN_OCCURRENCES = 2
 /** Max confidence for learned patterns (below explicit patterns) */
 const MAX_CONFIDENCE = 0.75
 
-/** Cache for learned patterns */
-let cachedPatterns: Map<string, Category> | null = null
-let cachedHash: string | null = null
-
-function hashOverrides(overrides: CategoryOverrides): string {
-  const entries = Object.entries(overrides)
-    // merchantName too: it is what the tokens are learned from
-    .map(([k, v]) => `${k}:${v.category}:${v.merchantName ?? ''}`)
-    .sort()
-  return entries.join('|')
-}
+/**
+ * Learned patterns per overrides object. The merchant-override store
+ * replaces its object on every write (copy-on-write), so an object never
+ * changes after its patterns are built: the same object — one `UserRules`
+ * value, however many rows it categorizes — builds them once.
+ */
+const learnedByOverrides = new WeakMap<
+  CategoryOverrides,
+  Map<string, Category>
+>()
 
 /**
  * Build learned patterns from all category overrides.
@@ -81,31 +80,16 @@ export function buildLearnedPatterns(
   return learned
 }
 
-/**
- * The patterns learned from `overrides`, cached by their content (the hash),
- * so the same overrides — or the same ones handed in again — reuse the map.
- */
+/** The patterns learned from `overrides`, built once per object. */
 export function getLearnedPatterns(
   overrides: CategoryOverrides
 ): Map<string, Category> {
-  const hash = hashOverrides(overrides)
-
-  if (cachedPatterns && cachedHash === hash) {
-    return cachedPatterns
+  let learned = learnedByOverrides.get(overrides)
+  if (!learned) {
+    learned = buildLearnedPatterns(overrides)
+    learnedByOverrides.set(overrides, learned)
   }
-
-  cachedPatterns = buildLearnedPatterns(overrides)
-  cachedHash = hash
-  return cachedPatterns
-}
-
-/**
- * Invalidate the learned patterns cache.
- * Call this when overrides are added/removed.
- */
-export function invalidateLearnedPatternsCache(): void {
-  cachedPatterns = null
-  cachedHash = null
+  return learned
 }
 
 /**

@@ -130,41 +130,17 @@ export function testPattern(
   }
 }
 
-/** The first of `patterns` that matches the description, as a match. */
+/** The first pattern in `from` that matches the description, as a match. */
 export function matchCustomPattern(
   description: string,
-  patterns: CustomPattern[]
+  from: CustomPattern[]
 ): PatternMatch | null {
-  const normalized = normalizeMerchantName(description)
-  if (!normalized) return null
-
-  for (const custom of patterns) {
-    const normalizedPattern = normalizeMerchantName(custom.pattern)
-    if (!normalizedPattern) continue
-
-    let matches = false
-
-    switch (custom.matchType) {
-      case 'contains':
-        matches = normalized.includes(normalizedPattern)
-        break
-      case 'starts_with':
-        matches = normalized.startsWith(normalizedPattern)
-        break
-      case 'exact':
-        matches = normalized === normalizedPattern
-        break
-    }
-
-    if (matches) {
-      return {
-        category: custom.category as PatternMatch['category'],
-        confidence: 0.95,
-        matchedPattern: `custom:${custom.pattern}(${custom.matchType})`,
-        description: custom.description,
-      }
-    }
+  const custom = from.find((pattern) => testPattern(description, pattern))
+  if (!custom) return null
+  return {
+    category: custom.category as PatternMatch['category'],
+    confidence: 0.95,
+    matchedPattern: `custom:${custom.pattern}(${custom.matchType})`,
+    description: custom.description,
   }
-
-  return null
 }

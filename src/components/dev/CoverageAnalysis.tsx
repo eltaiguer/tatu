@@ -3,7 +3,10 @@ import { Button } from '../ui/button'
 import type { Repository } from '../../services/repository/repository'
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
-import { merchantOverrideKey } from '../../services/categorizer/category-overrides'
+import {
+  categoryOverridesFrom,
+  merchantOverrideKey,
+} from '../../services/categorizer/category-overrides'
 import { currentUserRules } from '../../services/categorizer/user-rules'
 import type { Transaction } from '../../models'
 
@@ -55,7 +58,12 @@ async function runAnalysis(repository: Repository): Promise<AnalysisResult> {
     byKey.get(key)!.transactions.push(tx)
   }
 
-  const rules = currentUserRules()
+  // The stored overrides, the same ones the Override column reads; the
+  // other rule types as the workspace holds them.
+  const rules = {
+    ...currentUserRules(),
+    merchantOverrides: categoryOverridesFrom(overrides),
+  }
   const stats: MerchantStat[] = []
   for (const [key, { description, transactions: txs }] of byKey) {
     const sample = txs[0]

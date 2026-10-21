@@ -1,6 +1,6 @@
 import type { ParsedData, Transaction } from '../../models'
 import { categorizeTransaction } from './transaction-categorizer'
-import { currentUserRules, type UserRules } from './user-rules'
+import type { UserRules } from './user-rules'
 
 /**
  * Import-time categorization: the step between the (pure) CSV parsers and the
@@ -32,16 +32,13 @@ export function categorizeImportedTransactions(
   })
 }
 
-/**
- * `categorizeImportedTransactions` over a parser result, with the signed-in
- * user's rules as the stores hold them when the statement is imported.
- */
-export function categorizeParsedData(parsed: ParsedData): ParsedData {
+/** `categorizeImportedTransactions` over a parser result. */
+export function categorizeParsedData(
+  parsed: ParsedData,
+  rules: UserRules
+): ParsedData {
   return {
     ...parsed,
-    transactions: categorizeImportedTransactions(
-      parsed.transactions,
-      currentUserRules()
-    ),
+    transactions: categorizeImportedTransactions(parsed.transactions, rules),
   }
 }

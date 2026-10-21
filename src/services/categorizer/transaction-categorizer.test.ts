@@ -8,7 +8,7 @@ import {
   setMerchantCategoryOverride,
 } from './category-overrides'
 import { addCustomPattern, clearAllCustomPatterns } from './custom-patterns'
-import { emptyUserRules, type UserRules } from './user-rules'
+import { currentUserRules, emptyUserRules, type UserRules } from './user-rules'
 import { analyzeTemporalPatterns } from './temporal-patterns'
 import { userRules } from '../../test/user-rules'
 import { Category } from '../../models'
@@ -448,5 +448,55 @@ describe('user rules are passed in, not read from the stores', () => {
     expect(categorize('Random Place XYZ', 'debit').category).toBe(
       Category.Uncategorized
     )
+  })
+})
+
+// Learned patterns come from every merchant override: building them is the
+// expensive part of a categorization, so one rules value builds them once,
+// however many rows it categorizes.
+describe('learned patterns are built once per rules value', () => {
+  it('reads the merchant overrides once for a 1,000-row categorization', () => {
+    const rules = userRules({
+      merchantOverrides: [
+        { merchantName: 'Botica Central', category: Category.Healthcare },
+        { merchantName: 'Botica Sur', category: Category.Healthcare },
+      ],
+    })
+    let enumerations = 0
+    const counted: UserRules = {
+      ...rules,
+      merchantOverrides: new Proxy(rules.merchantOverrides, {
+        ownKeys(target) {
+          enumerations += 1
+          return Reflect.ownKeys(target)
+        },
+      }),
+    }
+
+    for (let i = 0; i < 1000; i++) {
+      const result = categorize(`Botica Norte ${i}`, 'debit', {}, counted)
+      expect(result.category).toBe(Category.Healthcare)
+    }
+
+    expect(enumerations).toBe(1)
+  })
+
+  it('learns from a merchant override saved after an earlier categorization', () => {
+    try {
+      setMerchantCategoryOverride('Botica Central', Category.Healthcare)
+      const before = currentUserRules()
+      expect(categorize('Botica Norte', 'debit', {}, before).category).toBe(
+        Category.Uncategorized
+      )
+
+      setMerchantCategoryOverride('Botica Sur', Category.Healthcare)
+
+      const after = currentUserRules()
+      expect(categorize('Botica Norte', 'debit', {}, after).category).toBe(
+        Category.Healthcare
+      )
+    } finally {
+      clearAllCategoryOverrides()
+    }
   })
 })

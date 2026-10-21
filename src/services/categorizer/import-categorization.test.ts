@@ -105,11 +105,16 @@ describe('categorizeImportedTransactions', () => {
       parsedAt: new Date(2026, 0, 31),
     } as unknown as ParsedData
 
-    const result = categorizeParsedData(parsed)
+    const result = categorizeParsedData(parsed, RULES)
 
     expect(result.fileType).toBe('credit_card')
     expect(result.fileName).toBe('cc.csv')
     expect(result.metadata).toBe(parsed.metadata)
     expect(result.transactions[0].category).toBe('groceries')
+    expect(categorizeTransactionMock).toHaveBeenCalledWith(
+      'Devoto Supermercado',
+      'debit',
+      { rules: RULES }
+    )
   })
 })

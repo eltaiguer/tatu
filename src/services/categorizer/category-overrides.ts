@@ -1,6 +1,6 @@
 import { normalizeMerchantName } from './merchant-patterns'
-import { invalidateLearnedPatternsCache } from './learned-patterns'
 import { buildDescriptionOverrideKey } from '../descriptions/normalization'
+import type { CategoryOverrideRecord } from '../supabase/category-overrides'
 
 export interface CategoryOverride {
   merchantName?: string
@@ -10,6 +10,25 @@ export interface CategoryOverride {
 
 export type CategoryOverrides = Record<string, CategoryOverride>
 
+/** Stored override rows as the in-memory map, keyed as they were stored. */
+export function categoryOverridesFrom(
+  records: CategoryOverrideRecord[]
+): CategoryOverrides {
+  return Object.fromEntries(
+    records.map((record) => [
+      record.merchantNormalized,
+      {
+        merchantName: record.merchantOriginal,
+        category: record.category,
+        updatedAt: record.updatedAt,
+      },
+    ])
+  )
+}
+
+// Replaced, never mutated, on every write: a reader holding the previous
+// object (a UserRules value) keeps a consistent view, and the patterns
+// learned from an object (learned-patterns.ts) never go stale.
 let overrides: CategoryOverrides = {}
 
 /**
@@ -67,18 +86,17 @@ export function putMerchantCategoryOverrideKey(
   merchantName: string,
   category: string
 ): void {
-  overrides[key] = {
-    category,
-    merchantName,
-    updatedAt: new Date().toISOString(),
+  overrides = {
+    ...overrides,
+    [key]: { category, merchantName, updatedAt: new Date().toISOString() },
   }
-  invalidateLearnedPatternsCache()
 }
 
 export function deleteMerchantCategoryOverrideKey(key: string): void {
   if (overrides[key]) {
-    delete overrides[key]
-    invalidateLearnedPatternsCache()
+    const next = { ...overrides }
+    delete next[key]
+    overrides = next
   }
 }
 

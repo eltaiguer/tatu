@@ -70,9 +70,11 @@ Details that matter:
 
 - **Categorization at import uses only the first 8 sources** in the
   [precedence table](#categorizer-precedence). `categorizeParsedData` calls
-  `categorizeTransaction` with the user's rules (`currentUserRules()`) and no
-  other `CategorizationContext`, so temporal, similar-merchant and amount
-  hints never run at import. Passing context there
+  `categorizeTransaction` with the user's rules and no other
+  `CategorizationContext`, so temporal, similar-merchant and amount hints
+  never run at import. `importStatement` reads the rules once
+  (`currentUserRules()`) and passes the same value to `categorizeParsedData`
+  and to `importTransactions`, whose AI gate uses it. Passing context there
   would change future imports' categories — a separate decision (#64 step 2).
   The golden fixture in `import-categorization.equivalence.test.ts` pins the
   sample CSVs' import categories.
@@ -339,8 +341,10 @@ The user's rules come in as a value, `UserRules`
 (`src/services/categorizer/user-rules.ts`: description overrides, merchant
 overrides, custom patterns); steps 1–3 and 8 read only that value, never the
 stores. Call sites read it with `currentUserRules()` right where they
-categorize (import, Auto-categorizar, the dev panels), so each rule type keeps
-its one owner store. An empty value (`emptyUserRules()`) withholds the rules —
+categorize (`importStatement`, Auto-categorizar, the dev panels), so each
+rule type keeps its one owner store. Learned patterns are built once per
+merchant-overrides object (the store replaces its object on every write), so
+one `UserRules` value builds them once however many rows it categorizes. An empty value (`emptyUserRules()`) withholds the rules —
 learned patterns included, since they are built from the merchant overrides —
 which is how the categorizer eval
 (`src/services/categorizer/eval/agreement.ts`) scores the built-in

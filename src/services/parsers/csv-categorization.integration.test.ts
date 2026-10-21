@@ -4,11 +4,12 @@ import { join } from 'path'
 import { Category } from '../../models'
 import { parseCSV } from './csv-parser'
 import { categorizeParsedData } from '../categorizer/import-categorization'
+import { emptyUserRules } from '../categorizer/user-rules'
 
 function parseSample(fileName: string) {
   const samplePath = join(process.cwd(), 'samples', fileName)
   const csvContent = readFileSync(samplePath, 'utf-8')
-  return categorizeParsedData(parseCSV(csvContent, fileName))
+  return categorizeParsedData(parseCSV(csvContent, fileName), emptyUserRules())
 }
 
 function categorizationRate(categories: string[]): number {
