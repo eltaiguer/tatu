@@ -3,7 +3,10 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { TransactionFilters } from './TransactionFilters'
 import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
-import type { FilterState } from '../services/filters/transaction-filter'
+import {
+  hasActiveFilters,
+  type FilterState,
+} from '../services/filters/transaction-filter'
 import { getCategoryDisplay } from '../utils/category-display'
 import { replaceCustomCategories } from '../services/categories/category-store'
 
@@ -13,11 +16,18 @@ function renderFilters(
   filters: Partial<FilterState> = {},
   overrides: Partial<FilterProps> = {}
 ) {
+  const state: FilterState = {
+    ...DEFAULT_URL_FILTERS,
+    period: { mode: 'all' },
+    ...filters,
+  }
   const props: FilterProps = {
-    filters: { ...DEFAULT_URL_FILTERS, period: { mode: 'all' }, ...filters },
+    filters: state,
+    hasActiveFilters: hasActiveFilters(state),
     dateRange: { from: '', to: '' },
     availableCategories: ['groceries', 'restaurants'],
     onChange: vi.fn(),
+    onDateBoundChange: vi.fn(),
     onClearAll: vi.fn(),
     ...overrides,
   }
@@ -189,7 +199,7 @@ describe('TransactionFilters', () => {
   })
 
   describe('date range', () => {
-    it('updates the from and to dates', () => {
+    it('edits the from and to dates', () => {
       const props = renderFilters()
 
       fireEvent.change(screen.getByLabelText('Filtro fecha desde'), {
@@ -199,27 +209,23 @@ describe('TransactionFilters', () => {
         target: { value: '2025-01-31' },
       })
 
-      expect(props.onChange).toHaveBeenCalledWith({
-        period: { mode: 'range', from: '2025-01-01', to: '' },
-      })
-      expect(props.onChange).toHaveBeenCalledWith({
-        period: { mode: 'range', from: '', to: '2025-01-31' },
-      })
+      expect(props.onDateBoundChange).toHaveBeenCalledWith('from', '2025-01-01')
+      expect(props.onDateBoundChange).toHaveBeenCalledWith('to', '2025-01-31')
+      expect(props.onChange).not.toHaveBeenCalled()
     })
 
-    it('keeps the month end when only the start date is edited', () => {
-      const props = renderFilters(
+    it("shows the period's days", () => {
+      renderFilters(
         { period: { mode: 'month', y: 2026, m: 2 } },
         { dateRange: { from: '2026-03-01', to: '2026-03-31' } }
       )
 
-      fireEvent.change(screen.getByLabelText('Filtro fecha desde'), {
-        target: { value: '2026-03-05' },
-      })
-
-      expect(props.onChange).toHaveBeenCalledWith({
-        period: { mode: 'range', from: '2026-03-05', to: '2026-03-31' },
-      })
+      expect(screen.getByLabelText('Filtro fecha desde')).toHaveValue(
+        '2026-03-01'
+      )
+      expect(screen.getByLabelText('Filtro fecha hasta')).toHaveValue(
+        '2026-03-31'
+      )
     })
   })
 
@@ -238,6 +244,13 @@ describe('TransactionFilters', () => {
 
     it('is not offered when no filter is active', () => {
       renderFilters()
+
+      expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
+    })
+
+    // The view decides what counts as "filtrado" once, for the header too.
+    it('follows whether the view says a filter is active', () => {
+      renderFilters({ categories: ['groceries'] }, { hasActiveFilters: false })
 
       expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
     })

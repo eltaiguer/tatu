@@ -581,7 +581,113 @@ describe('useTransactionFiltering — the filters as one value', () => {
     rerender()
     act(() => result.current.update({ currency: 'all', categories: [] }))
     act(() => result.current.clear())
+    act(() => result.current.update({ period: { mode: 'all' }, accounts: [] }))
 
     expect(result.current.filters).toBe(before)
+  })
+})
+
+describe('useTransactionFiltering — date inputs', () => {
+  const transactions = [
+    makeTransaction('mar-02', { date: new Date('2026-03-02T00:00:00.000Z') }),
+    makeTransaction('mar-10', { date: new Date('2026-03-10T00:00:00.000Z') }),
+    makeTransaction('mar-31', { date: new Date('2026-03-31T00:00:00.000Z') }),
+  ]
+  const march = {
+    ...DEFAULT_URL_FILTERS,
+    period: { mode: 'month' as const, y: 2026, m: 2 },
+  }
+
+  it('keeps the month end when only the start date is edited', () => {
+    const { result } = renderHook(() =>
+      useTransactionFiltering({ transactions, initial: march })
+    )
+    act(() => result.current.setDateBound('from', '2026-03-05'))
+
+    expect(result.current.filters.period).toEqual({
+      mode: 'range',
+      from: '2026-03-05',
+      to: '2026-03-31',
+    })
+    expect(result.current.filteredTransactions.map((t) => t.id)).toEqual([
+      'mar-31',
+      'mar-10',
+    ])
+  })
+
+  it('keeps both ends edited in the same batch', () => {
+    const { result } = renderHook(() =>
+      useTransactionFiltering({ transactions, initial: march })
+    )
+    act(() => {
+      result.current.setDateBound('from', '2026-03-05')
+      result.current.setDateBound('to', '2026-03-20')
+    })
+
+    expect(result.current.filters.period).toEqual({
+      mode: 'range',
+      from: '2026-03-05',
+      to: '2026-03-20',
+    })
+    expect(result.current.dateRange).toEqual({
+      from: '2026-03-05',
+      to: '2026-03-20',
+    })
+  })
+})
+
+describe('useTransactionFiltering — stable updates', () => {
+  const transactions = [
+    makeTransaction('apr', { date: new Date('2026-04-02T00:00:00.000Z') }),
+  ]
+
+  // The view hands these to children as props, like the per-field setters
+  // they replace.
+  it('keeps update, clear and setDateBound the same across renders', () => {
+    const { result, rerender } = setup(transactions)
+    const { update, clear, setDateBound } = result.current
+
+    rerender()
+    act(() => result.current.update({ currency: 'UYU' }))
+
+    expect(result.current.update).toBe(update)
+    expect(result.current.clear).toBe(clear)
+    expect(result.current.setDateBound).toBe(setDateBound)
+  })
+
+  it('counts "últimos n meses" from the rows at the time it is chosen, even through an update kept from earlier', () => {
+    const { result, rerender } = renderHook(
+      ({ rows }) => useTransactionFiltering({ transactions: rows }),
+      { initialProps: { rows: transactions } }
+    )
+    const update = result.current.update
+
+    rerender({
+      rows: [
+        ...transactions,
+        makeTransaction('may', { date: new Date('2026-05-05T00:00:00.000Z') }),
+      ],
+    })
+    act(() => update({ period: { mode: 'recent', n: 1 } }))
+
+    expect(result.current.filteredTransactions.map((t) => t.id)).toEqual([
+      'may',
+    ])
+  })
+
+  it('does not re-render when the same "últimos n meses" is chosen again with no new rows', () => {
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders += 1
+      return useTransactionFiltering({
+        transactions,
+        initial: { ...DEFAULT_URL_FILTERS, period: { mode: 'recent', n: 2 } },
+      })
+    })
+    const before = renders
+
+    act(() => result.current.update({ period: { mode: 'recent', n: 2 } }))
+
+    expect(renders).toBe(before)
   })
 })

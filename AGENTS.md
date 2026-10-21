@@ -69,7 +69,7 @@ src/
     CategoryBreakdownList.tsx  # Ranked category list with progress bars
     FxChip.tsx             # Editable FX rate chip (click to edit inline)
     CurrencyToggle.tsx     # Home-currency switch
-    TransactionFilters.tsx # Unified filter bar (search, category, account, type, currency, date, amount): takes `filters` + `onChange(patch)` + `onClearAll`
+    TransactionFilters.tsx # Unified filter bar (search, category, account, type, currency, date, amount): takes `filters` + `onChange(patch)` + `onDateBoundChange` + `onClearAll`
     TransactionTable.tsx   # Transaction rows, selection, confidence meter, row actions
     EditTransactionDialog.tsx  # Edit modal: owns the draft (description, category, tags, apply-scope) + validation; emits it via one onSave
     BulkEditDialog.tsx     # Bulk categorization modal
@@ -92,7 +92,7 @@ src/
     useAuthSession.ts      # Supabase auth session management
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
     useTransactionHandlers.ts  # The transaction mutations bound to the signed-in user's repository (thin; one contract without one)
-    useTransactionFiltering.ts # The filters as ONE value (URL shape, period included): `filters` + `update(patch)` + `clear()`, plus sort + split grouping + pagination around filterTransactions
+    useTransactionFiltering.ts # The filters as ONE value (URL shape, period included): `filters` + `update(patch)` + `clear()` + `setDateBound`, plus sort + split grouping + pagination around filterTransactions
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)

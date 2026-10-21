@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
@@ -33,6 +33,7 @@ import {
   DEFAULT_URL_FILTERS,
   serializeFilterParams,
   type UrlFilterState,
+  type UrlPeriod,
 } from '../services/filters/url-filters'
 import { getPeriodLabel } from '../services/filters/period-label'
 import { hasActiveFilters } from '../services/filters/transaction-filter'
@@ -93,6 +94,7 @@ export function Transactions({
     filters,
     update: updateFilters,
     clear: clearFilters,
+    setDateBound,
     dateRange,
     sortField,
     sortDirection,
@@ -116,6 +118,15 @@ export function Transactions({
   })
   const { merchant: merchantFilter, period } = filters
   const filtered = hasActiveFilters(filters)
+  // Stable, like the per-field setters these children were handed before.
+  const setPeriod = useCallback(
+    (next: UrlPeriod) => updateFilters({ period: next }),
+    [updateFilters]
+  )
+  const setShowIgnored = useCallback(
+    (show: boolean) => updateFilters({ showIgnored: show }),
+    [updateFilters]
+  )
 
   // The merchant filter holds a merchant key (#120); the chip shows the same
   // label Resumen's "Mayores comercios" row did.
@@ -344,7 +355,7 @@ export function Transactions({
           <>
             <MonthNav
               period={period}
-              setPeriod={(next) => updateFilters({ period: next })}
+              setPeriod={setPeriod}
               newest={newestForNav}
             />
             <Button
@@ -413,9 +424,11 @@ export function Transactions({
       {/* Filters */}
       <TransactionFilters
         filters={filters}
+        hasActiveFilters={filtered}
         dateRange={dateRange}
         availableCategories={availableCategories}
         onChange={updateFilters}
+        onDateBoundChange={setDateBound}
         onClearAll={clearFilters}
       />
 
@@ -440,7 +453,7 @@ export function Transactions({
         onHeaderCheckboxChange={handleHeaderCheckboxChange}
         onSort={handleSort}
         onClearFilters={clearFilters}
-        onShowIgnoredChange={(show) => updateFilters({ showIgnored: show })}
+        onShowIgnoredChange={setShowIgnored}
         onEdit={setEditingTransaction}
         onDelete={(transaction) => {
           void handleDeleteTransaction(transaction)

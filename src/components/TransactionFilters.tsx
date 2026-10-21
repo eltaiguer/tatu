@@ -8,11 +8,7 @@ import { SegmentedToggle } from './ui/segmented-toggle'
 import { getCategoryDisplay } from '../utils/category-display'
 import { useClickOutside } from '../hooks/useClickOutside'
 import type { UrlFilterState } from '../services/filters/url-filters'
-import {
-  hasActiveFilters,
-  periodWithDateBound,
-  type FilterPatch,
-} from '../services/filters/transaction-filter'
+import type { FilterPatch } from '../services/filters/transaction-filter'
 
 const ACCOUNT_OPTIONS = [
   { value: 'credit_card', label: 'Tarjeta' },
@@ -139,18 +135,26 @@ function MultiSelectPopover({
 
 interface TransactionFiltersProps {
   filters: UrlFilterState
-  // The period as days, for the date inputs (see periodDateRange).
+  // Whether the view counts as "filtrado" (hasActiveFilters), decided once
+  // by the view.
+  hasActiveFilters: boolean
+  // The period as days, for the date inputs. Not derived from `filters`
+  // here: "últimos n meses" counts from an anchor only the view's state has.
   dateRange: { from: string; to: string }
   availableCategories: string[]
   onChange: (patch: FilterPatch) => void
+  // Editing one end of the date inputs; the view keeps the other end.
+  onDateBoundChange: (bound: 'from' | 'to', value: string) => void
   onClearAll: () => void
 }
 
 export function TransactionFilters({
   filters,
+  hasActiveFilters,
   dateRange,
   availableCategories,
   onChange,
+  onDateBoundChange,
   onClearAll,
 }: TransactionFiltersProps) {
   const [amountPanelOpen, setAmountPanelOpen] = useState(false)
@@ -173,10 +177,6 @@ export function TransactionFilters({
     max: maxAmount,
   } = filters
   const amountActive = Boolean(minAmount) || Boolean(maxAmount)
-
-  function setDateBound(bound: 'from' | 'to', value: string) {
-    onChange({ period: periodWithDateBound(dateRange, bound, value) })
-  }
 
   // Build active chips (search has its own × in the input, date is MonthNav)
   const chips: { label: string; onClear: () => void }[] = []
@@ -343,7 +343,7 @@ export function TransactionFilters({
               </button>
             </span>
           ))}
-          {hasActiveFilters(filters) && chips.length > 0 && (
+          {hasActiveFilters && chips.length > 0 && (
             <button
               onClick={onClearAll}
               className="cursor-pointer border-none [background:none] px-[4px] py-0 text-[13px] font-[500] text-[var(--brand)]"
@@ -360,7 +360,7 @@ export function TransactionFilters({
         aria-label="Filtro fecha desde"
         type="date"
         value={dateRange.from}
-        onChange={(event) => setDateBound('from', event.target.value)}
+        onChange={(event) => onDateBoundChange('from', event.target.value)}
         className="hidden"
       />
       <input
@@ -368,7 +368,7 @@ export function TransactionFilters({
         aria-label="Filtro fecha hasta"
         type="date"
         value={dateRange.to}
-        onChange={(event) => setDateBound('to', event.target.value)}
+        onChange={(event) => onDateBoundChange('to', event.target.value)}
         className="hidden"
       />
     </Card>
