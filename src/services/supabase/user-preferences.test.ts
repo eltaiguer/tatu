@@ -96,7 +96,8 @@ describe('user-preferences service', () => {
         fxRate: 42.5,
         claudeApiKey: '',
         aiEnabled: false,
-        aiModel: 'claude-haiku-4-5',
+        // A stored pre-5.5 id loads as its successor (models.ts)
+        aiModel: 'claude-haiku-5-5',
       })
     })
 
@@ -140,7 +141,7 @@ describe('user-preferences service', () => {
 
       expect(prefs?.aiModel).toBe(DEFAULT_CATEGORIZATION_MODEL)
       // Behavior unchanged: the fallback is still Haiku.
-      expect(prefs?.aiModel).toBe('claude-haiku-4-5')
+      expect(prefs?.aiModel).toBe('claude-haiku-5-5')
     })
   })
 

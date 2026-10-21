@@ -11,7 +11,10 @@ const KNOWN_MERCHANTS = [
 
 describe('Similar Merchant', () => {
   it('should find a similar merchant by shared tokens', () => {
-    const result = findSimilarMerchant('Farmacia del Sol', KNOWN_MERCHANTS)
+    // More than half of the known merchant's tokens must be anchored
+    // (review of #216): "Farmacia del Sol" shares one of two and no longer
+    // matches; the merchant list already sends "farmacia" to healthcare.
+    const result = findSimilarMerchant('Farmacia Central Sur', KNOWN_MERCHANTS)
     expect(result).not.toBeNull()
     expect(result!.category).toBe(Category.Healthcare)
     expect(result!.matchedPattern).toContain('similar:')
@@ -52,5 +55,31 @@ describe('Similar Merchant', () => {
     ])
     expect(result).not.toBeNull()
     expect(result!.category).toBe(Category.Groceries)
+  })
+})
+
+describe('findSimilarMerchant - anchored like the merchant list (review of #216)', () => {
+  it('does not match on character bigrams alone', () => {
+    expect(
+      findSimilarMerchant('La Pantera', [
+        { name: 'Antel', category: Category.Utilities },
+      ])
+    ).toBeNull()
+  })
+
+  it('does not match half of a multi-word merchant', () => {
+    expect(
+      findSimilarMerchant('El Club', [
+        { name: 'Automovil Club', category: Category.Insurance },
+      ])
+    ).toBeNull()
+  })
+
+  it('still matches a typo of a known merchant', () => {
+    expect(
+      findSimilarMerchant('Devotto', [
+        { name: 'Devoto', category: Category.Groceries },
+      ])?.category
+    ).toBe(Category.Groceries)
   })
 })

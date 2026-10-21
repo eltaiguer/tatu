@@ -86,7 +86,8 @@ src/
     CategoryChangesCard.tsx    # Resumen "what changed": category spend vs prior months
     ViewErrorBoundary.tsx  # Catches a failed view (e.g. lazy chunk) — reload affordance
     dev/                   # Developer tooling rendered inside Settings:
-                           #   CoverageAnalysis, AiCategorizationPreview, AiPatternAnalysis
+                           #   CoverageAnalysis, AiCategorizationPreview, AiPatternAnalysis,
+                           #   CategorizerEval (agreement of rules / AI with the user's own categorizations)
   hooks/                   # Custom React hooks (extracted from App.tsx)
     useAuthSession.ts      # Supabase auth session management
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
@@ -95,7 +96,7 @@ src/
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
-    categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure)
+    categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure); eval/agreement.ts scores any engine against the user's confidence-1 rows (user rules withheld)
     dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57); duplicate-review.ts: groups stored rows from different import runs for the one-off cleanup (#167)
     repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
     mutations/             # bulk-steps.ts: runs a bulk edit's steps in order (retry resumes the chain); transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
@@ -109,7 +110,7 @@ src/
     suggestions/           # suggestions.ts: category/tag suggestion lists + search filters shared by the edit dialogs
     descriptions/          # Description override management
     transfers/             # Internal transfer detection
-    ai/                    # Client-side Claude (BYO API key): categorization/enrichment; models.ts is the only place model IDs live
+    ai/                    # Client-side Claude (BYO API key): categorization/enrichment; models.ts is the only place model IDs live; jev-classifier.ts: Jev (TypeSafe, via OpenRouter) category-only classifier, eval panel only for now
     preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
     insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
     supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapter composes. No ambient session: callers pass a session or a repository

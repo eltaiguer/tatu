@@ -3,6 +3,8 @@ import type { Transaction } from '../../models'
 import type { CustomCategory } from '../categories/category-store'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { AiConfig } from './ai-config'
+import { firstTextBlock, type ClaudeResponseLike } from './text-block'
+import { resolveBuiltinAlias } from '../categories/category-aliases'
 
 export interface AiEnrichmentInput {
   id: string
@@ -31,14 +33,19 @@ export interface AiCorrectionContext {
   customPatterns: CustomPattern[]
 }
 
-// Each result object costs roughly 45-60 output tokens, so a 150-row batch
-// needs ~8,250 — which overflowed the previous 8192 cap and truncated the
-// JSON. The fix is the cap, not the batch size: shrinking batches instead
-// would have tripled the request count, and since the system prompt is
-// below the cache minimum on the default model (see below) that would have
-// tripled its cost too.
+// Each result object cost roughly 45-60 output tokens on Haiku 4.5, so a
+// 150-row batch needed ~8,250 and overflowed the previous 8192 cap. The 5.5
+// tokenizer counts about 30% more (~11,000 per batch), and the low-effort
+// thinking the model does before answering is billed against the same cap,
+// so 16,000 is the budget with the headroom that leaves — re-measure
+// `usage.output_tokens` before raising the batch size.
 const MAX_OUTPUT_TOKENS = 16000
-const BATCH_SIZE = 150
+/** Rows per request; exported so the dev panels can say how many calls a run is. */
+export const BATCH_SIZE = 150
+
+// Confidence 1 means "the user said so" everywhere (edits, bulk categorize,
+// the evaluation labels); the model's own 1.0 is capped just below it.
+const MAX_AI_CONFIDENCE = 0.99
 
 function buildSystemPrompt(customCategories: CustomCategory[]): string {
   const builtinLines = Object.values(Category)
@@ -176,7 +183,9 @@ export function validateCategory(
   raw: string,
   customCategories: CustomCategory[]
 ): string {
-  const normalized = raw.trim().toLowerCase()
+  // Pre-rename ids ("food", "transfer") still appear in the model's output;
+  // they resolve to the current built-in, as everywhere else.
+  const normalized = resolveBuiltinAlias(raw.trim().toLowerCase())
   if ((Object.values(Category) as string[]).includes(normalized)) {
     return normalized
   }
@@ -202,10 +211,7 @@ export function applyAiEnrichment(
   })
 }
 
-interface AiEnrichmentBatchResponse {
-  stop_reason?: string | null
-  content: Array<{ type: string; text?: string }>
-}
+type AiEnrichmentBatchResponse = ClaudeResponseLike
 
 /** Parses one batch response into results, or throws a diagnosable error. */
 function parseBatchResponse(
@@ -222,12 +228,7 @@ function parseBatchResponse(
     )
   }
 
-  const block = response.content[0]
-  if (!block || block.type !== 'text' || typeof block.text !== 'string') {
-    throw new Error(
-      `Respuesta inesperada del modelo (tipo: ${block?.type ?? 'vacío'})`
-    )
-  }
+  const text = firstTextBlock(response)
 
   let parsed: Array<{
     id: string
@@ -237,7 +238,7 @@ function parseBatchResponse(
   }>
   try {
     // Claude occasionally wraps output in markdown fences despite instructions
-    const raw = block.text.trim()
+    const raw = text.trim()
     const jsonText = raw.startsWith('[')
       ? raw
       : (raw.match(/\[[\s\S]*\]/)?.[0] ?? raw)
@@ -259,7 +260,7 @@ function parseBatchResponse(
       displayDescription:
         item.displayDescription.trim() ||
         (inputs.find((t) => t.id === item.id)?.description ?? item.id),
-      confidence: Math.min(1, Math.max(0, rawConfidence)),
+      confidence: Math.min(MAX_AI_CONFIDENCE, Math.max(0, rawConfidence)),
     })
   }
   return results
@@ -297,12 +298,10 @@ export async function enrichTransactionsWithAi(
   // makes it a stable cache prefix. Volatile per-batch data lives in the user
   // message, after this breakpoint.
   //
-  // Caveat: at ~1,200 tokens this prompt is below the minimum cacheable
-  // prefix for claude-haiku-4-5 (4,096), the default model — there the
-  // breakpoint is silently inert, with no error and cache_read_input_tokens
-  // of 0. It does engage on claude-sonnet-4-6 (minimum 1,024), the other
-  // option in Settings. Kept because it is free and correct; verify with
-  // usage.cache_read_input_tokens before claiming a saving on Haiku.
+  // At ~1,200 tokens this prompt clears the minimum cacheable prefix of the
+  // 5.5 models (512 tokens); it was below Haiku 4.5's 4,096, where the
+  // breakpoint was silently inert. Verify with usage.cache_read_input_tokens
+  // before claiming a saving.
   const systemPrompt = [
     {
       type: 'text' as const,
@@ -320,9 +319,13 @@ export async function enrichTransactionsWithAi(
     const batch = inputs.slice(i, i + BATCH_SIZE)
 
     try {
+      // The 5.5 models think by default and the thinking counts against
+      // max_tokens; this is classification, so the lowest effort keeps the
+      // output budget for the JSON.
       const response = (await client.messages.create({
         model: config.model,
         max_tokens: MAX_OUTPUT_TOKENS,
+        output_config: { effort: 'low' },
         system: systemPrompt,
         messages: [{ role: 'user', content: buildUserMessage(batch, context) }],
       })) as AiEnrichmentBatchResponse

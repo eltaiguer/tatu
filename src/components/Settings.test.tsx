@@ -283,10 +283,9 @@ describe('Settings', () => {
     expect(onSetAiModel.mock.calls.map(([id]) => id)).toEqual(
       CATEGORIZATION_MODELS.map((m) => m.id)
     )
-    // Behavior unchanged: same two models as before.
     expect(CATEGORIZATION_MODELS.map((m) => m.id)).toEqual([
-      'claude-haiku-4-5',
-      'claude-sonnet-4-6',
+      'claude-haiku-5-5',
+      'claude-sonnet-5-5',
     ])
   })
 

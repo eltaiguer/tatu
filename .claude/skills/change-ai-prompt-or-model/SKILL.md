@@ -9,11 +9,12 @@ Every Claude call runs in the browser with the user's own key (BYO,
 `dangerouslyAllowBrowser`) — there is no backend, and each call costs the user
 money. Two features use it:
 
-| Feature                    | Prompt + call                                                     | Parsing / guardrails                                          |
-| -------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------- |
-| Categorization at import   | `buildSystemPrompt` / `buildUserMessage` in `transaction-ai.ts`   | `validateCategory`, `applyAiEnrichment`, `parseBatchResponse` |
-| Insights                   | `insight-prompt.ts`, `generateInsights` in `insight-generator.ts` | `parseInsightsResponse`, `sanitizeInsight`                    |
-| Dev panel pattern analysis | `analyzeTransactionPatterns` in `prompt-analysis.ts`              | —                                                             |
+| Feature                    | Prompt + call                                                                                                     | Parsing / guardrails                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Categorization at import   | `buildSystemPrompt` / `buildUserMessage` in `transaction-ai.ts`                                                   | `validateCategory`, `applyAiEnrichment`, `parseBatchResponse` |
+| Insights                   | `insight-prompt.ts`, `generateInsights` in `insight-generator.ts`                                                 | `parseInsightsResponse`, `sanitizeInsight`                    |
+| Dev panel pattern analysis | `analyzeTransactionPatterns` in `prompt-analysis.ts`                                                              | —                                                             |
+| Dev panel evaluation (Jev) | `classifyWithJev` in `jev-classifier.ts` (TypeSafe Jev via OpenRouter, category only, `JEV_MODEL` in `models.ts`) | answers validated against the offered category ids            |
 
 For SDK, model and parameter facts, load the `claude-api` skill if available;
 don't work from memory.

@@ -173,11 +173,60 @@ describe('generateInsights', () => {
 
     expect(messagesCreateMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'claude-opus-4-8',
+        model: 'claude-opus-5-5',
         messages: [
           { role: 'user', content: expect.stringContaining('"historyStart"') },
         ],
       })
+    )
+  })
+
+  it('reads the first text block when the model thinks first', async () => {
+    messagesCreateMock.mockResolvedValueOnce({
+      content: [
+        { type: 'thinking', thinking: '', signature: 'sig' },
+        { type: 'text', text: JSON.stringify({ insights: [] }) },
+      ],
+    })
+
+    await expect(generateInsights(baseInput, 'sk-test-key')).resolves.toEqual({
+      insights: [],
+    })
+  })
+
+  it('leaves the output budget room for thinking and sets the effort', async () => {
+    messagesCreateMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: JSON.stringify({ insights: [] }) }],
+      stop_reason: 'end_turn',
+    })
+
+    await generateInsights(baseInput, 'sk-test-key')
+
+    const params = messagesCreateMock.mock.calls[0][0]
+    expect(params.max_tokens).toBeGreaterThanOrEqual(16000)
+    expect(params.output_config).toEqual({ effort: 'medium' })
+  })
+
+  it('reports a refusal in its own words', async () => {
+    messagesCreateMock.mockResolvedValueOnce({
+      content: [],
+      stop_reason: 'refusal',
+      stop_details: { type: 'refusal', category: 'general_harms' },
+    })
+
+    await expect(generateInsights(baseInput, 'sk-test-key')).rejects.toThrow(
+      /rechazó/
+    )
+  })
+
+  it('reports a truncated response instead of a parse error', async () => {
+    messagesCreateMock.mockResolvedValueOnce({
+      content: [{ type: 'text', text: '{"insights": [' }],
+      stop_reason: 'max_tokens',
+    })
+
+    await expect(generateInsights(baseInput, 'sk-test-key')).rejects.toThrow(
+      /truncada/
     )
   })
 

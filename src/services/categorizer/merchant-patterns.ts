@@ -1,5 +1,5 @@
 import { Category } from '../../models'
-import { tokenize, fuzzyTokenSimilarity } from './tokenizer'
+import { tokenize, fuzzyTokenSimilarity, anchoredCoverage } from './tokenizer'
 
 /**
  * Pattern matching result
@@ -286,7 +286,12 @@ export function matchMerchantPattern(
     }
   }
 
-  // Fuzzy fallback: if no substring match, try token-based similarity
+  // Fuzzy fallback: if no substring match, try token-based similarity.
+  // Similarity alone is not enough: character bigrams let "pantera" pass as
+  // "antel", and one shared token lets "el club" pass as "automovil club" or
+  // "merpago resto" as "merpago seguros". More than half of the pattern's
+  // tokens must be anchored by an input token (tokenizer.ts: equal, a 4+
+  // character prefix, or a close misspelling) before similarity counts.
   if (!bestMatch) {
     const inputTokens = tokenize(normalized)
     if (inputTokens.length > 0) {
@@ -294,6 +299,7 @@ export function matchMerchantPattern(
         for (const pattern of merchantPattern.patterns) {
           const patternTokens = tokenize(pattern)
           if (patternTokens.length === 0) continue
+          if (anchoredCoverage(patternTokens, inputTokens) <= 0.5) continue
 
           const score = fuzzyTokenSimilarity(inputTokens, patternTokens)
           if (score >= 0.5) {
