@@ -12,11 +12,13 @@ export interface DescriptionOverride {
 
 export type DescriptionOverrides = Record<string, DescriptionOverride>
 
-let overrides: DescriptionOverrides = {}
+// Replaced, never mutated, on every write: a UserRules snapshot holding the
+// previous object keeps seeing exactly the rules it was read with.
+let overrides: Readonly<DescriptionOverrides> = {}
 
 /** The override in `from` that covers a row with this description. */
 export function findDescriptionOverride(
-  from: DescriptionOverrides,
+  from: Readonly<DescriptionOverrides>,
   description: string
 ): DescriptionOverride | null {
   const descriptionKey = buildDescriptionOverrideKey(description)
@@ -47,11 +49,14 @@ export function setDescriptionOverride(input: {
     return
   }
 
-  overrides[descriptionKey] = {
-    descriptionOriginal: input.description,
-    friendlyDescription: input.friendlyDescription,
-    category: input.category,
-    updatedAt: new Date().toISOString(),
+  overrides = {
+    ...overrides,
+    [descriptionKey]: {
+      descriptionOriginal: input.description,
+      friendlyDescription: input.friendlyDescription,
+      category: input.category,
+      updatedAt: new Date().toISOString(),
+    },
   }
 }
 
@@ -62,11 +67,13 @@ export function clearDescriptionOverride(description: string): void {
   }
 
   if (overrides[descriptionKey]) {
-    delete overrides[descriptionKey]
+    const next = { ...overrides }
+    delete next[descriptionKey]
+    overrides = next
   }
 }
 
-export function listDescriptionOverrides(): DescriptionOverrides {
+export function listDescriptionOverrides(): Readonly<DescriptionOverrides> {
   return overrides
 }
 
@@ -75,7 +82,7 @@ export function clearAllDescriptionOverrides(): void {
 }
 
 export function replaceDescriptionOverrides(
-  nextOverrides: DescriptionOverrides
+  nextOverrides: Readonly<DescriptionOverrides>
 ): void {
   overrides = { ...nextOverrides }
 }

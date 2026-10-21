@@ -34,7 +34,7 @@ const learnedByOverrides = new WeakMap<
  * appear in overrides of other categories at similar frequency).
  */
 export function buildLearnedPatterns(
-  overrides: CategoryOverrides
+  overrides: Readonly<CategoryOverrides>
 ): Map<string, Category> {
   // Count token → category occurrences
   const tokenCategoryCounts = new Map<string, Map<string, number>>()
@@ -82,7 +82,7 @@ export function buildLearnedPatterns(
 
 /** The patterns learned from `overrides`, built once per object. */
 export function getLearnedPatterns(
-  overrides: CategoryOverrides
+  overrides: Readonly<CategoryOverrides>
 ): Map<string, Category> {
   let learned = learnedByOverrides.get(overrides)
   if (!learned) {
@@ -99,7 +99,7 @@ export function getLearnedPatterns(
  */
 export function matchLearnedPattern(
   description: string,
-  overrides: CategoryOverrides
+  overrides: Readonly<CategoryOverrides>
 ): PatternMatch | null {
   const patterns = getLearnedPatterns(overrides)
   if (patterns.size === 0) return null

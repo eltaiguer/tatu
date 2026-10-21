@@ -41,7 +41,7 @@ export interface AiCorrectionContext {
   }>
   categoryExamples: Array<{ merchant: string; category: string }>
   customCategories: CustomCategory[]
-  customPatterns: CustomPattern[]
+  customPatterns: readonly CustomPattern[]
 }
 
 // Each result object cost roughly 45-60 output tokens on Haiku 4.5, so a

@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { currentUserRules, emptyUserRules, hasUserRule } from './user-rules'
 import { addCustomPattern, clearAllCustomPatterns } from './custom-patterns'
+import {
+  clearAllCategoryOverrides,
+  setMerchantCategoryOverride,
+} from './category-overrides'
+import {
+  clearAllDescriptionOverrides,
+  setDescriptionOverride,
+} from '../descriptions/description-overrides'
 import { userRules } from '../../test/user-rules'
 
 describe('hasUserRule — does a rule the user wrote cover this row?', () => {
@@ -66,7 +74,11 @@ describe('hasUserRule — does a rule the user wrote cover this row?', () => {
 })
 
 describe('currentUserRules', () => {
-  afterEach(() => clearAllCustomPatterns())
+  afterEach(() => {
+    clearAllCustomPatterns()
+    clearAllCategoryOverrides()
+    clearAllDescriptionOverrides()
+  })
 
   it('reads the rules the stores hold now', () => {
     addCustomPattern({
@@ -76,5 +88,27 @@ describe('currentUserRules', () => {
     })
 
     expect(hasUserRule(currentUserRules(), 'NETFLIX.COM')).toBe(true)
+  })
+
+  // A snapshot: rules saved after it was read are not in it, so whoever
+  // read it categorizes and gates with one consistent set.
+  it('is not changed by rules saved after it was read', () => {
+    const snapshot = currentUserRules()
+
+    setDescriptionOverride({
+      description: 'KIOSCO 25',
+      friendlyDescription: 'Kiosco',
+      category: 'personal',
+    })
+    setMerchantCategoryOverride('DEVOTO EXPRESS', 'groceries')
+    addCustomPattern({
+      pattern: 'netflix',
+      matchType: 'contains',
+      category: 'shopping',
+    })
+
+    expect(hasUserRule(snapshot, 'KIOSCO 25')).toBe(false)
+    expect(hasUserRule(snapshot, 'DEVOTO EXPRESS')).toBe(false)
+    expect(hasUserRule(snapshot, 'NETFLIX.COM')).toBe(false)
   })
 })

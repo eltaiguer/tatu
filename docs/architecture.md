@@ -49,7 +49,7 @@ flowchart TD
     A2 --> B["detectFileType: credit_card, bank_account_usd or bank_account_uyu"]
     B --> C["parseCreditCardCSV or parseBankAccountCSV"]
     C --> E["Per row: generateTransactionId(date, description, amount text, row index)"]
-    E --> D["categorizeParsedData, per row: categorizeTransaction(description, type), no context"]
+    E --> D["categorizeParsedData, per row: categorizeTransaction(description, type, { rules }), no other context"]
     D --> F["findImportCandidates on Supabase: rows in the file's date window (live and deleted) + rows holding an incoming id"]
     F --> G{"classifyImport: same content (fingerprint) already stored, as many times?"}
     G -- "yes, live" --> H["Skipped as duplicate"]
@@ -57,7 +57,7 @@ flowchart TD
     G -- "matches a live row stored garbled (U+FFFD)" --> R["Repaired in place after the insert: description + raw_data patched, same id"]
     G -- "no" --> S["New row; id salted to id_cN if taken"]
     S --> J{"AI enabled with an API key?"}
-    J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a user rule (description override, merchant override, custom pattern)"]
+    J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a user rule (description override, merchant override, custom pattern; rules read after the server answered)"]
     J -- "no" --> L["insertTransactions: sequential 500-row INSERT chunks, tagged with the import run; stops at the first failed chunk"]
     K --> L
     L --> M["store.addTransactions(exactly the saved rows), which runs inferInternalTransfers"]
@@ -72,9 +72,12 @@ Details that matter:
   [precedence table](#categorizer-precedence). `categorizeParsedData` calls
   `categorizeTransaction` with the user's rules and no other
   `CategorizationContext`, so temporal, similar-merchant and amount hints
-  never run at import. `importStatement` reads the rules once
-  (`currentUserRules()`) and passes the same value to `categorizeParsedData`
-  and to `importTransactions`, whose AI gate uses it. Passing context there
+  never run at import. `importStatement` categorizes the parsed rows with
+  `currentUserRules()`; `importTransactions` takes a fresh snapshot once the
+  server has answered (after classification and `createImportRun`),
+  categorizes again the new rows a rule in it covers, and gates the AI and
+  builds its correction context with that same snapshot — so a rule saved
+  while the import waited is honoured. Passing context there
   would change future imports' categories — a separate decision (#64 step 2).
   The golden fixture in `import-categorization.equivalence.test.ts` pins the
   sample CSVs' import categories.
@@ -340,11 +343,12 @@ real money lands in, so keep this table and the function in sync.
 The user's rules come in as a value, `UserRules`
 (`src/services/categorizer/user-rules.ts`: description overrides, merchant
 overrides, custom patterns); steps 1–3 and 8 read only that value, never the
-stores. Call sites read it with `currentUserRules()` right where they
-categorize (`importStatement`, Auto-categorizar, the dev panels), so each
-rule type keeps its one owner store. Learned patterns are built once per
-merchant-overrides object (the store replaces its object on every write), so
-one `UserRules` value builds them once however many rows it categorizes. An empty value (`emptyUserRules()`) withholds the rules —
+stores. Call sites read it with `currentUserRules()` after their last
+await (import, Auto-categorizar, the dev panels), so each rule type keeps its
+one owner store. The value is an immutable snapshot (read-only types; the
+three stores replace their objects on every write, never mutate them), so
+learned patterns are built once per merchant-overrides object: one
+`UserRules` value builds them once however many rows it categorizes. An empty value (`emptyUserRules()`) withholds the rules —
 learned patterns included, since they are built from the merchant overrides —
 which is how the categorizer eval
 (`src/services/categorizer/eval/agreement.ts`) scores the built-in

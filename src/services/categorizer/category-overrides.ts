@@ -11,7 +11,7 @@ export interface CategoryOverride {
 export type CategoryOverrides = Record<string, CategoryOverride>
 
 /** Stored override rows as the in-memory map, keyed as they were stored. */
-export function categoryOverridesFrom(
+function categoryOverridesFrom(
   records: CategoryOverrideRecord[]
 ): CategoryOverrides {
   return Object.fromEntries(
@@ -29,7 +29,7 @@ export function categoryOverridesFrom(
 // Replaced, never mutated, on every write: a reader holding the previous
 // object (a UserRules value) keeps a consistent view, and the patterns
 // learned from an object (learned-patterns.ts) never go stale.
-let overrides: CategoryOverrides = {}
+let overrides: Readonly<CategoryOverrides> = {}
 
 /**
  * The key a merchant override is stored under: the normalized description
@@ -62,7 +62,7 @@ function keysFor(merchantName: string): string[] {
 
 /** The category an override in `from` gives this merchant, if any. */
 export function findMerchantCategoryOverride(
-  from: CategoryOverrides,
+  from: Readonly<CategoryOverrides>,
   merchantName: string
 ): string | null {
   for (const key of keysFor(merchantName)) {
@@ -120,7 +120,7 @@ export function clearMerchantCategoryOverride(merchantName: string): void {
   }
 }
 
-export function listMerchantCategoryOverrides(): CategoryOverrides {
+export function listMerchantCategoryOverrides(): Readonly<CategoryOverrides> {
   return overrides
 }
 
@@ -128,8 +128,15 @@ export function clearAllCategoryOverrides(): void {
   overrides = {}
 }
 
+/** Loads a user's stored override rows (the workspace load). */
+export function loadMerchantCategoryOverrides(
+  records: CategoryOverrideRecord[]
+): void {
+  overrides = categoryOverridesFrom(records)
+}
+
 export function replaceMerchantCategoryOverrides(
-  nextOverrides: CategoryOverrides
+  nextOverrides: Readonly<CategoryOverrides>
 ): void {
   overrides = { ...nextOverrides }
 }

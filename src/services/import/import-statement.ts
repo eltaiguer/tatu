@@ -59,13 +59,12 @@ export async function importStatement(
   file: StatementFile,
   { onParsed }: ImportStatementOptions = {}
 ): Promise<StatementImportResult> {
-  // Read once: the rows are categorized and gated from the AI by the same
-  // rules, whatever changes while the import awaits the server.
-  const rules = currentUserRules()
-  const { csvContent, parsed } = readStatement(file, rules)
+  const { csvContent, parsed } = readStatement(file, currentUserRules())
   onParsed?.()
 
-  const result = await importTransactions(repo, parsed.transactions, rules, {
+  // importTransactions reads the rules again once the server has answered,
+  // and recategorizes the new rows a rule saved meanwhile covers.
+  const result = await importTransactions(repo, parsed.transactions, {
     parsedData: parsed,
     csvContent,
     fileName: file.fileName,

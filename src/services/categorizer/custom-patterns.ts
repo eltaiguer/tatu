@@ -20,17 +20,20 @@ export interface CustomPattern {
   createdAt: string
 }
 
-let patterns: CustomPattern[] = []
+// Replaced, never mutated, on every write (see user-rules.ts).
+let patterns: readonly CustomPattern[] = []
 
 function generateId(): string {
   return `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function replaceCustomPatterns(nextPatterns: CustomPattern[]): void {
+export function replaceCustomPatterns(
+  nextPatterns: readonly CustomPattern[]
+): void {
   patterns = [...nextPatterns]
 }
 
-export function listCustomPatterns(): CustomPattern[] {
+export function listCustomPatterns(): readonly CustomPattern[] {
   return patterns
 }
 
@@ -114,7 +117,11 @@ export function testPattern(
   description: string,
   pattern: CustomPattern
 ): boolean {
-  const normalized = normalizeMerchantName(description)
+  return testNormalized(normalizeMerchantName(description), pattern)
+}
+
+/** `testPattern` for a description already through normalizeMerchantName. */
+function testNormalized(normalized: string, pattern: CustomPattern): boolean {
   if (!normalized) return false
 
   const normalizedPattern = normalizeMerchantName(pattern.pattern)
@@ -133,9 +140,10 @@ export function testPattern(
 /** The first pattern in `from` that matches the description, as a match. */
 export function matchCustomPattern(
   description: string,
-  from: CustomPattern[]
+  from: readonly CustomPattern[]
 ): PatternMatch | null {
-  const custom = from.find((pattern) => testPattern(description, pattern))
+  const normalized = normalizeMerchantName(description)
+  const custom = from.find((pattern) => testNormalized(normalized, pattern))
   if (!custom) return null
   return {
     category: custom.category as PatternMatch['category'],

@@ -22,13 +22,14 @@ import {
   type CustomPattern,
 } from './custom-patterns'
 
+/** Read-only: a value is never changed after it is read (see currentUserRules). */
 export interface UserRules {
   /** Renames (and optionally recategorizes) rows by their description. */
-  descriptionOverrides: DescriptionOverrides
+  readonly descriptionOverrides: Readonly<DescriptionOverrides>
   /** A category per merchant; the learned patterns are built from these. */
-  merchantOverrides: CategoryOverrides
+  readonly merchantOverrides: Readonly<CategoryOverrides>
   /** The user's pattern rules (Categorías → reglas). */
-  customPatterns: CustomPattern[]
+  readonly customPatterns: readonly CustomPattern[]
 }
 
 export function emptyUserRules(): UserRules {
@@ -36,9 +37,10 @@ export function emptyUserRules(): UserRules {
 }
 
 /**
- * The signed-in user's rules as the stores hold them now. Read it where the
- * rules are used, synchronously: the value shares the stores' objects, so it
- * is not a snapshot to keep across an await.
+ * A snapshot of the signed-in user's rules as the stores hold them now. The
+ * stores replace their objects on every write, never mutate them, so the
+ * snapshot keeps exactly these rules however long it is held: read it after
+ * the last await before the rules are used, so it is current.
  */
 export function currentUserRules(): UserRules {
   return {

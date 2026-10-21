@@ -1,9 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Transaction } from '../../models'
 import { createInMemoryRepository } from '../../services/repository/in-memory-repository'
-import { merchantOverrideKey } from '../../services/categorizer/category-overrides'
+import {
+  clearAllCategoryOverrides,
+  setMerchantCategoryOverride,
+} from '../../services/categorizer/category-overrides'
 import { CoverageAnalysis } from './CoverageAnalysis'
 
 const KIOSCO: Transaction = {
@@ -20,21 +23,13 @@ const KIOSCO: Transaction = {
 }
 
 describe('CoverageAnalysis', () => {
-  // The panel reads the stored overrides; it categorizes with those same
-  // overrides, not with whatever the in-memory store holds (empty here).
-  it('categorizes with the merchant overrides it loaded', async () => {
-    const repository = createInMemoryRepository({
-      transactions: [KIOSCO],
-      categoryOverrides: [
-        {
-          merchantNormalized: merchantOverrideKey('KIOSCO 25')!,
-          merchantOriginal: 'KIOSCO 25',
-          category: 'personal',
-          createdAt: '2026-03-01T00:00:00.000Z',
-          updatedAt: '2026-03-01T00:00:00.000Z',
-        },
-      ],
-    })
+  afterEach(() => clearAllCategoryOverrides())
+
+  // The stored rows, categorized with the workspace's rules: the same
+  // overrides the Override column reports.
+  it('categorizes the stored rows with the workspace merchant overrides', async () => {
+    setMerchantCategoryOverride('KIOSCO 25', 'personal')
+    const repository = createInMemoryRepository({ transactions: [KIOSCO] })
     render(<CoverageAnalysis repository={repository} />)
 
     await userEvent.click(
@@ -48,5 +43,6 @@ describe('CoverageAnalysis', () => {
       screen.getByTitle('KIOSCO 25').closest('tr') as HTMLElement
     )
     expect(row.getAllByText('personal')).toHaveLength(2)
+    expect(row.getByText('✓')).toBeTruthy()
   })
 })

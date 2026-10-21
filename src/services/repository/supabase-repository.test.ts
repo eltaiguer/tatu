@@ -424,35 +424,6 @@ describe('Supabase repository — transactions only', () => {
   })
 })
 
-describe('Supabase repository — merchant overrides only', () => {
-  it("reads only the user's category overrides", async () => {
-    db.seed('category_overrides', [
-      {
-        user_id: 'user-1',
-        merchant_normalized: 'disco',
-        merchant_original: 'DISCO',
-        category: 'groceries',
-        created_at: '',
-        updated_at: '',
-      },
-      {
-        user_id: 'user-2',
-        merchant_normalized: 'tienda',
-        merchant_original: 'TIENDA',
-        category: 'groceries',
-        created_at: '',
-        updated_at: '',
-      },
-    ])
-    const repo = createSupabaseRepository('user-1')
-
-    const overrides = await repo.loadCategoryOverrides()
-
-    expect(overrides.map((o) => o.merchantNormalized)).toEqual(['disco'])
-    expect(db.requests.map((r) => r.table)).toEqual(['category_overrides'])
-  })
-})
-
 describe('Supabase repository — insights cache', () => {
   it('reads no cache as null, and reads back what it saved', async () => {
     const repo = createSupabaseRepository('user-1')

@@ -10,6 +10,7 @@ import {
   LOW_CONFIDENCE,
 } from '../../services/categorizer/confidence'
 import { buildCorrectionContext } from '../../services/ai/correction-context'
+import { listCustomCategories } from '../../services/categories/category-store'
 import { resolveCategory } from '../../services/categories/category-registry'
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import {
@@ -141,7 +142,7 @@ export function AiCategorizationPreview({
               await enrichTransactionsWithAi(
                 inputs,
                 config,
-                buildCorrectionContext()
+                buildCorrectionContext(rules, listCustomCategories())
               )
             ).results
           : new Map()

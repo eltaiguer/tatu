@@ -52,11 +52,9 @@ import {
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
-import {
-  currentUserRules,
-  hasUserRule,
-  type UserRules,
-} from '../categorizer/user-rules'
+import { currentUserRules, hasUserRule } from '../categorizer/user-rules'
+import { categorizeImportedTransactions } from '../categorizer/import-categorization'
+import { listCustomCategories } from '../categories/category-store'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
 import { applyAiEnrichment, enrichTransactionsWithAi, getAiConfig } from '../ai'
@@ -243,13 +241,15 @@ function isUncategorized(tx: Transaction): boolean {
  * (#61): if one fails, the chunks before it stay saved, exactly those rows
  * reach the store, the run is marked failed with "N de M guardadas", and the
  * error says to import the file again (dedup skips what was saved).
- * `rules` are the user's rules the rows were categorized with: the same
- * value gates the AI (hasUserRule).
+ *
+ * The user's rules are read once the server has answered (a rule saved
+ * while the import waited counts): the new rows a rule covers are
+ * categorized again with that snapshot, and the same snapshot keeps them
+ * from the AI (hasUserRule) and builds the AI's correction context.
  */
 export async function importTransactions(
   repo: Repository,
   incoming: Transaction[],
-  rules: UserRules,
   context?: ImportContext
 ): Promise<ImportResult> {
   assertOwner(repo)
@@ -268,15 +268,26 @@ export async function importTransactions(
   }
 
   // Read only while this user still owns the workspace: the AI config and
-  // the correction context are the signed-in user's.
+  // the rules are the signed-in user's. A rule the user wrote is enforced
+  // here, not handed to the model as advice: a row it covers gets the rule's
+  // result and is not sent to the AI.
   const aiConfig = getAiConfig()
-  let toStore = added
+  const rules = currentUserRules()
+  const ruled = new Set(
+    added.filter((tx) => hasUserRule(rules, tx.description)).map((tx) => tx.id)
+  )
+  const recategorized = new Map(
+    categorizeImportedTransactions(
+      added.filter((tx) => ruled.has(tx.id)),
+      rules
+    ).map((tx) => [tx.id, tx])
+  )
+  const categorized = added.map((tx) => recategorized.get(tx.id) ?? tx)
+  let toStore = categorized
   let aiError: unknown
   let aiPartial: string | undefined
   if (aiConfig?.enabled && aiConfig.apiKey && added.length > 0) {
-    // A rule the user wrote is enforced here, not handed to the model as
-    // advice: a row it covers keeps the rule's result (hasUserRule).
-    const toEnrich = added.filter((tx) => !hasUserRule(rules, tx.description))
+    const toEnrich = categorized.filter((tx) => !ruled.has(tx.id))
     if (toEnrich.length > 0) {
       try {
         const outcome = await enrichTransactionsWithAi(
@@ -289,9 +300,9 @@ export async function importTransactions(
             source: tx.source,
           })),
           aiConfig,
-          buildCorrectionContext()
+          buildCorrectionContext(rules, listCustomCategories())
         )
-        toStore = applyAiEnrichment(added, outcome.results)
+        toStore = applyAiEnrichment(categorized, outcome.results)
         aiPartial = outcome.partialFailure
       } catch (error) {
         aiError = error

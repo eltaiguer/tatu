@@ -1,10 +1,11 @@
 import type { CustomPattern } from '../services/categorizer/custom-patterns'
-import { merchantOverrideKey } from '../services/categorizer/category-overrides'
-import { buildDescriptionOverrideKey } from '../services/descriptions/normalization'
 import {
-  emptyUserRules,
-  type UserRules,
-} from '../services/categorizer/user-rules'
+  merchantOverrideKey,
+  type CategoryOverrides,
+} from '../services/categorizer/category-overrides'
+import type { DescriptionOverrides } from '../services/descriptions/description-overrides'
+import { buildDescriptionOverrideKey } from '../services/descriptions/normalization'
+import type { UserRules } from '../services/categorizer/user-rules'
 
 const UPDATED_AT = '2026-03-01T00:00:00.000Z'
 
@@ -23,30 +24,31 @@ export function userRules(input: {
   merchantOverrides?: Array<{ merchantName: string; category: string }>
   customPatterns?: Array<Omit<CustomPattern, 'id' | 'createdAt'>>
 }): UserRules {
-  const rules = emptyUserRules()
+  const descriptionOverrides: DescriptionOverrides = {}
   for (const o of input.descriptionOverrides ?? []) {
     const key = buildDescriptionOverrideKey(o.description)
     if (!key) throw new Error(`no override key for "${o.description}"`)
-    rules.descriptionOverrides[key] = {
+    descriptionOverrides[key] = {
       descriptionOriginal: o.description,
       friendlyDescription: o.friendlyDescription,
       category: o.category,
       updatedAt: UPDATED_AT,
     }
   }
+  const merchantOverrides: CategoryOverrides = {}
   for (const o of input.merchantOverrides ?? []) {
     const key = merchantOverrideKey(o.merchantName)
     if (!key) throw new Error(`no override key for "${o.merchantName}"`)
-    rules.merchantOverrides[key] = {
+    merchantOverrides[key] = {
       merchantName: o.merchantName,
       category: o.category,
       updatedAt: UPDATED_AT,
     }
   }
-  rules.customPatterns = (input.customPatterns ?? []).map((p, i) => ({
+  const customPatterns = (input.customPatterns ?? []).map((p, i) => ({
     ...p,
     id: `cp_test_${i}`,
     createdAt: UPDATED_AT,
   }))
-  return rules
+  return { descriptionOverrides, merchantOverrides, customPatterns }
 }
