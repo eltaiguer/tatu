@@ -7,18 +7,37 @@ import {
 } from './suggestions'
 import { Category } from '../../models'
 import { replaceCustomCategories } from '../categories/category-store'
-import { getCategoryDisplay } from '../../utils/category-display'
+import { resolveCategory } from '../categories/category-registry'
 
 describe('buildCategorySuggestions', () => {
   beforeEach(() => {
     replaceCustomCategories([])
   })
 
+  it('never lists one category twice under different spellings', () => {
+    replaceCustomCategories([
+      { id: 'Viajes-Familia', label: 'Viajes', color: '#123456' },
+    ])
+
+    // A row's own category comes in as `extra`, in whatever casing or
+    // pre-rename id it was stored with.
+    const suggestions = buildCategorySuggestions([
+      'viajes-familia',
+      'Viajes-Familia',
+      'FOOD',
+    ])
+
+    expect(suggestions.filter((id) => id === 'viajes-familia')).toHaveLength(1)
+    expect(suggestions).not.toContain('Viajes-Familia')
+    expect(suggestions).not.toContain('FOOD')
+    expect(suggestions.filter((id) => id === 'groceries')).toHaveLength(1)
+  })
+
   it('lists every built-in category once, sorted by Spanish label', () => {
     const suggestions = buildCategorySuggestions()
 
     expect(new Set(suggestions)).toEqual(new Set(Object.values(Category)))
-    const labels = suggestions.map((id) => getCategoryDisplay(id).label)
+    const labels = suggestions.map((id) => resolveCategory(id).label)
     expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, 'es')))
   })
 
@@ -54,7 +73,7 @@ describe('filterCategorySuggestions', () => {
   })
 
   it('matches the id or the label, ignoring case and spaces around', () => {
-    const restaurantsLabel = getCategoryDisplay('restaurants').label
+    const restaurantsLabel = resolveCategory('restaurants').label
 
     expect(
       filterCategorySuggestions(['groceries', 'restaurants'], ' GROC ')

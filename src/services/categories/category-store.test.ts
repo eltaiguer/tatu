@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addCustomCategory,
   addCustomCategoryWithSync,
@@ -8,6 +8,8 @@ import {
   replaceCustomCategories,
   updateCustomCategory,
   updateCustomCategoryWithSync,
+  upsertBuiltinOverrideWithSync,
+  type CustomCategory,
 } from './category-store'
 import {
   createInMemoryRepository,
@@ -47,7 +49,7 @@ describe('Custom category store', () => {
   })
 
   it('never hands a custom category the legacy ignored id', () => {
-    // isCategoryIgnored treats 'ignored' as ignore-by-default, so a category
+    // resolveCategory treats 'ignored' as ignore-by-default, so a category
     // slugged that way would silently drop its transactions from every total.
     const c = addCustomCategory({ label: 'Ignored', color: '#ff0000' })
     expect(c.id).not.toBe('ignored')
@@ -190,5 +192,189 @@ describe('Custom category store', () => {
 
       expect(listCustomCategories().map((c) => c.label)).toEqual(['A de B'])
     })
+  })
+})
+
+// Ids are case-insensitive. Rows stored before slugs were lowercased keep
+// their stored casing on the server; the store normalizes them once, on the
+// way in, and writes back under the stored id.
+describe('legacy mixed-case category ids', () => {
+  let repo: InMemoryRepository
+
+  beforeEach(() => {
+    replaceCustomCategories([])
+    repo = createInMemoryRepository()
+    workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('lists a loaded mixed-case row under its lowercase id', () => {
+    replaceCustomCategories([
+      { id: 'Viajes-Familia', label: 'Viajes', color: '#123456' },
+    ])
+
+    expect(listCustomCategories().map((c) => c.id)).toEqual(['viajes-familia'])
+  })
+
+  it('keeps one row per id when two differ only by case, and says so', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const legacy = { id: 'Viajes', label: 'Viajes viejo', color: '#111111' }
+    const current = { id: 'viajes', label: 'Viajes', color: '#222222' }
+
+    for (const rows of [
+      [legacy, current],
+      [current, legacy],
+    ]) {
+      replaceCustomCategories(rows)
+      expect(listCustomCategories()).toEqual([
+        expect.objectContaining({ id: 'viajes', label: 'Viajes' }),
+      ])
+    }
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"Viajes"'))
+  })
+
+  it('edits and archives the stored row, never a lowercase duplicate', async () => {
+    await repo.upsertCustomCategory({
+      id: 'Home-Office',
+      label: 'Home office',
+      color: '#123456',
+    })
+    replaceCustomCategories([
+      { id: 'Home-Office', label: 'Home office', color: '#123456' },
+    ])
+    const [visible] = listCustomCategories()
+
+    await updateCustomCategoryWithSync(repo, visible.id, { label: 'Oficina' })
+    expect(listCustomCategories()[0].label).toBe('Oficina')
+    expect(repo.customCategories.get('Home-Office')?.label).toBe('Oficina')
+    expect(repo.customCategories.has('home-office')).toBe(false)
+
+    await removeCustomCategoryWithSync(repo, visible.id)
+    expect(listCustomCategories()).toEqual([])
+    expect(repo.customCategories.get('Home-Office')?.isArchived).toBe(true)
+    expect(repo.customCategories.has('home-office')).toBe(false)
+  })
+
+  it('never hands a new category the id of a mixed-case row', () => {
+    replaceCustomCategories([
+      { id: 'Home-Office', label: 'Home office', color: '#123456' },
+    ])
+
+    const created = addCustomCategory({ label: 'Home office', color: '#f00' })
+
+    expect(created.id).toBe('home-office-2')
+    expect(listCustomCategories().map((c) => c.id)).toEqual([
+      'home-office',
+      'home-office-2',
+    ])
+  })
+
+  it('updates a mixed-case built-in override in place', async () => {
+    await repo.upsertCustomCategory({
+      id: 'Groceries',
+      label: 'Súper',
+      color: '#123456',
+    })
+    replaceCustomCategories([
+      { id: 'Groceries', label: 'Súper', color: '#123456' },
+    ])
+
+    await upsertBuiltinOverrideWithSync(repo, 'groceries', { isIgnored: true })
+
+    expect(listCustomCategories()).toEqual([
+      expect.objectContaining({ id: 'groceries', isIgnored: true }),
+    ])
+    expect(repo.customCategories.get('Groceries')?.isIgnored).toBe(true)
+    expect(repo.customCategories.has('groceries')).toBe(false)
+  })
+})
+
+// Several stored rows can name one category (ids differing only by case, or
+// a pre-rename alias next to the current id). Every write goes to all of
+// them, so the server converges and a deleted category can't come back from
+// a row the screen never showed.
+describe('rows that collapse into one category', () => {
+  let repo: InMemoryRepository
+  const seed = async (rows: CustomCategory[]) => {
+    for (const row of rows) await repo.upsertCustomCategory(row)
+    replaceCustomCategories(rows)
+  }
+
+  beforeEach(() => {
+    replaceCustomCategories([])
+    repo = createInMemoryRepository()
+    workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('archives every collapsed row on delete', async () => {
+    await seed([
+      { id: 'Viajes', label: 'Viajes viejo', color: '#111111' },
+      { id: 'viajes', label: 'Viajes', color: '#222222' },
+    ])
+
+    await removeCustomCategoryWithSync(repo, 'viajes')
+
+    expect(repo.customCategories.get('Viajes')?.isArchived).toBe(true)
+    expect(repo.customCategories.get('viajes')?.isArchived).toBe(true)
+  })
+
+  it('sends an edit to every collapsed row', async () => {
+    await seed([
+      {
+        id: 'Viajes',
+        label: 'Viajes viejo',
+        color: '#111111',
+        isIgnored: true,
+      },
+      { id: 'viajes', label: 'Viajes', color: '#222222' },
+    ])
+
+    await updateCustomCategoryWithSync(repo, 'viajes', { label: 'Paseos' })
+
+    for (const id of ['Viajes', 'viajes']) {
+      expect(repo.customCategories.get(id)).toMatchObject({
+        label: 'Paseos',
+        color: '#222222',
+        isIgnored: false,
+      })
+    }
+  })
+
+  it('warns about diverging rows only until a write converges them', async () => {
+    const warn = vi.mocked(console.warn)
+    await seed([
+      { id: 'Viajes', label: 'Viajes viejo', color: '#111111' },
+      { id: 'viajes', label: 'Viajes', color: '#222222' },
+    ])
+    expect(warn).toHaveBeenCalledTimes(1)
+
+    await updateCustomCategoryWithSync(repo, 'viajes', { label: 'Paseos' })
+    warn.mockClear()
+    replaceCustomCategories(Array.from(repo.customCategories.values()))
+
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('folds a pre-rename alias row into its built-in and updates it in place', async () => {
+    await seed([{ id: 'transfer', label: 'Transferencias', color: '#0284c7' }])
+
+    expect(listCustomCategories().map((c) => c.id)).toEqual([
+      'internal_transfer',
+    ])
+
+    await upsertBuiltinOverrideWithSync(repo, 'internal_transfer', {
+      isIgnored: false,
+    })
+
+    expect(repo.customCategories.get('transfer')?.isIgnored).toBe(false)
+    expect(repo.customCategories.has('internal_transfer')).toBe(false)
   })
 })

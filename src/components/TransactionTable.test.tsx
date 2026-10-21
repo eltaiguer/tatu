@@ -299,6 +299,24 @@ describe('TransactionTable', () => {
       expect(normalRow.getByText(/-US\$/)).not.toHaveClass('line-through')
     })
 
+    it('says "Ignorada" once for a row marked with Ignorar', () => {
+      const { table } = renderTable({
+        paginatedTransactions: [
+          makeTransaction({
+            id: 'tx-ignored',
+            description: 'PAGO A MAMA',
+            category: 'ignored',
+          }),
+        ],
+      })
+
+      const row = within(rowFor(table, 'PAGO A MAMA'))
+      expect(row.getAllByText('Ignorada')).toHaveLength(1)
+      expect(row.getByText(/-US\$/)).toHaveClass('line-through')
+      // Desktop row + mobile card, once each.
+      expect(screen.getAllByText('Ignorada')).toHaveLength(2)
+    })
+
     it('toggles showing ignored transfers and shows how many there are', () => {
       const { props } = renderTable({ ignoredCount: 3 })
 

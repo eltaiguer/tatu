@@ -4,7 +4,10 @@ import { Checkbox } from '../ui/checkbox'
 import { CategoryBadge } from '../CategoryBadge'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency } from '../../models'
-import { isCategoryIgnored } from '../../services/categories/category-registry'
+import {
+  needsIgnoredFlag,
+  resolveCategory,
+} from '../../services/categories/category-registry'
 import {
   getDisplayDescription,
   needsCategoryReview,
@@ -35,7 +38,9 @@ export function TransactionCard({
 }: TransactionRowProps) {
   const displayDescription = getDisplayDescription(transaction)
   const hasFriendlyOverride = displayDescription !== transaction.description
-  const isIgnored = isCategoryIgnored(transaction.category)
+  const category = resolveCategory(transaction.category)
+  const isIgnored = category.isIgnored
+  const showIgnoredFlag = needsIgnoredFlag(category)
   const isSplitParentM = isSplitParentTx(transaction)
   const mutedM = !countsTowardTotals(transaction)
   const isSplitChildM = isSplitChildTx(transaction)
@@ -61,7 +66,7 @@ export function TransactionCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <div className="font-medium truncate">{displayDescription}</div>
-            {isIgnored && (
+            {showIgnoredFlag && (
               <span className="inline-flex shrink-0 items-center gap-[3px] rounded-[4px] bg-[var(--muted)] px-[6px] py-[1px] text-[11px] font-medium text-[color:var(--text-muted)]">
                 <Slash size={9} />
                 Ignorada

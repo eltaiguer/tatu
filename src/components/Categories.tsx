@@ -14,7 +14,7 @@ import {
   DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
 import { getCategoryTransactionCount } from '../services/categories/category-counts'
-import { getCategoryDisplay } from '../utils/category-display'
+import { resolveCategory } from '../services/categories/category-registry'
 import { buildCategorySpendingConverted } from '../services/charts/chart-data'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import type { CustomPattern } from '../services/categorizer/custom-patterns'
@@ -147,7 +147,7 @@ export function Categories({
   }
 
   async function handleDelete(categoryId: string) {
-    const label = getCategoryDisplay(categoryId).label
+    const label = resolveCategory(categoryId).label
     try {
       await removeCustomCategoryWithSync(
         requireRepository(repository),
@@ -177,25 +177,13 @@ export function Categories({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [transactions, homeCurrency, fxRate, categoriesVersion]
   )
-  const definedIds = new Set(
-    categoryDefinitions.map((cat) => normalizeCategoryId(cat.id))
-  )
   // Transactions can keep a category whose definition was deleted; Resumen
-  // still counts them, so they get a card too (no edit/delete).
+  // still counts them, so they get a card too (no edit/delete), drawn the
+  // way every other surface draws that id.
   const orphanCards = Array.from(spending.keys())
-    .filter((id) => !definedIds.has(id))
-    .map((id) => {
-      const display = getCategoryDisplay(id)
-      return {
-        id,
-        label: display.label,
-        color: display.color,
-        icon: '🏷️',
-        isIgnored: false,
-        isCustom: false,
-        isOrphan: true,
-      }
-    })
+    .map((id) => resolveCategory(id))
+    .filter((category) => !category.known)
+    .map((category) => ({ ...category, isOrphan: true }))
   const categoryCards = [
     ...categoryDefinitions.map((cat) => ({ ...cat, isOrphan: false })),
     ...orphanCards,

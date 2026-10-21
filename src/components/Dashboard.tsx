@@ -5,7 +5,6 @@ import { PageHeader } from './ui/page-header'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
 import { Category } from '../models'
 import { useMemo } from 'react'
-import { getCategoryDefinitions } from '../services/categories/category-registry'
 import {
   buildCurrentMonthSummary,
   buildMerchantSpendingConverted,
@@ -109,20 +108,14 @@ export function Dashboard({
   )
 
   // Category breakdown — all history (for donut)
-  const emojiLookup = useMemo(() => {
-    const map = new Map<string, string>()
-    getCategoryDefinitions().forEach((d) => map.set(d.id, d.icon))
-    return map
-  }, [])
-
-  const categoryData = useMemo(
-    () =>
-      toCategorySpendRows(
-        buildCategorySpendingConverted(transactions, homeCurrency, fxRate),
-        emojiLookup
-      ),
-    [transactions, homeCurrency, fxRate, emojiLookup]
+  const categorySpending = useMemo(
+    () => buildCategorySpendingConverted(transactions, homeCurrency, fxRate),
+    [transactions, homeCurrency, fxRate]
   )
+  // Labels, colours and icons are resolved at render, not memoized with the
+  // sums: custom categories can load or change without `transactions`
+  // changing. One resolveCategory per category is cheap.
+  const categoryData = toCategorySpendRows(categorySpending)
 
   const changes = useMemo(
     () => categoryChanges(transactions, homeCurrency, fxRate),
@@ -325,7 +318,6 @@ export function Dashboard({
             {topMerchants.length > 0 && (
               <TopMerchantsCard
                 topMerchants={topMerchants}
-                emojiLookup={emojiLookup}
                 periodRange={periodRange}
                 homeCurrency={homeCurrency}
                 onNavigateToTransactions={onNavigateToTransactions}

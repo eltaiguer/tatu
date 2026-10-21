@@ -10,7 +10,7 @@ import {
   LOW_CONFIDENCE,
 } from '../../services/categorizer/confidence'
 import { buildCorrectionContext } from '../../services/ai/correction-context'
-import { getCategoryDefinition } from '../../services/categories/category-registry'
+import { resolveCategory } from '../../services/categories/category-registry'
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import { getDescriptionOverride } from '../../services/descriptions/description-overrides'
 import { getMerchantCategoryOverride } from '../../services/categorizer/category-overrides'
@@ -146,12 +146,8 @@ export function AiCategorizationPreview({
 
       // Step 4: build rows
       const built: PreviewRow[] = sample.map((tx) => {
-        const ruleCat = getCategoryDefinition(
-          ruleResults.get(tx.id)?.category ?? 'uncategorized'
-        ).id
-        const storedCat = getCategoryDefinition(
-          tx.category ?? 'uncategorized'
-        ).id
+        const ruleCat = resolveCategory(ruleResults.get(tx.id)?.category).id
+        const storedCat = resolveCategory(tx.category).id
         const aiResult = aiResults.get(tx.id)
 
         let finalCategory: string
@@ -163,7 +159,7 @@ export function AiCategorizationPreview({
           finalCategory = ruleCat
           source = 'override'
         } else if (aiResult) {
-          finalCategory = getCategoryDefinition(aiResult.category).id
+          finalCategory = resolveCategory(aiResult.category).id
           aiDisplayDescription = aiResult.displayDescription
           aiConfidence = aiResult.confidence
           source = 'ai'

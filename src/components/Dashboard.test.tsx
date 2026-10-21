@@ -229,6 +229,22 @@ describe('Dashboard', () => {
     expect(screen.queryByText(/NaN|Infinity/)).not.toBeInTheDocument()
   })
 
+  it('relabels the category breakdown when custom categories load after first render', () => {
+    const transactions = [
+      makeTransaction({ id: 'cafe-1', category: 'cafe', amount: 100 }),
+    ]
+    const { rerender } = render(<Dashboard transactions={transactions} />)
+    expect(screen.getAllByText('Cafe').length).toBeGreaterThan(0)
+
+    replaceCustomCategories([
+      { id: 'cafe', label: 'Café y bares', color: '#123456', icon: '☕' },
+    ])
+    rerender(<Dashboard transactions={transactions} />)
+
+    expect(screen.queryAllByText('Cafe')).toHaveLength(0)
+    expect(screen.getAllByText('Café y bares').length).toBeGreaterThan(0)
+  })
+
   it('renders category breakdown from expense data', () => {
     const transactions = [
       makeTransaction({

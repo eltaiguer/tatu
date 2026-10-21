@@ -6,8 +6,8 @@ import { CategoryBadge } from '../CategoryBadge'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency, Transaction } from '../../models'
 import {
-  getCategoryDefinition,
-  isCategoryIgnored,
+  needsIgnoredFlag,
+  resolveCategory,
 } from '../../services/categories/category-registry'
 import {
   getDisplayDescription,
@@ -52,7 +52,9 @@ export function TransactionRow({
 }: TransactionRowProps) {
   const displayDescription = getDisplayDescription(transaction)
   const hasFriendlyOverride = displayDescription !== transaction.description
-  const isIgnored = isCategoryIgnored(transaction.category)
+  const category = resolveCategory(transaction.category)
+  const isIgnored = category.isIgnored
+  const showIgnoredFlag = needsIgnoredFlag(category)
   const isSplitParent = isSplitParentTx(transaction)
   // Muted when the row adds nothing to the totals.
   const muted = !countsTowardTotals(transaction)
@@ -101,31 +103,20 @@ export function TransactionRow({
         }
       >
         <div className="flex items-start gap-[10px]">
-          {(() => {
-            const catId = transaction.category ?? 'uncategorized'
-            const definition = getCategoryDefinition(catId)
-            return (
-              <IconTile
-                aria-hidden="true"
-                size="sm"
-                color={definition.color}
-                className="mt-[1px]"
-              >
-                {definition.icon ?? (
-                  <span
-                    className="block h-[8px] w-[8px] rounded-full"
-                    style={{ background: definition.color }}
-                  />
-                )}
-              </IconTile>
-            )
-          })()}
+          <IconTile
+            aria-hidden="true"
+            size="sm"
+            color={category.color}
+            className="mt-[1px]"
+          >
+            {category.icon}
+          </IconTile>
           <div className="min-w-0">
             <div className="flex items-center gap-[7px]">
               <div className="font-medium truncate leading-snug max-w-[220px]">
                 {displayDescription}
               </div>
-              {isIgnored && (
+              {showIgnoredFlag && (
                 <span className="inline-flex shrink-0 items-center gap-[3px] rounded-[4px] bg-[var(--muted)] px-[6px] py-[1px] text-[11px] font-medium text-[color:var(--text-muted)]">
                   <Slash size={9} />
                   Ignorada

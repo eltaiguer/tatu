@@ -3,7 +3,7 @@
 
 import type { Currency, TransactionsFilter } from '../../models'
 import type { MerchantSpendDatum } from '../../services/charts/chart-data'
-import { getCategoryDisplay } from '../../utils/category-display'
+import { resolveCategory } from '../../services/categories/category-registry'
 import { formatCurrency } from '../../utils/formatting'
 import { Card } from '../ui/card'
 import { IconTile } from '../ui/icon-tile'
@@ -11,8 +11,6 @@ import { DrillTarget } from './DrillTarget'
 
 interface TopMerchantsCardProps {
   topMerchants: MerchantSpendDatum[]
-  // Category id -> emoji icon.
-  emojiLookup: Map<string, string>
   periodRange: string | null
   homeCurrency: Currency
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
@@ -20,7 +18,6 @@ interface TopMerchantsCardProps {
 
 export function TopMerchantsCard({
   topMerchants,
-  emojiLookup,
   periodRange,
   homeCurrency,
   onNavigateToTransactions,
@@ -39,8 +36,7 @@ export function TopMerchantsCard({
       </div>
       <div className="flex flex-col">
         {topMerchants.map((m, i) => {
-          const display = getCategoryDisplay(m.categoryId)
-          const emoji = emojiLookup.get(m.categoryId)
+          const display = resolveCategory(m.categoryId)
           return (
             <DrillTarget
               key={m.key}
@@ -59,12 +55,7 @@ export function TopMerchantsCard({
                 {i + 1}
               </span>
               <IconTile size="sm" color={display.color}>
-                {emoji ?? (
-                  <span
-                    className="block h-[8px] w-[8px] rounded-[50%]"
-                    style={{ background: display.color }}
-                  />
-                )}
+                {display.icon}
               </IconTile>
               <div className="min-w-0 flex-1">
                 <div className="overflow-hidden text-[14px] font-medium text-ellipsis whitespace-nowrap">

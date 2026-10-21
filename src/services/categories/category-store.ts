@@ -1,4 +1,4 @@
-import { isReservedCategoryId } from './category-aliases'
+import { isReservedCategoryId, normalizeCategoryId } from './category-aliases'
 import { UserFacingError } from '../../utils/user-error'
 import type { Repository } from '../repository/repository'
 import { isWorkspaceOwner } from '../../stores/workspace-state'
@@ -12,7 +12,16 @@ export type CategoryRepository = Pick<
 export const DEFAULT_CATEGORY_COLOR = '#0ea5e9'
 
 export interface CustomCategory {
+  /** The id rows are grouped under: always normalizeCategoryId(stored id). */
   id: string
+  /**
+   * The server rows behind this category when they are not just `id`: a row
+   * stored before slugs were lowercased ('Viajes-Familia'), a pre-rename
+   * alias row ('transfer' for internal_transfer), or several rows that name
+   * one category. Every write and archive goes to all of them, so editing a
+   * legacy row never creates a duplicate and the server converges.
+   */
+  storedIds?: string[]
   label: string
   color: string
   icon?: string
@@ -50,12 +59,66 @@ export function listCustomCategories(): CustomCategory[] {
   return _customCategories
 }
 
+function serverIds(c: CustomCategory): string[] {
+  return c.storedIds ?? [c.id]
+}
+
+// Which stored row's settings a category shows when several rows name it:
+// the one stored under the current id (what the app writes today), else the
+// smallest stored id — never whichever order Supabase returned them in.
+function rank(key: string, storedId: string): [number, string] {
+  return [storedId === key ? 0 : 1, storedId]
+}
+
+function sameSettings(a: CustomCategory, b: CustomCategory): boolean {
+  return (
+    a.label === b.label &&
+    a.color === b.color &&
+    (a.icon ?? '') === (b.icon ?? '') &&
+    (a.isIgnored ?? false) === (b.isIgnored ?? false)
+  )
+}
+
+/**
+ * Loads a user's categories — the one place ids are normalized. Each row is
+ * keyed by normalizeCategoryId (trimmed, lowercase, pre-rename alias
+ * resolved), keeping the server ids in `storedIds` for writes. Rows that
+ * name one category collapse into it: the preferred row's settings win, and
+ * the next write goes to every row, so the server converges. Until then the
+ * disagreement is reported once per load.
+ */
 export function replaceCustomCategories(categories: CustomCategory[]): void {
-  const seen = new Set<string>()
-  _customCategories = categories.filter((c) => {
-    if (seen.has(c.id)) return false
-    seen.add(c.id)
-    return true
+  const groups = new Map<
+    string,
+    Array<{ storedId: string; row: CustomCategory }>
+  >()
+  for (const row of categories) {
+    for (const storedId of serverIds(row)) {
+      const key = normalizeCategoryId(storedId)
+      groups.set(key, [...(groups.get(key) ?? []), { storedId, row }])
+    }
+  }
+
+  _customCategories = Array.from(groups, ([key, rows]) => {
+    const sorted = [...rows].sort((a, b) => {
+      const [ra, ia] = rank(key, a.storedId)
+      const [rb, ib] = rank(key, b.storedId)
+      return ra - rb || (ia < ib ? -1 : ia > ib ? 1 : 0)
+    })
+    const storedIds = Array.from(new Set(sorted.map((r) => r.storedId)))
+    const winner = sorted[0].row
+    const diverging = sorted.filter((r) => !sameSettings(r.row, winner))
+    if (diverging.length > 0) {
+      console.warn(
+        `[categories] stored categories ${storedIds.map((id) => `"${id}"`).join(', ')} are one category with different settings; showing "${sorted[0].storedId}" until the next save updates them all`
+      )
+    }
+    return {
+      ...winner,
+      id: key,
+      storedIds:
+        storedIds.length === 1 && storedIds[0] === key ? undefined : storedIds,
+    }
   })
 }
 
@@ -115,14 +178,16 @@ async function pushCategory(
 ): Promise<void> {
   const category = _customCategories.find((c) => c.id === id)
   if (!category) return
-  await repo.upsertCustomCategory({
-    id: category.id,
-    label: category.label,
-    color: category.color,
-    icon: category.icon,
-    isIgnored: category.isIgnored,
-    isArchived: false,
-  })
+  for (const storedId of serverIds(category)) {
+    await repo.upsertCustomCategory({
+      id: storedId,
+      label: category.label,
+      color: category.color,
+      icon: category.icon,
+      isIgnored: category.isIgnored,
+      isArchived: false,
+    })
+  }
 }
 
 function restoreCategory(
@@ -229,7 +294,9 @@ export async function removeCustomCategoryWithSync(
   const previous = _customCategories.find((c) => c.id === id)
   removeCustomCategory(id)
   try {
-    await repo.archiveCustomCategory(id)
+    for (const storedId of previous ? serverIds(previous) : [id]) {
+      await repo.archiveCustomCategory(storedId)
+    }
   } catch (error) {
     restoreCategory(repo, id, previous)
     throw error
