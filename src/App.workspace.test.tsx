@@ -14,148 +14,72 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
-import type { SupabaseSession } from './services/supabase/client'
+import type { AuthSession } from './services/auth/auth-port'
 import type { UserPreferences } from './services/supabase/user-preferences'
+import type { Repository } from './services/repository/repository'
 import { getAiConfig } from './services/ai/ai-config'
 import {
   PREFERENCE_FLUSH_TIMEOUT_MS,
   teardownWorkspace,
 } from './stores/workspace-store'
-
-const {
-  getCurrentSessionMock,
-  signInWithPasswordMock,
-  signOutMock,
-  subscribeToAuthChangesMock,
-  updatePasswordMock,
-  loadUserPreferencesMock,
-  saveUserPreferencesMock,
-  resetUserSupabaseDataMock,
-} = vi.hoisted(() => ({
-  getCurrentSessionMock: vi.fn(),
-  signInWithPasswordMock: vi.fn(),
-  signOutMock: vi.fn(),
-  subscribeToAuthChangesMock: vi.fn(),
-  updatePasswordMock: vi.fn(),
-  loadUserPreferencesMock: vi.fn(),
-  saveUserPreferencesMock: vi.fn(),
-  resetUserSupabaseDataMock: vi.fn(),
-}))
-
-vi.mock('./services/supabase/client', () => ({
-  isSupabaseConfigured: () => true,
-}))
-
-vi.mock('./services/supabase/auth', () => ({
-  getCurrentSession: getCurrentSessionMock,
-  requestPasswordReset: vi.fn().mockResolvedValue(undefined),
-  signInWithPassword: signInWithPasswordMock,
-  signOut: signOutMock,
-  signUpWithPassword: vi.fn(),
-  subscribeToAuthChanges: subscribeToAuthChangesMock,
-  updatePassword: updatePasswordMock,
-}))
-
-vi.mock('./services/supabase/transactions', () => ({
-  loadUserTransactions: vi.fn().mockResolvedValue([]),
-  persistTransactions: vi.fn().mockResolvedValue(undefined),
-  setTransactionsDeleted: vi.fn(async (_s: unknown, ids: string[]) => ids),
-  updateTransactionsByIds: vi.fn(async (_s: unknown, ids: string[]) => ids),
-}))
-
-vi.mock('./services/supabase/category-overrides', () => ({
-  listCategoryOverrides: vi.fn().mockResolvedValue([]),
-  upsertCategoryOverride: vi.fn().mockResolvedValue(undefined),
-  deleteCategoryOverride: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('./services/supabase/description-overrides', () => ({
-  listDescriptionOverrides: vi.fn().mockResolvedValue([]),
-  upsertDescriptionOverride: vi.fn().mockResolvedValue(undefined),
-  deleteDescriptionOverride: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('./services/supabase/custom-categories', () => ({
-  listCustomCategories: vi.fn().mockResolvedValue([]),
-  upsertCustomCategory: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('./services/supabase/custom-patterns', () => ({
-  listCustomPatterns: vi.fn().mockResolvedValue([]),
-}))
-
-vi.mock('./services/supabase/user-preferences', () => ({
-  loadUserPreferences: loadUserPreferencesMock,
-  saveUserPreferences: saveUserPreferencesMock,
-}))
-
-vi.mock('./services/supabase/reset', () => ({
-  resetUserSupabaseData: resetUserSupabaseDataMock,
-}))
+import { makeSession } from './services/auth/in-memory-auth'
+import { createFakeBackend, type FakeBackend } from './test/fake-backend'
 
 const A_KEY = 'sk-ant-user-a-secret'
-
-function makeSession(id: string): SupabaseSession {
-  return {
-    access_token: `access-${id}`,
-    refresh_token: `refresh-${id}`,
-    token_type: 'bearer',
-    expires_in: 3600,
-    expires_at: 9999,
-    user: { id, email: `${id}@example.com` },
-  } as SupabaseSession
-}
 
 const userA = makeSession('user-a')
 const userB = makeSession('user-b')
 
-// The callbacks App registered with Supabase's auth listener, so a test can
-// raise SIGNED_OUT / PASSWORD_RECOVERY the way Supabase would.
-let authListener: {
-  onSession: (session: SupabaseSession | null) => void
-  onRecovery: () => void
-}
+// Nobody signed in; A and B have accounts and nothing stored. A test raises
+// SIGNED_OUT / PASSWORD_RECOVERY with `backend.auth.emit` / `recover`.
+let backend: FakeBackend
 
-type SaveCall = [SupabaseSession, UserPreferences]
-const saves = () => saveUserPreferencesMock.mock.calls as SaveCall[]
+// Every preference save App sends, in order, by user (logged when sent).
+type SaveCall = [userId: string, preferences: UserPreferences]
+let saveLog: SaveCall[]
+const logged = new WeakSet<Repository>()
+function createRepository(userId: string) {
+  const repo = backend.createRepository(userId)
+  if (!logged.has(repo)) {
+    logged.add(repo)
+    const save = repo.savePreferences
+    repo.savePreferences = (preferences) => {
+      saveLog.push([repo.userId, preferences])
+      return save(preferences)
+    }
+  }
+  return repo
+}
+const saves = () => saveLog
 const savesFor = (userId: string) =>
-  saves()
-    .filter(([session]) => session.user.id === userId)
-    .map(([, prefs]) => prefs)
+  saveLog.filter(([id]) => id === userId).map(([, prefs]) => prefs)
 
 beforeAll(async () => {
   await preloadViews()
 })
 
 beforeEach(() => {
-  vi.clearAllMocks()
   window.history.replaceState({}, '', '/')
   localStorage.clear()
   teardownWorkspace()
-  getCurrentSessionMock.mockReturnValue(null)
-  signOutMock.mockResolvedValue(undefined)
-  updatePasswordMock.mockResolvedValue(undefined)
-  resetUserSupabaseDataMock.mockResolvedValue(undefined)
-  saveUserPreferencesMock.mockResolvedValue(undefined)
+  saveLog = []
   // Neither user has a preferences row.
-  loadUserPreferencesMock.mockResolvedValue(null)
-  subscribeToAuthChangesMock.mockImplementation((onSession, onRecovery) => {
-    authListener = { onSession, onRecovery }
-    return () => undefined
-  })
+  backend = createFakeBackend()
+  for (const user of [userA, userB]) {
+    backend.auth.addAccount(user.user.email!, 'secret123', user)
+  }
 })
 
 async function renderApp() {
   const { default: App } = await import('./App')
   render(
     <MemoryRouter future={ROUTER_FUTURE}>
-      <App />
+      <App auth={backend.auth} createRepository={createRepository} />
     </MemoryRouter>
   )
 }
 
-async function signInAs(session: SupabaseSession) {
-  signInWithPasswordMock.mockResolvedValue(session)
+async function signInAs(session: AuthSession) {
   fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
     target: { value: session.user.email },
   })
@@ -220,8 +144,8 @@ async function expectUserBIsClean() {
     expect(prefs.aiEnabled).toBe(false)
   }
   // Nothing anywhere carried A's key except A's own row.
-  for (const [session, prefs] of saves()) {
-    if (prefs.claudeApiKey === A_KEY) expect(session.user.id).toBe('user-a')
+  for (const [userId, prefs] of saves()) {
+    if (prefs.claudeApiKey === A_KEY) expect(userId).toBe('user-a')
   }
 }
 
@@ -243,9 +167,8 @@ describe('switching users on the same tab (#117, #123)', () => {
     // A's last keystroke is saved by a request that never answers.
     async function userAHasAHungSave() {
       await userASetsKey()
-      saveUserPreferencesMock.mockImplementationOnce(
-        () => new Promise(() => {})
-      )
+      // Never released.
+      backend.repo('user-a').hold('savePreferences')
       fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), {
         target: { value: `${A_KEY}-2` },
       })
@@ -268,7 +191,7 @@ describe('switching users on the same tab (#117, #123)', () => {
           await vi.advanceTimersByTimeAsync(PREFERENCE_FLUSH_TIMEOUT_MS)
         })
         await showSignInScreen()
-        expect(signOutMock).toHaveBeenCalled()
+        expect(backend.auth.signOuts).toBe(1)
         expect(getAiConfig()).toBeNull()
       } finally {
         vi.useRealTimers()
@@ -289,7 +212,7 @@ describe('switching users on the same tab (#117, #123)', () => {
           await vi.advanceTimersByTimeAsync(PREFERENCE_FLUSH_TIMEOUT_MS)
         })
         await waitFor(() =>
-          expect(resetUserSupabaseDataMock).toHaveBeenCalledTimes(1)
+          expect(backend.repo('user-a').requests.resetAll).toBeGreaterThan(0)
         )
         await waitFor(() =>
           expect(screen.getByPlaceholderText('sk-ant-...')).toHaveValue('')
@@ -304,7 +227,7 @@ describe('switching users on the same tab (#117, #123)', () => {
   it('a SIGNED_OUT event from Supabase leaves nothing of A for B', async () => {
     await userASetsKey()
 
-    act(() => authListener.onSession(null))
+    act(() => backend.auth.emit(null))
     await showSignInScreen()
 
     await expectUserBIsClean()
@@ -313,10 +236,7 @@ describe('switching users on the same tab (#117, #123)', () => {
   it('updating the password after recovery leaves nothing of A for B', async () => {
     await userASetsKey()
 
-    act(() => {
-      authListener.onSession(userA)
-      authListener.onRecovery()
-    })
+    act(() => backend.auth.recover(userA))
     fireEvent.change(await screen.findByPlaceholderText('Nueva contraseña'), {
       target: { value: 'new-secret123' },
     })
@@ -329,15 +249,74 @@ describe('switching users on the same tab (#117, #123)', () => {
   it('going back to sign-in from recovery leaves nothing of A for B', async () => {
     await userASetsKey()
 
-    act(() => {
-      authListener.onSession(userA)
-      authListener.onRecovery()
-    })
+    act(() => backend.auth.recover(userA))
     await screen.findByRole('heading', { name: 'Elegí una nueva contraseña' })
     fireEvent.click(
       screen.getByRole('button', { name: 'Volver a iniciar sesión' })
     )
     await showSignInScreen()
+
+    await expectUserBIsClean()
+  })
+
+  it('going back to sign-in lets A’s queued preference save land before signing out', async () => {
+    await userASetsKey()
+    // One save in flight (held), the next queued behind it.
+    const inFlight = backend.repo('user-a').hold('savePreferences')
+    const keyInput = screen.getByPlaceholderText('sk-ant-...')
+    fireEvent.change(keyInput, { target: { value: `${A_KEY}-2` } })
+    fireEvent.change(keyInput, { target: { value: `${A_KEY}-3` } })
+    act(() => backend.auth.recover(userA))
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Volver a iniciar sesión' })
+    )
+
+    // The screen switches at once; the session ends after the saves.
+    expect(
+      screen.getByRole('heading', { name: 'Ingresar a Tatú' })
+    ).toBeInTheDocument()
+    expect(backend.auth.signOuts).toBe(0)
+    inFlight.release()
+    await waitFor(() => expect(backend.auth.signOuts).toBe(1))
+    expect(backend.repo('user-a').preferences?.claudeApiKey).toBe(`${A_KEY}-3`)
+    expect(getAiConfig()).toBeNull()
+
+    await expectUserBIsClean()
+  })
+
+  it('cannot sign in while going back to sign-in is still ending A’s session (the pending sign-out would end it)', async () => {
+    await userASetsKey()
+    const inFlight = backend.repo('user-a').hold('savePreferences')
+    fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), {
+      target: { value: `${A_KEY}-2` },
+    })
+    act(() => backend.auth.recover(userA))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Volver a iniciar sesión' })
+    )
+
+    // The flush is waiting on A's save: B tries to sign in meanwhile.
+    fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
+      target: { value: userB.user.email },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Contraseña'), {
+      target: { value: 'secret123' },
+    })
+    expect(screen.getByRole('button', { name: 'Procesando...' })).toBeDisabled()
+    fireEvent.submit(
+      screen.getByPlaceholderText('email@ejemplo.com').closest('form')!
+    )
+
+    inFlight.release()
+    await waitFor(() => expect(backend.auth.signOuts).toBe(1))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Iniciar sesión' })
+      ).toBeEnabled()
+    )
+    // B's attempt never reached the server, so nothing of it was ended.
+    expect(backend.auth.getSession()).toBeNull()
 
     await expectUserBIsClean()
   })
@@ -349,9 +328,8 @@ describe('switching users on the same tab (#117, #123)', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Eliminar todo' })
     )
-    await waitFor(() =>
-      expect(resetUserSupabaseDataMock).toHaveBeenCalledTimes(1)
-    )
+    await waitFor(() => expect(backend.repo('user-a').preferences).toBeNull())
+    expect(backend.repo('user-a').requests.resetAll).toBeGreaterThan(0)
 
     // A is still signed in, but the key and the AI switch are gone.
     const keyInput = await screen.findByPlaceholderText('sk-ant-...')
@@ -360,26 +338,31 @@ describe('switching users on the same tab (#117, #123)', () => {
     expect(getAiConfig()).toBeNull()
 
     // Then the tab's session switches to B (e.g. B signed in from another tab).
-    act(() => authListener.onSession(null))
+    act(() => backend.auth.emit(null))
     await showSignInScreen()
     await expectUserBIsClean()
   })
 
   it('never saves B’s preferences before B’s own preferences have loaded', async () => {
     await userASetsKey()
-    act(() => authListener.onSession(null))
+    act(() => backend.auth.emit(null))
     await showSignInScreen()
 
     // B has a real row; its load is slow.
-    let resolveB: (prefs: UserPreferences) => void = () => {}
-    loadUserPreferencesMock.mockImplementation((session: SupabaseSession) =>
-      session.user.id === 'user-b'
-        ? new Promise<UserPreferences>((resolve) => {
-            resolveB = resolve
-          })
-        : Promise.resolve(null)
+    backend.seed(
+      {
+        preferences: {
+          theme: 'light',
+          currency: 'UYU',
+          fxRate: 41,
+          claudeApiKey: 'sk-ant-user-b-own',
+          aiEnabled: true,
+          aiModel: 'claude-haiku-4-5',
+        },
+      },
+      'user-b'
     )
-    signInWithPasswordMock.mockResolvedValue(userB)
+    const loadB = backend.repo('user-b').hold('load')
     fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
       target: { value: 'user-b@example.com' },
     })
@@ -387,22 +370,11 @@ describe('switching users on the same tab (#117, #123)', () => {
       target: { value: 'secret123' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
-    await waitFor(() =>
-      expect(loadUserPreferencesMock).toHaveBeenCalledWith(
-        expect.objectContaining({ user: userB.user })
-      )
-    )
+    await waitFor(() => expect(backend.repo('user-b').requests.load).toBe(1))
     expect(savesFor('user-b')).toEqual([])
 
     await act(async () => {
-      resolveB({
-        theme: 'light',
-        currency: 'UYU',
-        fxRate: 41,
-        claudeApiKey: 'sk-ant-user-b-own',
-        aiEnabled: true,
-        aiModel: 'claude-haiku-4-5',
-      })
+      loadB.release()
     })
     const keyInput = await openSettings()
     await waitFor(() => expect(keyInput).toHaveValue('sk-ant-user-b-own'))

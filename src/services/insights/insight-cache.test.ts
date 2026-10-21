@@ -1,17 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from '../supabase/client'
+import { beforeEach, describe, expect, it } from 'vitest'
 import type { InsightInput } from './insight-data'
 import type { InsightsResult } from './insight-generator'
-
-const { loadCachedInsightsMock, saveInsightsMock } = vi.hoisted(() => ({
-  loadCachedInsightsMock: vi.fn(),
-  saveInsightsMock: vi.fn(),
-}))
-
-vi.mock('../supabase/ai-insights', () => ({
-  loadCachedInsights: loadCachedInsightsMock,
-  saveInsights: saveInsightsMock,
-}))
 
 import {
   hashInsightInput,
@@ -20,10 +9,15 @@ import {
 } from './insight-cache'
 import { INSIGHT_PROMPT_VERSION } from './insight-prompt'
 import { INSIGHTS_MODEL } from '../ai/models'
+import {
+  createInMemoryRepository,
+  type InMemoryRepository,
+} from '../repository/in-memory-repository'
 
-const session = {
-  user: { id: 'user-1' },
-} as unknown as SupabaseSession
+let repo: InMemoryRepository
+beforeEach(() => {
+  repo = createInMemoryRepository()
+})
 
 const input: InsightInput = {
   historyStart: '2026-01-01',
@@ -73,26 +67,20 @@ describe('hashInsightInput', () => {
 })
 
 describe('getCachedInsights', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
   it('returns null when there is no cached row', async () => {
-    loadCachedInsightsMock.mockResolvedValue(null)
-    const cached = await getCachedInsights(session, input)
+    const cached = await getCachedInsights(repo, input)
     expect(cached).toBeNull()
-    expect(loadCachedInsightsMock).toHaveBeenCalledWith(session)
   })
 
   it('marks the result fresh when the stored hash matches the current input', async () => {
-    loadCachedInsightsMock.mockResolvedValue({
+    repo.insights = {
       inputHash: hashInsightInput(input),
       model: INSIGHTS_MODEL,
       insights: result,
       generatedAt: '2026-06-30T12:00:00.000Z',
-    })
+    }
 
-    const cached = await getCachedInsights(session, input)
+    const cached = await getCachedInsights(repo, input)
     expect(cached).toEqual({
       result,
       model: INSIGHTS_MODEL,
@@ -102,81 +90,63 @@ describe('getCachedInsights', () => {
   })
 
   it('marks the result stale when the stored hash no longer matches the input', async () => {
-    loadCachedInsightsMock.mockResolvedValue({
+    repo.insights = {
       inputHash: 'stale-hash',
       model: 'claude-opus-4-8',
       insights: result,
       generatedAt: '2026-06-30T12:00:00.000Z',
-    })
+    }
 
-    const cached = await getCachedInsights(session, input)
+    const cached = await getCachedInsights(repo, input)
     expect(cached?.isStale).toBe(true)
   })
 
   it('marks the result stale when it was generated with an older prompt version', async () => {
-    loadCachedInsightsMock.mockResolvedValue({
+    repo.insights = {
       inputHash: hashInsightInput(input, {
         promptVersion: INSIGHT_PROMPT_VERSION - 1,
       }),
       model: INSIGHTS_MODEL,
       insights: result,
       generatedAt: '2026-06-30T12:00:00.000Z',
-    })
+    }
 
-    const cached = await getCachedInsights(session, input)
+    const cached = await getCachedInsights(repo, input)
     expect(cached?.isStale).toBe(true)
   })
 
   it('marks the result stale when it was generated with a different model', async () => {
-    loadCachedInsightsMock.mockResolvedValue({
+    repo.insights = {
       inputHash: hashInsightInput(input, { model: 'claude-old-model' }),
       model: 'claude-old-model',
       insights: result,
       generatedAt: '2026-06-30T12:00:00.000Z',
-    })
+    }
 
-    const cached = await getCachedInsights(session, input)
+    const cached = await getCachedInsights(repo, input)
     expect(cached?.isStale).toBe(true)
   })
 
   it('marks a result saved with the current prompt and model as fresh', async () => {
-    saveInsightsMock.mockResolvedValue(undefined)
-    await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
-    const saved = saveInsightsMock.mock.calls[0][1]
-    loadCachedInsightsMock.mockResolvedValue({
-      ...saved,
-      generatedAt: '2026-06-30T12:00:00.000Z',
-    })
+    await saveCachedInsights(repo, input, result, INSIGHTS_MODEL)
 
-    const cached = await getCachedInsights(session, input)
+    const cached = await getCachedInsights(repo, input)
     expect(cached?.isStale).toBe(false)
   })
 
   it('marks a result saved by a different model as stale', async () => {
-    saveInsightsMock.mockResolvedValue(undefined)
-    await saveCachedInsights(session, input, result, 'claude-old-model')
-    const saved = saveInsightsMock.mock.calls[0][1]
-    loadCachedInsightsMock.mockResolvedValue({
-      ...saved,
-      generatedAt: '2026-06-30T12:00:00.000Z',
-    })
+    await saveCachedInsights(repo, input, result, 'claude-old-model')
 
-    const cached = await getCachedInsights(session, input)
+    const cached = await getCachedInsights(repo, input)
     expect(cached?.isStale).toBe(true)
   })
 })
 
 describe('saveCachedInsights', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
   it('saves the result with the computed input hash', async () => {
-    saveInsightsMock.mockResolvedValue(undefined)
+    await saveCachedInsights(repo, input, result, INSIGHTS_MODEL)
 
-    await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
-
-    expect(saveInsightsMock).toHaveBeenCalledWith(session, {
+    expect(repo.insights).toMatchObject({
       inputHash: hashInsightInput(input),
       model: INSIGHTS_MODEL,
       insights: result,

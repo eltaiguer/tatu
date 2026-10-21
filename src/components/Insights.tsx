@@ -15,7 +15,7 @@ import { Button } from './ui/button'
 import { CategoryBadge } from './CategoryBadge'
 import { formatCurrency } from '../utils/formatting'
 import type { Currency, Transaction, TransactionsFilter } from '../models'
-import type { SupabaseSession } from '../services/supabase/client'
+import type { Repository } from '../services/repository/repository'
 import { buildInsightInput } from '../services/insights/insight-data'
 import {
   generateInsights,
@@ -39,7 +39,8 @@ interface InsightsProps {
   transactions: Transaction[]
   homeCurrency: Currency
   fxRate: number
-  session: SupabaseSession
+  /** The signed-in user's repository: the insights cache lives there. */
+  repository: Repository
   aiEnabled: boolean
   claudeApiKey: string
   onNavigateToTransactions: (filter: TransactionsFilter) => void
@@ -99,7 +100,7 @@ export function Insights({
   transactions,
   homeCurrency,
   fxRate,
-  session,
+  repository,
   aiEnabled,
   claudeApiKey,
   onNavigateToTransactions,
@@ -130,7 +131,7 @@ export function Insights({
     setLoadingCache(true)
     setError('')
 
-    getCachedInsights(session, input)
+    getCachedInsights(repository, input)
       .then((result) => {
         if (!cancelled) setCached(result)
       })
@@ -152,7 +153,7 @@ export function Insights({
     return () => {
       cancelled = true
     }
-  }, [session, input, isConfigured, hasTransactions])
+  }, [repository, input, isConfigured, hasTransactions])
 
   async function handleGenerate() {
     setGenerating(true)
@@ -168,7 +169,7 @@ export function Insights({
         isStale: false,
       })
       step = 'save'
-      await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
+      await saveCachedInsights(repository, input, result, INSIGHTS_MODEL)
     } catch (e) {
       if (step === 'generate') {
         reportAiError(e, 'insights')

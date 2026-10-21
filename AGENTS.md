@@ -89,7 +89,7 @@ src/
                            #   CoverageAnalysis, AiCategorizationPreview, AiPatternAnalysis,
                            #   CategorizerEval (agreement of rules / AI with the user's own categorizations)
   hooks/                   # Custom React hooks (extracted from App.tsx)
-    useAuthSession.ts      # Supabase auth session management
+    useAuthSession.ts      # The signed-in session + sign-in screen state, over the injected AuthPort
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
     useTransactionHandlers.ts  # The transaction mutations bound to the signed-in user's repository (thin; one contract without one)
     useTransactionFiltering.ts # The filters as ONE value (URL shape, period included): `filters` + `update(patch)` + `clear()` + `setDateBound`, plus sort + split grouping + pagination around filterTransactions
@@ -98,7 +98,8 @@ src/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure); eval/agreement.ts scores any engine against the user's confidence-1 rows (user rules withheld)
     dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57); duplicate-review.ts: groups stored rows from different import runs for the one-off cleanup (#167)
-    repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
+    repository/            # The persistence port (#119): repository.ts (Repository — workspace, transactions (+ loadTransactions / loadCategoryOverrides for the dev panels), rules, insights cache, resetAll; TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
+    auth/                  # The auth port: auth-port.ts (AuthPort: getSession, onAuthChange, signIn/signUp, requestPasswordReset, updatePassword, signOut), supabase-auth.ts (prod), in-memory-auth.ts (tests: accounts, emit/recover events, failOn)
     import/                # import-statement.ts: importStatement = THE import pipeline, one function (decode → parse → categorize → importTransactions: classify, AI enrich, insert, import run, repair); a file it cannot read rejects with a `StatementReadError` (`utils/user-error.ts`), anything else is a save failure
     mutations/             # bulk-steps.ts: runs a bulk edit's steps in order (retry resumes the chain); transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
     categories/            # category-registry.ts: resolveCategory = THE answer to "what is this category id?" (label, colour, icon, isIgnored, known) for every surface — never re-derive it; isCategoryIgnored is its cheap form for totals; getCategoryDefinitions lists the pickable ones. category-store.ts: custom categories (ids normalized once, on load); category-counts.ts: rows per category
@@ -115,22 +116,22 @@ src/
     preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
     insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
     monitoring/            # error-reporting.ts: Sentry init, captureError, scrubbers (ADR-0004)
-    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapter composes. No ambient session: callers pass a session or a repository
+    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapters compose; they take the user id, not a session. Only `supabase-repository.ts` and `supabase-auth.ts` import them at runtime (`services/supabase-boundary.test.ts` enforces it, and keeps the `@supabase/*` SDK in here); everything else imports only their types
     firebase.ts            # Firebase config
-  App.tsx / main.tsx       # Shell (auth, sync, view switch) / BrowserRouter mount
+  App.tsx / main.tsx       # Shell (auth, sync, view switch; takes `auth` + `createRepository` props) / BrowserRouter mount, wires the Supabase adapters into App
   routes.ts                # View <-> URL path + document title
   lazy-views.tsx           # The five views as lazy chunks (retryable, preloadViews)
   router-future.ts         # React Router v7 future flags (app + test routers)
   models/                  # TypeScript interfaces + Category enum
-  stores/                  # Zustand stores, in-memory only: transaction-store; workspace-store = the ONE owner of per-user state (hydrateWorkspace / teardownWorkspace / setPreference), loaded through the repository port; workspace-state = whose workspace is loaded (isWorkspaceOwner, checked by every write after an await)
+  stores/                  # Zustand stores, in-memory only: transaction-store; workspace-store = the ONE owner of per-user state (hydrateWorkspace / teardownWorkspace / setPreference / endSession / resetWorkspace), loaded through the repository port; workspace-state = whose workspace is loaded (isWorkspaceOwner, checked by every write after an await)
   index.css                # CSS entry (imported by main.tsx): fonts → tailwind → theme
   styles/
     fonts.css              # Google Fonts: Spectral, Hanken Grotesk, JetBrains Mono
     tailwind.css           # Tailwind 4 import + sources
     theme.css              # CSS custom properties — light + dark tokens
                            # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
-  utils/                   # account-display (ACCOUNT_LABELS: the three accounts' names, accountOf), date-utils (newestDate / newestDataMonth = the newest month with data; pass only the rows that count where that matters), formatting, memo, transaction-display, user-display, user-error, auth-errors
-  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-claude-client.ts records Claude requests and scripts answers
+  utils/                   # account-display (ACCOUNT_LABELS: the three accounts' names, accountOf), date-utils (newestDate / newestDataMonth = the newest month with data; pass only the rows that count where that matters), formatting, memo, transaction-display, user-display, user-error, auth-errors, sha256 (import file checksum)
+  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-claude-client.ts records Claude requests and scripts answers; fake-backend.ts = in-memory auth + one in-memory repository per user, for the App suites
 supabase/
   schema.sql               # PostgreSQL schema (tables, RLS policies)
 samples/                   # Example Santander CSV files for testing
@@ -176,7 +177,8 @@ Users earn in USD and spend in both USD and UYU. The app converts and combines b
 - **Auth session token**: cached in `localStorage` by the Supabase client (standard Supabase auth behavior, not app data)
 - **Zustand store**: holds in-memory state only — no persist middleware. Populated from Supabase on login by `hydrateWorkspace` (`stores/workspace-store.ts`)
 - No offline fallback. Unauthenticated users see the `AuthCard` login screen.
-- **Per-user lifecycle** (#117): `stores/workspace-store.ts` is the only place that fills (`hydrateWorkspace`) or empties (`teardownWorkspace`) a user's in-memory state — transactions, overrides, custom patterns/categories, preferences, AI config. Every path that ends a session calls `teardownWorkspace`; new per-user state must be added there. Preferences are saved only by `setPreference`, only for the user whose workspace is loaded and ready.
+- **Per-user lifecycle** (#117): `stores/workspace-store.ts` is the only place that fills (`hydrateWorkspace`) or empties (`teardownWorkspace`) a user's in-memory state — transactions, overrides, custom patterns/categories, preferences, AI config. Every path that ends a session calls `teardownWorkspace` — sign-out, password update and back-to-sign-in through `endSession` (flush pending preference saves → sign out → teardown); new per-user state must be added there. "Reset all data" is `resetWorkspace`. Preferences are saved only by `setPreference`, only for the user whose workspace is loaded and ready.
+- **Ports at the App root**: `App` receives `auth: AuthPort` and `createRepository: (userId) => Repository` as props — the Supabase adapters in `main.tsx`, `createFakeBackend()` (`src/test/fake-backend.ts`) in tests. Nothing else builds a repository or calls Supabase; tests never `vi.mock` `services/supabase/*` except the adapters' own tests.
 - **Writes** (#119): every transaction write is a function in `services/mutations/transaction-mutations.ts` that takes the signed-in user's `Repository` (`services/repository/`) — never an ambient session. Each change is one `TransactionPatch` per row applied to the repository and then, for exactly the rows the server confirmed, to the store ("screen mirrors database"); a partial write throws `PartialWriteError` (toast "Se actualizaron N de M — reintentar", retry = only the failed remainder). After every await a write checks `isWorkspaceOwner` and drops its local changes if another user signed in. Rule stores (custom patterns, custom categories) take the repository explicitly too. Test writes against `createInMemoryRepository` and assert on the store and the repository, not on request payloads: the mutations' behaviour suite is `src/services/mutations/transaction-mutations.test.ts` (calls the functions directly); the import from a file's bytes is `src/services/import/import-statement.test.ts` (real sample CSVs); `src/hooks/useTransactionHandlers.test.ts` covers only what the hook adds (signed-out rejection, current repository, error clearing).
 
 ## Testing approach: strict red-green TDD

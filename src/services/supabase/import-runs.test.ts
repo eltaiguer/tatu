@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from './client'
 
 const {
   insertMock,
@@ -28,21 +27,7 @@ vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
 }))
 
-const session: SupabaseSession = {
-  access_token: 'access-token',
-  refresh_token: 'refresh-token',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999999999,
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-  },
-}
+const userId = 'user-1'
 
 describe('supabase import runs service', () => {
   beforeEach(() => {
@@ -66,7 +51,7 @@ describe('supabase import runs service', () => {
 
   it('creates an import run in processing state', async () => {
     const { createImportRun } = await import('./import-runs')
-    const id = await createImportRun(session, {
+    const id = await createImportRun(userId, {
       fileName: 'movements.csv',
       fileType: 'bank_account_uyu',
       fileChecksum: 'abc123',
@@ -83,7 +68,7 @@ describe('supabase import runs service', () => {
     const { createImportRun } = await import('./import-runs')
     const { UserFacingError } = await import('../../utils/user-error')
 
-    const error = await createImportRun(session, {
+    const error = await createImportRun(userId, {
       fileName: 'movements.csv',
       fileType: 'bank_account_uyu',
       fileChecksum: 'abc123',
@@ -96,7 +81,7 @@ describe('supabase import runs service', () => {
 
   it('completes an import run with counters', async () => {
     const { completeImportRun } = await import('./import-runs')
-    await completeImportRun(session, 'run-1', {
+    await completeImportRun(userId, 'run-1', {
       totalRows: 10,
       insertedRows: 8,
       duplicateRows: 2,
@@ -114,7 +99,7 @@ describe('supabase import runs service', () => {
 
   it('marks import run as failed', async () => {
     const { failImportRun } = await import('./import-runs')
-    await failImportRun(session, 'run-1', 'bad csv')
+    await failImportRun(userId, 'run-1', 'bad csv')
 
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({

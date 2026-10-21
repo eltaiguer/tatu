@@ -1,30 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
-import type { SupabaseSession } from '../services/supabase/client'
 import type { Transaction } from '../models'
-
-const auth = vi.hoisted(() => ({
-  getCurrentSession: vi.fn(),
-  requestPasswordReset: vi.fn(),
-  signInWithPassword: vi.fn(),
-  signOut: vi.fn(),
-  signUpWithPassword: vi.fn(),
-  subscribeToAuthChanges: vi.fn(),
-  updatePassword: vi.fn(),
-}))
-
-vi.mock('../services/supabase/auth', () => auth)
-
 import { useAuthSession } from './useAuthSession'
 import { transactionStore } from '../stores/transaction-store'
 import { teardownWorkspace, workspaceStore } from '../stores/workspace-store'
+import {
+  createInMemoryAuth,
+  makeSession as sessionOf,
+  type InMemoryAuth,
+} from '../services/auth/in-memory-auth'
 
-function makeSession(userId = 'user-1'): SupabaseSession {
-  return {
-    access_token: `token-${userId}`,
-    user: { id: userId, email: 'jose@example.uy' },
-  } as SupabaseSession
-}
+const makeSession = (userId = 'user-1') => sessionOf(userId)
 
 const someTransaction: Transaction = {
   id: 'tx-1',
@@ -37,25 +23,16 @@ const someTransaction: Transaction = {
   rawData: {},
 }
 
-// Callbacks the hook registered with Supabase's auth listener.
-let onSessionChange: (session: SupabaseSession | null) => void
-let onPasswordRecovery: () => void
-const unsubscribe = vi.fn()
+let auth: InMemoryAuth
+// The auth server, signed in as `session` (or signed out).
+function serverWith(session: ReturnType<typeof makeSession> | null) {
+  auth = createInMemoryAuth({ session })
+}
+const renderAuth = () => renderHook(() => useAuthSession(auth))
 
 describe('useAuthSession', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    auth.getCurrentSession.mockReturnValue(null)
-    auth.subscribeToAuthChanges.mockImplementation(
-      (
-        sessionCb: (session: SupabaseSession | null) => void,
-        recoveryCb: () => void
-      ) => {
-        onSessionChange = sessionCb
-        onPasswordRecovery = recoveryCb
-        return unsubscribe
-      }
-    )
+    serverWith(null)
     teardownWorkspace()
   })
 
@@ -65,7 +42,7 @@ describe('useAuthSession', () => {
 
   describe('session restore', () => {
     it('starts signed out when there is no stored session', () => {
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
 
       expect(result.current.session).toBeNull()
       expect(result.current.authMode).toBe('signin')
@@ -73,26 +50,26 @@ describe('useAuthSession', () => {
 
     it('restores the stored session', () => {
       const stored = makeSession()
-      auth.getCurrentSession.mockReturnValue(stored)
+      serverWith(stored)
 
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
 
       expect(result.current.session).toBe(stored)
     })
 
     it('stops listening to auth changes on unmount', () => {
-      const { unmount } = renderHook(() => useAuthSession())
+      const { result, unmount } = renderAuth()
 
       unmount()
-      expect(unsubscribe).toHaveBeenCalledTimes(1)
+      auth.emit(makeSession())
+      expect(result.current.session).toBeNull()
     })
   })
 
   describe('sign-in', () => {
     it('signs in with the entered email and password', async () => {
-      const next = makeSession()
-      auth.signInWithPassword.mockResolvedValue(next)
-      const { result } = renderHook(() => useAuthSession())
+      const next = auth.addAccount('jose@example.uy', 'secret123')
+      const { result } = renderAuth()
 
       act(() => {
         result.current.setEmail('jose@example.uy')
@@ -100,20 +77,13 @@ describe('useAuthSession', () => {
       })
       await act(() => result.current.handleAuth('signin'))
 
-      expect(auth.signInWithPassword).toHaveBeenCalledWith(
-        'jose@example.uy',
-        'secret123'
-      )
-      expect(auth.signUpWithPassword).not.toHaveBeenCalled()
       expect(result.current.session).toBe(next)
       expect(result.current.authSubmitting).toBe(false)
       expect(result.current.authError).toBe('')
     })
 
     it('signs up with the entered email and password', async () => {
-      const next = makeSession('user-2')
-      auth.signUpWithPassword.mockResolvedValue(next)
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
 
       act(() => {
         result.current.setEmail('nuevo@example.uy')
@@ -121,18 +91,17 @@ describe('useAuthSession', () => {
       })
       await act(() => result.current.handleAuth('signup'))
 
-      expect(auth.signUpWithPassword).toHaveBeenCalledWith(
-        'nuevo@example.uy',
-        'secret123'
-      )
-      expect(result.current.session).toBe(next)
+      expect(result.current.session?.user.email).toBe('nuevo@example.uy')
+      expect(auth.getSession()).toBe(result.current.session)
     })
 
     it('shows a friendly error and stays signed out when credentials are wrong', async () => {
-      auth.signInWithPassword.mockRejectedValue(
-        new Error('Invalid login credentials')
-      )
-      const { result } = renderHook(() => useAuthSession())
+      auth.addAccount('jose@example.uy', 'secret123')
+      const { result } = renderAuth()
+      act(() => {
+        result.current.setEmail('jose@example.uy')
+        result.current.setPassword('wrong')
+      })
 
       await act(() => result.current.handleAuth('signin'))
 
@@ -142,10 +111,10 @@ describe('useAuthSession', () => {
     })
 
     it('picks up a session that arrives from the auth listener', () => {
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
       const next = makeSession()
 
-      act(() => onSessionChange(next))
+      act(() => auth.emit(next))
 
       expect(result.current.session).toBe(next)
     })
@@ -153,22 +122,22 @@ describe('useAuthSession', () => {
 
   describe('sign-out', () => {
     it('clears the session when Supabase reports a sign-out', () => {
-      auth.getCurrentSession.mockReturnValue(makeSession())
-      const { result } = renderHook(() => useAuthSession())
+      serverWith(makeSession())
+      const { result } = renderAuth()
 
-      act(() => onSessionChange(null))
+      act(() => auth.emit(null))
 
       expect(result.current.session).toBeNull()
     })
 
     it('drops the previous user’s workspace before a different user’s session renders', () => {
-      auth.getCurrentSession.mockReturnValue(makeSession('user-a'))
+      serverWith(makeSession('user-a'))
       workspaceStore.setState({ userId: 'user-a', status: 'ready' })
       transactionStore.getState().setTransactions([someTransaction])
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
 
       // e.g. user B signs in from another tab.
-      act(() => onSessionChange(makeSession('user-b')))
+      act(() => auth.emit(makeSession('user-b')))
 
       expect(result.current.session?.user.id).toBe('user-b')
       expect(workspaceStore.getState().userId).toBeNull()
@@ -176,33 +145,31 @@ describe('useAuthSession', () => {
     })
 
     it('keeps the workspace when the same user’s token is refreshed', () => {
-      auth.getCurrentSession.mockReturnValue(makeSession('user-a'))
+      serverWith(makeSession('user-a'))
       workspaceStore.setState({ userId: 'user-a', status: 'ready' })
       transactionStore.getState().setTransactions([someTransaction])
-      renderHook(() => useAuthSession())
+      renderAuth()
 
-      act(() => onSessionChange(makeSession('user-a')))
+      act(() => auth.emit(makeSession('user-a')))
 
       expect(workspaceStore.getState().userId).toBe('user-a')
       expect(transactionStore.getState().transactions).toHaveLength(1)
     })
 
     it('signs out and clears loaded transactions after a password change', async () => {
-      const current = makeSession()
-      auth.getCurrentSession.mockReturnValue(current)
-      auth.updatePassword.mockResolvedValue(undefined)
-      auth.signOut.mockResolvedValue(undefined)
+      serverWith(makeSession())
       transactionStore.getState().setTransactions([someTransaction])
       window.history.replaceState({}, '', '/?mode=reset-password')
 
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
       expect(result.current.authMode).toBe('reset')
 
       act(() => result.current.setPassword('nueva-clave'))
       await act(() => result.current.handlePasswordUpdate())
 
-      expect(auth.updatePassword).toHaveBeenCalledWith('nueva-clave')
-      expect(auth.signOut).toHaveBeenCalledWith(current)
+      expect(auth.passwordUpdates).toEqual(['nueva-clave'])
+      expect(auth.signOuts).toBe(1)
+      expect(auth.getSession()).toBeNull()
       expect(result.current.session).toBeNull()
       expect(transactionStore.getState().transactions).toEqual([])
       expect(result.current.password).toBe('')
@@ -214,12 +181,11 @@ describe('useAuthSession', () => {
     })
 
     it('still clears state when signing out after a password change fails', async () => {
-      auth.getCurrentSession.mockReturnValue(makeSession())
-      auth.updatePassword.mockResolvedValue(undefined)
-      auth.signOut.mockRejectedValue(new Error('network down'))
+      serverWith(makeSession())
+      auth.failOn('signOut', new Error('network down'))
       transactionStore.getState().setTransactions([someTransaction])
 
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
       await act(() => result.current.handlePasswordUpdate())
 
       expect(result.current.session).toBeNull()
@@ -227,18 +193,35 @@ describe('useAuthSession', () => {
       expect(result.current.authError).toBe('')
     })
 
+    it('stays signed in after a password change when the session cannot be removed at all', async () => {
+      const current = makeSession()
+      serverWith(current)
+      auth.failOn('signOut', new Error('Failed to fetch'))
+      auth.failOn('signOutLocal', new Error('Failed to fetch'))
+      window.history.replaceState({}, '', '/?mode=reset-password')
+
+      const { result } = renderAuth()
+      await act(() => result.current.handlePasswordUpdate())
+
+      // Supabase still holds the session: showing sign-in would be a lie.
+      expect(result.current.session).toBe(current)
+      expect(result.current.authMode).toBe('signin')
+      expect(result.current.authNotice).toBe('Contraseña actualizada.')
+    })
+
     it('keeps the session when the password change itself fails', async () => {
       const current = makeSession()
-      auth.getCurrentSession.mockReturnValue(current)
-      auth.updatePassword.mockRejectedValue(
+      serverWith(current)
+      auth.failOn(
+        'updatePassword',
         new Error('Password should be at least 6 characters')
       )
       transactionStore.getState().setTransactions([someTransaction])
 
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
       await act(() => result.current.handlePasswordUpdate())
 
-      expect(auth.signOut).not.toHaveBeenCalled()
+      expect(auth.signOuts).toBe(0)
       expect(result.current.session).toBe(current)
       expect(transactionStore.getState().transactions).toHaveLength(1)
       expect(result.current.authError).toBe(
@@ -249,9 +232,9 @@ describe('useAuthSession', () => {
 
   describe('password reset', () => {
     it('enters reset mode when the recovery link is opened', () => {
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
 
-      act(() => onPasswordRecovery())
+      act(() => auth.recover(makeSession()))
 
       expect(result.current.authMode).toBe('reset')
       expect(result.current.authNotice).toBe(
@@ -260,24 +243,23 @@ describe('useAuthSession', () => {
     })
 
     it('asks for the email instead of requesting a reset without one (#204)', async () => {
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
 
       await act(() => result.current.handlePasswordReset())
 
-      expect(auth.requestPasswordReset).not.toHaveBeenCalled()
+      expect(auth.resetRequests).toEqual([])
       expect(result.current.authNotice).toBe(
         'Ingresá tu email para restablecer la contraseña'
       )
     })
 
     it('requests a reset email for the entered address', async () => {
-      auth.requestPasswordReset.mockResolvedValue(undefined)
-      const { result } = renderHook(() => useAuthSession())
+      const { result } = renderAuth()
 
       act(() => result.current.setEmail('jose@example.uy'))
       await act(() => result.current.handlePasswordReset())
 
-      expect(auth.requestPasswordReset).toHaveBeenCalledWith('jose@example.uy')
+      expect(auth.resetRequests).toEqual(['jose@example.uy'])
       expect(result.current.authNotice).toBe(
         'Te enviamos un email para restablecer tu contraseña'
       )

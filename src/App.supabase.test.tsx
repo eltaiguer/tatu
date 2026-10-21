@@ -3,6 +3,7 @@ import { ROUTER_FUTURE } from './router-future'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { preloadViews } from './lazy-views'
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -10,119 +11,26 @@ import {
   within,
 } from '@testing-library/react'
 import { teardownWorkspace } from './stores/workspace-store'
+import { makeSession, type InMemoryAuth } from './services/auth/in-memory-auth'
+import type { AuthPort } from './services/auth/auth-port'
+import { transactionStore } from './stores/transaction-store'
+import { listCustomCategories } from './services/categories/category-store'
+import { createFakeBackend, type FakeBackend } from './test/fake-backend'
 
-const {
-  getCurrentSessionMock,
-  requestPasswordResetMock,
-  signInWithPasswordMock,
-  signOutMock,
-  signUpWithPasswordMock,
-  subscribeToAuthChangesMock,
-  updatePasswordMock,
-  isSupabaseConfiguredMock,
-  loadUserTransactionsMock,
-  persistTransactionsMock,
-  softDeleteTransactionMock,
-  restoreTransactionsMock,
-  updateTransactionMock,
-  listCategoryOverridesMock,
-  upsertCategoryOverrideMock,
-  deleteCategoryOverrideMock,
-  listDescriptionOverridesMock,
-  upsertDescriptionOverrideMock,
-  deleteDescriptionOverrideMock,
-  listCustomCategoriesMock,
-  upsertCustomCategoryMock,
-  listCustomPatternsMock,
-  loadUserPreferencesMock,
-  saveUserPreferencesMock,
-} = vi.hoisted(() => ({
-  getCurrentSessionMock: vi.fn(),
-  requestPasswordResetMock: vi.fn(),
-  signInWithPasswordMock: vi.fn(),
-  signOutMock: vi.fn(),
-  signUpWithPasswordMock: vi.fn(),
-  subscribeToAuthChangesMock: vi.fn(),
-  updatePasswordMock: vi.fn(),
-  isSupabaseConfiguredMock: vi.fn(),
-  loadUserTransactionsMock: vi.fn(),
-  persistTransactionsMock: vi.fn(),
-  softDeleteTransactionMock: vi.fn(),
-  restoreTransactionsMock: vi.fn(),
-  updateTransactionMock: vi.fn(),
-  listCategoryOverridesMock: vi.fn(),
-  upsertCategoryOverrideMock: vi.fn(),
-  deleteCategoryOverrideMock: vi.fn(),
-  listDescriptionOverridesMock: vi.fn(),
-  upsertDescriptionOverrideMock: vi.fn(),
-  deleteDescriptionOverrideMock: vi.fn(),
-  listCustomCategoriesMock: vi.fn(),
-  upsertCustomCategoryMock: vi.fn(),
-  listCustomPatternsMock: vi.fn(),
-  loadUserPreferencesMock: vi.fn(),
-  saveUserPreferencesMock: vi.fn(),
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('./services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('./services/monitoring/error-reporting')
+  >()),
+  captureError: reporting.captureError,
 }))
 
-vi.mock('./services/supabase/client', () => ({
-  isSupabaseConfigured: isSupabaseConfiguredMock,
-}))
-
-vi.mock('./services/supabase/auth', () => ({
-  getCurrentSession: getCurrentSessionMock,
-  requestPasswordReset: requestPasswordResetMock,
-  signInWithPassword: signInWithPasswordMock,
-  signOut: signOutMock,
-  signUpWithPassword: signUpWithPasswordMock,
-  subscribeToAuthChanges: subscribeToAuthChangesMock,
-  updatePassword: updatePasswordMock,
-}))
-
-vi.mock('./services/supabase/transactions', () => ({
-  loadUserTransactions: loadUserTransactionsMock,
-  persistTransactions: persistTransactionsMock,
-  setTransactionsDeleted: (
-    session: unknown,
-    ids: string[],
-    deleted: boolean
-  ) =>
-    deleted
-      ? softDeleteTransactionMock(session, ids)
-      : restoreTransactionsMock(session, ids),
-  updateTransactionsByIds: updateTransactionMock,
-}))
-
-vi.mock('./services/supabase/category-overrides', () => ({
-  listCategoryOverrides: listCategoryOverridesMock,
-  upsertCategoryOverride: upsertCategoryOverrideMock,
-  deleteCategoryOverride: deleteCategoryOverrideMock,
-}))
-
-vi.mock('./services/supabase/description-overrides', () => ({
-  listDescriptionOverrides: listDescriptionOverridesMock,
-  upsertDescriptionOverride: upsertDescriptionOverrideMock,
-  deleteDescriptionOverride: deleteDescriptionOverrideMock,
-}))
-
-vi.mock('./services/supabase/custom-categories', () => ({
-  listCustomCategories: listCustomCategoriesMock,
-  upsertCustomCategory: upsertCustomCategoryMock,
-}))
-
-vi.mock('./services/supabase/custom-patterns', () => ({
-  listCustomPatterns: listCustomPatternsMock,
-}))
-
-vi.mock('./services/supabase/user-preferences', () => ({
-  loadUserPreferences: loadUserPreferencesMock,
-  saveUserPreferences: saveUserPreferencesMock,
-}))
-
-vi.mock('./services/supabase/import-runs', () => ({
-  createImportRun: vi.fn(),
-  completeImportRun: vi.fn(),
-  failImportRun: vi.fn(),
-  sha256Hex: vi.fn().mockResolvedValue('hash'),
-}))
+// The backend: nobody signed in and nothing stored, unless a test says so.
+let backend: FakeBackend
+const USER_1 = makeSession('user-1', 'test@example.com')
+const signedInAsUser1 = () => {
+  backend = createFakeBackend({ session: USER_1 })
+}
 
 // Views are lazy chunks; load them up front so a test's first visit to a
 // view doesn't spend its waitFor budget on module loading.
@@ -132,49 +40,19 @@ beforeAll(async () => {
 
 describe('App with supabase enabled', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
     window.history.replaceState({}, '', '/')
     localStorage.clear()
     // The workspace is module state: start every test signed out of it.
     teardownWorkspace()
-    isSupabaseConfiguredMock.mockReturnValue(true)
-    getCurrentSessionMock.mockReturnValue(null)
-    loadUserTransactionsMock.mockResolvedValue([])
-    persistTransactionsMock.mockResolvedValue(undefined)
-    // The server confirms every id it was sent.
-    softDeleteTransactionMock.mockImplementation(async (_s, ids) => ids)
-    restoreTransactionsMock.mockImplementation(async (_s, ids) => ids)
-    deleteCategoryOverrideMock.mockResolvedValue(undefined)
-    deleteDescriptionOverrideMock.mockResolvedValue(undefined)
-    updateTransactionMock.mockImplementation(async (_s, ids) => ids)
-    listCategoryOverridesMock.mockResolvedValue([])
-    upsertCategoryOverrideMock.mockResolvedValue(undefined)
-    listDescriptionOverridesMock.mockResolvedValue([])
-    upsertDescriptionOverrideMock.mockResolvedValue(undefined)
-    listCustomCategoriesMock.mockResolvedValue([])
-    upsertCustomCategoryMock.mockResolvedValue(undefined)
-    listCustomPatternsMock.mockResolvedValue([])
-    loadUserPreferencesMock.mockResolvedValue(null)
-    saveUserPreferencesMock.mockResolvedValue(undefined)
-    requestPasswordResetMock.mockResolvedValue(undefined)
-    subscribeToAuthChangesMock.mockReturnValue(() => undefined)
-    updatePasswordMock.mockResolvedValue(undefined)
-    signOutMock.mockResolvedValue(undefined)
-    signUpWithPasswordMock.mockResolvedValue({
-      access_token: 'access',
-      refresh_token: 'refresh',
-      token_type: 'bearer',
-      expires_in: 3600,
-      expires_at: 9999,
-      user: { id: 'user-1', email: 'test@example.com' },
-    })
+    backend = createFakeBackend()
+    reporting.captureError.mockClear()
   })
 
   it('renders authentication form when no session exists', async () => {
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
@@ -188,7 +66,7 @@ describe('App with supabase enabled', () => {
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
@@ -199,14 +77,11 @@ describe('App with supabase enabled', () => {
   })
 
   it('shows Spanish error when signin fails with Supabase credentials error', async () => {
-    signInWithPasswordMock.mockRejectedValue(
-      new Error('Invalid login credentials')
-    )
-
+    // No such account: Supabase answers "Invalid login credentials".
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
@@ -226,19 +101,12 @@ describe('App with supabase enabled', () => {
   })
 
   it('signs in and loads transactions', async () => {
-    signInWithPasswordMock.mockResolvedValue({
-      access_token: 'access',
-      refresh_token: 'refresh',
-      token_type: 'bearer',
-      expires_in: 3600,
-      expires_at: 9999,
-      user: { id: 'user-1', email: 'test@example.com' },
-    })
+    backend.auth.addAccount('test@example.com', 'secret123', USER_1)
 
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
@@ -251,13 +119,6 @@ describe('App with supabase enabled', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
 
     await waitFor(() =>
-      expect(signInWithPasswordMock).toHaveBeenCalledWith(
-        'test@example.com',
-        'secret123'
-      )
-    )
-
-    await waitFor(() =>
       expect(
         screen.getByRole('heading', { name: /Bienvenido a Tatú/i })
       ).toBeInTheDocument()
@@ -268,7 +129,7 @@ describe('App with supabase enabled', () => {
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
@@ -280,7 +141,7 @@ describe('App with supabase enabled', () => {
     )
 
     await waitFor(() =>
-      expect(requestPasswordResetMock).toHaveBeenCalledWith('test@example.com')
+      expect(backend.auth.resetRequests).toEqual(['test@example.com'])
     )
   })
 
@@ -288,7 +149,7 @@ describe('App with supabase enabled', () => {
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
@@ -299,7 +160,7 @@ describe('App with supabase enabled', () => {
     expect(
       await screen.findByText('Ingresá tu email para restablecer la contraseña')
     ).toBeInTheDocument()
-    expect(requestPasswordResetMock).not.toHaveBeenCalled()
+    expect(backend.auth.resetRequests).toEqual([])
   })
 
   it('updates password from recovery mode', async () => {
@@ -308,7 +169,7 @@ describe('App with supabase enabled', () => {
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
@@ -325,9 +186,9 @@ describe('App with supabase enabled', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar contraseña' }))
 
     await waitFor(() =>
-      expect(updatePasswordMock).toHaveBeenCalledWith('new-secret123')
+      expect(backend.auth.passwordUpdates).toEqual(['new-secret123'])
     )
-    await waitFor(() => expect(signOutMock).toHaveBeenCalledWith(null))
+    await waitFor(() => expect(backend.auth.signOuts).toBe(1))
     await waitFor(() =>
       expect(
         screen.getByRole('heading', { name: 'Ingresar a Tatú' })
@@ -337,19 +198,12 @@ describe('App with supabase enabled', () => {
 
   it('keeps user in reset screen during recovery even with active session', async () => {
     window.history.replaceState({}, '', '/?mode=reset-password')
-    getCurrentSessionMock.mockReturnValue({
-      access_token: 'access',
-      refresh_token: 'refresh',
-      token_type: 'bearer',
-      expires_in: 3600,
-      expires_at: 9999,
-      user: { id: 'user-1', email: 'test@example.com' },
-    })
+    signedInAsUser1()
 
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
@@ -359,24 +213,17 @@ describe('App with supabase enabled', () => {
     expect(
       screen.queryByRole('heading', { name: 'Bienvenido a Tatú' })
     ).not.toBeInTheDocument()
-    expect(loadUserTransactionsMock).not.toHaveBeenCalled()
+    expect(backend.repo().requests.load).toBeUndefined()
   })
 
   it('starts in reset mode for hash recovery links without query mode', async () => {
     window.history.replaceState({}, '', '/#access_token=abc&type=recovery')
-    getCurrentSessionMock.mockReturnValue({
-      access_token: 'access',
-      refresh_token: 'refresh',
-      token_type: 'bearer',
-      expires_in: 3600,
-      expires_at: 9999,
-      user: { id: 'user-1', email: 'test@example.com' },
-    })
+    signedInAsUser1()
 
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
@@ -386,60 +233,305 @@ describe('App with supabase enabled', () => {
     expect(
       screen.queryByRole('heading', { name: 'Bienvenido a Tatú' })
     ).not.toBeInTheDocument()
-    expect(loadUserTransactionsMock).not.toHaveBeenCalled()
+    expect(backend.repo().requests.load).toBeUndefined()
   })
 
   it('switches to reset mode when recovery event is raised', async () => {
-    subscribeToAuthChangesMock.mockImplementation((_onSession, onRecovery) => {
-      onRecovery?.()
-      return () => undefined
-    })
-
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
+
+    // The recovery link opens on an already rendered sign-in screen.
+    act(() => backend.auth.recover(USER_1))
 
     expect(
       screen.getByRole('heading', { name: 'Elegí una nueva contraseña' })
     ).toBeInTheDocument()
-    expect(loadUserTransactionsMock).not.toHaveBeenCalled()
+    expect(backend.repo().requests.load).toBeUndefined()
+  })
+
+  it('going back to sign-in from recovery signs out, even if that request fails', async () => {
+    backend.auth.failOn('signOut', new Error('network down'))
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    act(() => backend.auth.recover(USER_1))
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Volver a iniciar sesión' })
+    )
+
+    // At once: the sign-out runs in the background.
+    expect(
+      screen.getByRole('heading', { name: 'Ingresar a Tatú' })
+    ).toBeInTheDocument()
+    await waitFor(() => expect(backend.auth.signOuts).toBe(1))
+    expect(backend.auth.getSession()).toBeNull()
+  })
+
+  it('when going back to sign-in cannot end the session (offline), says so — and the message survives the reload', async () => {
+    signedInAsUser1()
+    backend.auth.failOn('signOut', new TypeError('Failed to fetch'))
+    backend.auth.failOn('signOutLocal', new TypeError('Failed to fetch'))
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+    act(() => backend.auth.recover(USER_1))
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Volver a iniciar sesión' })
+    )
+
+    // Still signed in: back in the app, which loads again.
+    await waitFor(() => expect(backend.repo().requests.load).toBe(2))
+    await screen.findAllByText('Configuración')
+    expect(
+      screen.getByText(
+        'No se pudo cerrar sesión. Revisá tu conexión e intentá de nuevo.'
+      )
+    ).toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(TypeError),
+      'auth'
+    )
+  })
+
+  it('after a password update that cannot end the session, “Contraseña actualizada.” survives the reload', async () => {
+    signedInAsUser1()
+    backend.auth.failOn('signOut', new TypeError('Failed to fetch'))
+    backend.auth.failOn('signOutLocal', new TypeError('Failed to fetch'))
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+    act(() => backend.auth.recover(USER_1))
+
+    fireEvent.change(await screen.findByPlaceholderText('Nueva contraseña'), {
+      target: { value: 'new-secret123' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar contraseña' }))
+
+    await waitFor(() => expect(backend.repo().requests.load).toBe(2))
+    await screen.findAllByText('Configuración')
+    expect(screen.getByText('Contraseña actualizada.')).toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(TypeError),
+      'auth'
+    )
+  })
+
+  it('signs out through an auth adapter whose methods need their object (a class)', async () => {
+    signedInAsUser1()
+    const inner = backend.auth
+    class ClassAuth implements AuthPort {
+      constructor(private readonly delegate: InMemoryAuth) {}
+      getSession() {
+        return this.delegate.getSession()
+      }
+      onAuthChange(...args: Parameters<AuthPort['onAuthChange']>) {
+        return this.delegate.onAuthChange(...args)
+      }
+      signIn(email: string, password: string) {
+        return this.delegate.signIn(email, password)
+      }
+      signUp(email: string, password: string) {
+        return this.delegate.signUp(email, password)
+      }
+      requestPasswordReset(email: string) {
+        return this.delegate.requestPasswordReset(email)
+      }
+      updatePassword(password: string) {
+        return this.delegate.updatePassword(password)
+      }
+      signOut() {
+        return this.delegate.signOut()
+      }
+    }
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App
+          auth={new ClassAuth(inner)}
+          createRepository={backend.createRepository}
+        />
+      </MemoryRouter>
+    )
+    await screen.findAllByText('Configuración')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cerrar sesión' })[0])
+
+    await screen.findByRole('heading', { name: 'Ingresar a Tatú' })
+    expect(inner.signOuts).toBe(1)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('a failed sign-out whose session is gone here still leaves, says so in Spanish and reports it', async () => {
+    signedInAsUser1()
+    backend.seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-02-10T00:00:00.000Z'),
+          description: 'Comercio',
+          amount: 10,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
+    // A network failure of the global sign-out; the local one worked.
+    const failure = new TypeError('Failed to fetch')
+    backend.auth.failOn('signOut', failure)
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cerrar sesión' })[0])
+
+    await screen.findByRole('heading', { name: 'Ingresar a Tatú' })
+    expect(
+      screen.getByText(
+        'No se pudo cerrar la sesión en el servidor; en este dispositivo ya está cerrada.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Sin conexión/)).not.toBeInTheDocument()
+    expect(transactionStore.getState().transactions).toEqual([])
+    expect(reporting.captureError).toHaveBeenCalledWith(failure, 'auth')
+  })
+
+  it('when the session cannot be removed at all (offline), stays signed in, says so, and a retry signs out', async () => {
+    signedInAsUser1()
+    backend.auth.failOn('signOut', new TypeError('Failed to fetch'))
+    backend.auth.failOn('signOutLocal', new TypeError('Failed to fetch'))
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cerrar sesión' })[0])
+
+    expect(
+      await screen.findByText(
+        'No se pudo cerrar sesión. Revisá tu conexión e intentá de nuevo.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Ingresar a Tatú' })
+    ).not.toBeInTheDocument()
+    expect(backend.auth.getSession()).toBe(USER_1)
+
+    backend.auth.heal()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cerrar sesión' })[0])
+
+    await screen.findByRole('heading', { name: 'Ingresar a Tatú' })
+    expect(backend.auth.signOuts).toBe(2)
+  })
+
+  it('when reset all data fails part-way, reloads what remains and explains it', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    signedInAsUser1()
+    backend.seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-02-10T00:00:00.000Z'),
+          description: 'Comercio',
+          amount: 10,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+      customCategories: [
+        {
+          id: 'mine',
+          label: 'Mía',
+          color: '#f00',
+          isIgnored: false,
+          isArchived: false,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+    })
+    backend
+      .repo()
+      .failOn('resetAll', { when: ([table]) => table === 'custom_categories' })
+    window.history.replaceState({}, '', '/configuracion')
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter initialEntries={['/configuracion']} future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resetear' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Eliminar todo' })
+    )
+
+    expect(
+      await screen.findByText(
+        'No se pudieron borrar todos los datos. Recargamos lo que quedó guardado; intentá de nuevo.'
+      )
+    ).toBeInTheDocument()
+    // Reloaded through the workspace hook: what remains is shown.
+    await waitFor(() => expect(backend.repo().requests.load).toBe(2))
+    await waitFor(() =>
+      expect(transactionStore.getState().transactions).toEqual([])
+    )
+    expect(listCustomCategories().map((c) => c.id)).toEqual(['mine'])
   })
 
   it('updates and soft-deletes transactions from transactions view', async () => {
-    getCurrentSessionMock.mockReturnValue({
-      access_token: 'access',
-      refresh_token: 'refresh',
-      token_type: 'bearer',
-      expires_in: 3600,
-      expires_at: 9999,
-      user: { id: 'user-1', email: 'test@example.com' },
+    signedInAsUser1()
+    backend.seed({
+      transactions: [
+        {
+          id: 'tx-10',
+          date: new Date('2026-02-10T00:00:00.000Z'),
+          description: 'Old merchant',
+          amount: 120,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
     })
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-10',
-        date: new Date('2026-02-10T00:00:00.000Z'),
-        description: 'Old merchant',
-        amount: 120,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
 
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
-    await waitFor(() =>
-      expect(loadUserTransactionsMock).toHaveBeenCalledTimes(1)
-    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
 
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
     fireEvent.click((await screen.findAllByLabelText('Editar Old merchant'))[0])
@@ -452,7 +544,9 @@ describe('App with supabase enabled', () => {
     })
     fireEvent.click(screen.getByLabelText('Crear categoría'))
     // The new category is selected once it is saved.
-    await waitFor(() => expect(upsertCustomCategoryMock).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(backend.repo().requests.upsertCustomCategory).toBe(1)
+    )
     fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
     fireEvent.change(screen.getByLabelText('Nueva etiqueta'), {
       target: { value: 'monthly' },
@@ -466,18 +560,12 @@ describe('App with supabase enabled', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
     await waitFor(() =>
-      expect(updateTransactionMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          user: expect.objectContaining({ id: 'user-1' }),
-        }),
-        ['tx-10'],
-        {
-          displayDescription: 'New merchant',
-          category: 'services',
-          categoryConfidence: 1,
-          tags: ['monthly', 'fixed'],
-        }
-      )
+      expect(backend.repo().row('tx-10')).toMatchObject({
+        displayDescription: 'New merchant',
+        category: 'services',
+        categoryConfidence: 1,
+        tags: ['monthly', 'fixed'],
+      })
     )
 
     fireEvent.click(
@@ -485,75 +573,54 @@ describe('App with supabase enabled', () => {
     )
 
     // Soft delete: no confirmation, an undo instead.
-    await waitFor(() =>
-      expect(softDeleteTransactionMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          user: expect.objectContaining({ id: 'user-1' }),
-        }),
-        ['tx-10']
-      )
-    )
+    await waitFor(() => expect(backend.repo().isDeleted('tx-10')).toBe(true))
     await waitFor(() =>
       expect(screen.queryByText('New merchant')).not.toBeInTheDocument()
     )
 
     // The undo is wired through App to the real restore handler.
     fireEvent.click(await screen.findByRole('button', { name: 'Deshacer' }))
-    await waitFor(() =>
-      expect(restoreTransactionsMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          user: expect.objectContaining({ id: 'user-1' }),
-        }),
-        ['tx-10']
-      )
-    )
+    await waitFor(() => expect(backend.repo().isDeleted('tx-10')).toBe(false))
     expect((await screen.findAllByText('New merchant')).length).toBeGreaterThan(
       0
     )
   })
 
   it('applies edit to future matching transactions only', async () => {
-    getCurrentSessionMock.mockReturnValue({
-      access_token: 'access',
-      refresh_token: 'refresh',
-      token_type: 'bearer',
-      expires_in: 3600,
-      expires_at: 9999,
-      user: { id: 'user-1', email: 'test@example.com' },
+    signedInAsUser1()
+    backend.seed({
+      transactions: [
+        {
+          id: 'tx-10',
+          date: new Date('2026-02-10T00:00:00.000Z'),
+          description: 'AUT 998877 DEVOTO',
+          amount: 120,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+        {
+          id: 'tx-11',
+          date: new Date('2026-02-11T00:00:00.000Z'),
+          description: 'AUT 123456 DEVOTO',
+          amount: 90,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
     })
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-10',
-        date: new Date('2026-02-10T00:00:00.000Z'),
-        description: 'AUT 998877 DEVOTO',
-        amount: 120,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-      {
-        id: 'tx-11',
-        date: new Date('2026-02-11T00:00:00.000Z'),
-        description: 'AUT 123456 DEVOTO',
-        amount: 90,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
 
     const { default: App } = await import('./App')
     render(
       <MemoryRouter future={ROUTER_FUTURE}>
-        <App />
+        <App auth={backend.auth} createRepository={backend.createRepository} />
       </MemoryRouter>
     )
 
-    await waitFor(() =>
-      expect(loadUserTransactionsMock).toHaveBeenCalledTimes(1)
-    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
 
     fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
     fireEvent.click(
@@ -568,26 +635,17 @@ describe('App with supabase enabled', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
     await waitFor(() =>
-      expect(updateTransactionMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          user: expect.objectContaining({ id: 'user-1' }),
-        }),
-        ['tx-10'],
-        {
-          displayDescription: 'Devoto',
-          // The row had no category: 'Sin categoría' clears it (a no-op).
-          category: null,
-          categoryConfidence: null,
-          tags: [],
-        }
-      )
+      expect(backend.repo().row('tx-10')).toMatchObject({
+        displayDescription: 'Devoto',
+        tags: [],
+      })
     )
+    // The row had no category: 'Sin categoría' clears it (a no-op).
+    expect(backend.repo().row('tx-10')?.category).toBeUndefined()
 
-    expect(
-      updateTransactionMock.mock.calls.filter((call) =>
-        (call[1] as string[]).includes('tx-11')
-      ).length
-    ).toBe(0)
-    expect(upsertDescriptionOverrideMock).toHaveBeenCalledTimes(1)
+    // Only future imports: the past matching row is untouched.
+    expect(backend.repo().row('tx-11')?.displayDescription).toBeUndefined()
+    expect(backend.repo().requests.upsertDescriptionOverride).toBe(1)
+    expect(backend.repo().descriptionOverrides.size).toBe(1)
   })
 })

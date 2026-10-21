@@ -1,4 +1,4 @@
-import { getSupabaseClient, type SupabaseSession } from './client'
+import { getSupabaseClient } from './client'
 
 interface CategoryOverrideRow {
   user_id: string
@@ -28,13 +28,13 @@ function rowToRecord(row: CategoryOverrideRow): CategoryOverrideRecord {
 }
 
 export async function listCategoryOverrides(
-  session: SupabaseSession
+  userId: string
 ): Promise<CategoryOverrideRecord[]> {
   const client = getSupabaseClient()
   const { data, error } = await client
     .from('category_overrides')
     .select('*')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
 
   if (error) {
     throw new Error(error.message)
@@ -44,7 +44,7 @@ export async function listCategoryOverrides(
 }
 
 export async function upsertCategoryOverride(
-  session: SupabaseSession,
+  userId: string,
   input: {
     merchantNormalized: string
     merchantOriginal?: string
@@ -54,7 +54,7 @@ export async function upsertCategoryOverride(
   const client = getSupabaseClient()
   const { error } = await client.from('category_overrides').upsert(
     {
-      user_id: session.user.id,
+      user_id: userId,
       merchant_normalized: input.merchantNormalized,
       merchant_original: input.merchantOriginal ?? null,
       category: input.category,
@@ -68,14 +68,14 @@ export async function upsertCategoryOverride(
 }
 
 export async function deleteCategoryOverride(
-  session: SupabaseSession,
+  userId: string,
   merchantNormalized: string
 ): Promise<void> {
   const client = getSupabaseClient()
   const { error } = await client
     .from('category_overrides')
     .delete()
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('merchant_normalized', merchantNormalized)
 
   if (error) {

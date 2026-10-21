@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
-import type { SupabaseSession } from '../services/supabase/client'
+import type { Repository } from '../services/repository/repository'
 import {
   hydrateWorkspace,
   setPreference,
@@ -17,40 +17,48 @@ export type SyncStatus = 'loading' | 'ready' | 'error'
  * load status. Teardown is `teardownWorkspace()` from the store.
  */
 export function useUserWorkspace({
-  session,
-  authMode,
+  repository,
+  paused,
   onHydrateStart,
 }: {
-  session: SupabaseSession | null
-  authMode: 'signin' | 'reset'
+  /**
+   * The signed-in user's repository (null: signed out); the workspace loads
+   * through it, and its user is the signed-in user.
+   */
+  repository: Repository | null
+  /**
+   * True while the auth screen is shown (choosing a new password, leaving):
+   * nothing loads.
+   */
+  paused: boolean
   /** Runs when a load starts (App clears stale auth messages). */
   onHydrateStart?: () => void
 }) {
-  const userId = session?.user?.id ?? null
+  const userId = repository?.userId ?? null
   const [syncKey, setSyncKey] = useState(0)
   const refetch = useCallback(() => setSyncKey((k) => k + 1), [])
 
-  const sessionRef = useRef(session)
-  sessionRef.current = session
+  // Read through a ref: a new repository object for the same user must not
+  // reload.
+  const repositoryRef = useRef(repository)
+  repositoryRef.current = repository
   const onHydrateStartRef = useRef(onHydrateStart)
   onHydrateStartRef.current = onHydrateStart
 
-  // Keyed on the stable user id, not the session object: Supabase hands us a
-  // new session object on every token refresh (tab refocus), which must not
-  // reload everything.
+  // Keyed on the stable user id, not the repository object.
   useEffect(() => {
     const loadedFor = workspaceStore.getState().userId
     // Safety net: a session that ended or switched without going through
     // teardown never leaves the previous user's data behind.
     if (loadedFor !== null && loadedFor !== userId) teardownWorkspace()
 
-    const current = sessionRef.current
-    if (!current || authMode === 'reset') return
+    const current = repositoryRef.current
+    if (!current || paused) return
 
     onHydrateStartRef.current?.()
     const hydration = hydrateWorkspace(current)
     return hydration.abandon
-  }, [userId, authMode, syncKey])
+  }, [userId, paused, syncKey])
 
   const workspace = useStore(workspaceStore)
   const { preferences } = workspace
@@ -67,7 +75,7 @@ export function useUserWorkspace({
 
   const save = useCallback(
     <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
-      setPreference(sessionRef.current, key, value)
+      setPreference(repositoryRef.current?.userId ?? null, key, value)
     },
     []
   )

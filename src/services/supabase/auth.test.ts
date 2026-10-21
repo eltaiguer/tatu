@@ -89,9 +89,34 @@ describe('supabase auth service', () => {
     signOutMock.mockResolvedValue({ error: null })
 
     const { signOut } = await import('./auth')
-    await signOut(null)
+    await signOut()
 
     expect(clearStoredSessionMock).toHaveBeenCalledTimes(1)
+    expect(signOutMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('when the global sign-out fails, removes this device’s session (local scope) and still reports the failure', async () => {
+    signOutMock
+      .mockResolvedValueOnce({ error: { message: 'Internal Server Error' } })
+      .mockResolvedValueOnce({ error: null })
+
+    const { signOut } = await import('./auth')
+    await expect(signOut()).rejects.toThrow('Internal Server Error')
+
+    expect(signOutMock).toHaveBeenLastCalledWith({ scope: 'local' })
+    expect(clearStoredSessionMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the session when even the local sign-out fails (offline)', async () => {
+    signOutMock
+      .mockResolvedValueOnce({ error: { message: 'Failed to fetch' } })
+      .mockResolvedValueOnce({ error: { message: 'Failed to fetch' } })
+
+    const { signOut } = await import('./auth')
+    await expect(signOut()).rejects.toThrow('Failed to fetch')
+
+    // supabase-js kept its session; so does the app's copy.
+    expect(clearStoredSessionMock).not.toHaveBeenCalled()
   })
 
   it('requests password reset email', async () => {

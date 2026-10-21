@@ -1,5 +1,5 @@
 import type { Transaction } from '../../models'
-import { getSupabaseClient, type SupabaseSession } from './client'
+import { getSupabaseClient } from './client'
 import { UserFacingError } from '../../utils/user-error'
 import { toCalendarDay } from '../../utils/date-utils'
 import type { ExistingTransaction } from '../dedup/import-dedup'
@@ -81,7 +81,7 @@ function rowToTransaction(row: TransactionRow): Transaction {
 const LOAD_PAGE_SIZE = 1000
 
 export async function loadUserTransactions(
-  session: SupabaseSession
+  userId: string
 ): Promise<Transaction[]> {
   const client = getSupabaseClient()
   const rows: TransactionRow[] = []
@@ -90,7 +90,7 @@ export async function loadUserTransactions(
     let query = client
       .from('transactions')
       .select('*')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .is('is_deleted', false)
     const lastId = rows[rows.length - 1]?.transaction_id
     if (lastId !== undefined) {
@@ -121,7 +121,7 @@ export async function loadUserTransactions(
  * (or giving a deleted one new content).
  */
 export async function persistTransactions(
-  session: SupabaseSession,
+  userId: string,
   transactions: Transaction[],
   options?: {
     importId?: string
@@ -133,7 +133,7 @@ export async function persistTransactions(
 
   const client = getSupabaseClient()
   const rows = transactions.map((tx) => ({
-    ...transactionToRow(session.user.id, tx),
+    ...transactionToRow(userId, tx),
     import_id: options?.importId ?? null,
   }))
 
@@ -158,7 +158,7 @@ const UNIQUE_VIOLATION = '23505'
 const EXISTING_LOOKUP_CHUNK = 200
 
 export async function findExistingTransactionIds(
-  session: SupabaseSession,
+  userId: string,
   ids: string[]
 ): Promise<{ active: Set<string>; deleted: Set<string> }> {
   const active = new Set<string>()
@@ -170,7 +170,7 @@ export async function findExistingTransactionIds(
     const { data, error } = await client
       .from('transactions')
       .select('transaction_id, is_deleted')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .in('transaction_id', chunk)
     if (error) {
       throw new Error(error.message)
@@ -204,7 +204,7 @@ const CANDIDATE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
  * parts are left out of the window: they are not bank rows.
  */
 export async function findImportCandidates(
-  session: SupabaseSession,
+  userId: string,
   incoming: Transaction[]
 ): Promise<ExistingTransaction[]> {
   if (incoming.length === 0) {
@@ -218,7 +218,7 @@ export async function findImportCandidates(
     const { data, error } = await client
       .from('transactions')
       .select(CANDIDATE_COLUMNS)
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .in('transaction_id', ids.slice(i, i + EXISTING_LOOKUP_CHUNK))
     if (error) {
       throw new Error(error.message)
@@ -239,7 +239,7 @@ export async function findImportCandidates(
     let query = client
       .from('transactions')
       .select(CANDIDATE_COLUMNS)
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .in('source', sources)
       .gte('date', from)
       .lte('date', to)
@@ -311,7 +311,7 @@ function returnedIds(data: unknown): string[] {
 
 /** Applies one patch to every id (≤ ~100: URL length); returns the ids changed. */
 export async function updateTransactionsByIds(
-  session: SupabaseSession,
+  userId: string,
   ids: string[],
   patch: TransactionColumnsPatch
 ): Promise<string[]> {
@@ -320,7 +320,7 @@ export async function updateTransactionsByIds(
   const { data, error } = await getSupabaseClient()
     .from('transactions')
     .update(columns)
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .in('transaction_id', ids)
     .select('transaction_id')
   if (error) throw new Error(error.message)
@@ -329,7 +329,7 @@ export async function updateTransactionsByIds(
 
 /** Soft-deletes (or restores) every id; returns the ids changed. */
 export async function setTransactionsDeleted(
-  session: SupabaseSession,
+  userId: string,
   ids: string[],
   deleted: boolean
 ): Promise<string[]> {
@@ -341,7 +341,7 @@ export async function setTransactionsDeleted(
         ? { is_deleted: true, deleted_at: new Date().toISOString() }
         : { is_deleted: false, deleted_at: null }
     )
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .in('transaction_id', ids)
     .select('transaction_id')
   if (error) throw new Error(error.message)
@@ -350,14 +350,14 @@ export async function setTransactionsDeleted(
 
 /** Removes rows for good (split parts); returns the ids that existed. */
 export async function hardDeleteTransactionsByIds(
-  session: SupabaseSession,
+  userId: string,
   ids: string[]
 ): Promise<string[]> {
   if (ids.length === 0) return []
   const { data, error } = await getSupabaseClient()
     .from('transactions')
     .delete()
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .in('transaction_id', ids)
     .select('transaction_id')
   if (error) throw new Error(error.message)
@@ -371,7 +371,7 @@ export async function hardDeleteTransactionsByIds(
  * of being overwritten.
  */
 export async function insertSplitParts(
-  session: SupabaseSession,
+  userId: string,
   parts: Transaction[]
 ): Promise<'saved' | 'taken'> {
   if (parts.length === 0) return 'saved'
@@ -379,7 +379,7 @@ export async function insertSplitParts(
     .from('transactions')
     .insert(
       parts.map((part) => ({
-        ...transactionToRow(session.user.id, part),
+        ...transactionToRow(userId, part),
         is_deleted: false,
         deleted_at: null,
       }))
@@ -395,7 +395,7 @@ export async function insertSplitParts(
  * value. Returns how many rows changed (0 or 1).
  */
 export async function setSplitParentFlag(
-  session: SupabaseSession,
+  userId: string,
   parentId: string,
   isSplitParent: boolean,
   options: { onlyIfSplit?: boolean } = {}
@@ -403,7 +403,7 @@ export async function setSplitParentFlag(
   let query = getSupabaseClient()
     .from('transactions')
     .update({ is_split_parent: isSplitParent })
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('transaction_id', parentId)
     .is('is_deleted', false)
   if (options.onlyIfSplit !== undefined) {
@@ -416,14 +416,14 @@ export async function setSplitParentFlag(
 
 /** Deletes a parent's parts: every one pointing at it, or just `ids`. */
 export async function deleteSplitParts(
-  session: SupabaseSession,
+  userId: string,
   parentId: string,
   ids?: string[]
 ): Promise<void> {
   let query = getSupabaseClient()
     .from('transactions')
     .delete()
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('split_parent_id', parentId)
   if (ids) query = query.in('transaction_id', ids)
   const { error } = await query
@@ -432,13 +432,13 @@ export async function deleteSplitParts(
 
 /** How many parts point at `parentId`. */
 export async function countSplitParts(
-  session: SupabaseSession,
+  userId: string,
   parentId: string
 ): Promise<number> {
   const { data, error } = await getSupabaseClient()
     .from('transactions')
     .select('transaction_id')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('split_parent_id', parentId)
   if (error) throw new Error(error.message)
   return returnedIds(data).length

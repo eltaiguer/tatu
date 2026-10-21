@@ -1,4 +1,4 @@
-import { getSupabaseClient, type SupabaseSession } from './client'
+import { getSupabaseClient } from './client'
 
 interface DescriptionOverrideRow {
   user_id: string
@@ -31,13 +31,13 @@ function rowToRecord(row: DescriptionOverrideRow): DescriptionOverrideRecord {
 }
 
 export async function listDescriptionOverrides(
-  session: SupabaseSession
+  userId: string
 ): Promise<DescriptionOverrideRecord[]> {
   const client = getSupabaseClient()
   const { data, error } = await client
     .from('description_overrides')
     .select('*')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
 
   if (error) {
     throw new Error(error.message)
@@ -47,7 +47,7 @@ export async function listDescriptionOverrides(
 }
 
 export async function upsertDescriptionOverride(
-  session: SupabaseSession,
+  userId: string,
   input: {
     descriptionNormalized: string
     descriptionOriginal?: string
@@ -58,7 +58,7 @@ export async function upsertDescriptionOverride(
   const client = getSupabaseClient()
   const { error } = await client.from('description_overrides').upsert(
     {
-      user_id: session.user.id,
+      user_id: userId,
       description_normalized: input.descriptionNormalized,
       description_original: input.descriptionOriginal ?? null,
       friendly_description: input.friendlyDescription,
@@ -73,14 +73,14 @@ export async function upsertDescriptionOverride(
 }
 
 export async function deleteDescriptionOverride(
-  session: SupabaseSession,
+  userId: string,
   descriptionNormalized: string
 ): Promise<void> {
   const client = getSupabaseClient()
   const { error } = await client
     .from('description_overrides')
     .delete()
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('description_normalized', descriptionNormalized)
 
   if (error) {

@@ -3,7 +3,6 @@
 // `services/supabase/*` and owns how large writes are cut (`batching.ts`):
 // ≤100-id `.in()` updates settled independently (#60), sequential 500-row
 // import inserts that stop at the first failure (#61).
-import type { SupabaseSession } from '../supabase/client'
 import {
   countSplitParts,
   deleteSplitParts,
@@ -46,6 +45,8 @@ import {
   loadUserPreferences,
   saveUserPreferences,
 } from '../supabase/user-preferences'
+import { loadCachedInsights, saveInsights } from '../supabase/ai-insights'
+import { resetUserSupabaseData } from '../supabase/reset'
 import { UserFacingError } from '../../utils/user-error'
 import { groupByPatch, insertSequentially, settleChunks } from './batching'
 import {
@@ -55,9 +56,9 @@ import {
   type Repository,
 } from './repository'
 
-export function createSupabaseRepository(session: SupabaseSession): Repository {
+export function createSupabaseRepository(userId: string): Repository {
   return {
-    userId: session.user.id,
+    userId,
 
     async loadWorkspace() {
       const [
@@ -68,12 +69,12 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
         customCategories,
         preferences,
       ] = await Promise.all([
-        loadUserTransactions(session),
-        listCategoryOverrides(session),
-        listDescriptionOverrides(session),
-        listCustomPatterns(session),
-        listCustomCategories(session),
-        loadUserPreferences(session),
+        loadUserTransactions(userId),
+        listCategoryOverrides(userId),
+        listDescriptionOverrides(userId),
+        listCustomPatterns(userId),
+        listCustomCategories(userId),
+        loadUserPreferences(userId),
       ])
       return {
         transactions,
@@ -84,16 +85,18 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
         preferences,
       }
     },
-    savePreferences: (preferences) => saveUserPreferences(session, preferences),
+    loadTransactions: () => loadUserTransactions(userId),
+    loadCategoryOverrides: () => listCategoryOverrides(userId),
+    savePreferences: (preferences) => saveUserPreferences(userId, preferences),
 
-    findImportCandidates: (incoming) => findImportCandidates(session, incoming),
-    findExistingIds: (ids) => findExistingTransactionIds(session, ids),
+    findImportCandidates: (incoming) => findImportCandidates(userId, incoming),
+    findExistingIds: (ids) => findExistingTransactionIds(userId, ids),
 
     insertTransactions(rows, options) {
       return insertSequentially(
         rows,
         (part) =>
-          persistTransactions(session, part, { importId: options?.importId }),
+          persistTransactions(userId, part, { importId: options?.importId }),
         options?.shouldContinue
       )
     },
@@ -101,26 +104,26 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
       return settleChunks(
         groupByPatch(changes).map(({ patch, ids }) => ({
           ids,
-          write: (chunk) => updateTransactionsByIds(session, chunk, patch),
+          write: (chunk) => updateTransactionsByIds(userId, chunk, patch),
         }))
       )
     },
     softDeleteTransactions(ids) {
       return settleChunks([
-        { ids, write: (chunk) => setTransactionsDeleted(session, chunk, true) },
+        { ids, write: (chunk) => setTransactionsDeleted(userId, chunk, true) },
       ])
     },
     restoreTransactions(ids) {
       return settleChunks([
         {
           ids,
-          write: (chunk) => setTransactionsDeleted(session, chunk, false),
+          write: (chunk) => setTransactionsDeleted(userId, chunk, false),
         },
       ])
     },
     hardDeleteTransactions(ids) {
       return settleChunks([
-        { ids, write: (chunk) => hardDeleteTransactionsByIds(session, chunk) },
+        { ids, write: (chunk) => hardDeleteTransactionsByIds(userId, chunk) },
       ])
     },
 
@@ -134,12 +137,12 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
     // compensation ever deletes.
     async splitTransaction(parent, parts) {
       const partIds = parts.map((part) => part.id)
-      if ((await insertSplitParts(session, parts)) === 'taken') {
+      if ((await insertSplitParts(userId, parts)) === 'taken') {
         throw new UserFacingError(SPLIT_CONFLICT_MESSAGE)
       }
       let marked: number
       try {
-        marked = await setSplitParentFlag(session, parent.id, true, {
+        marked = await setSplitParentFlag(userId, parent.id, true, {
           onlyIfSplit: false,
         })
       } catch (error) {
@@ -147,9 +150,9 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
         // split's parts, then clear the flag — only if no parts point at the
         // parent any more, so another device's split is never undone.
         try {
-          await deleteSplitParts(session, parent.id, partIds)
-          if ((await countSplitParts(session, parent.id)) === 0) {
-            await setSplitParentFlag(session, parent.id, false)
+          await deleteSplitParts(userId, parent.id, partIds)
+          if ((await countSplitParts(userId, parent.id)) === 0) {
+            await setSplitParentFlag(userId, parent.id, false)
           }
         } catch {
           throw new SplitIncompleteError(error)
@@ -159,7 +162,7 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
       if (marked === 0) {
         // Split (or deleted) meanwhile: take back only this split's parts.
         try {
-          await deleteSplitParts(session, parent.id, partIds)
+          await deleteSplitParts(userId, parent.id, partIds)
         } catch (error) {
           throw new SplitIncompleteError(error)
         }
@@ -171,20 +174,20 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
     // knows): a failure leaves parent and parts visible, never a split parent
     // without parts.
     async unsplitTransaction(parent) {
-      const unmarked = await setSplitParentFlag(session, parent.id, false)
+      const unmarked = await setSplitParentFlag(userId, parent.id, false)
       if (unmarked === 0) {
         throw new UserFacingError(
           'La transacción ya no existe. Recargá para ver el estado actual.'
         )
       }
       try {
-        await deleteSplitParts(session, parent.id)
+        await deleteSplitParts(userId, parent.id)
       } catch (error) {
         try {
           // The delete may have committed with its response lost: mark the
           // parent again only if parts are still there.
-          if ((await countSplitParts(session, parent.id)) === 0) return
-          await setSplitParentFlag(session, parent.id, true)
+          if ((await countSplitParts(userId, parent.id)) === 0) return
+          await setSplitParentFlag(userId, parent.id, true)
         } catch {
           throw new UnsplitIncompleteError(error)
         }
@@ -192,20 +195,25 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
       }
     },
 
-    createImportRun: (input) => createImportRun(session, input),
+    createImportRun: (input) => createImportRun(userId, input),
     completeImportRun: (importId, stats) =>
-      completeImportRun(session, importId, stats),
+      completeImportRun(userId, importId, stats),
     failImportRun: (importId, message) =>
-      failImportRun(session, importId, message),
+      failImportRun(userId, importId, message),
 
     upsertDescriptionOverride: (input) =>
-      upsertDescriptionOverride(session, input),
-    deleteDescriptionOverride: (key) => deleteDescriptionOverride(session, key),
-    upsertCategoryOverride: (input) => upsertCategoryOverride(session, input),
-    deleteCategoryOverride: (key) => deleteCategoryOverride(session, key),
-    upsertCustomPattern: (pattern) => upsertCustomPattern(session, pattern),
-    deleteCustomPattern: (id) => deleteCustomPattern(session, id),
-    upsertCustomCategory: (input) => upsertCustomCategory(session, input),
-    archiveCustomCategory: (id) => archiveCustomCategory(session, id),
+      upsertDescriptionOverride(userId, input),
+    deleteDescriptionOverride: (key) => deleteDescriptionOverride(userId, key),
+    upsertCategoryOverride: (input) => upsertCategoryOverride(userId, input),
+    deleteCategoryOverride: (key) => deleteCategoryOverride(userId, key),
+    upsertCustomPattern: (pattern) => upsertCustomPattern(userId, pattern),
+    deleteCustomPattern: (id) => deleteCustomPattern(userId, id),
+    upsertCustomCategory: (input) => upsertCustomCategory(userId, input),
+    archiveCustomCategory: (id) => archiveCustomCategory(userId, id),
+
+    loadInsights: () => loadCachedInsights(userId),
+    saveInsights: (row) => saveInsights(userId, row),
+
+    resetAll: () => resetUserSupabaseData(userId),
   }
 }

@@ -12,7 +12,7 @@ import { replaceCustomPatterns } from '../categorizer/custom-patterns'
 import { StatementReadError } from '../../utils/user-error'
 import { parseCSV } from '../parsers/csv-parser'
 import { categorizeParsedData } from '../categorizer/import-categorization'
-import { sha256Hex } from '../supabase/import-runs'
+import { sha256Hex } from '../../utils/sha256'
 import { decodeCsvBytes } from '../parsers/decode-csv'
 
 // The whole import, from a statement file's bytes to rows saved through the

@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from './client'
 
 const { selectMock, eqUserMock, singleMock, upsertMock, fromMock } = vi.hoisted(
   () => ({
@@ -17,21 +16,7 @@ vi.mock('./client', () => ({
   }),
 }))
 
-const session: SupabaseSession = {
-  access_token: 'access-token',
-  refresh_token: 'refresh-token',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999999999,
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-  },
-}
+const userId = 'user-1'
 
 describe('supabase ai-insights service', () => {
   beforeEach(() => {
@@ -66,7 +51,7 @@ describe('supabase ai-insights service', () => {
     })
 
     const { loadCachedInsights } = await import('./ai-insights')
-    const row = await loadCachedInsights(session)
+    const row = await loadCachedInsights(userId)
 
     expect(selectMock).toHaveBeenCalledWith('*')
     expect(eqUserMock).toHaveBeenCalledWith('user_id', 'user-1')
@@ -82,7 +67,7 @@ describe('supabase ai-insights service', () => {
     singleMock.mockResolvedValue({ data: null, error: null })
     const { loadCachedInsights } = await import('./ai-insights')
 
-    await expect(loadCachedInsights(session)).resolves.toBeNull()
+    await expect(loadCachedInsights(userId)).resolves.toBeNull()
   })
 
   it('returns null when several rows exist (PGRST116)', async () => {
@@ -92,7 +77,7 @@ describe('supabase ai-insights service', () => {
     })
 
     const { loadCachedInsights } = await import('./ai-insights')
-    const row = await loadCachedInsights(session)
+    const row = await loadCachedInsights(userId)
 
     expect(row).toBeNull()
   })
@@ -111,7 +96,7 @@ describe('supabase ai-insights service', () => {
 
       const { loadCachedInsights } = await import('./ai-insights')
       const { UserFacingError } = await import('../../utils/user-error')
-      const error = await loadCachedInsights(session).catch((e: unknown) => e)
+      const error = await loadCachedInsights(userId).catch((e: unknown) => e)
 
       expect(error).toBeInstanceOf(UserFacingError)
       expect((error as Error).message).not.toMatch(/schema cache/)
@@ -125,12 +110,12 @@ describe('supabase ai-insights service', () => {
     })
 
     const { loadCachedInsights } = await import('./ai-insights')
-    await expect(loadCachedInsights(session)).rejects.toThrow('boom')
+    await expect(loadCachedInsights(userId)).rejects.toThrow('boom')
   })
 
   it('upserts insights with user ownership keyed on user_id alone', async () => {
     const { saveInsights } = await import('./ai-insights')
-    await saveInsights(session, {
+    await saveInsights(userId, {
       inputHash: 'abc123',
       model: 'claude-opus-4-8',
       insights: { insights: [] },

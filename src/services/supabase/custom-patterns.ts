@@ -1,4 +1,4 @@
-import { getSupabaseClient, type SupabaseSession } from './client'
+import { getSupabaseClient } from './client'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 
 interface CustomPatternRow {
@@ -23,13 +23,13 @@ function rowToPattern(row: CustomPatternRow): CustomPattern {
 }
 
 export async function listCustomPatterns(
-  session: SupabaseSession
+  userId: string
 ): Promise<CustomPattern[]> {
   const client = getSupabaseClient()
   const { data, error } = await client
     .from('custom_patterns')
     .select('*')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: true })
 
   if (error) {
@@ -40,13 +40,13 @@ export async function listCustomPatterns(
 }
 
 export async function upsertCustomPattern(
-  session: SupabaseSession,
+  userId: string,
   pattern: CustomPattern
 ): Promise<void> {
   const client = getSupabaseClient()
   const { error } = await client.from('custom_patterns').upsert(
     {
-      user_id: session.user.id,
+      user_id: userId,
       id: pattern.id,
       pattern: pattern.pattern,
       match_type: pattern.matchType,
@@ -63,14 +63,14 @@ export async function upsertCustomPattern(
 }
 
 export async function deleteCustomPattern(
-  session: SupabaseSession,
+  userId: string,
   id: string
 ): Promise<void> {
   const client = getSupabaseClient()
   const { error } = await client
     .from('custom_patterns')
     .delete()
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('id', id)
 
   if (error) {
@@ -78,14 +78,12 @@ export async function deleteCustomPattern(
   }
 }
 
-export async function deleteAllCustomPatterns(
-  session: SupabaseSession
-): Promise<void> {
+export async function deleteAllCustomPatterns(userId: string): Promise<void> {
   const client = getSupabaseClient()
   const { error } = await client
     .from('custom_patterns')
     .delete()
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
 
   if (error) {
     throw new Error(error.message)
