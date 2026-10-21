@@ -256,6 +256,26 @@ describe('useTransactionFiltering — pagination', () => {
     expect(result.current.currentPage).toBe(1)
     expect(result.current.paginatedTransactions).toHaveLength(1)
   })
+
+  // #231: a later page would hide the first matches of the new filter.
+  it('goes back to the first page when a filter changes', () => {
+    const { result } = setup(transactions)
+    act(() => result.current.setCurrentPage(3))
+
+    act(() => result.current.update({ search: 'tx-' }))
+
+    expect(result.current.totalPages).toBe(3)
+    expect(result.current.currentPage).toBe(1)
+  })
+
+  it('keeps the page when a patch changes nothing', () => {
+    const { result } = setup(transactions)
+    act(() => result.current.setCurrentPage(2))
+
+    act(() => result.current.update({ search: result.current.filters.search }))
+
+    expect(result.current.currentPage).toBe(2)
+  })
 })
 
 describe('useTransactionFiltering — derived array identity', () => {

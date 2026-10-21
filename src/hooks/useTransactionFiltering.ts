@@ -179,6 +179,15 @@ export function useTransactionFiltering({
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
   const [currentPage, setCurrentPage] = useState(1)
 
+  // A new filter starts on its first page (#231): a later page would hide its
+  // first matches. `filters` keeps its identity when a patch changes nothing,
+  // so a no-op keeps the page.
+  const [pageFilters, setPageFilters] = useState(filters)
+  if (pageFilters !== filters) {
+    setPageFilters(filters)
+    setCurrentPage(1)
+  }
+
   // Every matching row, ignored ones included (the totals strip and the
   // "n ignoradas" count need them), sorted for the table.
   const allFilteredTransactions = useMemo(

@@ -375,7 +375,9 @@ the URL write-back stays quiet), `clear()` (every filter back to its default,
 all dates, ignored rows hidden) and `setDateBound(bound, value)` for the date
 inputs (a custom range keeping the other end of the current period,
 `periodWithDateBound`). The three updaters are stable and apply to the latest
-state. When the results shrink, the current page is clamped to the last one.
+state. Changing a filter goes back to the first page (#231); a patch that
+changes nothing keeps the page, and the page is clamped to the last one when
+the results shrink.
 The hook sorts, groups split parts under their parent (`groupSplitRows`) and
 paginates. It freezes the "últimos n meses" anchor (the newest row) when that
 period is chosen, so an import does not shift the window. `TransactionFilters`
