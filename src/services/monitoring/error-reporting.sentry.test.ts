@@ -110,6 +110,25 @@ describe('error reporting through the Sentry SDK', () => {
     ])
   })
 
+  it('ignores each chunk-load message exactly, not one with more after it', async () => {
+    const sent = initWithFakeTransport()
+
+    captureError(new TypeError('Importing a module script failed.'))
+    captureError(
+      new TypeError(
+        'error loading dynamically imported module: https://tatu.app/assets/x.js'
+      )
+    )
+    captureError(
+      new TypeError('Importing a module script failed: extra context')
+    )
+    await Sentry.flush()
+
+    expect(sent.map((e) => e.exception?.values?.[0].value)).toEqual([
+      'Importing a module script failed: extra context',
+    ])
+  })
+
   it('does not send a network failure, whoever reports it', async () => {
     const sent = initWithFakeTransport()
 

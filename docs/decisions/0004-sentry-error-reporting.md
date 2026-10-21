@@ -50,8 +50,10 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
   failures, which the app already recovers from. AI failures are classified
   once, by the Claude client (`services/ai/claude-client.ts`), from the SDK
   error's class, `status` and `type` (the message is read only for
-  Anthropic's "credit balance is too low" 400): a bad key, rate limit, no credit, outage, lost connection,
-  truncated or refused answer and a stale SDK chunk become an `AiError` and
+  Anthropic's "credit balance is too low" and "prompt is too long" 400s): a
+  bad key, rate limit, no credit, outage, lost connection, truncated or
+  refused answer, a request over the size limit (413) and a stale SDK chunk
+  become an `AiError` and
   are not reported; a malformed answer (`bad_response`) and anything the
   client did not explain — a JavaScript engine error (`TypeError`,
   `SyntaxError`, …), a 400/404 for a malformed request — are. A partial AI

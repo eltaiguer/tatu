@@ -743,7 +743,7 @@ describe('ImportCSV', () => {
     ).toBeInTheDocument()
     await waitFor(() =>
       expect(toastMock.warning).toHaveBeenCalledWith(
-        'Categorización con IA no disponible: la respuesta del modelo quedó truncada (límite de tokens alcanzado). Probá importar menos transacciones a la vez. Se usaron las reglas de categorización.'
+        'Categorización con IA no disponible: la respuesta del modelo quedó truncada (límite de tokens alcanzado); probá importar menos transacciones a la vez. Se usaron las reglas de categorización.'
       )
     )
   })

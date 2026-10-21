@@ -6,6 +6,7 @@ import {
   aiDiagnosticMessage,
   aiErrorMessage,
   aiPartialFailureMessage,
+  importAiErrorMessage,
   isUnexpectedAiError,
   userErrorMessage,
 } from './user-error'
@@ -154,6 +155,7 @@ describe('AI messages compose into a sentence', () => {
     'stale_chunk',
     'refused',
     'bad_response',
+    'too_large',
   ] as const
 
   it('is a fragment for every kind: no leading capital, no closing period', () => {
@@ -180,6 +182,33 @@ describe('aiErrorMessage — failures that reached it without the client', () =>
     expect(isUnexpectedAiError(offline)).toBe(false)
     expect(aiErrorMessage(stale)).toBe('la app se actualizó; recargá la página')
     expect(isUnexpectedAiError(stale)).toBe(false)
+  })
+})
+
+describe('aiErrorMessage — offline', () => {
+  it('reads a chunk that failed to load offline as no connection, like the client', () => {
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const stale = new TypeError(
+      'Failed to fetch dynamically imported module: https://tatu.app/assets/sdk.js'
+    )
+    const bug = new TypeError('x is undefined')
+
+    expect(aiErrorMessage(stale)).toBe('sin conexión con Anthropic')
+    expect(isUnexpectedAiError(stale)).toBe(false)
+    // A bug is a bug, offline or not.
+    expect(isUnexpectedAiError(bug)).toBe(true)
+    online.mockRestore()
+  })
+})
+
+describe('importAiErrorMessage', () => {
+  it('adds what to do about a cut-off answer, and only to that', () => {
+    expect(importAiErrorMessage(new AiError('truncated'))).toBe(
+      'la respuesta del modelo quedó truncada (límite de tokens alcanzado); probá importar menos transacciones a la vez'
+    )
+    expect(importAiErrorMessage(new AiError('auth'))).toBe(
+      'la clave API de Anthropic no es válida'
+    )
   })
 })
 
@@ -222,7 +251,8 @@ describe('isUnexpectedAiError', () => {
     }
   })
 
-  it('is false for a truncated or refused answer, which depends on the data', () => {
+  it('is false for a truncated, refused or too large request, which depends on the data', () => {
+    expect(isUnexpectedAiError(new AiError('too_large'))).toBe(false)
     expect(isUnexpectedAiError(new AiError('truncated'))).toBe(false)
     expect(isUnexpectedAiError(new AiError('refused'))).toBe(false)
   })

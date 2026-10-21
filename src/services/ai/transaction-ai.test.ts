@@ -328,21 +328,32 @@ describe('enrichTransactionsWithAi', () => {
     expect(results.get('tx1')?.category).toBe(Category.Uncategorized)
   })
 
-  it('skips items of the wrong shape instead of losing the batch', async () => {
+  it('skips only items without a string id, and ignores fields of the wrong type', async () => {
     answers([
-      { id: 'tx1', displayDescription: 'Devoto', category: 5 },
+      { id: 'tx1', displayDescription: 'Devoto', category: null },
+      { id: 'tx2', displayDescription: 5, category: 'groceries' },
       { id: 7, displayDescription: 'Seven', category: 'groceries' },
       null,
       'tx3',
-      { id: 'tx4', displayDescription: 'Netflix', category: 'entertainment' },
     ])
 
     const { results, partialFailure } = await enrich([
       input('tx1', 'DEVOTO'),
-      input('tx4', 'NETFLIX'),
+      input('tx2', 'TATA 123'),
     ])
 
-    expect([...results.keys()]).toEqual(['tx4'])
+    expect([...results.keys()]).toEqual(['tx1', 'tx2'])
+    // A category that is not a string is no answer: uncategorized, as when
+    // the field is missing; the name the model gave is kept.
+    expect(results.get('tx1')).toMatchObject({
+      category: Category.Uncategorized,
+      displayDescription: 'Devoto',
+    })
+    // A name that is not a string is ignored: the row keeps its description.
+    expect(results.get('tx2')).toMatchObject({
+      category: 'groceries',
+      displayDescription: 'TATA 123',
+    })
     expect(partialFailure).toBeUndefined()
     expect(reporting.captureError).not.toHaveBeenCalled()
   })
@@ -645,6 +656,16 @@ describe('enrichTransactionsWithAi — failures every batch would repeat', () =>
     answers({ throws: new AiError('rate_limit') }, { throws: auth })
 
     await expect(enrich(makeInputs(600))).rejects.toBe(auth)
+  })
+
+  it('suggests a smaller import when some batches were cut off', async () => {
+    answers([], { throws: new AiError('truncated') }, [])
+
+    const { partialFailure } = await enrich(makeInputs(450))
+
+    expect(partialFailure).toBe(
+      '1 de 3 lotes fallaron (la respuesta del modelo quedó truncada (límite de tokens alcanzado); probá importar menos transacciones a la vez)'
+    )
   })
 
   it('names the failure that stopped a partial run', async () => {

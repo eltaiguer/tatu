@@ -15,10 +15,7 @@ import {
 } from '../../services/ai/jev-classifier'
 import { JEV_MODEL } from '../../services/ai/models'
 import { errorMessage } from '../../services/monitoring/error-reporting'
-import {
-  aiDiagnosticMessage,
-  isUnexpectedAiError,
-} from '../../utils/user-error'
+import { devFailureMessage } from './dev-failure'
 import { resolveCategory } from '../../services/categories/category-registry'
 import {
   labelledRows,
@@ -61,20 +58,6 @@ const idle = (): EngineRun => ({
 type Classify = (
   sample: LabelledRow[]
 ) => Promise<{ predictions: Map<string, string>; partialFailure?: string }>
-
-/** `classify`, with its failure rethrown as the text `describe` writes. */
-function described(
-  classify: Classify,
-  describe: (error: unknown) => string
-): Classify {
-  return async (sample) => {
-    try {
-      return await classify(sample)
-    } catch (error) {
-      throw new Error(describe(error))
-    }
-  }
-}
 
 function percent(ratio: number): string {
   return `${Math.round(ratio * 100)} %`
@@ -133,9 +116,13 @@ export function CategorizerEval({
   const [jevKey, setJevKey] = useState('')
   const [jev, setJev] = useState<EngineRun>(idle)
 
-  // A run either scores or shows one line of error. Each engine's classify
-  // throws an error already written for this panel (see `described`).
-  async function runEngine(set: (run: EngineRun) => void, classify: Classify) {
+  // A run either scores or shows one line of error, written by `describe`
+  // (the panel already names the engine).
+  async function runEngine(
+    set: (run: EngineRun) => void,
+    classify: Classify,
+    describe: (error: unknown) => string
+  ) {
     set({ ...idle(), state: 'running' })
     try {
       const { predictions, partialFailure } = await classify(sample)
@@ -152,73 +139,65 @@ export function CategorizerEval({
         error: partialFailure ?? null,
       })
     } catch (e) {
-      set({ ...idle(), state: 'error', error: errorMessage(e) })
+      set({ ...idle(), state: 'error', error: describe(e) })
     }
   }
+
+  const evalFailure = (e: unknown) => devFailureMessage(e, '[Dev] evaluation')
 
   const handleRules = () =>
     runEngine(
       setRules,
-      described(
-        async (s) => ({ predictions: rulePredictions(s) }),
-        (e) => {
-          console.error('[Dev] evaluation failed:', e)
-          return `las reglas fallaron: ${errorMessage(e)}`
-        }
-      )
+      async (s) => ({ predictions: rulePredictions(s) }),
+      evalFailure
     )
 
   const handleClaude = () =>
     runEngine(
       setClaude,
-      described(
-        async (s) => {
-          const config: AiConfig = {
-            apiKey: claudeApiKey,
-            enabled: true,
-            model: aiModel,
-          }
-          // No correction examples and no custom patterns: the labels came
-          // from those, so handing them to the model would score its memory.
-          const { results, partialFailure } = await enrichTransactionsWithAi(
-            toInputs(s),
-            config,
-            {
-              descriptionExamples: [],
-              categoryExamples: [],
-              customCategories: listCustomCategories(),
-              customPatterns: [],
-            }
-          )
-          return {
-            predictions: new Map(
-              [...results].map(([id, r]) => [id, r.category])
-            ),
-            partialFailure,
-          }
-        },
-        (e) => {
-          if (isUnexpectedAiError(e)) {
-            console.error('[Dev] evaluation failed:', e)
-          }
-          return aiDiagnosticMessage(e)
+      async (s) => {
+        const config: AiConfig = {
+          apiKey: claudeApiKey,
+          enabled: true,
+          model: aiModel,
         }
-      )
+        // No correction examples and no custom patterns: the labels came
+        // from those, so handing them to the model would score its memory.
+        const { results, partialFailure } = await enrichTransactionsWithAi(
+          toInputs(s),
+          config,
+          {
+            descriptionExamples: [],
+            categoryExamples: [],
+            customCategories: listCustomCategories(),
+            customPatterns: [],
+          }
+        )
+        return {
+          predictions: new Map([...results].map(([id, r]) => [id, r.category])),
+          partialFailure,
+        }
+      },
+      evalFailure
     )
 
   // Jev's errors (an OpenRouter call) are already written for this panel.
   const handleJev = () =>
-    runEngine(setJev, async (s) => {
-      const { results, partialFailure } = await classifyWithJev(
-        toInputs(s),
-        { apiKey: jevKey, model: JEV_MODEL },
-        listCustomCategories()
-      )
-      return {
-        predictions: new Map([...results].map(([id, r]) => [id, r.category])),
-        partialFailure,
-      }
-    })
+    runEngine(
+      setJev,
+      async (s) => {
+        const { results, partialFailure } = await classifyWithJev(
+          toInputs(s),
+          { apiKey: jevKey, model: JEV_MODEL },
+          listCustomCategories()
+        )
+        return {
+          predictions: new Map([...results].map(([id, r]) => [id, r.category])),
+          partialFailure,
+        }
+      },
+      errorMessage
+    )
 
   const engines: Array<{ key: string; name: string; run: EngineRun }> = [
     { key: 'rules', name: 'Reglas', run: rules },

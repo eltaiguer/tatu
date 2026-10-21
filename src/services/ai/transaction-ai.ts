@@ -13,6 +13,7 @@ import { resolveBuiltinAlias } from '../categories/category-aliases'
 import { captureError, errorMessage } from '../monitoring/error-reporting'
 import {
   aiPartialFailureMessage,
+  importAiErrorMessage,
   isUnexpectedAiError,
 } from '../../utils/user-error'
 
@@ -236,27 +237,27 @@ function parseBatchResponse(
   }
 
   const results: AiEnrichmentResult[] = []
-  // An item of the wrong shape is skipped, like one without an id: the rest
-  // of the batch is still good, and the row keeps its rule-based result.
+  // Only an item without a string id is skipped (there is no row to put
+  // it on). A field of the wrong type is ignored: a category that is not a
+  // string is no answer (uncategorized, as when it is missing), and a name
+  // that is not a string leaves the row's description.
   for (const raw of parsed as unknown[]) {
     if (typeof raw !== 'object' || raw === null) continue
     const item = raw as Record<string, unknown>
     if (typeof item.id !== 'string' || !item.id) continue
-    if (typeof item.displayDescription !== 'string') continue
-    if (item.category !== undefined && typeof item.category !== 'string') {
-      continue
-    }
+    const id = item.id
+    const category = typeof item.category === 'string' ? item.category : ''
+    const name =
+      typeof item.displayDescription === 'string'
+        ? item.displayDescription.trim()
+        : ''
     const rawConfidence =
       typeof item.confidence === 'number' ? item.confidence : 0.7
     results.push({
-      id: item.id,
-      category: validateCategory(
-        (item.category as string | undefined) ?? '',
-        context.customCategories
-      ),
+      id,
+      category: validateCategory(category, context.customCategories),
       displayDescription:
-        item.displayDescription.trim() ||
-        (inputs.find((t) => t.id === item.id)?.description ?? item.id),
+        name || (inputs.find((t) => t.id === id)?.description ?? id),
       confidence: Math.min(MAX_AI_CONFIDENCE, Math.max(0, rawConfidence)),
     })
   }
@@ -353,7 +354,8 @@ async function enrichInBatches(
     partialFailure: aiPartialFailureMessage(
       errors.length + totalBatches - batchCount,
       totalBatches,
-      first
+      first,
+      importAiErrorMessage
     ),
   }
 }

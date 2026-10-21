@@ -255,7 +255,7 @@ describe('CategorizerEval — failures', () => {
     )
 
     expect(
-      await screen.findByText(/las reglas fallaron: rules exploded/)
+      await screen.findByText('Reglas: rules exploded')
     ).toBeInTheDocument()
     expect(
       screen.queryByText(/error inesperado del servicio de IA/)

@@ -47,9 +47,7 @@ export function createClaudeClient(
   // next run builds a new client and tries afresh.
   async function sdk(): Promise<SdkModule> {
     loaded ??= loadSdk().catch((error: unknown) => {
-      const offline =
-        typeof navigator !== 'undefined' && navigator.onLine === false
-      throw browserFailureAsAiError(error, { offline }) ?? error
+      throw browserFailureAsAiError(error) ?? error
     })
     return loaded
   }
@@ -99,7 +97,8 @@ interface ClaudeResponse {
  * The SDK error as an `AiError`, or null when it is not one the user can act
  * on (a 400 for a malformed request, a 404 for an unknown model: our bug).
  * By class and `status`/`type`; the message only tells Anthropic's own
- * "credit balance is too low" 400 from other invalid requests.
+ * "credit balance is too low" and "prompt is too long" 400s from other
+ * invalid requests.
  */
 function classify(error: unknown, sdk: SdkModule): AiError | null {
   // Before APIError: these are APIErrors without a status.
@@ -124,6 +123,13 @@ function classify(error: unknown, sdk: SdkModule): AiError | null {
     type === 'permission_error'
   ) {
     return new AiError('auth', undefined, error)
+  }
+  if (
+    status === 413 ||
+    (type as string | null) === 'request_too_large' ||
+    (status === 400 && /prompt is too long/i.test(error.message))
+  ) {
+    return new AiError('too_large', undefined, error)
   }
   if (status === 429 || type === 'rate_limit_error') {
     return new AiError('rate_limit', undefined, error)

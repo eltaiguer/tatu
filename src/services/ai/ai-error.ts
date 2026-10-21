@@ -25,6 +25,8 @@ export type AiErrorKind =
   | 'refused'
   /** The model answered, but not in the shape asked for. */
   | 'bad_response'
+  /** The request is over the model's size limit (413, "prompt is too long"). */
+  | 'too_large'
 
 // What the user reads. Every one is a fragment (no capital, no period): the
 // screen writes the sentence around it ("Categorización con IA no
@@ -41,6 +43,8 @@ const MESSAGES: Record<AiErrorKind, string> = {
     'la respuesta del modelo quedó truncada (límite de tokens alcanzado)',
   refused: 'el modelo rechazó la solicitud',
   bad_response: 'respuesta inesperada del modelo',
+  too_large:
+    'la solicitud es demasiado grande para el modelo; probá con menos datos',
 }
 
 // Failures every later request would repeat: a batch loop stops on these
@@ -86,18 +90,15 @@ export class AiError extends Error {
 /**
  * A browser failure that reached an AI call as a plain error — the SDK's
  * chunk would not load, or the network is gone — as the `AiError` it means;
- * undefined for anything else. `offline` (the browser says so) makes any
- * such failure a lost connection: a missing chunk cannot be told apart
- * from no network then.
+ * undefined for anything else (a bug stays a bug, offline or not). While
+ * the browser is offline a chunk that would not load is a lost connection:
+ * the two cannot be told apart then.
  */
-export function browserFailureAsAiError(
-  error: unknown,
-  { offline = false }: { offline?: boolean } = {}
-): AiError | undefined {
-  if (offline) return new AiError('network', undefined, error)
+export function browserFailureAsAiError(error: unknown): AiError | undefined {
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false
   // Before the network check: Chrome's chunk message says "Failed to fetch".
   if (isChunkLoadError(error)) {
-    return new AiError('stale_chunk', undefined, error)
+    return new AiError(offline ? 'network' : 'stale_chunk', undefined, error)
   }
   if (isNetworkError(error)) return new AiError('network', undefined, error)
   return undefined

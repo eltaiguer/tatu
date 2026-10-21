@@ -215,10 +215,32 @@ describe('createClaudeClient — failures', () => {
     const tooBig = apiError(
       400,
       'invalid_request_error',
-      'prompt is too long: insufficient max_tokens for the requested credit'
+      'max_tokens: insufficient budget for the requested credit tier'
     )
 
     expect(await failureOf(tooBig)).toBe(tooBig)
+  })
+
+  it('tells the user to send less when the request is too large', async () => {
+    const promptTooLong = apiError(
+      400,
+      'invalid_request_error',
+      'prompt is too long: 250000 tokens > 200000 maximum'
+    )
+    const tooLarge = apiError(
+      413,
+      'request_too_large',
+      'Request exceeds the maximum size'
+    )
+
+    for (const thrown of [promptTooLong, tooLarge]) {
+      const error = (await failureOf(thrown)) as AiError
+      expect(error).toBeInstanceOf(AiError)
+      expect(error.kind).toBe('too_large')
+      expect(error.message).toBe(
+        'la solicitud es demasiado grande para el modelo; probá con menos datos'
+      )
+    }
   })
 
   it('treats a lost, timed-out or aborted connection as the network', async () => {
@@ -346,6 +368,7 @@ describe('AiError', () => {
     expect(retryable('truncated')).toBe(true)
     expect(retryable('refused')).toBe(true)
     expect(retryable('bad_response')).toBe(true)
+    expect(retryable('too_large')).toBe(true)
   })
 })
 

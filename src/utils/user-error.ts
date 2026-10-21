@@ -111,15 +111,27 @@ export function aiDiagnosticMessage(error: unknown): string {
 }
 
 /**
+ * `aiErrorMessage` for the import, which can say what to do about a cut-off
+ * answer: send fewer rows at a time.
+ */
+export function importAiErrorMessage(error: unknown): string {
+  const message = aiErrorMessage(error)
+  return error instanceof AiError && error.kind === 'truncated'
+    ? `${message}; probá importar menos transacciones a la vez`
+    : message
+}
+
+/**
  * Some batches of an AI run failed and the rest were applied. Keeps how many,
  * so a partial failure never reads like an outage.
  */
 export function aiPartialFailureMessage(
   failed: number,
   total: number,
-  firstError: unknown
+  firstError: unknown,
+  describe: (error: unknown) => string = aiErrorMessage
 ): string {
-  return `${failed} de ${total} lotes fallaron (${aiErrorMessage(firstError)})`
+  return `${failed} de ${total} lotes fallaron (${describe(firstError)})`
 }
 
 /**
