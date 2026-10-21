@@ -47,13 +47,12 @@ import {
   deleteMerchantCategoryOverrideKey,
   getMerchantCategoryOverride,
   legacyMerchantOverrideKey,
-  listMerchantCategoryOverrides,
   merchantOverrideKey,
   putMerchantCategoryOverrideKey,
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
-import { matchCustomPattern } from '../categorizer/custom-patterns'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
+import { currentUserRules, hasUserRule } from '../categorizer/user-rules'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
 import { applyAiEnrichment, enrichTransactionsWithAi, getAiConfig } from '../ai'
@@ -234,19 +233,6 @@ function isUncategorized(tx: Transaction): boolean {
 }
 
 /**
- * True when the row has a user rule that the AI must not override: a
- * description override, a merchant override, or a custom pattern. A rule
- * the user wrote is enforced here, not handed to the model as advice.
- */
-function hasUserOverride(tx: Transaction): boolean {
-  return (
-    !!getDescriptionOverride(tx.description) ||
-    !!getMerchantCategoryOverride(tx.description) ||
-    !!matchCustomPattern(tx.description)
-  )
-}
-
-/**
  * Imports a parsed statement. Classified against the server by content
  * (#57), optionally enriched by the AI (best-effort: its failure is returned
  * as `aiError`, never fails the import), then inserted in sequential chunks
@@ -281,7 +267,10 @@ export async function importTransactions(
   let aiError: unknown
   let aiPartial: string | undefined
   if (aiConfig?.enabled && aiConfig.apiKey && added.length > 0) {
-    const toEnrich = added.filter((tx) => !hasUserOverride(tx))
+    // A rule the user wrote is enforced here, not handed to the model as
+    // advice: a row it covers keeps the rule's result (hasUserRule).
+    const rules = currentUserRules()
+    const toEnrich = added.filter((tx) => !hasUserRule(rules, tx.description))
     if (toEnrich.length > 0) {
       try {
         const outcome = await enrichTransactionsWithAi(
@@ -1001,12 +990,13 @@ export async function autoCategorize(
   assertOwner(repo)
   const all = store().transactions
   const targetIds = new Set(transactionIds)
+  const rules = currentUserRules()
 
   const pool = new Map<
     string,
     { name: string; category: string; confidence: number }
   >()
-  for (const [key, o] of Object.entries(listMerchantCategoryOverrides())) {
+  for (const [key, o] of Object.entries(rules.merchantOverrides)) {
     // The description, not the key: a key can be "raw:…" or stripped
     const name = o.merchantName ?? key
     pool.set(normalizeMerchantName(name), {
@@ -1043,6 +1033,7 @@ export async function autoCategorize(
   for (const tx of all) {
     if (!targetIds.has(tx.id)) continue
     const result = categorizeTransaction(tx.description, tx.type, {
+      rules,
       categorizedMerchants: poolWithout(normalizeMerchantName(tx.description)),
       temporalPatterns,
       amount: tx.amount,

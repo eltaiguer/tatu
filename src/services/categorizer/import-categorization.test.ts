@@ -13,6 +13,13 @@ import {
   categorizeImportedTransactions,
   categorizeParsedData,
 } from './import-categorization'
+import { userRules } from '../../test/user-rules'
+
+const RULES = userRules({
+  customPatterns: [
+    { pattern: 'devoto', matchType: 'contains', category: 'groceries' },
+  ],
+})
 
 function makeTx(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -33,20 +40,23 @@ describe('categorizeImportedTransactions', () => {
     categorizeTransactionMock.mockReset()
   })
 
-  it('calls the categorizer with only the description and type — no context', () => {
+  it('calls the categorizer with the description, type and user rules — no other context', () => {
     categorizeTransactionMock.mockReturnValue({
       category: 'groceries',
       confidence: 0.9,
     })
 
-    categorizeImportedTransactions([
-      makeTx({ description: 'Devoto Supermercado', type: 'debit' }),
-      makeTx({ id: 'txn_2', description: 'Sueldo', type: 'credit' }),
-    ])
+    categorizeImportedTransactions(
+      [
+        makeTx({ description: 'Devoto Supermercado', type: 'debit' }),
+        makeTx({ id: 'txn_2', description: 'Sueldo', type: 'credit' }),
+      ],
+      RULES
+    )
 
     expect(categorizeTransactionMock.mock.calls).toEqual([
-      ['Devoto Supermercado', 'debit'],
-      ['Sueldo', 'credit'],
+      ['Devoto Supermercado', 'debit', { rules: RULES }],
+      ['Sueldo', 'credit', { rules: RULES }],
     ])
   })
 
@@ -57,7 +67,7 @@ describe('categorizeImportedTransactions', () => {
       description: 'Café del barrio',
     })
 
-    const [tx] = categorizeImportedTransactions([makeTx()])
+    const [tx] = categorizeImportedTransactions([makeTx()], RULES)
 
     expect(tx).toMatchObject({
       id: 'txn_1',
@@ -75,7 +85,7 @@ describe('categorizeImportedTransactions', () => {
       confidence: 0,
     })
 
-    const [tx] = categorizeImportedTransactions([makeTx()])
+    const [tx] = categorizeImportedTransactions([makeTx()], RULES)
 
     expect(tx.displayDescription).toBeUndefined()
     expect(tx.category).toBe('uncategorized')

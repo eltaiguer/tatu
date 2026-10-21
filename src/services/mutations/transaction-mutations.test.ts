@@ -73,6 +73,7 @@ import {
 } from '../descriptions/description-overrides'
 import { getDisplayDescription } from '../../utils/transaction-display'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
+import { currentUserRules } from '../categorizer/user-rules'
 import {
   getMerchantCategoryOverride,
   listMerchantCategoryOverrides,
@@ -1066,7 +1067,9 @@ describe('transaction-mutations — apply scope', () => {
           applyScope,
         })
 
-        expect(categorizeTransaction(LATER, 'debit')).toEqual({
+        expect(
+          categorizeTransaction(LATER, 'debit', { rules: currentUserRules() })
+        ).toEqual({
           category: 'healthcare',
           confidence: 1,
         })
@@ -1088,9 +1091,10 @@ describe('transaction-mutations — apply scope', () => {
         applyScope: 'future_matching_only',
       })
 
-      expect(categorizeTransaction(LATER, 'debit').category).not.toBe(
-        'healthcare'
-      )
+      expect(
+        categorizeTransaction(LATER, 'debit', { rules: currentUserRules() })
+          .category
+      ).not.toBe('healthcare')
       expect(repo.categoryOverrides.size).toBe(0)
     })
   })

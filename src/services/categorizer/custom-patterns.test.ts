@@ -170,7 +170,10 @@ describe('Custom Patterns', () => {
         category: Category.Healthcare,
       })
 
-      const result = matchCustomPattern('Farmacia del Sol SA')
+      const result = matchCustomPattern(
+        'Farmacia del Sol SA',
+        listCustomPatterns()
+      )
       expect(result).not.toBeNull()
       expect(result!.category).toBe(Category.Healthcare)
       expect(result!.confidence).toBe(0.95)
@@ -183,8 +186,10 @@ describe('Custom Patterns', () => {
         category: Category.Transport,
       })
 
-      expect(matchCustomPattern('Taxi Express')).not.toBeNull()
-      expect(matchCustomPattern('My Taxi')).toBeNull()
+      expect(
+        matchCustomPattern('Taxi Express', listCustomPatterns())
+      ).not.toBeNull()
+      expect(matchCustomPattern('My Taxi', listCustomPatterns())).toBeNull()
     })
 
     it('should match with exact type', () => {
@@ -194,8 +199,10 @@ describe('Custom Patterns', () => {
         category: Category.Entertainment,
       })
 
-      expect(matchCustomPattern('Spotify')).not.toBeNull()
-      expect(matchCustomPattern('Spotify Premium')).toBeNull()
+      expect(matchCustomPattern('Spotify', listCustomPatterns())).not.toBeNull()
+      expect(
+        matchCustomPattern('Spotify Premium', listCustomPatterns())
+      ).toBeNull()
     })
 
     it('should return null when no patterns match', () => {
@@ -205,7 +212,9 @@ describe('Custom Patterns', () => {
         category: Category.Healthcare,
       })
 
-      expect(matchCustomPattern('Devoto Supermercado')).toBeNull()
+      expect(
+        matchCustomPattern('Devoto Supermercado', listCustomPatterns())
+      ).toBeNull()
     })
 
     it('returns description when pattern has one', () => {
@@ -216,7 +225,10 @@ describe('Custom Patterns', () => {
         description: 'Farmacia Del Sol',
       })
 
-      const result = matchCustomPattern('COMPRA FARMACIA DEL SOL 01/12')
+      const result = matchCustomPattern(
+        'COMPRA FARMACIA DEL SOL 01/12',
+        listCustomPatterns()
+      )
       expect(result).not.toBeNull()
       expect(result!.description).toBe('Farmacia Del Sol')
     })
@@ -228,13 +240,16 @@ describe('Custom Patterns', () => {
         category: Category.Healthcare,
       })
 
-      const result = matchCustomPattern('Farmacia del Sol')
+      const result = matchCustomPattern(
+        'Farmacia del Sol',
+        listCustomPatterns()
+      )
       expect(result).not.toBeNull()
       expect(result!.description).toBeUndefined()
     })
 
     it('should return null for empty description', () => {
-      expect(matchCustomPattern('')).toBeNull()
+      expect(matchCustomPattern('', listCustomPatterns())).toBeNull()
     })
 
     it('should stop matching after pattern is removed', () => {
@@ -244,10 +259,14 @@ describe('Custom Patterns', () => {
         category: Category.Healthcare,
       })
 
-      expect(matchCustomPattern('Farmacia Sol')).not.toBeNull()
+      expect(
+        matchCustomPattern('Farmacia Sol', listCustomPatterns())
+      ).not.toBeNull()
 
       removeCustomPattern(added.id)
-      expect(matchCustomPattern('Farmacia Sol')).toBeNull()
+      expect(
+        matchCustomPattern('Farmacia Sol', listCustomPatterns())
+      ).toBeNull()
     })
   })
 

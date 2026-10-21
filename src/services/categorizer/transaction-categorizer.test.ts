@@ -1,32 +1,37 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { categorizeTransaction } from './transaction-categorizer'
+import { describe, it, expect, afterEach } from 'vitest'
+import {
+  categorizeTransaction,
+  type CategorizationContext,
+} from './transaction-categorizer'
 import {
   clearAllCategoryOverrides,
   setMerchantCategoryOverride,
 } from './category-overrides'
-import {
-  clearAllDescriptionOverrides,
-  setDescriptionOverride,
-} from '../descriptions/description-overrides'
 import { addCustomPattern, clearAllCustomPatterns } from './custom-patterns'
-import { invalidateLearnedPatternsCache } from './learned-patterns'
+import { emptyUserRules, type UserRules } from './user-rules'
 import { analyzeTemporalPatterns } from './temporal-patterns'
+import { userRules } from '../../test/user-rules'
 import { Category } from '../../models'
+import type { TransactionType } from '../../models'
+
+/** The built-in sources only, unless a test hands in the user's rules. */
+function categorize(
+  description: string,
+  type: TransactionType,
+  context: CategorizationContext = {},
+  rules: UserRules = emptyUserRules()
+) {
+  return categorizeTransaction(description, type, { ...context, rules })
+}
 
 describe('Transaction Categorizer', () => {
-  beforeEach(() => {
-    clearAllCategoryOverrides()
-    clearAllDescriptionOverrides()
-    clearAllCustomPatterns()
-    invalidateLearnedPatternsCache()
-  })
   it('should not categorize coffee shops as Fees (word-boundary regression)', () => {
-    const result = categorizeTransaction('Sq Blue Bottle Coffee', 'debit')
+    const result = categorize('Sq Blue Bottle Coffee', 'debit')
     expect(result.category).not.toBe(Category.Fees)
   })
 
   it('should categorize fees with high confidence', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'COMISION POR COSTO PRODUCTO COMISION COSTO PRODUCTO',
       'debit'
     )
@@ -36,7 +41,7 @@ describe('Transaction Categorizer', () => {
   })
 
   it('should categorize transfers for outgoing transfers', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'TRANSFERENCIA ENVIADA 754934TT55557465 TRF. PLAZA',
       'debit'
     )
@@ -46,10 +51,7 @@ describe('Transaction Categorizer', () => {
   })
 
   it('should categorize transfers for card payments', () => {
-    const result = categorizeTransaction(
-      'PAGO ELECTRONICO TARJETA CREDITO',
-      'debit'
-    )
+    const result = categorize('PAGO ELECTRONICO TARJETA CREDITO', 'debit')
 
     expect(result.category).toBe(Category.InternalTransfer)
   })
@@ -58,7 +60,7 @@ describe('Transaction Categorizer', () => {
     // Self-transfers like "CREDITO POR OPERACION EN SUPERNET P--/..." are left
     // Uncategorized here so that inferInternalTransfers can pair them with the
     // matching debit and assign Transfer with high confidence.
-    const result = categorizeTransaction(
+    const result = categorize(
       'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE',
       'credit'
     )
@@ -67,10 +69,7 @@ describe('Transaction Categorizer', () => {
   })
 
   it('should categorize cash withdrawals as transfers', () => {
-    const result = categorizeTransaction(
-      'RETIRO CORRESPONSALES MONTEVIDEO',
-      'debit'
-    )
+    const result = categorize('RETIRO CORRESPONSALES MONTEVIDEO', 'debit')
 
     expect(result.category).toBe(Category.InternalTransfer)
   })
@@ -78,16 +77,13 @@ describe('Transaction Categorizer', () => {
   it('does not auto-Transfer incoming bank transfers (recibida) — they are income', () => {
     // "TRANSF INSTANTANEA RECIBIDA" means money arriving from an external party;
     // treating it as Transfer would hide legitimate income from the chart.
-    const result = categorizeTransaction(
-      'TRANSF INSTANTANEA RECIBIDA 644388LR',
-      'credit'
-    )
+    const result = categorize('TRANSF INSTANTANEA RECIBIDA 644388LR', 'credit')
 
     expect(result.category).not.toBe(Category.InternalTransfer)
   })
 
   it('does not auto-Transfer TRANSFERENCIA RECIBIDA credits', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA /GAZZANO DE MARCO, FEDERICO J',
       'credit'
     )
@@ -96,7 +92,7 @@ describe('Transaction Categorizer', () => {
   })
 
   it('does not auto-Transfer CREDITO POR OPERACION EN SUPERNET with external beneficiary name', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY MARIA CONSTANZA',
       'credit'
     )
@@ -105,16 +101,13 @@ describe('Transaction Categorizer', () => {
   })
 
   it('still categorizes outgoing transfers (enviada) as Transfer', () => {
-    const result = categorizeTransaction(
-      'TRANSF INSTANTANEA ENVIADA 871947LE',
-      'debit'
-    )
+    const result = categorize('TRANSF INSTANTANEA ENVIADA 871947LE', 'debit')
 
     expect(result.category).toBe(Category.InternalTransfer)
   })
 
   it('should not categorize TRF. PLAZA- NAME transfers as Transfer', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'TRANSFERENCIA ENVIADA 797258TT55557944 TRF. PLAZA- FEDERICO GAZZANO',
       'debit'
     )
@@ -123,7 +116,7 @@ describe('Transaction Categorizer', () => {
   })
 
   it('should not categorize DEBITO OPERACION EN BANCA DIGITAL TRF. PLAZA- NAME as Transfer', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'DEBITO OPERACION EN BANCA DIGITAL 526741TT55770545 TRF. PLAZA- ISABEL ARISMENDI',
       'debit'
     )
@@ -132,7 +125,7 @@ describe('Transaction Categorizer', () => {
   })
 
   it('should not categorize TRANSF INSTANTANEA ENVIADA NRR: NAME as Transfer', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'TRANSF INSTANTANEA ENVIADA 381239LE NRR:182500517 JOSE PREX',
       'debit'
     )
@@ -141,7 +134,7 @@ describe('Transaction Categorizer', () => {
   })
 
   it('should not categorize DEBITO OPERACION EN SUPERNET TRF. PLAZA- NAME as Transfer', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'DEBITO OPERACION EN SUPERNET O SMS 466949TT55365654 TRF. PLAZA- MATEO RODRIGUEZ',
       'debit'
     )
@@ -150,7 +143,7 @@ describe('Transaction Categorizer', () => {
   })
 
   it('should still categorize TRF. PLAZA without a named recipient as Transfer', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'TRANSFERENCIA ENVIADA 754934TT55557465 TRF. PLAZA',
       'debit'
     )
@@ -159,7 +152,7 @@ describe('Transaction Categorizer', () => {
   })
 
   it('should categorize income when credit matches income keywords', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL',
       'credit'
     )
@@ -169,86 +162,107 @@ describe('Transaction Categorizer', () => {
   })
 
   it('should fall back to merchant patterns for debits', () => {
-    const result = categorizeTransaction('Devoto Supermercado', 'debit')
+    const result = categorize('Devoto Supermercado', 'debit')
 
     expect(result.category).toBe(Category.Groceries)
     expect(result.confidence).toBeGreaterThan(0)
   })
 
   it('should return Uncategorized when no match is found', () => {
-    const result = categorizeTransaction('Random Unknown Merchant', 'debit')
+    const result = categorize('Random Unknown Merchant', 'debit')
 
     expect(result.category).toBe(Category.Uncategorized)
     expect(result.confidence).toBe(0)
   })
 
   it('should return Uncategorized for empty descriptions', () => {
-    const result = categorizeTransaction('', 'debit')
+    const result = categorize('', 'debit')
 
     expect(result.category).toBe(Category.Uncategorized)
     expect(result.confidence).toBe(0)
   })
 
   it('should prioritize fees over transfers', () => {
-    const result = categorizeTransaction('COMISION TRANSFERENCIA', 'debit')
+    const result = categorize('COMISION TRANSFERENCIA', 'debit')
 
     expect(result.category).toBe(Category.Fees)
   })
 
   it('should use manual overrides when available', () => {
-    setMerchantCategoryOverride('Devoto Supermercado', Category.Shopping)
+    const rules = userRules({
+      merchantOverrides: [
+        { merchantName: 'Devoto Supermercado', category: Category.Shopping },
+      ],
+    })
 
-    const result = categorizeTransaction('Devoto Supermercado', 'debit')
+    const result = categorize('Devoto Supermercado', 'debit', {}, rules)
     expect(result.category).toBe(Category.Shopping)
     expect(result.confidence).toBe(1)
   })
 
   it('should use description override category for noisy descriptions', () => {
-    setDescriptionOverride({
-      description: 'AUT 998877 DEVOTO',
-      friendlyDescription: 'Devoto',
-      category: Category.Groceries,
+    const rules = userRules({
+      descriptionOverrides: [
+        {
+          description: 'AUT 998877 DEVOTO',
+          friendlyDescription: 'Devoto',
+          category: Category.Groceries,
+        },
+      ],
     })
 
-    const result = categorizeTransaction('AUT 123456 DEVOTO', 'debit')
+    const result = categorize('AUT 123456 DEVOTO', 'debit', {}, rules)
     expect(result.category).toBe(Category.Groceries)
     expect(result.confidence).toBe(1)
   })
 
   it('should keep using merchant override when description override has no category', () => {
-    setMerchantCategoryOverride('Devoto Supermercado', Category.Shopping)
-    setDescriptionOverride({
-      description: 'Devoto Supermercado',
-      friendlyDescription: 'Devoto',
+    const rules = userRules({
+      merchantOverrides: [
+        { merchantName: 'Devoto Supermercado', category: Category.Shopping },
+      ],
+      descriptionOverrides: [
+        { description: 'Devoto Supermercado', friendlyDescription: 'Devoto' },
+      ],
     })
 
-    const result = categorizeTransaction('Devoto Supermercado', 'debit')
+    const result = categorize('Devoto Supermercado', 'debit', {}, rules)
     expect(result.category).toBe(Category.Shopping)
     expect(result.confidence).toBe(1)
   })
 
   describe('custom patterns', () => {
     it('should use custom pattern before keywords', () => {
-      addCustomPattern({
-        pattern: 'random place',
-        matchType: 'contains',
-        category: Category.Entertainment,
+      const rules = userRules({
+        customPatterns: [
+          {
+            pattern: 'random place',
+            matchType: 'contains',
+            category: Category.Entertainment,
+          },
+        ],
       })
 
-      const result = categorizeTransaction('Random Place XYZ', 'debit')
+      const result = categorize('Random Place XYZ', 'debit', {}, rules)
       expect(result.category).toBe(Category.Entertainment)
       expect(result.confidence).toBe(0.95)
     })
 
     it('should prioritize overrides over custom patterns', () => {
-      addCustomPattern({
-        pattern: 'devoto',
-        matchType: 'contains',
-        category: Category.Entertainment,
+      const rules = userRules({
+        customPatterns: [
+          {
+            pattern: 'devoto',
+            matchType: 'contains',
+            category: Category.Entertainment,
+          },
+        ],
+        merchantOverrides: [
+          { merchantName: 'Devoto Supermercado', category: Category.Shopping },
+        ],
       })
-      setMerchantCategoryOverride('Devoto Supermercado', Category.Shopping)
 
-      const result = categorizeTransaction('Devoto Supermercado', 'debit')
+      const result = categorize('Devoto Supermercado', 'debit', {}, rules)
       expect(result.category).toBe(Category.Shopping)
       expect(result.confidence).toBe(1)
     })
@@ -257,11 +271,14 @@ describe('Transaction Categorizer', () => {
   describe('learned patterns', () => {
     it('should use learned patterns for new merchants', () => {
       // Use names that don't match any existing merchant patterns
-      setMerchantCategoryOverride('Botica Central', Category.Healthcare)
-      setMerchantCategoryOverride('Botica Sur', Category.Healthcare)
-      invalidateLearnedPatternsCache()
+      const rules = userRules({
+        merchantOverrides: [
+          { merchantName: 'Botica Central', category: Category.Healthcare },
+          { merchantName: 'Botica Sur', category: Category.Healthcare },
+        ],
+      })
 
-      const result = categorizeTransaction('Botica Norte', 'debit')
+      const result = categorize('Botica Norte', 'debit', {}, rules)
       expect(result.category).toBe(Category.Healthcare)
       expect(result.confidence).toBeGreaterThan(0)
       expect(result.confidence).toBeLessThanOrEqual(0.75)
@@ -270,15 +287,11 @@ describe('Transaction Categorizer', () => {
 
   describe('context-based categorization', () => {
     it('should use similar merchant when context provided', () => {
-      const result = categorizeTransaction(
-        'Totally Unknown Place XYZ',
-        'debit',
-        {
-          categorizedMerchants: [
-            { name: 'Unknown Place ABC', category: Category.Shopping },
-          ],
-        }
-      )
+      const result = categorize('Totally Unknown Place XYZ', 'debit', {
+        categorizedMerchants: [
+          { name: 'Unknown Place ABC', category: Category.Shopping },
+        ],
+      })
 
       // May or may not match depending on token similarity
       // At minimum, it should not error
@@ -286,15 +299,11 @@ describe('Transaction Categorizer', () => {
     })
 
     it('should use amount heuristics as last resort', () => {
-      const result = categorizeTransaction(
-        'Zzz Completely Unknown 12345',
-        'debit',
-        {
-          amount: 200,
-          currency: 'UYU',
-          categorizedMerchants: [],
-        }
-      )
+      const result = categorize('Zzz Completely Unknown 12345', 'debit', {
+        amount: 200,
+        currency: 'UYU',
+        categorizedMerchants: [],
+      })
 
       expect(result.category).toBe(Category.Restaurants)
       expect(result.confidence).toBeLessThanOrEqual(0.3)
@@ -309,7 +318,7 @@ describe('Transaction Categorizer', () => {
       }))
       const temporalPatterns = analyzeTemporalPatterns(txs)
 
-      const result = categorizeTransaction('Monthly Service XYZ', 'debit', {
+      const result = categorize('Monthly Service XYZ', 'debit', {
         temporalPatterns,
       })
 
@@ -328,41 +337,41 @@ describe('Transaction Categorizer', () => {
       }))
       const temporalPatterns = analyzeTemporalPatterns(txs)
 
-      const result = categorizeTransaction(
-        'Acme Consulting Payment',
-        'credit',
-        { temporalPatterns }
-      )
+      const result = categorize('Acme Consulting Payment', 'credit', {
+        temporalPatterns,
+      })
 
       expect(result.category).toBe(Category.Uncategorized)
     })
 
     it('should not use amount heuristics for credits', () => {
-      const result = categorizeTransaction(
-        'Zzz Completely Unknown 12345',
-        'credit',
-        {
-          amount: 200,
-          currency: 'UYU',
-          categorizedMerchants: [],
-        }
-      )
+      const result = categorize('Zzz Completely Unknown 12345', 'credit', {
+        amount: 200,
+        currency: 'UYU',
+        categorizedMerchants: [],
+      })
 
       expect(result.category).toBe(Category.Uncategorized)
     })
   })
 
   it('passes through description from a custom pattern', () => {
-    addCustomPattern({
-      pattern: 'farmacia del sol',
-      matchType: 'contains',
-      category: Category.Healthcare,
-      description: 'Farmacia Del Sol',
+    const rules = userRules({
+      customPatterns: [
+        {
+          pattern: 'farmacia del sol',
+          matchType: 'contains',
+          category: Category.Healthcare,
+          description: 'Farmacia Del Sol',
+        },
+      ],
     })
 
-    const result = categorizeTransaction(
+    const result = categorize(
       'COMPRA FARMACIA DEL SOL 01/12 REF:1234',
-      'debit'
+      'debit',
+      {},
+      rules
     )
 
     expect(result.category).toBe(Category.Healthcare)
@@ -370,13 +379,17 @@ describe('Transaction Categorizer', () => {
   })
 
   it('returns no description when custom pattern has none', () => {
-    addCustomPattern({
-      pattern: 'farmacia',
-      matchType: 'contains',
-      category: Category.Healthcare,
+    const rules = userRules({
+      customPatterns: [
+        {
+          pattern: 'farmacia',
+          matchType: 'contains',
+          category: Category.Healthcare,
+        },
+      ],
     })
 
-    const result = categorizeTransaction('Farmacia Cruz Verde', 'debit')
+    const result = categorize('Farmacia Cruz Verde', 'debit', {}, rules)
 
     expect(result.category).toBe(Category.Healthcare)
     expect(result.description).toBeUndefined()
@@ -385,7 +398,7 @@ describe('Transaction Categorizer', () => {
 
 describe('own-account sweeps (audit)', () => {
   it('categorizes CARGO POR TRASPASO CTA.COMBINADA as an internal transfer, not a fee', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'CARGO POR TRASPASO CTA.COMBINADA 1234567',
       'debit'
     )
@@ -393,7 +406,7 @@ describe('own-account sweeps (audit)', () => {
   })
 
   it('categorizes ABONO POR TRASPASO CTA.COMBINADA as an internal transfer', () => {
-    const result = categorizeTransaction(
+    const result = categorize(
       'ABONO POR TRASPASO CTA.COMBINADA 1234567',
       'credit'
     )
@@ -402,8 +415,38 @@ describe('own-account sweeps (audit)', () => {
 
   it('still categorizes a plain cargo as a fee', () => {
     expect(
-      categorizeTransaction('CARGO POR MANTENIMIENTO DE CUENTA', 'debit')
-        .category
+      categorize('CARGO POR MANTENIMIENTO DE CUENTA', 'debit').category
     ).toBe(Category.Fees)
+  })
+})
+
+// The rules passed in are the only user rules the categorizer sees: the
+// stores the app keeps them in are not read, so an empty value withholds them
+// (the categorizer eval scores the built-in sources this way).
+describe('user rules are passed in, not read from the stores', () => {
+  afterEach(() => {
+    clearAllCategoryOverrides()
+    clearAllCustomPatterns()
+  })
+
+  it('ignores the rules the stores hold when given none', () => {
+    setMerchantCategoryOverride('Devoto Supermercado', Category.Shopping)
+    setMerchantCategoryOverride('Botica Central', Category.Healthcare)
+    setMerchantCategoryOverride('Botica Sur', Category.Healthcare)
+    addCustomPattern({
+      pattern: 'random place',
+      matchType: 'contains',
+      category: Category.Entertainment,
+    })
+
+    expect(categorize('Devoto Supermercado', 'debit').category).toBe(
+      Category.Groceries
+    )
+    expect(categorize('Botica Norte', 'debit').category).toBe(
+      Category.Uncategorized
+    )
+    expect(categorize('Random Place XYZ', 'debit').category).toBe(
+      Category.Uncategorized
+    )
   })
 })

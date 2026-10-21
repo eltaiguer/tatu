@@ -41,14 +41,22 @@ function keysFor(merchantName: string): string[] {
   return keys
 }
 
-export function getMerchantCategoryOverride(
+/** The category an override in `from` gives this merchant, if any. */
+export function findMerchantCategoryOverride(
+  from: CategoryOverrides,
   merchantName: string
 ): string | null {
   for (const key of keysFor(merchantName)) {
-    const category = overrides[key]?.category
+    const category = from[key]?.category
     if (category) return category
   }
   return null
+}
+
+export function getMerchantCategoryOverride(
+  merchantName: string
+): string | null {
+  return findMerchantCategoryOverride(overrides, merchantName)
 }
 
 // The two primitives mirror one server row each, so a write can apply to

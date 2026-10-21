@@ -1,8 +1,9 @@
 import { Category, type Currency, type TransactionType } from '../../models'
 import { getMerchantCategory, normalizeMerchantName } from './merchant-patterns'
-import { getMerchantCategoryOverride } from './category-overrides'
-import { getDescriptionOverride } from '../descriptions/description-overrides'
+import { findMerchantCategoryOverride } from './category-overrides'
+import { findDescriptionOverride } from '../descriptions/description-overrides'
 import { matchCustomPattern } from './custom-patterns'
+import type { UserRules } from './user-rules'
 import { matchLearnedPattern } from './learned-patterns'
 import {
   findSimilarMerchant,
@@ -84,7 +85,16 @@ export interface CategorizationContext {
 }
 
 /**
- * Categorize a transaction using the full pipeline:
+ * What a categorization runs with: the user's rules (always — an empty
+ * `UserRules` withholds them) plus the optional context.
+ */
+export interface CategorizeOptions extends CategorizationContext {
+  rules: UserRules
+}
+
+/**
+ * Categorize a transaction using the full pipeline. Steps 1–3 and 8 read
+ * the user's rules from `options.rules` only, never from the stores:
  *
  * 1. Description override (confidence 1.0)
  * 2. Merchant override (confidence 1.0)
@@ -102,12 +112,13 @@ export interface CategorizationContext {
 export function categorizeTransaction(
   description: string,
   type: TransactionType,
-  context?: CategorizationContext
+  options: CategorizeOptions
 ): {
   category: string
   confidence: number
   description?: string
 } {
+  const { rules, ...context } = options
   const normalized = normalizeMerchantName(description)
 
   if (!normalized) {
@@ -118,7 +129,10 @@ export function categorizeTransaction(
   }
 
   // 1. Description override
-  const descriptionOverride = getDescriptionOverride(description)
+  const descriptionOverride = findDescriptionOverride(
+    rules.descriptionOverrides,
+    description
+  )
   if (descriptionOverride?.category) {
     return {
       category: descriptionOverride.category,
@@ -128,7 +142,10 @@ export function categorizeTransaction(
 
   // 2. Merchant override (keyed on the code-stripped description, so a
   // category set on one row of a merchant reaches its later rows)
-  const override = getMerchantCategoryOverride(description)
+  const override = findMerchantCategoryOverride(
+    rules.merchantOverrides,
+    description
+  )
   if (override) {
     return {
       category: override,
@@ -137,7 +154,7 @@ export function categorizeTransaction(
   }
 
   // 3. Custom user patterns
-  const customMatch = matchCustomPattern(description)
+  const customMatch = matchCustomPattern(description, rules.customPatterns)
   if (customMatch) {
     return {
       category: customMatch.category,
@@ -187,7 +204,7 @@ export function categorizeTransaction(
   }
 
   // 8. Learned patterns from user overrides
-  const learnedMatch = matchLearnedPattern(description)
+  const learnedMatch = matchLearnedPattern(description, rules.merchantOverrides)
   if (learnedMatch) {
     return {
       category: learnedMatch.category,
@@ -197,7 +214,7 @@ export function categorizeTransaction(
 
   // 9. Temporal patterns (requires context; debits only — the hinted
   // categories are expense categories, a recurring credit is not one)
-  if (type === 'debit' && context?.temporalPatterns) {
+  if (type === 'debit' && context.temporalPatterns) {
     const temporalMatch = getTemporalSuggestion(
       description,
       context.temporalPatterns
@@ -211,7 +228,7 @@ export function categorizeTransaction(
   }
 
   // 10. Similar merchant (requires context)
-  if (context?.categorizedMerchants) {
+  if (context.categorizedMerchants) {
     const similarMatch = findSimilarMerchant(
       description,
       context.categorizedMerchants
@@ -225,7 +242,7 @@ export function categorizeTransaction(
   }
 
   // 11. Amount heuristics (requires context)
-  if (context?.amount !== undefined && context?.currency) {
+  if (context.amount !== undefined && context.currency) {
     const amountMatch = categorizeByAmount(
       context.amount,
       context.currency,

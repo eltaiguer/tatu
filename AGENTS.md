@@ -96,7 +96,7 @@ src/
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
-    categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure); eval/agreement.ts scores any engine against the user's confidence-1 rows (user rules withheld)
+    categorizer/           # Merchant pattern matching + auto-categorization; user-rules.ts: UserRules (the user's overrides + custom patterns as one value, passed to categorizeTransaction — never read by it from the stores; currentUserRules() at the call site) + hasUserRule, THE "a user rule covers this row" gate (AI skips it); import-categorization.ts categorizes parsed rows (parsers are pure); eval/agreement.ts scores any engine against the user's confidence-1 rows (user rules withheld = emptyUserRules())
     dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57); duplicate-review.ts: groups stored rows from different import runs for the one-off cleanup (#167)
     repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
     import/                # import-statement.ts: importStatement = THE import pipeline, one function (decode → parse → categorize → importTransactions: classify, AI enrich, insert, import run, repair); a file it cannot read rejects with a `StatementReadError` (`utils/user-error.ts`), anything else is a save failure

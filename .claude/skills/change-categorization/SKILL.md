@@ -60,9 +60,14 @@ one.
   `src/services/categorizer/import-categorization.ts`) runs without a
   `CategorizationContext`: temporal, similar-merchant and amount heuristics
   (steps 9–11) never run at import.
+- `categorizeTransaction` takes the user's rules as a value
+  (`{ rules }`, `src/services/categorizer/user-rules.ts`) and never reads the
+  rule stores. A test about categorization builds them as a literal with
+  `userRules(...)` from `src/test/user-rules.ts`; `emptyUserRules()` means
+  the built-in sources only.
 - With AI enabled, `applyAiEnrichment` replaces the rule result for new rows
-  without a user rule (description override, merchant override or custom
-  pattern), so a change to the built-in keywords or merchant list may not
+  without a user rule (`hasUserRule`: description override, merchant override
+  or custom pattern), so a change to the built-in keywords or merchant list may not
   show in a test import with AI on; a custom pattern always does.
 - A rule change never rewrites stored rows. They change only through
   Auto-categorizar (`autoCategorize`: the selected rows, and only where the

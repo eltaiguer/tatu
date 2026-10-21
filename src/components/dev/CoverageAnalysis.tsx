@@ -6,6 +6,7 @@ import { listCategoryOverrides } from '../../services/supabase/category-override
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
 import { merchantOverrideKey } from '../../services/categorizer/category-overrides'
+import { currentUserRules } from '../../services/categorizer/user-rules'
 import type { Transaction } from '../../models'
 
 interface MerchantStat {
@@ -54,10 +55,12 @@ async function runAnalysis(session: SupabaseSession): Promise<AnalysisResult> {
     byKey.get(key)!.transactions.push(tx)
   }
 
+  const rules = currentUserRules()
   const stats: MerchantStat[] = []
   for (const [key, { description, transactions: txs }] of byKey) {
     const sample = txs[0]
     const result = categorizeTransaction(description, sample.type, {
+      rules,
       amount: sample.amount,
       currency: sample.currency,
     })

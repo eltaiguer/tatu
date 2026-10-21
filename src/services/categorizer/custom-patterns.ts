@@ -130,7 +130,11 @@ export function testPattern(
   }
 }
 
-export function matchCustomPattern(description: string): PatternMatch | null {
+/** The first of `patterns` that matches the description, as a match. */
+export function matchCustomPattern(
+  description: string,
+  patterns: CustomPattern[]
+): PatternMatch | null {
   const normalized = normalizeMerchantName(description)
   if (!normalized) return null
 

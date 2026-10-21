@@ -7,6 +7,7 @@ import {
 } from './learned-patterns'
 import {
   clearAllCategoryOverrides,
+  listMerchantCategoryOverrides,
   setMerchantCategoryOverride,
 } from './category-overrides'
 
@@ -98,7 +99,10 @@ describe('Learned Patterns', () => {
       setMerchantCategoryOverride('Farmacia Nueva', Category.Healthcare)
       invalidateLearnedPatternsCache()
 
-      const result = matchLearnedPattern('Farmacia del Sol')
+      const result = matchLearnedPattern(
+        'Farmacia del Sol',
+        listMerchantCategoryOverrides()
+      )
       expect(result).not.toBeNull()
       expect(result!.category).toBe(Category.Healthcare)
       expect(result!.confidence).toBeGreaterThan(0)
@@ -110,17 +114,23 @@ describe('Learned Patterns', () => {
       setMerchantCategoryOverride('Farmacia Nueva', Category.Healthcare)
       invalidateLearnedPatternsCache()
 
-      const result = matchLearnedPattern('Random Unknown Place')
+      const result = matchLearnedPattern(
+        'Random Unknown Place',
+        listMerchantCategoryOverrides()
+      )
       expect(result).toBeNull()
     })
 
     it('should return null when no overrides exist', () => {
-      const result = matchLearnedPattern('Farmacia del Sol')
+      const result = matchLearnedPattern(
+        'Farmacia del Sol',
+        listMerchantCategoryOverrides()
+      )
       expect(result).toBeNull()
     })
 
     it('should return null for empty description', () => {
-      const result = matchLearnedPattern('')
+      const result = matchLearnedPattern('', listMerchantCategoryOverrides())
       expect(result).toBeNull()
     })
 
@@ -129,12 +139,16 @@ describe('Learned Patterns', () => {
       setMerchantCategoryOverride('Farmacia Nueva', Category.Healthcare)
       invalidateLearnedPatternsCache()
 
-      expect(matchLearnedPattern('Farmacia X')).not.toBeNull()
+      expect(
+        matchLearnedPattern('Farmacia X', listMerchantCategoryOverrides())
+      ).not.toBeNull()
 
       clearAllCategoryOverrides()
       invalidateLearnedPatternsCache()
 
-      expect(matchLearnedPattern('Farmacia X')).toBeNull()
+      expect(
+        matchLearnedPattern('Farmacia X', listMerchantCategoryOverrides())
+      ).toBeNull()
     })
   })
 })

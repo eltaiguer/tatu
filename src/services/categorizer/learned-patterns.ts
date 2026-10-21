@@ -7,10 +7,7 @@
  */
 import { Category } from '../../models'
 import { tokenize } from './tokenizer'
-import {
-  type CategoryOverrides,
-  listMerchantCategoryOverrides,
-} from './category-overrides'
+import type { CategoryOverrides } from './category-overrides'
 import type { PatternMatch } from './merchant-patterns'
 
 /** Minimum number of overrides a token must appear in to become a learned pattern */
@@ -84,11 +81,12 @@ export function buildLearnedPatterns(
 }
 
 /**
- * Get learned patterns with caching.
- * Cache is invalidated when overrides change.
+ * The patterns learned from `overrides`, cached by their content (the hash),
+ * so the same overrides — or the same ones handed in again — reuse the map.
  */
-export function getLearnedPatterns(): Map<string, Category> {
-  const overrides = listMerchantCategoryOverrides()
+export function getLearnedPatterns(
+  overrides: CategoryOverrides
+): Map<string, Category> {
   const hash = hashOverrides(overrides)
 
   if (cachedPatterns && cachedHash === hash) {
@@ -114,8 +112,11 @@ export function invalidateLearnedPatternsCache(): void {
  * Uses token voting: if multiple tokens match, the category with
  * the most matching tokens wins.
  */
-export function matchLearnedPattern(description: string): PatternMatch | null {
-  const patterns = getLearnedPatterns()
+export function matchLearnedPattern(
+  description: string,
+  overrides: CategoryOverrides
+): PatternMatch | null {
+  const patterns = getLearnedPatterns(overrides)
   if (patterns.size === 0) return null
 
   const tokens = tokenize(description)

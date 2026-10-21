@@ -1,17 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Transaction } from '../../../models'
+import { labelledRows, rulePredictions, scoreAgreement } from './agreement'
 import {
-  labelledRows,
-  rulePredictions,
-  scoreAgreement,
-  withoutUserRules,
-} from './agreement'
-import {
-  getMerchantCategoryOverride,
   replaceMerchantCategoryOverrides,
+  setMerchantCategoryOverride,
 } from '../category-overrides'
 import { replaceDescriptionOverrides } from '../../descriptions/description-overrides'
-import { listCustomPatterns, replaceCustomPatterns } from '../custom-patterns'
+import { replaceCustomPatterns } from '../custom-patterns'
 
 function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -78,8 +73,10 @@ describe('labelledRows — what is not a label (review of #224)', () => {
   })
 })
 
+// The rules sit in the stores, where the app keeps them; rulePredictions must
+// not see them, since the labels came from those very rules.
 describe('rulePredictions', () => {
-  it('categorizes without the user rules the labels came from, then restores them', () => {
+  it('categorizes without the user rules the labels came from', () => {
     replaceMerchantCategoryOverrides({
       'kiosco 25': {
         merchantName: 'KIOSCO 25',
@@ -105,28 +102,18 @@ describe('rulePredictions', () => {
 
     expect(predicted.get('KIOSCO 25')).toBe('uncategorized')
     expect(predicted.get('NETFLIX.COM')).toBe('entertainment')
-    expect(getMerchantCategoryOverride('KIOSCO 25')).toBe('personal')
-    expect(listCustomPatterns()).toHaveLength(1)
   })
 
-  it('restores the user rules even when the evaluated function throws', () => {
-    replaceCustomPatterns([
-      {
-        id: 'cp',
-        pattern: 'x',
-        matchType: 'contains',
-        category: 'shopping',
-        createdAt: '',
-      },
+  // Learned patterns are built from the merchant overrides: withholding the
+  // overrides withholds what was learned from them too.
+  it('does not use patterns learned from the user overrides', () => {
+    setMerchantCategoryOverride('Botica Central', 'healthcare')
+    setMerchantCategoryOverride('Botica Sur', 'healthcare')
+    const rows = labelledRows([
+      tx('Botica Norte', { category: 'healthcare', categoryConfidence: 1 }),
     ])
 
-    expect(() =>
-      withoutUserRules(() => {
-        expect(listCustomPatterns()).toHaveLength(0)
-        throw new Error('boom')
-      })
-    ).toThrow('boom')
-    expect(listCustomPatterns()).toHaveLength(1)
+    expect(rulePredictions(rows).get('Botica Norte')).toBe('uncategorized')
   })
 })
 

@@ -12,8 +12,10 @@ import {
 import { buildCorrectionContext } from '../../services/ai/correction-context'
 import { resolveCategory } from '../../services/categories/category-registry'
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
-import { getDescriptionOverride } from '../../services/descriptions/description-overrides'
-import { getMerchantCategoryOverride } from '../../services/categorizer/category-overrides'
+import {
+  currentUserRules,
+  hasUserRule,
+} from '../../services/categorizer/user-rules'
 import { formatDate } from '../../utils/formatting'
 import { devFailureMessage } from './dev-failure'
 
@@ -101,23 +103,22 @@ export function AiCategorizationPreview({
         model: aiModel,
       }
 
-      // Step 1: rule-based categorization on every transaction (no context,
-      // matching what the CSV parsers do at import time)
+      // Step 1: rule-based categorization on every transaction (the user's
+      // rules and no other context, matching what an import does)
+      const rules = currentUserRules()
       const ruleResults = new Map(
         sample.map((tx) => [
           tx.id,
-          categorizeTransaction(tx.description, tx.type),
+          categorizeTransaction(tx.description, tx.type, { rules }),
         ])
       )
 
-      // Step 2: apply same override filter as production
+      // Step 2: the same user-rule gate as an import (hasUserRule)
       const toEnrich: Transaction[] = []
       const overriddenIds = new Set<string>()
 
       for (const tx of sample) {
-        const hasDescOverride = !!getDescriptionOverride(tx.description)
-        const hasCatOverride = !!getMerchantCategoryOverride(tx.description)
-        if (hasDescOverride || hasCatOverride) {
+        if (hasUserRule(rules, tx.description)) {
           overriddenIds.add(tx.id)
         } else {
           toEnrich.push(tx)
