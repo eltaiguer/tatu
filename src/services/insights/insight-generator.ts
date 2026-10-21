@@ -57,11 +57,28 @@ function isKnownCategory(category: string, input: InsightInput): boolean {
   return input.categoryTotals.some((c) => c.category === category)
 }
 
-function isKnownMerchant(merchant: string, input: InsightInput): boolean {
-  return (
-    input.topMerchants.some((m) => m.merchant === merchant) ||
-    input.recurringCharges.some((r) => r.merchant === merchant)
-  )
+// How a merchant name is compared with what the model echoes: case, accents,
+// separators (" · ", " - ", " — ") and spacing may drift.
+function merchantMatchKey(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+[·•|\-–—]\s+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// The input's own spelling of the merchant the model named, if it is one.
+function knownMerchant(
+  merchant: string,
+  input: InsightInput
+): string | undefined {
+  const wanted = merchantMatchKey(merchant)
+  return [
+    ...input.topMerchants.map((m) => m.merchant),
+    ...input.recurringCharges.map((r) => r.merchant),
+  ].find((name) => merchantMatchKey(name) === wanted)
 }
 
 // Every numeric/category/merchant field is verified against the InsightInput
@@ -101,12 +118,11 @@ function sanitizeInsight(raw: unknown, input: InsightInput): Insight | null {
   ) {
     insight.category = item.category
   }
-  if (
-    typeof item.merchant === 'string' &&
-    isKnownMerchant(item.merchant, input)
-  ) {
-    insight.merchant = item.merchant
-  }
+  const merchant =
+    typeof item.merchant === 'string'
+      ? knownMerchant(item.merchant, input)
+      : undefined
+  if (merchant !== undefined) insight.merchant = merchant
 
   return insight
 }

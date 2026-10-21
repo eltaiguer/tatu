@@ -283,11 +283,11 @@ describe('merchantLabelFor on transfers', () => {
   it.each([
     [
       'DEBITO OPERACION EN BANCA DIGITAL 526741TT55770545 TRF. PLAZA- ISABEL ARISMENDI',
-      'ISABEL ARISMENDI · Débito Banca Digital',
+      'ISABEL ARISMENDI · Transferencia Banca Digital',
     ],
     [
       'DEBITO OPERACION EN SUPERNET O SMS 466949TT55365654 TRF. PLAZA- MATEO RODRIGUEZ',
-      'MATEO RODRIGUEZ · Débito Supernet',
+      'MATEO RODRIGUEZ · Transferencia Supernet',
     ],
     [
       'TRANSFERENCIA ENVIADA 797258TT55557944 TRF. PLAZA- FEDERICO GAZZANO',
@@ -307,7 +307,7 @@ describe('merchantLabelFor on transfers', () => {
     ],
     [
       'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY MARIA CONSTANZA',
-      'HARGUINDEGUY MARIA CONSTANZA · Crédito Supernet',
+      'TAIRTAGS/HARGUINDEGUY MARIA CONSTANZA · Crédito Supernet',
     ],
     [
       'DEBITO OPERACION EN SUPERNET O SMS PAGO A GOMEZ, ROCHA',
@@ -323,25 +323,16 @@ describe('merchantLabelFor on transfers', () => {
     )
   })
 
-  // samples/USDmovements.csv: a Supernet debit and its 1.90 TRANSFERENCIA
-  // ENVIADA leg share the reference and the name but are different merchant
-  // keys, so they must not read as the same merchant.
-  it('tells apart two groups for the same counterparty', () => {
-    const debit =
-      'DEBITO OPERACION EN SUPERNET O SMS 754930TT55557465 TRF. PLAZA- FEDERICO GAZZANO'
-    const leg =
-      'TRANSFERENCIA ENVIADA 754934TT55557465 TRF. PLAZA- FEDERICO GAZZANO'
-    expect(rawMerchantKey(debit)).not.toBe(rawMerchantKey(leg))
-    expect(labelOf(debit)).not.toBe(labelOf(leg))
+  it('keeps the accents of the name', () => {
+    expect(labelOf('TRANSF INSTANTANEA ENVIADA 380104LE NRR:1 JOSÉ PEÑA')).toBe(
+      'JOSÉ PEÑA · Transf. instantánea enviada'
+    )
   })
 
   it('recognizes the bank concept regardless of accents and spacing', () => {
     expect(
       labelOf('DÉBITO  OPERACIÓN EN SUPERNET O SMS 466949TT55 MATEO RODRIGUEZ')
     ).toBe('MATEO RODRIGUEZ · Débito Supernet')
-    expect(labelOf('TRANSF INSTANTÁNEA ENVIADA 380104LE JOSE PREX')).toBe(
-      'JOSE PREX · Transf. instantánea enviada'
-    )
   })
 
   it('keeps a slash that is part of the name', () => {
@@ -349,10 +340,7 @@ describe('merchantLabelFor on transfers', () => {
       labelOf(
         'DEBITO OPERACION EN SUPERNET O SMS 123TT TRF. PLAZA- JUAN PEREZ S/A'
       )
-    ).toBe('JUAN PEREZ S/A · Débito Supernet')
-    expect(
-      labelOf('DEBITO OPERACION EN SUPERNET O SMS 123TT ANA C/ LUIS GOMEZ')
-    ).toBe('ANA C/ LUIS GOMEZ · Débito Supernet')
+    ).toBe('JUAN PEREZ S/A · Transferencia Supernet')
   })
 
   it('keeps the raw description when no counterparty is left', () => {
@@ -364,6 +352,9 @@ describe('merchantLabelFor on transfers', () => {
     )
     expect(labelOf('DEBITO OPERACION EN SUPERNET O SMS P--')).toBe(
       'DEBITO OPERACION EN SUPERNET O SMS P--'
+    )
+    expect(labelOf('DEBITO OPERACION EN BANCA DIGITAL 526741TT55770545')).toBe(
+      'DEBITO OPERACION EN BANCA DIGITAL 526741TT55770545'
     )
   })
 
@@ -379,6 +370,46 @@ describe('merchantLabelFor on transfers', () => {
         }),
       ])
     ).toBe('Alquiler')
+  })
+
+  // The label is display only; the key decides the groups. Two groups must
+  // never read the same, or Mayores comercios shows twin rows and Insights
+  // twin merchants. Every transfer shape in samples/, plus near-misses.
+  it('gives different merchant keys different labels', () => {
+    const descriptions = [
+      'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE',
+      'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY  MARIA CONSTANZA',
+      'CREDITO POR OPERACION EN SUPERNET OTRO/HARGUINDEGUY MARIA CONSTANZA',
+      'CREDITO POR OPERACION EN SUPERNET HARGUINDEGUY MARIA CONSTANZA',
+      'DEBITO OPERACION EN SUPERNET O SMS ANHEC     GC  PAGOS DE A',
+      'DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA                  5506',
+      'DEBITO OPERACION EN SUPERNET O SMS P--',
+      'DEBITO OPERACION EN SUPERNET O SMS 754930TT55557465 TRF. PLAZA- FEDERICO GAZZANO',
+      'DEBITO OPERACION EN SUPERNET O SMS 1TT FEDERICO GAZZANO',
+      'DEBITO OPERACION EN SUPERNET 1TT FEDERICO GAZZANO',
+      'DEBITO OPERACION EN BANCA DIGITAL 1TT TRF. PLAZA- FEDERICO GAZZANO',
+      'DEBITO OPERACION EN BANCA DIGITAL 1TT FEDERICO GAZZANO',
+      'DEBITO OPERACION EN SUPERNET O SMS 467794TT55306376 TRF. PLAZA- GONZ     LATI     SANT',
+      'DEBITO OPERACION EN SUPERNET O SMS 686716TT55201905 TRF. PLAZA- MARIA VERONICA MAURIS',
+      'TRANSF INSTANTANEA ENVIADA 380104LE NRR:182499946 JOSE PREX',
+      'TRANSF INSTANTANEA ENVIADA 871947LE',
+      'TRANSF INSTANTANEA ENVIADA 871947LE NRR:183230909 ROMINA FERRARO',
+      'TRANSF INSTANTANEA RECIBIDA 618258LR:000022847973 CRAVIOTTO FREIRA MARCOS',
+      'TRANSFERENCIA ENVIADA 754934TT55557465 TRF. PLAZA- FEDERICO GAZZANO',
+      'TRANSFERENCIA ENVIADA 797258TT FEDERICO GAZZANO',
+      'TRANSFERENCIA ENVIADA 686721TT55201905 TRF. PLAZA- MARIA VERONICA MAURIS',
+      'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA /GAZZANO DE MARCO, FEDERICO J',
+      'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA GAZZANO DE MARCO, FEDERICO J',
+      'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA',
+    ]
+    const keyByLabel = new Map<string, string>()
+    for (const description of descriptions) {
+      const key = rawMerchantKey(description)
+      const label = labelOf(description)
+      const other = keyByLabel.get(label)
+      if (other !== undefined) expect([label, other]).toEqual([label, key])
+      keyByLabel.set(label, key)
+    }
   })
 })
 

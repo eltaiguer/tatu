@@ -137,33 +137,23 @@ function stripTrailingPlace(
 
 const EDGE_PUNCTUATION = /^[\s,.;:/-]+|[\s,.;:/-]+$/g
 
-// A statement's `NRR:…` reference (any case).
-const NRR_REFERENCE = /\bnrr:\S*/gi
-
-// A stateful predicate over a description's tokens, in order: whether the
-// token is a reference code — it has a digit — except numbers after "NRO",
-// which tell payees apart ("NRO FAMILIA 5506").
-function codeTokenFilter(): (token: string) => boolean {
-  let afterNro = false
-  return (token) => {
-    if (/^nro$/i.test(token)) afterNro = true
-    return !afterNro && /\d/.test(token)
-  }
-}
-
 // Drops NRR references, the card mask and a trailing ", PLACE"; with
 // `dropDigits`, also every token containing a digit — except numbers after
 // "NRO", which tell payees apart ("NRO FAMILIA 5506").
 function denoise(folded: string, dropDigits: boolean): string {
   const cardPurchase = /\btarj:/.test(folded)
-  const isCode = codeTokenFilter()
+  let afterNro = false
   const tokens = folded
-    .replace(NRR_REFERENCE, ' ')
+    .replace(/\bnrr:\S*/g, ' ')
     .replace(/\btarj:\s*\S*/g, ' ')
     // Commas stand alone, so dropping "7SEVEN," keeps the ", CITY" boundary.
     .replace(/,/g, ' , ')
     .split(/\s+/)
-    .filter((token) => token !== '' && !(dropDigits && isCode(token)))
+    .filter((token) => {
+      if (token === '') return false
+      if (token === 'nro') afterNro = true
+      return !dropDigits || afterNro || !/\d/.test(token)
+    })
   return stripTrailingPlace(
     tokens.join(' ').replace(/ ,/g, ',').replace(EDGE_PUNCTUATION, ''),
     cardPurchase,
@@ -207,51 +197,57 @@ export function merchantKeyOf(tx: Transaction): string {
   return rawMerchantKey(tx.description)
 }
 
-// The bank concepts a transfer description opens with (folded words), and
-// how a label names them. The concept stays in the label because it is part
-// of the key: a Supernet debit and the TRANSFERENCIA ENVIADA leg next to it
-// name the same person but are different merchants.
-const TRANSFER_CONCEPTS: ReadonlyArray<readonly [string[], string]> = [
-  [['debito', 'operacion', 'en', 'banca', 'digital'], 'Débito Banca Digital'],
-  [['debito', 'operacion', 'en', 'supernet', 'o', 'sms'], 'Débito Supernet'],
-  [['debito', 'operacion', 'en', 'supernet'], 'Débito Supernet'],
-  [['credito', 'por', 'operacion', 'en', 'supernet'], 'Crédito Supernet'],
-  [['transf', 'instantanea', 'enviada'], 'Transf. instantánea enviada'],
-  [['transf', 'instantanea', 'recibida'], 'Transf. instantánea recibida'],
-  [['transferencia', 'enviada'], 'Transferencia enviada'],
-  [['transferencia', 'recibida'], 'Transferencia recibida'],
+// A transfer's merchant key opens with its bank concept, then the
+// counterparty: "transferencia enviada trf. plaza- federico gazzano". These
+// are the exact openings a label can name, longest first; the label is read
+// off the key, so two keys never get the same label.
+const TRANSFER_KEY_CONCEPTS: ReadonlyArray<readonly [string, string]> = [
+  [
+    'debito operacion en banca digital trf. plaza-',
+    'Transferencia Banca Digital',
+  ],
+  ['debito operacion en banca digital', 'Débito Banca Digital'],
+  ['debito operacion en supernet o sms trf. plaza-', 'Transferencia Supernet'],
+  ['debito operacion en supernet o sms', 'Débito Supernet'],
+  ['credito por operacion en supernet', 'Crédito Supernet'],
+  ['transf instantanea enviada', 'Transf. instantánea enviada'],
+  ['transf instantanea recibida', 'Transf. instantánea recibida'],
+  ['transferencia enviada trf. plaza-', 'Transferencia enviada'],
+  ['transferencia recibida recibida /', 'Transferencia recibida'],
 ]
 
-// A transfer's label is its counterparty plus the bank concept
-// ("TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO GAZZANO" →
-// "FEDERICO GAZZANO · Transferencia enviada"): drops reference codes (but
-// not digits after "NRO"), `NRR:…`, "TRF. PLAZA-", a repeated
-// "RECIBIDA"/"ENVIADA" and a sender alias glued before a "/"
-// ("TAIRTAGS/NAME"). Other descriptions, or a transfer with no name left,
-// keep their raw text. Display only — the key is rawMerchantKey.
+// A transfer's label: its counterparty plus the bank concept, both read off
+// the merchant key ("TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO
+// GAZZANO" → "FEDERICO GAZZANO · Transferencia enviada"). The name keeps the
+// description's own spelling when its last words fold to it. A key that opens
+// otherwise, or whose rest is not a name (empty, one letter, a reference code
+// kept because nothing else was left), keeps the raw description. Display
+// only — the key is rawMerchantKey.
 function counterpartyLabel(description: string): string {
-  const words = description.trim().split(/\s+/)
-  const folded = words.map(fold)
-  const concept = TRANSFER_CONCEPTS.find(([prefix]) =>
-    prefix.every((word, i) => folded[i] === word)
+  const key = rawMerchantKey(description)
+  const concept = TRANSFER_KEY_CONCEPTS.find(
+    ([opening]) =>
+      key.startsWith(opening) &&
+      (opening.endsWith('/') || key[opening.length] === ' ')
   )
   if (!concept) return description
-  const [prefix, conceptLabel] = concept
-  const isCode = codeTokenFilter()
-  const name = words
-    .slice(prefix.length)
-    .join(' ')
-    .replace(NRR_REFERENCE, ' ')
-    .replace(/\btrf\. plaza-?/gi, ' ')
-    .split(/\s+/)
-    .filter(
-      (token) =>
-        token !== '' && !isCode(token) && !/^(?:recibida|enviada)$/i.test(token)
-    )
-    .join(' ')
-    .replace(/^[^\s/]*\//, '')
-    .replace(EDGE_PUNCTUATION, '')
-  return name.length < 2 ? description : `${name} · ${conceptLabel}`
+  const [opening, conceptLabel] = concept
+  const name = key.slice(opening.length).trim()
+  const isName =
+    /[a-z].*[a-z]/.test(name) && (!/\d/.test(name) || name.startsWith('nro '))
+  if (!isName) return description
+  return `${spelledAsInDescription(name, description)} · ${conceptLabel}`
+}
+
+// The description's last words if they fold to `folded` (accents and case
+// kept), else `folded` in capitals, as Santander writes names.
+function spelledAsInDescription(folded: string, description: string): string {
+  const words = description.trim().split(/\s+/)
+  for (let count = 1; count <= words.length; count += 1) {
+    const tail = words.slice(-count).join(' ')
+    if (fold(tail) === folded) return tail
+  }
+  return folded.toUpperCase()
 }
 
 function newestFirst(a: Transaction, b: Transaction): number {
@@ -260,7 +256,7 @@ function newestFirst(a: Transaction, b: Transaction): number {
 
 // The friendliest name for a group of rows sharing a key: the most recent
 // rename, else the most common raw description (a transfer's reduced to its
-// counterparty and bank concept). Ties go to the most recent
+// counterparty). Ties go to the most recent
 // row, so the label does not depend on input order (it feeds InsightInput,
 // whose hash decides whether cached insights are stale).
 export function merchantLabelFor(rows: Transaction[]): string {
