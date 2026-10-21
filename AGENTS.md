@@ -129,7 +129,7 @@ src/
     tailwind.css           # Tailwind 4 import + sources
     theme.css              # CSS custom properties — light + dark tokens
                            # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
-  utils/                   # date-utils (newestDate / newestDataMonth = the newest month with data; pass only the rows that count where that matters), formatting, memo, transaction-display, user-display, user-error, auth-errors
+  utils/                   # account-display (ACCOUNT_LABELS: the three accounts' names, accountOf), date-utils (newestDate / newestDataMonth = the newest month with data; pass only the rows that count where that matters), formatting, memo, transaction-display, user-display, user-error, auth-errors
   test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-claude-client.ts records Claude requests and scripts answers
 supabase/
   schema.sql               # PostgreSQL schema (tables, RLS policies)

@@ -18,6 +18,12 @@ import {
   userErrorMessage,
 } from '../utils/user-error'
 import type { FileType, TransactionsFilter } from '../models'
+import type {
+  ImportStatementOptions,
+  StatementFile,
+  StatementImportResult,
+} from '../services/import/import-statement'
+import { ACCOUNT_LABELS } from '../utils/account-display'
 
 // validating = reading/parsing the file; importing = the file is valid and
 // its rows are being saved.
@@ -57,32 +63,21 @@ function summaryLines(summary: ImportSummary) {
   ]
 }
 
-const ACCOUNT_LABELS: Record<FileType, string> = {
-  credit_card: 'Tarjeta de crédito',
-  bank_account_usd: 'Cuenta USD',
-  bank_account_uyu: 'Cuenta $U',
-}
-
-// What the dialog needs from an import, declared here (structurally) so the
-// dialog does not depend on the import service: `importStatement`'s result
-// satisfies it, and so does a test double.
-export interface ImportOutcome {
-  added: readonly unknown[]
-  duplicates: readonly unknown[]
-  /** Rows deleted before; skipped so they stay deleted. */
-  previouslyDeleted: readonly unknown[]
-  /** Stored rows whose garbled description the import repaired (#192). */
-  repaired: readonly unknown[]
-  /** Repairs that did not save; importing again retries them. */
-  repairsFailed?: number
-  /** Enrichment did not run at all: what it threw (`importAiErrorMessage`). */
-  aiError?: unknown
-  /** Enrichment ran but some batches failed: the text to show. */
-  aiPartial?: string
-  fileType: FileType
-  /** The month "Ver transacciones" opens. */
-  month: { y: number; m: number } | null
-}
+// The part of an import's result the dialog reads. Type-only imports: the
+// dialog has no runtime dependency on the import service, and a test double
+// only has to supply these fields.
+export type ImportOutcome = Pick<
+  StatementImportResult,
+  | 'added'
+  | 'duplicates'
+  | 'previouslyDeleted'
+  | 'repaired'
+  | 'repairsFailed'
+  | 'aiError'
+  | 'aiPartial'
+  | 'fileType'
+  | 'month'
+>
 
 interface ImportCSVProps {
   /** "Ver transacciones" on the summary; the import itself never navigates. */
@@ -93,8 +88,8 @@ interface ImportCSVProps {
    * rejection is a failure to save. `onParsed` is progress only.
    */
   onTransactionsImported: (
-    file: { bytes: ArrayBuffer; fileName: string },
-    options: { onParsed?: () => void }
+    file: StatementFile,
+    options: ImportStatementOptions
   ) => Promise<ImportOutcome>
 }
 
@@ -394,7 +389,7 @@ export function ImportCSV({
             <div className="p-2 rounded-lg bg-brand-soft">
               <FileText className="text-primary" size={20} />
             </div>
-            <h4>Tarjeta de crédito</h4>
+            <h4>{ACCOUNT_LABELS.credit_card}</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Extracto de tarjeta Santander con compras y pagos en UYU y USD.
@@ -406,7 +401,7 @@ export function ImportCSV({
             <div className="p-2 rounded-lg bg-accent-soft">
               <FileText className="text-accent" size={20} />
             </div>
-            <h4>Cuenta USD</h4>
+            <h4>{ACCOUNT_LABELS.bank_account_usd}</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Caja de ahorro en dólares con movimientos de débito y crédito.
@@ -418,7 +413,7 @@ export function ImportCSV({
             <div className="p-2 rounded-lg bg-pos-soft">
               <FileText className="text-pos" size={20} />
             </div>
-            <h4>Cuenta $U</h4>
+            <h4>{ACCOUNT_LABELS.bank_account_uyu}</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Caja de ahorro en pesos uruguayos con todas las operaciones.

@@ -1,4 +1,5 @@
 import { CreditCard, Wallet } from 'lucide-react'
+import { ACCOUNT_SHORT_LABELS, accountOf } from '../../utils/account-display'
 
 export function getAccountIcon(type: string) {
   if (type === 'credit_card') return <CreditCard size={14} />
@@ -8,8 +9,7 @@ export function getAccountIcon(type: string) {
 // Which of the three Santander accounts a row came from. A bank account is
 // identified by its currency (USD and $U are separate accounts).
 export function getAccountLabel(source: string, currency: string): string {
-  if (source === 'credit_card') return 'Tarjeta'
-  return currency === 'USD' ? 'Cuenta USD' : 'Cuenta $U'
+  return ACCOUNT_SHORT_LABELS[accountOf(source, currency)]
 }
 
 // Flags a category worth a second look (none, or a low-confidence automatic

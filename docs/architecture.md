@@ -19,13 +19,14 @@ dropped). It then parses, categorizes the parsed rows
 (`categorizeParsedData` in `src/services/categorizer/import-categorization.ts`),
 then hands the rows to `importTransactions`
 (`src/services/mutations/transaction-mutations.ts`) for everything after.
-A file it cannot read (decode or parse failed, or the browser could not read it) rejects with a
-`StatementReadError` (`src/utils/user-error.ts`): the parser's own message, or
-for a crash a generic one with the crash as `cause`. The dialog shows it as
+A file it cannot decode or parse rejects with a `StatementReadError`
+(`src/utils/user-error.ts`): the parser's own message, or for a parser crash a
+generic one with the crash as `cause`; so does the dialog when the browser
+cannot read the file ("Error al leer el archivo"). The dialog shows it as
 "Error al validar archivo" and reports it to Sentry as `import-parse`. Any
 other rejection — saving, the network, a session that ended, a categorizer
-crash (a bug, not a bad file) — is "No se pudo
-importar", area `import`. `onParsed` only reports progress ("Importando…").
+crash (a bug in the app, not a bad file) — is "No se pudo importar", area
+`import`. `onParsed` only reports progress ("Importando…").
 The result is `ImportResult` plus the file type and the month to show.
 The parsers are pure: they map columns, dates, amounts, currency and IDs and
 never call the categorizer.
