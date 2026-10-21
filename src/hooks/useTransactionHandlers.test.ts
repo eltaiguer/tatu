@@ -9,6 +9,11 @@ const ai = vi.hoisted(() => ({
   getAiConfig: vi.fn(),
   enrichTransactionsWithAi: vi.fn(),
 }))
+// Sentry is the other external service.
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../services/monitoring/error-reporting', () => ({
+  captureError: reporting.captureError,
+}))
 
 vi.mock('../services/ai', () => ({
   getAiConfig: ai.getAiConfig,
@@ -302,6 +307,38 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     )
   })
 
+  it('does not report an AI failure caused by the user key to Sentry', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    ai.enrichTransactionsWithAi.mockRejectedValueOnce(
+      new Error('401 invalid x-api-key')
+    )
+    const { handlers } = signedIn()
+    reporting.captureError.mockClear()
+
+    await handlers.handleTransactionsImported(
+      [makeTransaction('tx-1')],
+      makeImportContext()
+    )
+
+    expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
+  it('reports an unexpected AI failure to Sentry', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const bug = new TypeError(
+      "Cannot read properties of undefined (reading 'map')"
+    )
+    ai.enrichTransactionsWithAi.mockRejectedValueOnce(bug)
+    const { handlers } = signedIn()
+
+    await handlers.handleTransactionsImported(
+      [makeTransaction('tx-1')],
+      makeImportContext()
+    )
+
+    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
+  })
+
   it('does not call the AI when it is disabled', async () => {
     ai.getAiConfig.mockReturnValue({ ...AI_ON, enabled: false, apiKey: '' })
     const { handlers } = signedIn()
@@ -400,6 +437,29 @@ describe('useTransactionHandlers — import persistence (#61)', () => {
 
     expect(result.added).toHaveLength(1)
     expect(repo.importRuns[0].status).toBe('processing')
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      'import'
+    )
+  })
+
+  it('reports to Sentry when a failed import cannot be marked failed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { repo, handlers } = signedIn()
+    repo.failOn('insert', { error: new Error('network down') })
+    repo.failOn('failImportRun')
+
+    await expect(
+      handlers.handleTransactionsImported(
+        [makeTransaction('tx-1')],
+        makeImportContext()
+      )
+    ).rejects.toThrow('network down')
+
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      'import'
+    )
   })
 
   it('fails before recording the import when the lookup fails', async () => {
@@ -650,6 +710,20 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       expect(repo.row(garbled.id)?.description).toBe(garbled.description)
       expect(stored(garbled.id)?.description).toBe(garbled.description)
       expect(errorSpy).toHaveBeenCalled()
+    })
+
+    it('reports a failed repair to Sentry', async () => {
+      const [garbled] = garbledFile(PENAROL)
+      const { repo, handlers } = signedIn([garbled])
+      failChunksWith(repo, 'update', garbled.id)
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await handlers.handleTransactionsImported(file(NEW, PENAROL))
+
+      expect(reporting.captureError).toHaveBeenCalledWith(
+        expect.anything(),
+        'import'
+      )
     })
 
     describe('rules learned from the garbled text', () => {

@@ -28,6 +28,7 @@ import {
   type ImportClassification,
 } from '../dedup/import-dedup'
 import { sha256Hex } from '../supabase/import-runs'
+import { captureError } from '../monitoring/error-reporting'
 import {
   countSimilarEditReach,
   findSimilarTransactions,
@@ -62,6 +63,7 @@ import {
   PartialWriteError,
   UserFacingError,
   WorkspaceChangedError,
+  isUnexpectedAiError,
 } from '../../utils/user-error'
 
 const MISSING_TRANSACTION = new UserFacingError(
@@ -294,6 +296,7 @@ export async function importTransactions(
         aiError =
           error instanceof Error ? error.message : 'Error desconocido de IA'
         console.error('AI enrichment failed during import:', error)
+        if (isUnexpectedAiError(aiError)) captureError(error, 'ai')
       }
       assertOwner(repo)
     }
@@ -328,6 +331,7 @@ export async function importTransactions(
         )
       } catch (closeError) {
         console.error('Could not mark import run failed:', closeError)
+        captureError(closeError, 'import')
       }
     }
     if (!owner) throw new WorkspaceChangedError()
@@ -358,6 +362,7 @@ export async function importTransactions(
       })
     } catch (closeError) {
       console.error('Could not complete import run record:', closeError)
+      captureError(closeError, 'import')
     }
   }
 
@@ -400,12 +405,14 @@ async function repairRows(
   } catch (error) {
     if (error instanceof WorkspaceChangedError) throw error
     console.error('Could not repair garbled descriptions:', error)
+    captureError(error, 'import')
     return { saved: [], failed: repaired.length }
   }
   // A row gone from the server (deleted elsewhere) needs no repair.
   const failed = outcome.failed.length
   if (failed > 0) {
     console.error('Could not repair garbled descriptions:', outcome.error)
+    captureError(outcome.error, 'import')
   }
   const saved = new Set(outcome.saved)
   return { saved: repaired.filter((tx) => saved.has(tx.id)), failed }
