@@ -4,8 +4,10 @@ import { Checkbox } from '../ui/checkbox'
 import { CategoryBadge } from '../CategoryBadge'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency } from '../../models'
-import { resolveCategory } from '../../services/categories/category-registry'
-import { LEGACY_IGNORED_ID } from '../../services/categories/category-aliases'
+import {
+  needsIgnoredFlag,
+  resolveCategory,
+} from '../../services/categories/category-registry'
 import {
   getDisplayDescription,
   needsCategoryReview,
@@ -38,8 +40,7 @@ export function TransactionCard({
   const hasFriendlyOverride = displayDescription !== transaction.description
   const category = resolveCategory(transaction.category)
   const isIgnored = category.isIgnored
-  // The 'ignored' category's own badge already reads "Ignorada".
-  const showIgnoredFlag = isIgnored && category.id !== LEGACY_IGNORED_ID
+  const showIgnoredFlag = needsIgnoredFlag(category)
   const isSplitParentM = isSplitParentTx(transaction)
   const mutedM = !countsTowardTotals(transaction)
   const isSplitChildM = isSplitChildTx(transaction)

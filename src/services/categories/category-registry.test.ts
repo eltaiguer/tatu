@@ -579,30 +579,6 @@ describe('resolveCategory(...).isIgnored', () => {
     }
   })
 
-  it('resolves two alias rows for one built-in the same way in any order', () => {
-    // Ids differing only in case both alias onto internal_transfer, so both
-    // land in the aliased bucket and the tie must break on the id rather than
-    // on the order select('*') happened to return them in.
-    const lower = {
-      id: 'transfer',
-      label: 'Transferencias',
-      color: '#ff0000',
-      isIgnored: true,
-    }
-    const upper = {
-      id: 'Transfer',
-      label: 'Transferencias',
-      color: '#00ff00',
-      isIgnored: false,
-    }
-
-    loadCustom([lower, upper])
-    const first = resolveCategory(Category.InternalTransfer)
-
-    loadCustom([upper, lower])
-    expect(resolveCategory(Category.InternalTransfer)).toEqual(first)
-  })
-
   it('keeps the transfer default when a legacy row records no preference', () => {
     // A row with no recorded preference must fall through to the built-in
     // default rather than read as an explicit "not ignored" and let transfers

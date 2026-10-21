@@ -54,14 +54,13 @@ const resolvedOverrides = memoizeByReference((categories: CustomCategory[]) => {
   const exact = new Map<string, CustomCategory>()
 
   categories.forEach((c) => {
-    const normalized = c.id.toLowerCase()
-    const resolved = resolveBuiltinAlias(normalized)
-    const target = resolved === normalized ? exact : aliased
+    // c.id is already lowercase: the store normalizes ids as they load.
+    const resolved = resolveBuiltinAlias(c.id)
+    const target = resolved === c.id ? exact : aliased
     const held = target.get(resolved)
-    // Several rows can land on one category: two alias keys for the same
-    // built-in ('restaurant' and 'restaurants'), or ids differing only in
-    // case. Break the tie on the id so the winner never depends on the order
-    // Supabase happened to return the rows in.
+    // Two alias keys can land on one built-in ('restaurant' and
+    // 'restaurants'). Break the tie on the id so the winner never depends on
+    // the order Supabase happened to return the rows in.
     if (!held || c.id < held.id) target.set(resolved, c)
   })
 
@@ -199,6 +198,15 @@ export function getCategoryDefinitions(): CategoryDefinition[] {
     if (b.id === Category.Uncategorized) return -1
     return a.label.localeCompare(b.label, 'es')
   })
+}
+
+/**
+ * Whether a row in this category needs the separate "Ignorada" flag: it is
+ * left out of totals and its category's own badge doesn't already say so
+ * (the 'ignored' category is itself "Ignorada").
+ */
+export function needsIgnoredFlag(category: CategoryDefinition): boolean {
+  return category.isIgnored && category.id !== LEGACY_IGNORED_ID
 }
 
 /** Category ids in Spanish label order, resolving each id once. */

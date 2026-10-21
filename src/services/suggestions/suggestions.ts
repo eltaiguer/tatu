@@ -3,6 +3,7 @@
 // the custom-category registry.
 import { Category } from '../../models'
 import { listCustomCategories } from '../categories/category-store'
+import { normalizeCategoryId } from '../categories/category-aliases'
 import {
   resolveCategory,
   sortCategoryIdsByLabel,
@@ -19,14 +20,19 @@ function uniqueTrimmed(values: Iterable<string>): string[] {
 }
 
 // Every built-in and custom category, plus `extra` ids (e.g. a row's
-// legacy category), sorted by Spanish label.
+// legacy category), each once under the id rows are grouped by, sorted by
+// Spanish label.
 export function buildCategorySuggestions(extra: string[] = []): string[] {
   return sortCategoryIdsByLabel(
-    uniqueTrimmed([
-      ...Object.values(Category),
-      ...listCustomCategories().map((category) => category.id),
-      ...extra,
-    ])
+    Array.from(
+      new Set(
+        uniqueTrimmed([
+          ...Object.values(Category),
+          ...listCustomCategories().map((category) => category.id),
+          ...extra,
+        ]).map(normalizeCategoryId)
+      )
+    )
   )
 }
 

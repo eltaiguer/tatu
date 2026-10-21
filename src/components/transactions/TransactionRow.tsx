@@ -5,8 +5,10 @@ import { IconTile } from '../ui/icon-tile'
 import { CategoryBadge } from '../CategoryBadge'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency, Transaction } from '../../models'
-import { resolveCategory } from '../../services/categories/category-registry'
-import { LEGACY_IGNORED_ID } from '../../services/categories/category-aliases'
+import {
+  needsIgnoredFlag,
+  resolveCategory,
+} from '../../services/categories/category-registry'
 import {
   getDisplayDescription,
   needsCategoryReview,
@@ -52,8 +54,7 @@ export function TransactionRow({
   const hasFriendlyOverride = displayDescription !== transaction.description
   const category = resolveCategory(transaction.category)
   const isIgnored = category.isIgnored
-  // The 'ignored' category's own badge already reads "Ignorada".
-  const showIgnoredFlag = isIgnored && category.id !== LEGACY_IGNORED_ID
+  const showIgnoredFlag = needsIgnoredFlag(category)
   const isSplitParent = isSplitParentTx(transaction)
   // Muted when the row adds nothing to the totals.
   const muted = !countsTowardTotals(transaction)

@@ -14,6 +14,25 @@ describe('buildCategorySuggestions', () => {
     replaceCustomCategories([])
   })
 
+  it('never lists one category twice under different spellings', () => {
+    replaceCustomCategories([
+      { id: 'Viajes-Familia', label: 'Viajes', color: '#123456' },
+    ])
+
+    // A row's own category comes in as `extra`, in whatever casing or
+    // pre-rename id it was stored with.
+    const suggestions = buildCategorySuggestions([
+      'viajes-familia',
+      'Viajes-Familia',
+      'FOOD',
+    ])
+
+    expect(suggestions.filter((id) => id === 'viajes-familia')).toHaveLength(1)
+    expect(suggestions).not.toContain('Viajes-Familia')
+    expect(suggestions).not.toContain('FOOD')
+    expect(suggestions.filter((id) => id === 'groceries')).toHaveLength(1)
+  })
+
   it('lists every built-in category once, sorted by Spanish label', () => {
     const suggestions = buildCategorySuggestions()
 

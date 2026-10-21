@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   addCustomCategory,
   addCustomCategoryWithSync,
@@ -8,6 +8,7 @@ import {
   replaceCustomCategories,
   updateCustomCategory,
   updateCustomCategoryWithSync,
+  upsertBuiltinOverrideWithSync,
 } from './category-store'
 import {
   createInMemoryRepository,
@@ -107,37 +108,6 @@ describe('Custom category store', () => {
       expect(listCustomCategories()).toEqual([])
     })
 
-    it('edits and deletes a mixed-case stored category by its listed (lowercase) id', async () => {
-      // getCategoryDefinitions lists ids normalized; a row stored before slugs
-      // were lowercased must still be found, and saved under its stored id.
-      await repo.upsertCustomCategory({
-        id: 'Viajes-Familia',
-        label: 'Viajes',
-        color: '#123456',
-      })
-      replaceCustomCategories([
-        { id: 'Viajes-Familia', label: 'Viajes', color: '#123456' },
-      ])
-
-      await updateCustomCategoryWithSync(repo, 'viajes-familia', {
-        label: 'Viajes en familia',
-      })
-      expect(listCustomCategories()).toEqual([
-        expect.objectContaining({
-          id: 'Viajes-Familia',
-          label: 'Viajes en familia',
-        }),
-      ])
-      expect(repo.customCategories.get('Viajes-Familia')?.label).toBe(
-        'Viajes en familia'
-      )
-      expect(repo.customCategories.has('viajes-familia')).toBe(false)
-
-      await removeCustomCategoryWithSync(repo, 'viajes-familia')
-      expect(listCustomCategories()).toEqual([])
-      expect(repo.customCategories.get('Viajes-Familia')?.isArchived).toBe(true)
-    })
-
     it('saves the isIgnored flag on add and update', async () => {
       const created = await addCustomCategoryWithSync(repo, {
         label: 'Reembolsos',
@@ -221,5 +191,102 @@ describe('Custom category store', () => {
 
       expect(listCustomCategories().map((c) => c.label)).toEqual(['A de B'])
     })
+  })
+})
+
+// Ids are case-insensitive. Rows stored before slugs were lowercased keep
+// their stored casing on the server; the store normalizes them once, on the
+// way in, and writes back under the stored id.
+describe('legacy mixed-case category ids', () => {
+  let repo: InMemoryRepository
+
+  beforeEach(() => {
+    replaceCustomCategories([])
+    repo = createInMemoryRepository()
+    workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('lists a loaded mixed-case row under its lowercase id', () => {
+    replaceCustomCategories([
+      { id: 'Viajes-Familia', label: 'Viajes', color: '#123456' },
+    ])
+
+    expect(listCustomCategories().map((c) => c.id)).toEqual(['viajes-familia'])
+  })
+
+  it('keeps one row per id when two differ only by case, and says so', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const legacy = { id: 'Viajes', label: 'Viajes viejo', color: '#111111' }
+    const current = { id: 'viajes', label: 'Viajes', color: '#222222' }
+
+    for (const rows of [
+      [legacy, current],
+      [current, legacy],
+    ]) {
+      replaceCustomCategories(rows)
+      expect(listCustomCategories()).toEqual([
+        expect.objectContaining({ id: 'viajes', label: 'Viajes' }),
+      ])
+    }
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"Viajes"'))
+  })
+
+  it('edits and archives the stored row, never a lowercase duplicate', async () => {
+    await repo.upsertCustomCategory({
+      id: 'Home-Office',
+      label: 'Home office',
+      color: '#123456',
+    })
+    replaceCustomCategories([
+      { id: 'Home-Office', label: 'Home office', color: '#123456' },
+    ])
+    const [visible] = listCustomCategories()
+
+    await updateCustomCategoryWithSync(repo, visible.id, { label: 'Oficina' })
+    expect(listCustomCategories()[0].label).toBe('Oficina')
+    expect(repo.customCategories.get('Home-Office')?.label).toBe('Oficina')
+    expect(repo.customCategories.has('home-office')).toBe(false)
+
+    await removeCustomCategoryWithSync(repo, visible.id)
+    expect(listCustomCategories()).toEqual([])
+    expect(repo.customCategories.get('Home-Office')?.isArchived).toBe(true)
+    expect(repo.customCategories.has('home-office')).toBe(false)
+  })
+
+  it('never hands a new category the id of a mixed-case row', () => {
+    replaceCustomCategories([
+      { id: 'Home-Office', label: 'Home office', color: '#123456' },
+    ])
+
+    const created = addCustomCategory({ label: 'Home office', color: '#f00' })
+
+    expect(created.id).toBe('home-office-2')
+    expect(listCustomCategories().map((c) => c.id)).toEqual([
+      'home-office',
+      'home-office-2',
+    ])
+  })
+
+  it('updates a mixed-case built-in override in place', async () => {
+    await repo.upsertCustomCategory({
+      id: 'Groceries',
+      label: 'Súper',
+      color: '#123456',
+    })
+    replaceCustomCategories([
+      { id: 'Groceries', label: 'Súper', color: '#123456' },
+    ])
+
+    await upsertBuiltinOverrideWithSync(repo, 'groceries', { isIgnored: true })
+
+    expect(listCustomCategories()).toEqual([
+      expect.objectContaining({ id: 'groceries', isIgnored: true }),
+    ])
+    expect(repo.customCategories.get('Groceries')?.isIgnored).toBe(true)
+    expect(repo.customCategories.has('groceries')).toBe(false)
   })
 })

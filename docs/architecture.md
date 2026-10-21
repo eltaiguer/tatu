@@ -417,11 +417,20 @@ is this category?" for every surface — badge, row icon, filter chips, donut,
 (`isIgnored`). Its `id` always equals `normalizeCategoryId(id)`, the key rows
 are grouped and filtered under, so a label never disagrees with the group it
 labels. `getCategoryDefinitions()` (the pickable list) is built from the same
-resolved rows and lists the same lowercase ids, so a custom category stored
-with mixed case is found case-insensitively by the category store and saved
-back under its stored id. The one ignore rule lives in the registry;
-`isCategoryIgnored(id)` is its allocation-free form for the per-row totals
-path. Empty icons fall back to the built-in (or 🏷️) icon.
+resolved rows, so it lists the same ids. The one ignore rule lives in the
+registry; `isCategoryIgnored(id)` is its allocation-free form for the per-row
+totals path, and `needsIgnoredFlag` decides when a row also shows the
+"Ignorada" flag. Empty icons fall back to the built-in (or 🏷️) icon.
+
+Custom category and override ids are normalized once, as they enter the
+store (`replaceCustomCategories` in `category-store.ts`): each row is keyed
+by its lowercase id, and a row stored before slugs were lowercased keeps its
+server id in `storedId`, which every write (upsert, archive) targets — so
+editing a legacy `Viajes-Familia` row never creates a `viajes-familia`
+duplicate, and a new category's slug can't collide with it. Two stored rows
+whose ids differ only by case are one category: the store keeps the one
+stored lowercase (else the smaller id), logs a `console.warn` naming the
+other, and leaves both untouched on the server (no migration).
 
 | Stored id                                   | Resolves to                                                                                                                 |
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
