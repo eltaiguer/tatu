@@ -260,9 +260,8 @@ describe('transaction-mutations — import with AI enrichment', () => {
   })
 
   it('still stores rule-based results when AI enrichment fails, and says why', async () => {
-    ai.enrichTransactionsWithAi.mockRejectedValue(
-      new Error('401 invalid x-api-key')
-    )
+    const failure = new Error('401 invalid x-api-key')
+    ai.enrichTransactionsWithAi.mockRejectedValue(failure)
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const repo = signedIn()
 
@@ -272,7 +271,8 @@ describe('transaction-mutations — import with AI enrichment', () => {
       makeImportContext()
     )
 
-    expect(outcome.aiError).toContain('401 invalid x-api-key')
+    // The error itself, for aiErrorMessage to explain — not its raw text.
+    expect(outcome.aiError).toBe(failure)
     expect(stored('tx-1')?.category).toBe('groceries')
     expect(repo.row('tx-1')?.category).toBe('groceries')
     expect(repo.importRuns[0].status).toBe('completed')

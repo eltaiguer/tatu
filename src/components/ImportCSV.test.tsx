@@ -535,8 +535,7 @@ describe('ImportCSV', () => {
     const onTransactionsImported = vi.fn().mockResolvedValue({
       added: [makeTx('tx-1'), makeTx('tx-2')],
       duplicates: [makeTx('tx-3')],
-      aiError: 'la clave API de Anthropic no es válida',
-      aiFailure: new AiError('auth'),
+      aiError: new AiError('auth'),
     })
 
     render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
@@ -728,8 +727,7 @@ describe('ImportCSV', () => {
     const onTransactionsImported = vi.fn().mockResolvedValue({
       added: [makeTx('tx-1')],
       duplicates: [],
-      aiError: '',
-      aiFailure: new Error(''),
+      aiError: new Error(''),
     })
 
     render(<ImportCSV onTransactionsImported={onTransactionsImported} />)

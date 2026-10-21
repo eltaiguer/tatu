@@ -91,10 +91,8 @@ interface ImportCSVProps {
      * Set when the import succeeded but AI enrichment did not, so the user can
      * tell a dead API key apart from the model categorizing badly.
      */
-    /** Enrichment did not run at all (its message, for logs). */
-    aiError?: string
-    /** What enrichment threw; `aiErrorMessage` explains it. */
-    aiFailure?: unknown
+    /** Enrichment did not run at all: what it threw (`aiErrorMessage`). */
+    aiError?: unknown
     /**
      * Enrichment ran but some batches failed; the rest were applied. Already
      * the text to show ("2 de 12 lotes fallaron (…)").
@@ -217,7 +215,6 @@ export function ImportCSV({
         repaired = [],
         repairsFailed = 0,
         aiError,
-        aiFailure,
         aiPartial,
       } = onTransactionsImported
         ? await onTransactionsImported(result.transactions, {
@@ -230,8 +227,7 @@ export function ImportCSV({
             // Local-only path never runs AI enrichment.
             repaired: [] as Transaction[],
             repairsFailed: 0,
-            aiError: undefined as string | undefined,
-            aiFailure: undefined as unknown,
+            aiError: undefined as unknown,
             aiPartial: undefined as string | undefined,
           }
 
@@ -257,9 +253,9 @@ export function ImportCSV({
       // dead API key looks identical to poor categorization. Total failure
       // and partial failure need different wording: telling the user "no
       // disponible" when 10 of 12 batches did enrich is simply wrong.
-      if (aiFailure !== undefined || aiError !== undefined) {
+      if (aiError !== undefined) {
         toast.warning(
-          `Categorización con IA no disponible: ${aiErrorMessage(aiFailure)}. Se usaron las reglas de categorización.`
+          `Categorización con IA no disponible: ${aiErrorMessage(aiError)}. Se usaron las reglas de categorización.`
         )
       } else if (aiPartial) {
         toast.warning(
