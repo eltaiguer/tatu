@@ -16,7 +16,7 @@ import {
 import { JEV_MODEL } from '../../services/ai/models'
 import { errorMessage } from '../../services/monitoring/error-reporting'
 import { aiErrorMessage, isUnexpectedAiError } from '../../utils/user-error'
-import { getCategoryDefinition } from '../../services/categories/category-registry'
+import { resolveCategory } from '../../services/categories/category-registry'
 import {
   labelledRows,
   rulePredictions,
@@ -64,7 +64,7 @@ function percent(ratio: number): string {
 }
 
 function label(id: string): string {
-  return getCategoryDefinition(id).label
+  return resolveCategory(id).label
 }
 
 function toInputs(sample: LabelledRow[]): AiEnrichmentInput[] {

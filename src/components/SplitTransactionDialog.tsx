@@ -18,6 +18,7 @@ import type { Transaction } from '../models'
 import { formatCurrency } from '../utils/formatting'
 import type { SplitPart } from '../services/mutations/transaction-mutations'
 import { getCategoryDefinitions } from '../services/categories/category-registry'
+import { normalizeCategoryId } from '../services/categories/category-aliases'
 
 interface SplitPartDraft {
   description: string
@@ -198,7 +199,9 @@ export function SplitTransactionDialog({
                         }}
                         className={cn(
                           'flex w-full cursor-pointer items-center gap-[6px] border-none px-[10px] py-[5px] text-left text-[12px] text-[var(--text)]',
-                          part.category === cat.id
+                          part.category &&
+                            normalizeCategoryId(part.category) ===
+                              normalizeCategoryId(cat.id)
                             ? 'bg-[var(--surface-hover)]'
                             : 'bg-transparent'
                         )}

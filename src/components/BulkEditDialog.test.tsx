@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import type { ComponentProps } from 'react'
 import { BulkEditDialog } from './BulkEditDialog'
-import { getCategoryDisplay } from '../utils/category-display'
+import { resolveCategory } from '../services/categories/category-registry'
 import { replaceCustomCategories } from '../services/categories/category-store'
 
 type DialogProps = ComponentProps<typeof BulkEditDialog>
@@ -72,7 +72,7 @@ function StatefulDialog({ onSave }: { onSave: (edit: SavedBulkEdit) => void }) {
 }
 
 describe('BulkEditDialog', () => {
-  const restaurants = getCategoryDisplay('restaurants').label
+  const restaurants = resolveCategory('restaurants').label
 
   beforeEach(() => {
     replaceCustomCategories([])
@@ -212,7 +212,7 @@ describe('BulkEditDialog', () => {
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('button', {
-        name: getCategoryDisplay('groceries').label,
+        name: resolveCategory('groceries').label,
       })
     ).not.toBeInTheDocument()
   })

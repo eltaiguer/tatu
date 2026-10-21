@@ -2,7 +2,7 @@
 // math itself lives in chart-data.ts — these only slice and label it.
 
 import type { Currency, Transaction } from '../../models'
-import { getCategoryDisplay } from '../../utils/category-display'
+import { resolveCategory } from '../categories/category-registry'
 import { buildMonthlyTrendsConverted } from './chart-data'
 import type { CategorySpendingDatum } from './chart-data'
 
@@ -29,17 +29,16 @@ export interface MonthlyTrendRow {
 // Labels each category's spend for the donut/list, with its share of the
 // total (0–100).
 export function toCategorySpendRows(
-  data: CategorySpendingDatum[],
-  emojiLookup: Map<string, string>
+  data: CategorySpendingDatum[]
 ): CategorySpendRow[] {
   const total = data.reduce((s, r) => s + r.total, 0) || 1
   return data.map((row) => {
-    const display = getCategoryDisplay(row.category)
+    const display = resolveCategory(row.category)
     return {
       categoryId: row.category,
       label: display.label,
       color: display.color,
-      emoji: emojiLookup.get(row.category) ?? '',
+      emoji: display.icon,
       value: row.total,
       pct: (row.total / total) * 100,
     }
