@@ -23,6 +23,8 @@ function sourceFiles(dir: string): string[] {
 }
 
 // `import … from '…'` / `export … from '…'` statements, type-only or not.
+// Only a whole `import type` counts as type-only: `import { type X }` is
+// treated as a runtime import on purpose (conservative, and simple).
 const STATEMENT = /\b(import|export)\s+(type\s+)?[^'"]*?\bfrom\s+'([^']+)'/g
 
 describe('Supabase boundary', () => {
