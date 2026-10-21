@@ -135,4 +135,15 @@ describe('error reporting through the Sentry SDK', () => {
     expect(values[values.length - 1]?.value).toBe('statement timeout')
     expect(sent[0].tags).toMatchObject({ area: 'write' })
   })
+
+  it('still reports a code bug while the browser says it is offline', async () => {
+    const sent = initWithFakeTransport()
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+
+    captureError(new TypeError('x is undefined'), 'view')
+    await Sentry.flush()
+    online.mockRestore()
+
+    expect(sent).toHaveLength(1)
+  })
 })

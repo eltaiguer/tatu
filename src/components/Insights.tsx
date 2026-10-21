@@ -161,14 +161,15 @@ export function Insights({
     let step: 'generate' | 'save' = 'generate'
     try {
       const result = await generateInsights(input, claudeApiKey)
-      step = 'save'
-      await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
+      // Shown even if saving fails: it was generated (and paid for).
       setCached({
         result,
         model: INSIGHTS_MODEL,
         generatedAt: new Date().toISOString(),
         isStale: false,
       })
+      step = 'save'
+      await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
     } catch (e) {
       if (step === 'generate') {
         reportAiError(e, 'insights')

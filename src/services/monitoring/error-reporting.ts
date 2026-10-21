@@ -100,11 +100,12 @@ export function initErrorReporting(): void {
   Sentry.init(sentryOptions(import.meta.env.VITE_SENTRY_DSN))
 }
 
-/** A lost connection: offline, or the browser's fetch failure messages. */
+/**
+ * A fetch that failed for lack of a connection, by the browser's messages.
+ * Not the offline flag: a code bug thrown while offline is still a bug (the
+ * user-facing text checks the flag itself).
+ */
 export function isNetworkError(error: unknown): boolean {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return true
-  }
   const message = errorMessage(error)
   // Safari's bare "Load failed" is anchored: "Preload failed" is not one.
   return /\bfailed to fetch\b|\bnetworkerror\b|(?:^|: )load failed$|\bnetwork request failed\b/i.test(

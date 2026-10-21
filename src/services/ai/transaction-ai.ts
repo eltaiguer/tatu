@@ -284,7 +284,7 @@ export interface AiEnrichmentOutcome {
   partialFailure?: string
 }
 
-export async function enrichTransactionsWithAi(
+async function enrichInBatches(
   inputs: AiEnrichmentInput[],
   config: AiConfig,
   context: AiCorrectionContext
@@ -316,6 +316,7 @@ export async function enrichTransactionsWithAi(
   const errors: unknown[] = []
   let reportedBug = false
   let batchCount = 0
+  const totalBatches = Math.ceil(inputs.length / BATCH_SIZE)
 
   for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
     batchCount += 1
@@ -361,10 +362,35 @@ export async function enrichTransactionsWithAi(
   // Every batch failed: a hard failure, rethrown as thrown (its type and
   // stack intact). Already reported above if it was a bug.
   if (errors.length === batchCount) {
-    throw first instanceof Error ? first : new Error(String(first))
+    throw new BatchFailure(
+      first instanceof Error ? first : new Error(errorMessage(first))
+    )
   }
   return {
     results,
-    partialFailure: `${errors.length} de ${batchCount} lotes fallaron: ${errorMessage(first)}`,
+    // A bad key stops the loop: the batches never sent failed too.
+    partialFailure: `${errors.length + totalBatches - batchCount} de ${totalBatches} lotes fallaron: ${errorMessage(first)}`,
   }
+}
+
+export async function enrichTransactionsWithAi(
+  inputs: AiEnrichmentInput[],
+  config: AiConfig,
+  context: AiCorrectionContext
+): Promise<AiEnrichmentOutcome> {
+  try {
+    return await enrichInBatches(inputs, config, context)
+  } catch (error) {
+    // Batch errors were reported inside the loop; this catches the rest
+    // (loading the SDK, building the prompt).
+    if (!(error instanceof BatchFailure) && isUnexpectedAiError(error)) {
+      captureError(error, 'ai')
+    }
+    throw error instanceof BatchFailure ? error.first : error
+  }
+}
+
+// Every batch failed: carries the first batch's error, already reported.
+class BatchFailure {
+  constructor(readonly first: Error) {}
 }

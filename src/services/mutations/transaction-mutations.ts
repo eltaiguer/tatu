@@ -363,7 +363,8 @@ export async function importTransactions(
       })
     } catch (closeError) {
       console.error('Could not complete import run record:', closeError)
-      captureError(closeError, 'import')
+      // After an account change the new token is expected to refuse it.
+      if (isWorkspaceOwner(repo.userId)) captureError(closeError, 'import')
     }
   }
 

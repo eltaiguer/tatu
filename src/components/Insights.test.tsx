@@ -285,6 +285,8 @@ describe('Insights', () => {
 
     fireEvent.click(await screen.findByText('Generar insights'))
     await screen.findByText('No se pudieron guardar los insights')
+    // Generated (and paid for) already: shown even though it wasn't saved.
+    expect(screen.getByText('Restaurantes domina tu gasto')).toBeInTheDocument()
     expect(screen.queryByText(failure.message)).not.toBeInTheDocument()
     expect(reporting.captureError).toHaveBeenCalledWith(failure, 'insights')
     expect(errorSpy).toHaveBeenCalledWith(failure)

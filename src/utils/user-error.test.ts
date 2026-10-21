@@ -35,6 +35,13 @@ describe('userErrorMessage', () => {
     ])
   })
 
+  it('tells an offline user about the connection, whatever the error', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+
+    expect(userErrorMessage(new Error('boom'), 'x')).toMatch(/Sin conexión/)
+  })
+
   it('does not report a network failure it tells the user about', () => {
     vi.mocked(captureError).mockClear()
     vi.spyOn(console, 'error').mockImplementation(() => {})

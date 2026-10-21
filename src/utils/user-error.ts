@@ -80,7 +80,8 @@ export function userErrorMessage(
   }
   console.error(error)
   // A lost connection is the user's network, and the text says so.
-  if (isNetworkError(error)) {
+  const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+  if (offline || isNetworkError(error)) {
     return 'Sin conexión con el servidor. Revisá tu conexión e intentá de nuevo.'
   }
   captureError(error, area)

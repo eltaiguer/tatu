@@ -804,6 +804,44 @@ describe('enrichTransactionsWithAi — partial batch failures', () => {
     expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
   })
 
+  it('reports a bug before the first batch, then rethrows it', async () => {
+    reporting.captureError.mockClear()
+    const malformed = { ...emptyContext, customCategories: null as never }
+
+    const error = await enrichTransactionsWithAi(
+      makeInputs(10),
+      baseConfig,
+      malformed
+    ).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(TypeError)
+    expect(reporting.captureError).toHaveBeenCalledWith(error, 'ai')
+  })
+
+  it('counts the batches a bad key left unsent as failed', async () => {
+    messagesCreateMock
+      .mockResolvedValueOnce(textResponse([]))
+      .mockRejectedValueOnce(
+        Object.assign(new Error('403 forbidden'), { status: 403 })
+      )
+
+    const { partialFailure } = await enrichTransactionsWithAi(
+      makeInputs(450),
+      baseConfig,
+      emptyContext
+    )
+
+    expect(partialFailure).toMatch(/^2 de 3 lotes fallaron/)
+  })
+
+  it('keeps the message of a non-Error rejection', async () => {
+    messagesCreateMock.mockRejectedValue({ message: '529 overloaded' })
+
+    await expect(
+      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
+    ).rejects.toThrow('529 overloaded')
+  })
+
   it('does not report a bad key', async () => {
     reporting.captureError.mockClear()
     messagesCreateMock.mockRejectedValue(new Error('401 invalid x-api-key'))

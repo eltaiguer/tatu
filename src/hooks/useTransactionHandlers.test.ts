@@ -2126,6 +2126,23 @@ describe('useTransactionHandlers — switching accounts mid-write', () => {
     expect(reporting.captureError).not.toHaveBeenCalled()
   })
 
+  it('does not report the refused completion of a run when the account changed', async () => {
+    const { repo, handlers } = signedIn()
+    repo.failOn('completeImportRun', {
+      when: () => {
+        workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+        return true
+      },
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await handlers
+      .handleTransactionsImported([makeTransaction('a')], makeImportContext())
+      .catch(() => {})
+
+    expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
   it("refuses A's undo once B is signed in, before sending anything", async () => {
     const { repo, handlers } = signedIn([makeTransaction('a')])
     const { removed } = await handlers.handleBulkDeleteTransactions(['a'])
