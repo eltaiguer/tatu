@@ -16,8 +16,8 @@ import { getUserRename } from '../../utils/transaction-display'
 const DIACRITICS = /[̀-ͯ]/g
 
 // Lowercase, accent-free, `*` as a separator ("MERPAGO*FOO" = "Merpago Foo"),
-// single spaces.
-function fold(text: string): string {
+// single spaces. Also how Insights compares a merchant name the model echoes.
+export function fold(text: string): string {
   return text
     .normalize('NFD')
     .replace(DIACRITICS, '')

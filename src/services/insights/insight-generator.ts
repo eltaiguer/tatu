@@ -6,6 +6,7 @@ import {
   buildInsightSystemPrompt,
   buildInsightUserMessage,
 } from './insight-prompt'
+import { fold } from '../merchants/merchant-key'
 
 export type InsightType =
   | 'bleeding_money'
@@ -57,34 +58,28 @@ function isKnownCategory(category: string, input: InsightInput): boolean {
   return input.categoryTotals.some((c) => c.category === category)
 }
 
-// How a merchant name is compared with what the model echoes: case, accents,
-// separators (" · ", " - ", " — ") and spacing may drift.
+// How a merchant name is compared with what the model echoes: the merchant
+// key's folding (case, accents, "*", spacing), and separators (" · ", " - ",
+// " — ") may drift too.
 function merchantMatchKey(name: string): string {
-  return name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+[·•|\-–—]\s+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return fold(name.replace(/\s+[·•|\-–—]\s+/g, ' '))
 }
 
-// The input's own spelling of the merchant the model named, if it is one.
+// The input's own spelling of the merchant the model named, if exactly one
+// input merchant matches it.
 function knownMerchant(
   merchant: string,
   input: InsightInput
 ): string | undefined {
   const wanted = merchantMatchKey(merchant)
-  return [
+  const names = new Set([
     ...input.topMerchants.map((m) => m.merchant),
     ...input.recurringCharges.map((r) => r.merchant),
-  ].find((name) => merchantMatchKey(name) === wanted)
+  ])
+  const matches = [...names].filter((name) => merchantMatchKey(name) === wanted)
+  return matches.length === 1 ? matches[0] : undefined
 }
 
-// Every numeric/category/merchant field is verified against the InsightInput
-// that was actually sent — an insight referencing a number, category, or
-// merchant not present in the input is dropped rather than trusted (same
-// discipline as validateCategory() in transaction-ai.ts).
 function sanitizeInsight(raw: unknown, input: InsightInput): Insight | null {
   if (typeof raw !== 'object' || raw === null) return null
   const item = raw as Record<string, unknown>

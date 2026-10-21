@@ -168,6 +168,51 @@ describe('parseInsightsResponse', () => {
     }
   })
 
+  it('drops a merchant that matches two input merchants once folded', () => {
+    const input: InsightInput = {
+      ...baseInput,
+      topMerchants: [
+        { merchant: 'Uber - Eats', amount: 15, count: 1 },
+        { merchant: 'UBER EATS', amount: 10, count: 1 },
+      ],
+    }
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'bleeding_money',
+          title: 'Delivery',
+          narrative: 'x',
+          merchant: 'uber eats',
+          severity: 'low',
+        },
+      ],
+    })
+    expect(parseInsightsResponse(text, input).insights[0].merchant).toBe(
+      undefined
+    )
+  })
+
+  it('matches a merchant echoed with a space where the key folds a "*"', () => {
+    const input: InsightInput = {
+      ...baseInput,
+      topMerchants: [{ merchant: 'MERPAGO*FOO', amount: 15, count: 1 }],
+    }
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'bleeding_money',
+          title: 'Foo',
+          narrative: 'x',
+          merchant: 'MERPAGO FOO',
+          severity: 'low',
+        },
+      ],
+    })
+    expect(parseInsightsResponse(text, input).insights[0].merchant).toBe(
+      'MERPAGO*FOO'
+    )
+  })
+
   it('drops insights missing a title, narrative, or valid type', () => {
     const text = JSON.stringify({
       insights: [
