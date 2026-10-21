@@ -13,7 +13,7 @@ import {
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
-  aiErrorMessage,
+  importAiErrorMessage,
   UserFacingError,
   userErrorMessage,
 } from '../utils/user-error'
@@ -91,9 +91,12 @@ interface ImportCSVProps {
      * Set when the import succeeded but AI enrichment did not, so the user can
      * tell a dead API key apart from the model categorizing badly.
      */
-    /** Enrichment did not run at all. */
-    aiError?: string
-    /** Enrichment ran but some batches failed; the rest were applied. */
+    /** Enrichment did not run at all: what it threw (`aiErrorMessage`). */
+    aiError?: unknown
+    /**
+     * Enrichment ran but some batches failed; the rest were applied. Already
+     * the text to show ("2 de 12 lotes fallaron (…)").
+     */
     aiPartial?: string
   }>
 }
@@ -224,7 +227,7 @@ export function ImportCSV({
             // Local-only path never runs AI enrichment.
             repaired: [] as Transaction[],
             repairsFailed: 0,
-            aiError: undefined as string | undefined,
+            aiError: undefined as unknown,
             aiPartial: undefined as string | undefined,
           }
 
@@ -250,13 +253,13 @@ export function ImportCSV({
       // dead API key looks identical to poor categorization. Total failure
       // and partial failure need different wording: telling the user "no
       // disponible" when 10 of 12 batches did enrich is simply wrong.
-      if (aiError) {
+      if (aiError !== undefined) {
         toast.warning(
-          `Categorización con IA no disponible: ${aiErrorMessage(aiError)}. Se usaron las reglas de categorización.`
+          `Categorización con IA no disponible: ${importAiErrorMessage(aiError)}. Se usaron las reglas de categorización.`
         )
       } else if (aiPartial) {
         toast.warning(
-          `Categorización con IA incompleta: ${aiErrorMessage(aiPartial)}. El resto se categorizó con reglas.`
+          `Categorización con IA incompleta: ${aiPartial}. El resto se categorizó con reglas.`
         )
       }
     } catch (error) {

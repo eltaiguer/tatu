@@ -1,6 +1,6 @@
 import type { Transaction } from '../../models'
 import type { AiConfig } from './ai-config'
-import { firstTextBlock } from './text-block'
+import { createClaudeClient, type ClaudeClient } from './claude-client'
 
 const MAX_CC_SAMPLES = 180
 const MAX_BA_SAMPLES = 120
@@ -40,17 +40,12 @@ function formatSamples(samples: DescriptionSample[]): string {
     .join('\n')
 }
 
+/** `client` is the real Claude client unless a test hands in a fake. */
 export async function analyzeTransactionPatterns(
   transactions: Transaction[],
-  config: AiConfig
+  config: AiConfig,
+  client: ClaudeClient = createClaudeClient(config.apiKey)
 ): Promise<string> {
-  // Loaded on demand so the SDK stays out of the startup bundle (#62).
-  const { default: Anthropic } = await import('@anthropic-ai/sdk')
-  const client = new Anthropic({
-    apiKey: config.apiKey,
-    dangerouslyAllowBrowser: true,
-  })
-
   const creditCard = deduplicateByDescription(
     transactions.filter((tx) => tx.source === 'credit_card')
   ).slice(0, MAX_CC_SAMPLES)
@@ -84,14 +79,12 @@ ${formatSamples(creditCard) || '(ninguna)'}
 ${formatSamples(bankAccount) || '(ninguna)'}`
 
   // Thinking shares max_tokens with the analysis on the 5.5 models.
-  const response = await client.messages.create({
+  return client.complete({
     model: config.model,
-    max_tokens: 16000,
-    output_config: { effort: 'medium' },
     system:
       'You are a prompt engineer analyzing bank transaction data to write reusable AI categorization instructions.',
-    messages: [{ role: 'user', content: userMessage }],
+    user: userMessage,
+    maxTokens: 16000,
+    effort: 'medium',
   })
-
-  return firstTextBlock(response)
 }

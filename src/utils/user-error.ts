@@ -3,6 +3,7 @@ import {
   errorMessage,
   isNetworkError,
 } from '../services/monitoring/error-reporting'
+import { AiError, browserFailureAsAiError } from '../services/ai/ai-error'
 
 // Errors whose message is already written for the user (Spanish, no jargon).
 // Anything else — Supabase/PostgREST text, fetch failures — is translated by
@@ -90,69 +91,61 @@ export function userErrorMessage(
 
 const AI_UNEXPECTED = 'error inesperado del servicio de IA'
 
-// The Anthropic SDK reports failures in English with status codes; turn the
-// ones users can act on into Spanish. Messages the app itself wrote (already
-// Spanish) pass through, and a partial-failure prefix ("2 de 12 lotes
-// fallaron: …") is kept so a partial failure never reads like an outage.
-export function aiErrorMessage(raw: string): string {
-  const partial = raw.match(/^(\d+ de \d+ lotes fallaron): ([\s\S]*)$/)
-  if (partial) {
-    return `${partial[1]} (${aiErrorMessage(partial[2])})`
-  }
-  if (
-    /^(La respuesta|Respuesta inesperada|No se pudo|El modelo rechazó)/.test(
-      raw
-    )
-  ) {
-    return raw
-  }
-  const text = raw.toLowerCase()
-  if (/\b40[13]\b|invalid x-api-key|authentication|api key/.test(text)) {
-    return 'la clave API de Anthropic no es válida'
-  }
-  if (/\b429\b|rate limit|rate_limit/.test(text)) {
-    return 'se alcanzó el límite de uso de la API'
-  }
-  if (/credit|billing|insufficient/.test(text)) {
-    return 'la cuenta de Anthropic no tiene saldo'
-  }
-  if (/\b(?:529|50[0-9])\b|overloaded|unavailable/.test(text)) {
-    return 'el servicio de IA no está disponible en este momento'
-  }
-  // The SDK loads on demand; after a deploy its old chunk is gone (#62).
-  if (
-    /dynamically imported module|importing a module script failed/.test(text)
-  ) {
-    return 'la app se actualizó; recargá la página'
-  }
-  if (/failed to fetch|network|connection|timed out|aborted/.test(text)) {
-    return 'sin conexión con Anthropic'
-  }
-  return AI_UNEXPECTED
+/**
+ * The text to show for an AI failure. The Claude client
+ * (services/ai/claude-client.ts) has already turned every failure the user
+ * can act on into an `AiError` with a Spanish message; anything else is a
+ * bug or a failure nobody explained, and its text never reaches the user.
+ */
+export function aiErrorMessage(error: unknown): string {
+  if (error instanceof AiError) return error.message
+  return browserFailureAsAiError(error)?.message ?? AI_UNEXPECTED
 }
 
-// A JavaScript engine error is a bug in our code whatever its message says
-// ("reading 'connection'" is not a lost connection).
-const CHUNK_LOAD_FAILED =
-  /dynamically imported module|importing a module script failed/i
+/**
+ * For the [Dev] panels, which are diagnostics: an AI failure as the user
+ * would read it, anything else (a bug in the panel's own code) as it is.
+ */
+export function aiDiagnosticMessage(error: unknown): string {
+  return error instanceof AiError ? error.message : errorMessage(error)
+}
 
-const CODE_BUG_TYPES = [TypeError, ReferenceError, RangeError, SyntaxError]
+/**
+ * `aiErrorMessage` for the import, which can say what to do about a cut-off
+ * answer: send fewer rows at a time.
+ */
+export function importAiErrorMessage(error: unknown): string {
+  const message = aiErrorMessage(error)
+  return error instanceof AiError && error.kind === 'truncated'
+    ? `${message}; probá importar menos transacciones a la vez`
+    : message
+}
 
-// Whether an AI failure is worth reporting as a bug: a code bug, an unknown
-// failure, or one the app raised itself (e.g. a malformed model response). A
-// bad key, a rate limit, no credit or an outage is the user's setup or
-// Anthropic's, and the toast already explains it.
+/**
+ * Some batches of an AI run failed and the rest were applied. Keeps how many,
+ * so a partial failure never reads like an outage.
+ */
+export function aiPartialFailureMessage(
+  failed: number,
+  total: number,
+  firstError: unknown,
+  describe: (error: unknown) => string = aiErrorMessage
+): string {
+  return `${failed} de ${total} lotes fallaron (${describe(firstError)})`
+}
+
+/**
+ * Whether an AI failure is worth reporting as a bug: an answer not in the
+ * shape asked for, or anything the Claude client did not explain (a code
+ * bug, a request the API rejected). A bad key, a rate limit, no credit, an
+ * outage, a lost connection, a truncated or refused answer and a chunk gone
+ * after a deploy are the user's setup, Anthropic's or the data's, and the
+ * message already says so.
+ */
 export function isUnexpectedAiError(error: unknown): boolean {
-  const raw = errorMessage(error)
-  // A lost connection or a chunk gone after a deploy (both TypeErrors), and
-  // a refusal that depends on the user's data, are not code bugs.
-  if (isNetworkError(error) || CHUNK_LOAD_FAILED.test(raw)) return false
-  if (/^(El modelo rechazó|La respuesta del modelo quedó truncada)/.test(raw)) {
-    return false
-  }
-  if (CODE_BUG_TYPES.some((type) => error instanceof type)) return true
-  const message = aiErrorMessage(raw)
-  return message === raw || message === AI_UNEXPECTED
+  if (error instanceof AiError) return error.kind === 'bad_response'
+  // Belt and braces for a failure that reached here without the client.
+  return browserFailureAsAiError(error) === undefined
 }
 
 /** Reports an AI failure only when it is a bug (see isUnexpectedAiError). */

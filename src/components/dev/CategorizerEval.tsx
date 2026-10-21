@@ -14,6 +14,8 @@ import {
   classifyWithJev,
 } from '../../services/ai/jev-classifier'
 import { JEV_MODEL } from '../../services/ai/models'
+import { errorMessage } from '../../services/monitoring/error-reporting'
+import { devFailureMessage } from './dev-failure'
 import { resolveCategory } from '../../services/categories/category-registry'
 import {
   labelledRows,
@@ -114,7 +116,13 @@ export function CategorizerEval({
   const [jevKey, setJevKey] = useState('')
   const [jev, setJev] = useState<EngineRun>(idle)
 
-  async function runEngine(set: (run: EngineRun) => void, classify: Classify) {
+  // A run either scores or shows one line of error, written by `describe`
+  // (the panel already names the engine).
+  async function runEngine(
+    set: (run: EngineRun) => void,
+    classify: Classify,
+    describe: (error: unknown) => string
+  ) {
     set({ ...idle(), state: 'running' })
     try {
       const { predictions, partialFailure } = await classify(sample)
@@ -131,54 +139,65 @@ export function CategorizerEval({
         error: partialFailure ?? null,
       })
     } catch (e) {
-      set({
-        ...idle(),
-        state: 'error',
-        error: e instanceof Error ? e.message : String(e),
-      })
+      set({ ...idle(), state: 'error', error: describe(e) })
     }
   }
 
+  const evalFailure = (e: unknown) => devFailureMessage(e, '[Dev] evaluation')
+
   const handleRules = () =>
-    runEngine(setRules, async (s) => ({ predictions: rulePredictions(s) }))
+    runEngine(
+      setRules,
+      async (s) => ({ predictions: rulePredictions(s) }),
+      evalFailure
+    )
 
   const handleClaude = () =>
-    runEngine(setClaude, async (s) => {
-      const config: AiConfig = {
-        apiKey: claudeApiKey,
-        enabled: true,
-        model: aiModel,
-      }
-      // No correction examples and no custom patterns: the labels came
-      // from those, so handing them to the model would score its memory.
-      const { results, partialFailure } = await enrichTransactionsWithAi(
-        toInputs(s),
-        config,
-        {
-          descriptionExamples: [],
-          categoryExamples: [],
-          customCategories: listCustomCategories(),
-          customPatterns: [],
+    runEngine(
+      setClaude,
+      async (s) => {
+        const config: AiConfig = {
+          apiKey: claudeApiKey,
+          enabled: true,
+          model: aiModel,
         }
-      )
-      return {
-        predictions: new Map([...results].map(([id, r]) => [id, r.category])),
-        partialFailure,
-      }
-    })
+        // No correction examples and no custom patterns: the labels came
+        // from those, so handing them to the model would score its memory.
+        const { results, partialFailure } = await enrichTransactionsWithAi(
+          toInputs(s),
+          config,
+          {
+            descriptionExamples: [],
+            categoryExamples: [],
+            customCategories: listCustomCategories(),
+            customPatterns: [],
+          }
+        )
+        return {
+          predictions: new Map([...results].map(([id, r]) => [id, r.category])),
+          partialFailure,
+        }
+      },
+      evalFailure
+    )
 
+  // Jev's errors (an OpenRouter call) are already written for this panel.
   const handleJev = () =>
-    runEngine(setJev, async (s) => {
-      const { results, partialFailure } = await classifyWithJev(
-        toInputs(s),
-        { apiKey: jevKey, model: JEV_MODEL },
-        listCustomCategories()
-      )
-      return {
-        predictions: new Map([...results].map(([id, r]) => [id, r.category])),
-        partialFailure,
-      }
-    })
+    runEngine(
+      setJev,
+      async (s) => {
+        const { results, partialFailure } = await classifyWithJev(
+          toInputs(s),
+          { apiKey: jevKey, model: JEV_MODEL },
+          listCustomCategories()
+        )
+        return {
+          predictions: new Map([...results].map(([id, r]) => [id, r.category])),
+          partialFailure,
+        }
+      },
+      errorMessage
+    )
 
   const engines: Array<{ key: string; name: string; run: EngineRun }> = [
     { key: 'rules', name: 'Reglas', run: rules },

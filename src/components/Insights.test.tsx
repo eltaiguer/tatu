@@ -6,6 +6,7 @@ import { Category } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 import type { InsightsResult } from '../services/insights/insight-generator'
 import { UserFacingError } from '../utils/user-error'
+import { AiError } from '../services/ai/ai-error'
 
 const { getCachedInsightsMock, saveCachedInsightsMock, generateInsightsMock } =
   vi.hoisted(() => ({
@@ -235,7 +236,7 @@ describe('Insights', () => {
     getCachedInsightsMock.mockResolvedValue(null)
     const bug = new TypeError('x is undefined')
     generateInsightsMock
-      .mockRejectedValueOnce(new Error('401 invalid x-api-key'))
+      .mockRejectedValueOnce(new AiError('auth'))
       .mockRejectedValueOnce(bug)
     renderInsights()
 

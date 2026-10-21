@@ -188,9 +188,15 @@ export interface ImportResult {
   repaired: Transaction[]
   /** Repairs the server did not confirm; importing again retries them. */
   repairsFailed?: number
-  /** Enrichment did not run at all. */
-  aiError?: string
-  /** Enrichment ran but some batches failed; the rest were applied. */
+  /**
+   * Enrichment did not run at all: what it threw, for `aiErrorMessage` to
+   * explain (an `AiError` reads as its kind; anything else as unexpected).
+   */
+  aiError?: unknown
+  /**
+   * Enrichment ran but some batches failed; the rest were applied. The text
+   * to show ("2 de 12 lotes fallaron (…)").
+   */
   aiPartial?: string
 }
 
@@ -272,7 +278,7 @@ export async function importTransactions(
   // the correction context are the signed-in user's.
   const aiConfig = getAiConfig()
   let toStore = added
-  let aiError: string | undefined
+  let aiError: unknown
   let aiPartial: string | undefined
   if (aiConfig?.enabled && aiConfig.apiKey && added.length > 0) {
     const toEnrich = added.filter((tx) => !hasUserOverride(tx))
@@ -293,8 +299,7 @@ export async function importTransactions(
         toStore = applyAiEnrichment(added, outcome.results)
         aiPartial = outcome.partialFailure
       } catch (error) {
-        aiError =
-          error instanceof Error ? error.message : 'Error desconocido de IA'
+        aiError = error
         console.error('AI enrichment failed during import:', error)
       }
       assertOwner(repo)

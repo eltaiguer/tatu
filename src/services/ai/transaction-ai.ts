@@ -3,10 +3,19 @@ import type { Transaction } from '../../models'
 import type { CustomCategory } from '../categories/category-store'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { AiConfig } from './ai-config'
-import { firstTextBlock, type ClaudeResponseLike } from './text-block'
+import { AiError } from './ai-error'
+import {
+  createClaudeClient,
+  parseModelJson,
+  type ClaudeClient,
+} from './claude-client'
 import { resolveBuiltinAlias } from '../categories/category-aliases'
 import { captureError, errorMessage } from '../monitoring/error-reporting'
-import { isUnexpectedAiError } from '../../utils/user-error'
+import {
+  aiPartialFailureMessage,
+  importAiErrorMessage,
+  isUnexpectedAiError,
+} from '../../utils/user-error'
 
 export interface AiEnrichmentInput {
   id: string
@@ -213,73 +222,55 @@ export function applyAiEnrichment(
   })
 }
 
-type AiEnrichmentBatchResponse = ClaudeResponseLike
-
-/** Parses one batch response into results, or throws a diagnosable error. */
+/** Parses one batch's answer into results, or throws an `AiError`. */
 function parseBatchResponse(
-  response: AiEnrichmentBatchResponse,
+  text: string,
   inputs: AiEnrichmentInput[],
   context: AiCorrectionContext
 ): AiEnrichmentResult[] {
-  // A response cut off at max_tokens leaves invalid JSON behind. Saying so
-  // beats letting JSON.parse fail on the fragment with an opaque message.
-  if (response.stop_reason === 'max_tokens') {
-    throw new Error(
-      'La respuesta del modelo quedó truncada (límite de tokens alcanzado). ' +
-        'Probá importar menos transacciones a la vez.'
-    )
-  }
-
-  const text = firstTextBlock(response)
-
-  let parsed: Array<{
-    id: string
-    displayDescription: string
-    category: string
-    confidence?: number
-  }>
-  try {
-    // Claude occasionally wraps output in markdown fences despite instructions
-    const raw = text.trim()
-    const jsonText = raw.startsWith('[')
-      ? raw
-      : (raw.match(/\[[\s\S]*\]/)?.[0] ?? raw)
-    parsed = JSON.parse(jsonText) as typeof parsed
-  } catch (e) {
-    throw new Error(
-      `No se pudo parsear la respuesta del modelo: ${e instanceof Error ? e.message : String(e)}`
+  const parsed = parseModelJson(text, 'array')
+  if (!Array.isArray(parsed)) {
+    throw new AiError(
+      'bad_response',
+      'respuesta inesperada del modelo (no es una lista)'
     )
   }
 
   const results: AiEnrichmentResult[] = []
-  for (const item of parsed) {
-    if (!item.id || typeof item.displayDescription !== 'string') continue
+  // Only an item without a string id is skipped (there is no row to put
+  // it on). A field of the wrong type is ignored: a category that is not a
+  // string is no answer (uncategorized, as when it is missing), and a name
+  // that is not a string leaves the row's description.
+  for (const raw of parsed as unknown[]) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const item = raw as Record<string, unknown>
+    if (typeof item.id !== 'string' || !item.id) continue
+    const id = item.id
+    const category = typeof item.category === 'string' ? item.category : ''
+    const name =
+      typeof item.displayDescription === 'string'
+        ? item.displayDescription.trim()
+        : ''
     const rawConfidence =
       typeof item.confidence === 'number' ? item.confidence : 0.7
     results.push({
-      id: item.id,
-      category: validateCategory(item.category ?? '', context.customCategories),
+      id,
+      category: validateCategory(category, context.customCategories),
       displayDescription:
-        item.displayDescription.trim() ||
-        (inputs.find((t) => t.id === item.id)?.description ?? item.id),
+        name || (inputs.find((t) => t.id === id)?.description ?? id),
       confidence: Math.min(MAX_AI_CONFIDENCE, Math.max(0, rawConfidence)),
     })
   }
   return results
 }
 
-/** 401/403 mean the credential is wrong; retrying cannot help. */
-function isNonRetryable(error: unknown): boolean {
-  const status = (error as { status?: number })?.status
-  return status === 401 || status === 403
-}
-
 export interface AiEnrichmentOutcome {
   results: Map<string, AiEnrichmentResult>
   /**
-   * Set when some batches failed but others succeeded. The successful results
-   * are still returned — a single bad batch must not discard a whole import's
-   * worth of enrichment.
+   * Set when some batches failed but others succeeded, as the text to show
+   * ("2 de 12 lotes fallaron (…)", `aiPartialFailureMessage`). The
+   * successful results are still returned — a single bad batch must not
+   * discard a whole import's worth of enrichment.
    */
   partialFailure?: string
 }
@@ -287,15 +278,9 @@ export interface AiEnrichmentOutcome {
 async function enrichInBatches(
   inputs: AiEnrichmentInput[],
   config: AiConfig,
-  context: AiCorrectionContext
+  context: AiCorrectionContext,
+  client: ClaudeClient
 ): Promise<AiEnrichmentOutcome> {
-  // Loaded on demand so the SDK stays out of the startup bundle (#62).
-  const { default: Anthropic } = await import('@anthropic-ai/sdk')
-  const client = new Anthropic({
-    apiKey: config.apiKey,
-    dangerouslyAllowBrowser: true,
-  })
-
   // Identical across every batch (it depends only on customCategories), which
   // makes it a stable cache prefix. Volatile per-batch data lives in the user
   // message, after this breakpoint.
@@ -304,13 +289,7 @@ async function enrichInBatches(
   // 5.5 models (512 tokens); it was below Haiku 4.5's 4,096, where the
   // breakpoint was silently inert. Verify with usage.cache_read_input_tokens
   // before claiming a saving.
-  const systemPrompt = [
-    {
-      type: 'text' as const,
-      text: buildSystemPrompt(context.customCategories),
-      cache_control: { type: 'ephemeral' as const },
-    },
-  ]
+  const systemPrompt = buildSystemPrompt(context.customCategories)
 
   const results = new Map<string, AiEnrichmentResult>()
   const errors: unknown[] = []
@@ -326,15 +305,16 @@ async function enrichInBatches(
       // The 5.5 models think by default and the thinking counts against
       // max_tokens; this is classification, so the lowest effort keeps the
       // output budget for the JSON.
-      const response = (await client.messages.create({
+      const text = await client.complete({
         model: config.model,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        output_config: { effort: 'low' },
         system: systemPrompt,
-        messages: [{ role: 'user', content: buildUserMessage(batch, context) }],
-      })) as AiEnrichmentBatchResponse
+        cacheSystem: true,
+        user: buildUserMessage(batch, context),
+        maxTokens: MAX_OUTPUT_TOKENS,
+        effort: 'low',
+      })
 
-      for (const result of parseBatchResponse(response, inputs, context)) {
+      for (const result of parseBatchResponse(text, inputs, context)) {
         results.set(result.id, result)
       }
     } catch (error) {
@@ -346,19 +326,21 @@ async function enrichInBatches(
         reportedBug = true
       }
 
-      // Batch isolation is for transient faults. A bad key or revoked
-      // permission fails identically for every remaining batch, so carrying
-      // on would fire one doomed request per batch — 20 of them on a
-      // 3,000-row import — before the user sees the same message. The SDK
-      // does not retry these either.
-      if (isNonRetryable(error)) {
+      // Batch isolation is for transient faults. A bad key or an empty
+      // account fails identically for every remaining batch, so carrying on
+      // would fire one doomed request per batch — 20 of them on a 3,000-row
+      // import — before the user sees the same message.
+      if (error instanceof AiError && !error.retryable) {
         break
       }
     }
   }
 
   if (errors.length === 0) return { results }
-  const [first] = errors
+  // The failure that stopped the run explains it best (a bad key after a
+  // rate limit is the reason nothing more was sent); otherwise the first.
+  const first =
+    errors.find((e) => e instanceof AiError && !e.retryable) ?? errors[0]
   // Every batch failed: a hard failure, rethrown as thrown (its type and
   // stack intact). Already reported above if it was a bug.
   if (errors.length === batchCount) {
@@ -369,20 +351,30 @@ async function enrichInBatches(
   return {
     results,
     // A bad key stops the loop: the batches never sent failed too.
-    partialFailure: `${errors.length + totalBatches - batchCount} de ${totalBatches} lotes fallaron: ${errorMessage(first)}`,
+    partialFailure: aiPartialFailureMessage(
+      errors.length + totalBatches - batchCount,
+      totalBatches,
+      first,
+      importAiErrorMessage
+    ),
   }
 }
 
+/**
+ * Enriches the rows in batches of `BATCH_SIZE`. `client` is the real Claude
+ * client unless a test hands in a fake.
+ */
 export async function enrichTransactionsWithAi(
   inputs: AiEnrichmentInput[],
   config: AiConfig,
-  context: AiCorrectionContext
+  context: AiCorrectionContext,
+  client: ClaudeClient = createClaudeClient(config.apiKey)
 ): Promise<AiEnrichmentOutcome> {
   try {
-    return await enrichInBatches(inputs, config, context)
+    return await enrichInBatches(inputs, config, context, client)
   } catch (error) {
     // Batch errors were reported inside the loop; this catches the rest
-    // (loading the SDK, building the prompt).
+    // (building the prompt).
     if (!(error instanceof BatchFailure) && isUnexpectedAiError(error)) {
       captureError(error, 'ai')
     }

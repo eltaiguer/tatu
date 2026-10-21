@@ -1,18 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { Transaction } from '../../models'
-
-const { messagesCreateMock } = vi.hoisted(() => ({
-  messagesCreateMock: vi.fn(),
-}))
-
-vi.mock('@anthropic-ai/sdk', () => {
-  return {
-    default: class {
-      messages = { create: messagesCreateMock }
-    },
-  }
-})
-
+import { fakeClaudeClient } from '../../test/fake-claude-client'
+import { AiError } from './ai-error'
 import { analyzeTransactionPatterns } from './prompt-analysis'
 
 function tx(id: string, source: Transaction['source']): Transaction {
@@ -31,46 +20,39 @@ function tx(id: string, source: Transaction['source']): Transaction {
 const config = { apiKey: 'sk-test', enabled: true, model: 'claude-haiku-5-5' }
 
 describe('analyzeTransactionPatterns', () => {
-  beforeEach(() => {
-    messagesCreateMock.mockReset()
-  })
-
-  it('returns the first text block even when the model thinks first', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [
-        { type: 'thinking', thinking: '', signature: 'sig' },
-        { type: 'text', text: '# PREFIX PATTERNS' },
-      ],
-      stop_reason: 'end_turn',
-    })
+  it("returns the model's analysis", async () => {
+    const client = fakeClaudeClient(() => '# PREFIX PATTERNS')
 
     await expect(
-      analyzeTransactionPatterns([tx('A', 'credit_card')], config)
+      analyzeTransactionPatterns([tx('A', 'credit_card')], config, client)
     ).resolves.toBe('# PREFIX PATTERNS')
   })
 
-  it('leaves the output budget room for thinking and the analysis', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: 'ok' }],
-      stop_reason: 'end_turn',
-    })
+  it('sends the samples to the chosen model with room to think', async () => {
+    const client = fakeClaudeClient(() => 'ok')
 
-    await analyzeTransactionPatterns([tx('A', 'bank_account')], config)
+    await analyzeTransactionPatterns(
+      [tx('CARD ROW', 'credit_card'), tx('BANK ROW', 'bank_account')],
+      config,
+      client
+    )
 
-    const params = messagesCreateMock.mock.calls[0][0]
-    expect(params.model).toBe('claude-haiku-5-5')
-    expect(params.max_tokens).toBeGreaterThanOrEqual(16000)
-    expect(params.output_config).toEqual({ effort: 'medium' })
+    const [request] = client.requests
+    expect(request.model).toBe('claude-haiku-5-5')
+    expect(request.maxTokens).toBeGreaterThanOrEqual(16000)
+    expect(request.effort).toBe('medium')
+    expect(request.system).toMatch(/^You are a prompt engineer/)
+    expect(request.user).toContain('CARD ROW | uncategorized')
+    expect(request.user).toContain('BANK ROW | uncategorized')
   })
 
-  it('reports a truncated analysis instead of showing it as complete', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: '# PREFIX PATTERNS (cut' }],
-      stop_reason: 'max_tokens',
+  it('passes a truncated analysis on as a failure, never as complete', async () => {
+    const client = fakeClaudeClient(() => {
+      throw new AiError('truncated')
     })
 
     await expect(
-      analyzeTransactionPatterns([tx('A', 'credit_card')], config)
+      analyzeTransactionPatterns([tx('A', 'credit_card')], config, client)
     ).rejects.toThrow(/truncada/)
   })
 })
