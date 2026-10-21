@@ -3,32 +3,31 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { TransactionFilters } from './TransactionFilters'
 import { resolveCategory } from '../services/categories/category-registry'
+import {
+  DEFAULT_URL_FILTERS,
+  hasActiveFilters,
+} from '../services/filters/url-filters'
+import type { FilterState } from '../services/filters/transaction-filter'
 import { replaceCustomCategories } from '../services/categories/category-store'
 
 type FilterProps = ComponentProps<typeof TransactionFilters>
 
-function renderFilters(overrides: Partial<FilterProps> = {}) {
+function renderFilters(
+  filters: Partial<FilterState> = {},
+  overrides: Partial<FilterProps> = {}
+) {
+  const state: FilterState = {
+    ...DEFAULT_URL_FILTERS,
+    period: { mode: 'all' },
+    ...filters,
+  }
   const props: FilterProps = {
-    searchTerm: '',
-    dateFromFilter: '',
-    dateToFilter: '',
-    categoryFilters: [],
-    accountFilters: [],
-    currencyFilter: 'all',
-    typeFilter: 'all',
-    minAmount: '',
-    maxAmount: '',
+    filters: state,
+    hasActiveFilters: hasActiveFilters(state),
+    dateRange: { from: '', to: '' },
     availableCategories: ['groceries', 'restaurants'],
-    hasActiveFilters: false,
-    onSearchChange: vi.fn(),
-    onDateFromChange: vi.fn(),
-    onDateToChange: vi.fn(),
-    onCategoryFiltersChange: vi.fn(),
-    onAccountFiltersChange: vi.fn(),
-    onCurrencyChange: vi.fn(),
-    onTypeChange: vi.fn(),
-    onMinAmountChange: vi.fn(),
-    onMaxAmountChange: vi.fn(),
+    onChange: vi.fn(),
+    onDateBoundChange: vi.fn(),
     onClearAll: vi.fn(),
     ...overrides,
   }
@@ -58,7 +57,7 @@ describe('TransactionFilters', () => {
       { target: { value: 'disco' } }
     )
 
-    expect(props.onSearchChange).toHaveBeenCalledWith('disco')
+    expect(props.onChange).toHaveBeenCalledWith({ search: 'disco' })
   })
 
   describe('category filter', () => {
@@ -71,44 +70,42 @@ describe('TransactionFilters', () => {
       fireEvent.click(screen.getByLabelText('Filtro categoría'))
       fireEvent.click(screen.getByRole('button', { name: restaurants }))
 
-      expect(props.onCategoryFiltersChange).toHaveBeenCalledWith([
-        'restaurants',
-      ])
+      expect(props.onChange).toHaveBeenCalledWith({
+        categories: ['restaurants'],
+      })
     })
 
     it('keeps already chosen categories when adding another', () => {
-      const props = renderFilters({ categoryFilters: ['groceries'] })
+      const props = renderFilters({ categories: ['groceries'] })
 
       fireEvent.click(screen.getByLabelText('Filtro categoría'))
       fireEvent.click(screen.getByRole('button', { name: restaurants }))
 
-      expect(props.onCategoryFiltersChange).toHaveBeenCalledWith([
-        'groceries',
-        'restaurants',
-      ])
+      expect(props.onChange).toHaveBeenCalledWith({
+        categories: ['groceries', 'restaurants'],
+      })
     })
 
     it('removes a chosen category when picked again', () => {
-      const props = renderFilters({ categoryFilters: ['groceries'] })
+      const props = renderFilters({ categories: ['groceries'] })
 
       fireEvent.click(screen.getByLabelText('Filtro categoría'))
       fireEvent.click(screen.getByRole('button', { name: groceries }))
 
-      expect(props.onCategoryFiltersChange).toHaveBeenCalledWith([])
+      expect(props.onChange).toHaveBeenCalledWith({ categories: [] })
     })
 
     it('shows the chosen category as a removable chip', () => {
       const props = renderFilters({
-        categoryFilters: ['groceries', 'restaurants'],
-        hasActiveFilters: true,
+        categories: ['groceries', 'restaurants'],
       })
 
       expect(screen.getByLabelText('Filtro categoría')).toHaveTextContent('· 2')
       fireEvent.click(screen.getByLabelText(`Quitar filtro ${groceries}`))
 
-      expect(props.onCategoryFiltersChange).toHaveBeenCalledWith([
-        'restaurants',
-      ])
+      expect(props.onChange).toHaveBeenCalledWith({
+        categories: ['restaurants'],
+      })
     })
   })
 
@@ -119,18 +116,17 @@ describe('TransactionFilters', () => {
       fireEvent.click(screen.getByLabelText('Filtro cuenta'))
       fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }))
 
-      expect(props.onAccountFiltersChange).toHaveBeenCalledWith(['credit_card'])
+      expect(props.onChange).toHaveBeenCalledWith({ accounts: ['credit_card'] })
     })
 
     it('removes the account via its chip', () => {
       const props = renderFilters({
-        accountFilters: ['credit_card', 'bank_account'],
-        hasActiveFilters: true,
+        accounts: ['credit_card', 'bank_account'],
       })
 
       fireEvent.click(screen.getByLabelText('Quitar filtro Cuenta bancaria'))
 
-      expect(props.onAccountFiltersChange).toHaveBeenCalledWith(['credit_card'])
+      expect(props.onChange).toHaveBeenCalledWith({ accounts: ['credit_card'] })
     })
   })
 
@@ -139,22 +135,19 @@ describe('TransactionFilters', () => {
       const props = renderFilters()
 
       fireEvent.click(segment('Tipo de transacción', 'Gastos'))
-      expect(props.onTypeChange).toHaveBeenLastCalledWith('debit')
+      expect(props.onChange).toHaveBeenLastCalledWith({ type: 'debit' })
 
       fireEvent.click(segment('Tipo de transacción', 'Ingresos'))
-      expect(props.onTypeChange).toHaveBeenLastCalledWith('credit')
+      expect(props.onChange).toHaveBeenLastCalledWith({ type: 'credit' })
     })
 
     it('shows the active type and clears it via its chip', () => {
-      const props = renderFilters({
-        typeFilter: 'debit',
-        hasActiveFilters: true,
-      })
+      const props = renderFilters({ type: 'debit' })
 
       expect(segment('Tipo de transacción', 'Gastos')).toBeChecked()
       fireEvent.click(screen.getByLabelText('Quitar filtro Gastos'))
 
-      expect(props.onTypeChange).toHaveBeenCalledWith('all')
+      expect(props.onChange).toHaveBeenCalledWith({ type: 'all' })
     })
   })
 
@@ -163,21 +156,18 @@ describe('TransactionFilters', () => {
       const props = renderFilters()
 
       fireEvent.click(segment('Moneda', 'US$'))
-      expect(props.onCurrencyChange).toHaveBeenLastCalledWith('USD')
+      expect(props.onChange).toHaveBeenLastCalledWith({ currency: 'USD' })
 
       fireEvent.click(segment('Moneda', '$U'))
-      expect(props.onCurrencyChange).toHaveBeenLastCalledWith('UYU')
+      expect(props.onChange).toHaveBeenLastCalledWith({ currency: 'UYU' })
     })
 
     it('clears the currency via its chip', () => {
-      const props = renderFilters({
-        currencyFilter: 'UYU',
-        hasActiveFilters: true,
-      })
+      const props = renderFilters({ currency: 'UYU' })
 
       fireEvent.click(screen.getByLabelText('Quitar filtro Pesos'))
 
-      expect(props.onCurrencyChange).toHaveBeenCalledWith('all')
+      expect(props.onChange).toHaveBeenCalledWith({ currency: 'all' })
     })
   })
 
@@ -195,26 +185,21 @@ describe('TransactionFilters', () => {
         target: { value: '500' },
       })
 
-      expect(props.onMinAmountChange).toHaveBeenCalledWith('50')
-      expect(props.onMaxAmountChange).toHaveBeenCalledWith('500')
+      expect(props.onChange).toHaveBeenCalledWith({ min: '50' })
+      expect(props.onChange).toHaveBeenCalledWith({ max: '500' })
     })
 
     it('clears both bounds via the amount chip', () => {
-      const props = renderFilters({
-        minAmount: '50',
-        maxAmount: '',
-        hasActiveFilters: true,
-      })
+      const props = renderFilters({ min: '50' })
 
       fireEvent.click(screen.getByLabelText('Quitar filtro Monto 50–∞'))
 
-      expect(props.onMinAmountChange).toHaveBeenCalledWith('')
-      expect(props.onMaxAmountChange).toHaveBeenCalledWith('')
+      expect(props.onChange).toHaveBeenCalledWith({ min: '', max: '' })
     })
   })
 
   describe('date range', () => {
-    it('updates the from and to dates', () => {
+    it('edits the from and to dates', () => {
       const props = renderFilters()
 
       fireEvent.change(screen.getByLabelText('Filtro fecha desde'), {
@@ -224,18 +209,32 @@ describe('TransactionFilters', () => {
         target: { value: '2025-01-31' },
       })
 
-      expect(props.onDateFromChange).toHaveBeenCalledWith('2025-01-01')
-      expect(props.onDateToChange).toHaveBeenCalledWith('2025-01-31')
+      expect(props.onDateBoundChange).toHaveBeenCalledWith('from', '2025-01-01')
+      expect(props.onDateBoundChange).toHaveBeenCalledWith('to', '2025-01-31')
+      expect(props.onChange).not.toHaveBeenCalled()
+    })
+
+    it("shows the period's days", () => {
+      renderFilters(
+        { period: { mode: 'month', y: 2026, m: 2 } },
+        { dateRange: { from: '2026-03-01', to: '2026-03-31' } }
+      )
+
+      expect(screen.getByLabelText('Filtro fecha desde')).toHaveValue(
+        '2026-03-01'
+      )
+      expect(screen.getByLabelText('Filtro fecha hasta')).toHaveValue(
+        '2026-03-31'
+      )
     })
   })
 
   describe('clear all', () => {
     it('resets every filter at once', () => {
       const props = renderFilters({
-        categoryFilters: ['groceries'],
-        typeFilter: 'debit',
-        currencyFilter: 'USD',
-        hasActiveFilters: true,
+        categories: ['groceries'],
+        type: 'debit',
+        currency: 'USD',
       })
 
       fireEvent.click(screen.getByRole('button', { name: 'Limpiar todo' }))
@@ -245,6 +244,13 @@ describe('TransactionFilters', () => {
 
     it('is not offered when no filter is active', () => {
       renderFilters()
+
+      expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
+    })
+
+    // The view decides what counts as "filtrado" once, for the header too.
+    it('follows whether the view says a filter is active', () => {
+      renderFilters({ categories: ['groceries'] }, { hasActiveFilters: false })
 
       expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
     })

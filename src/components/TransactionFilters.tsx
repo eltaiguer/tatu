@@ -7,32 +7,36 @@ import { Input } from './ui/input'
 import { SegmentedToggle } from './ui/segmented-toggle'
 import { resolveCategory } from '../services/categories/category-registry'
 import { useClickOutside } from '../hooks/useClickOutside'
+import type { UrlFilterState } from '../services/filters/url-filters'
+import type { FilterPatch } from '../services/filters/transaction-filter'
 
-const ACCOUNT_OPTIONS = [
+type Account = UrlFilterState['accounts'][number]
+
+const ACCOUNT_OPTIONS: { value: Account; label: string }[] = [
   { value: 'credit_card', label: 'Tarjeta' },
   { value: 'bank_account', label: 'Cuenta bancaria' },
 ]
 
-interface MultiSelectPopoverProps {
+interface MultiSelectPopoverProps<T extends string> {
   label: string
-  options: { value: string; label: string; color?: string }[]
-  selected: string[]
-  onChange: (next: string[]) => void
+  options: { value: T; label: string; color?: string }[]
+  selected: T[]
+  onChange: (next: T[]) => void
   ariaLabel?: string
 }
 
-function MultiSelectPopover({
+function MultiSelectPopover<T extends string>({
   label,
   options,
   selected,
   onChange,
   ariaLabel,
-}: MultiSelectPopoverProps) {
+}: MultiSelectPopoverProps<T>) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
-  function toggle(value: string) {
+  function toggle(value: T) {
     onChange(
       selected.includes(value)
         ? selected.filter((v) => v !== value)
@@ -132,50 +136,27 @@ function MultiSelectPopover({
 }
 
 interface TransactionFiltersProps {
-  searchTerm: string
-  dateFromFilter: string
-  dateToFilter: string
-  categoryFilters: string[]
-  accountFilters: string[]
-  currencyFilter: 'all' | 'USD' | 'UYU'
-  typeFilter: 'all' | 'credit' | 'debit'
-  minAmount: string
-  maxAmount: string
-  availableCategories: string[]
+  filters: UrlFilterState
+  // Whether the view counts as "filtrado" (hasActiveFilters), decided once
+  // by the view.
   hasActiveFilters: boolean
-  onSearchChange: (value: string) => void
-  onDateFromChange: (value: string) => void
-  onDateToChange: (value: string) => void
-  onCategoryFiltersChange: (value: string[]) => void
-  onAccountFiltersChange: (value: string[]) => void
-  onCurrencyChange: (value: 'all' | 'USD' | 'UYU') => void
-  onTypeChange: (value: 'all' | 'credit' | 'debit') => void
-  onMinAmountChange: (value: string) => void
-  onMaxAmountChange: (value: string) => void
+  // The period as days, for the date inputs. Not derived from `filters`
+  // here: "últimos n meses" counts from an anchor only the view's state has.
+  dateRange: { from: string; to: string }
+  availableCategories: string[]
+  onChange: (patch: FilterPatch) => void
+  // Editing one end of the date inputs; the view keeps the other end.
+  onDateBoundChange: (bound: 'from' | 'to', value: string) => void
   onClearAll: () => void
 }
 
 export function TransactionFilters({
-  searchTerm,
-  dateFromFilter,
-  dateToFilter,
-  categoryFilters,
-  accountFilters,
-  currencyFilter,
-  typeFilter,
-  minAmount,
-  maxAmount,
-  availableCategories,
+  filters,
   hasActiveFilters,
-  onSearchChange,
-  onDateFromChange,
-  onDateToChange,
-  onCategoryFiltersChange,
-  onAccountFiltersChange,
-  onCurrencyChange,
-  onTypeChange,
-  onMinAmountChange,
-  onMaxAmountChange,
+  dateRange,
+  availableCategories,
+  onChange,
+  onDateBoundChange,
   onClearAll,
 }: TransactionFiltersProps) {
   const [amountPanelOpen, setAmountPanelOpen] = useState(false)
@@ -187,44 +168,49 @@ export function TransactionFilters({
     return { value: cat, label, color }
   })
 
+  const {
+    search,
+    categories,
+    accounts,
+    currency,
+    type,
+    min: minAmount,
+    max: maxAmount,
+  } = filters
   const amountActive = Boolean(minAmount) || Boolean(maxAmount)
 
   // Build active chips (search has its own × in the input, date is MonthNav)
   const chips: { label: string; onClear: () => void }[] = []
-  categoryFilters.forEach((c) => {
+  categories.forEach((c) => {
     chips.push({
       label: resolveCategory(c).label,
       onClear: () =>
-        onCategoryFiltersChange(categoryFilters.filter((x) => x !== c)),
+        onChange({ categories: categories.filter((x) => x !== c) }),
     })
   })
-  accountFilters.forEach((a) => {
+  accounts.forEach((a) => {
     const opt = ACCOUNT_OPTIONS.find((o) => o.value === a)
     chips.push({
       label: opt?.label ?? a,
-      onClear: () =>
-        onAccountFiltersChange(accountFilters.filter((x) => x !== a)),
+      onClear: () => onChange({ accounts: accounts.filter((x) => x !== a) }),
     })
   })
-  if (currencyFilter !== 'all') {
+  if (currency !== 'all') {
     chips.push({
-      label: currencyFilter === 'USD' ? 'Dólares' : 'Pesos',
-      onClear: () => onCurrencyChange('all'),
+      label: currency === 'USD' ? 'Dólares' : 'Pesos',
+      onClear: () => onChange({ currency: 'all' }),
     })
   }
-  if (typeFilter !== 'all') {
+  if (type !== 'all') {
     chips.push({
-      label: typeFilter === 'credit' ? 'Ingresos' : 'Gastos',
-      onClear: () => onTypeChange('all'),
+      label: type === 'credit' ? 'Ingresos' : 'Gastos',
+      onClear: () => onChange({ type: 'all' }),
     })
   }
   if (minAmount || maxAmount) {
     chips.push({
       label: `Monto ${minAmount || '0'}–${maxAmount || '∞'}`,
-      onClear: () => {
-        onMinAmountChange('')
-        onMaxAmountChange('')
-      },
+      onClear: () => onChange({ min: '', max: '' }),
     })
   }
 
@@ -239,8 +225,8 @@ export function TransactionFilters({
           />
           <Input
             placeholder="Buscar por comercio o descripción..."
-            value={searchTerm}
-            onChange={(event) => onSearchChange(event.target.value)}
+            value={search}
+            onChange={(event) => onChange({ search: event.target.value })}
             className="pl-9 text-[13px]!"
           />
         </div>
@@ -249,16 +235,16 @@ export function TransactionFilters({
           label="Categoría"
           ariaLabel="Filtro categoría"
           options={categoryOptions}
-          selected={categoryFilters}
-          onChange={onCategoryFiltersChange}
+          selected={categories}
+          onChange={(next) => onChange({ categories: next })}
         />
 
         <MultiSelectPopover
           label="Cuenta"
           ariaLabel="Filtro cuenta"
           options={ACCOUNT_OPTIONS}
-          selected={accountFilters}
-          onChange={onAccountFiltersChange}
+          selected={accounts}
+          onChange={(next) => onChange({ accounts: next })}
         />
 
         {/* Type filter */}
@@ -268,8 +254,8 @@ export function TransactionFilters({
             { value: 'credit' as const, label: 'Ingresos' },
             { value: 'debit' as const, label: 'Gastos' },
           ]}
-          value={typeFilter}
-          onChange={onTypeChange}
+          value={type}
+          onChange={(next) => onChange({ type: next })}
           size="sm"
           aria-label="Tipo de transacción"
         />
@@ -281,8 +267,8 @@ export function TransactionFilters({
             { value: 'UYU' as const, label: '$U' },
             { value: 'USD' as const, label: 'US$' },
           ]}
-          value={currencyFilter}
-          onChange={onCurrencyChange}
+          value={currency}
+          onChange={(next) => onChange({ currency: next })}
           size="sm"
           aria-label="Moneda"
         />
@@ -314,7 +300,7 @@ export function TransactionFilters({
               type="number"
               placeholder="0"
               value={minAmount}
-              onChange={(e) => onMinAmountChange(e.target.value)}
+              onChange={(e) => onChange({ min: e.target.value })}
               className="text-[13px]!"
             />
           </div>
@@ -330,7 +316,7 @@ export function TransactionFilters({
               type="number"
               placeholder="∞"
               value={maxAmount}
-              onChange={(e) => onMaxAmountChange(e.target.value)}
+              onChange={(e) => onChange({ max: e.target.value })}
               className="text-[13px]!"
             />
           </div>
@@ -371,16 +357,16 @@ export function TransactionFilters({
         id="transactions-date-from-filter"
         aria-label="Filtro fecha desde"
         type="date"
-        value={dateFromFilter}
-        onChange={(event) => onDateFromChange(event.target.value)}
+        value={dateRange.from}
+        onChange={(event) => onDateBoundChange('from', event.target.value)}
         className="hidden"
       />
       <input
         id="transactions-date-to-filter"
         aria-label="Filtro fecha hasta"
         type="date"
-        value={dateToFilter}
-        onChange={(event) => onDateToChange(event.target.value)}
+        value={dateRange.to}
+        onChange={(event) => onDateBoundChange('to', event.target.value)}
         className="hidden"
       />
     </Card>
