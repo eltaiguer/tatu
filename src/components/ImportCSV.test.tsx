@@ -11,7 +11,8 @@ import {
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ImportCSV } from './ImportCSV'
-import { UserFacingError } from '../utils/user-error'
+import { StatementReadError } from '../utils/user-error'
+import { useTransactionHandlers } from '../hooks/useTransactionHandlers'
 import { AiError } from '../services/ai/ai-error'
 import {
   importStatement,
@@ -59,6 +60,7 @@ class SuccessfulFileReaderMock {
 
 class DeferredFileReaderMock {
   static instances: DeferredFileReaderMock[] = []
+  result: ArrayBuffer | null = null
   onload: ((event: ProgressEvent<FileReader>) => void) | null = null
   onerror: (() => void) | null = null
 
@@ -110,8 +112,9 @@ function result(
   }
 }
 
-// Test doubles of the import, one per outcome, so each test's phase is
-// explicit: the file read and understood (onParsed) or not.
+// Test doubles of the import, one per outcome, mirroring its contract: a file
+// it could not read rejects with a StatementReadError; anything else it
+// rejects with happened while saving (after reporting progress, onParsed).
 const parsedThen = (overrides: Partial<StatementImportResult> = {}) =>
   vi.fn<Parameters<Importer>, ReturnType<Importer>>(
     async (_file, { onParsed }) => {
@@ -119,7 +122,7 @@ const parsedThen = (overrides: Partial<StatementImportResult> = {}) =>
       return result(overrides)
     }
   )
-const failsToParse = (error: unknown) =>
+const failsToRead = (error: StatementReadError) =>
   vi.fn<Parameters<Importer>, ReturnType<Importer>>(async () => {
     throw error
   })
@@ -314,8 +317,8 @@ describe('ImportCSV', () => {
     render(
       <ImportCSV
         onViewTransactions={onViewTransactions}
-        onTransactionsImported={failsToParse(
-          new UserFacingError('Fila 17: Importe ilegible: "abc"')
+        onTransactionsImported={failsToRead(
+          new StatementReadError('Fila 17: Importe ilegible: "abc"')
         )}
       />
     )
@@ -332,12 +335,37 @@ describe('ImportCSV', () => {
     expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
   })
 
-  it('never shows the raw text of an unexpected parser failure', async () => {
+  it('never shows the raw text of an unexpected failure while saving', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(
       <ImportCSV
-        onTransactionsImported={failsToParse(
-          new TypeError("Cannot read properties of undefined (reading 'trim')")
+        onTransactionsImported={failsToSave(
+          new TypeError("Cannot read properties of undefined (reading 'id')")
+        )}
+      />
+    )
+
+    pick()
+
+    expect(
+      await screen.findByText('No se pudo guardar la importación')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Cannot read/)).not.toBeInTheDocument()
+    expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+  })
+
+  it('reports a parser crash to Sentry once, as a parse failure', async () => {
+    const bug = new TypeError(
+      "Cannot read properties of undefined (reading 'trim')"
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <ImportCSV
+        onTransactionsImported={failsToRead(
+          new StatementReadError(
+            'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.',
+            { cause: bug }
+          )
         )}
       />
     )
@@ -349,24 +377,43 @@ describe('ImportCSV', () => {
         'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
       )
     ).toBeInTheDocument()
-    expect(screen.queryByText(/Cannot read/)).not.toBeInTheDocument()
-    expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+    expect(screen.getByText('Error al validar archivo')).toBeInTheDocument()
+    // Error reporting sends the explained error's cause: the crash itself.
+    expect(reporting.captureError).toHaveBeenCalledTimes(1)
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ cause: bug }),
+      'import-parse'
+    )
   })
 
-  it('reports an unexpected parser failure to Sentry once, as a parse failure', async () => {
-    const bug = new TypeError(
-      "Cannot read properties of undefined (reading 'trim')"
-    )
+  it('treats a failure before any progress that is not a read error as a save failure', async () => {
+    // Signed out: the handler refuses before the file is even parsed.
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    render(<ImportCSV onTransactionsImported={failsToParse(bug)} />)
+    function SignedOutImport() {
+      const { handleTransactionsImported } = useTransactionHandlers({
+        repository: null,
+        setError: () => {},
+      })
+      return <ImportCSV onTransactionsImported={handleTransactionsImported} />
+    }
+    render(<SignedOutImport />)
 
     pick()
 
-    await screen.findByText(
-      'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
-    )
+    expect(await screen.findByText('No se pudo importar')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Tu sesión terminó. Iniciá sesión de nuevo para guardar cambios.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Error al validar archivo')
+    ).not.toBeInTheDocument()
     expect(reporting.captureError).toHaveBeenCalledTimes(1)
-    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'import-parse')
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      'import'
+    )
   })
 
   it('reports a save failure to Sentry once, as an import failure', async () => {
@@ -398,6 +445,29 @@ describe('ImportCSV', () => {
     expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
   })
 
+  it('treats a reader that returns no bytes as a read error', async () => {
+    globalThis.FileReader = class {
+      onload: ((event: ProgressEvent<FileReader>) => void) | null = null
+      onerror: (() => void) | null = null
+      result: string | null = null
+      readAsArrayBuffer() {
+        this.onload?.({} as ProgressEvent<FileReader>)
+      }
+    } as unknown as typeof FileReader
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const importer = parsedThen()
+    render(<ImportCSV onTransactionsImported={importer} />)
+
+    pick()
+
+    expect(
+      await screen.findByText('Error al validar archivo')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Error al leer el archivo')).toBeInTheDocument()
+    expect(importer).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+  })
+
   it('shows validating state while file is being processed', async () => {
     globalThis.FileReader =
       DeferredFileReaderMock as unknown as typeof FileReader
@@ -415,6 +485,7 @@ describe('ImportCSV', () => {
 
     const reader = DeferredFileReaderMock.instances[0]
     await act(async () => {
+      reader.result = new TextEncoder().encode('a,b').buffer
       reader.onload?.({} as ProgressEvent<FileReader>)
     })
 

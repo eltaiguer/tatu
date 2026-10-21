@@ -11,6 +11,10 @@ import {
   type ImportResult,
 } from '../mutations/transaction-mutations'
 import { newestDataMonth } from '../../utils/date-utils'
+import { StatementReadError, UserFacingError } from '../../utils/user-error'
+
+const UNREADABLE =
+  'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
 
 /** A statement as the user picked it: raw bytes, encoding unknown (#192). */
 export interface StatementFile {
@@ -30,9 +34,9 @@ export interface StatementImportResult extends ImportResult {
 
 export interface ImportStatementOptions {
   /**
-   * Called once the file is read and understood, before anything is written.
-   * A rejection before it is a file the import could not read (wrong format,
-   * a parser bug); a rejection after it is a failure to save.
+   * Progress only: called once the file is read and understood, before
+   * anything is written (the dialog then says "Importando…"). What failed is
+   * told by the error's type, not by whether this ran.
    */
   onParsed?: () => void
 }
@@ -44,18 +48,17 @@ export interface ImportStatementOptions {
  * content (#57), AI-enriched when enabled, inserted, recorded as an import
  * run, and rows stored garbled repaired in place.
  *
- * Parser errors are `UserFacingError`s (Spanish, say what to do); a save
- * failure is whatever `importTransactions` throws.
+ * A file it cannot read rejects with a `StatementReadError`: the parser's
+ * own message (Spanish, says what to do), or for a crash a generic one with
+ * the crash as `cause`. Anything else — a save failure, the session ended —
+ * is whatever `importTransactions` throws.
  */
 export async function importStatement(
   repo: Repository,
   file: StatementFile,
   { onParsed }: ImportStatementOptions = {}
 ): Promise<StatementImportResult> {
-  const csvContent = decodeCsvBytes(file.bytes)
-  // Parsers are pure and return uncategorized rows; categorize before
-  // anything else sees them (dedup, AI enrichment, the store).
-  const parsed = categorizeParsedData(parseCSV(csvContent, file.fileName))
+  const { csvContent, parsed } = readStatement(file)
   onParsed?.()
 
   const result = await importTransactions(repo, parsed.transactions, {
@@ -70,5 +73,22 @@ export async function importStatement(
     month: newestDataMonth(
       result.added.length > 0 ? result.added : parsed.transactions
     ),
+  }
+}
+
+function readStatement(file: StatementFile) {
+  try {
+    const csvContent = decodeCsvBytes(file.bytes)
+    // Parsers are pure and return uncategorized rows; categorize before
+    // anything else sees them (dedup, AI enrichment, the store).
+    const parsed = categorizeParsedData(parseCSV(csvContent, file.fileName))
+    return { csvContent, parsed }
+  } catch (error) {
+    // A crash may mean Santander changed its export format: kept as the
+    // cause, so error reporting sends it.
+    if (error instanceof UserFacingError) {
+      throw new StatementReadError(error.message, { cause: error.cause })
+    }
+    throw new StatementReadError(UNREADABLE, { cause: error })
   }
 }

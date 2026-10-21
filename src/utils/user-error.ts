@@ -66,6 +66,20 @@ export class WorkspaceChangedError extends UserFacingError {
 }
 
 /**
+ * A statement file that could not be read: unreadable bytes, a format the
+ * parsers don't recognize, or a parser crash. Its message is the text to show
+ * (the parser's own, or a generic one for a crash, whose original error is
+ * the `cause` error reporting sends). Anything an import throws that is not
+ * this happened while saving.
+ */
+export class StatementReadError extends UserFacingError {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options)
+    this.name = 'StatementReadError'
+  }
+}
+
+/**
  * The text to show for a failure. Errors the app wrote are shown as they are;
  * anything else is logged, reported (tagged with `area` when given) and
  * replaced by `fallback`.

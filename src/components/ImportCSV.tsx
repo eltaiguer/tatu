@@ -14,14 +14,9 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   importAiErrorMessage,
-  UserFacingError,
+  StatementReadError,
   userErrorMessage,
 } from '../utils/user-error'
-import type {
-  ImportStatementOptions,
-  StatementFile,
-  StatementImportResult,
-} from '../services/import/import-statement'
 import type { FileType, TransactionsFilter } from '../models'
 
 // validating = reading/parsing the file; importing = the file is valid and
@@ -68,19 +63,42 @@ const ACCOUNT_LABELS: Record<FileType, string> = {
   bank_account_uyu: 'Cuenta $U',
 }
 
+// What the dialog needs from an import, declared here (structurally) so the
+// dialog does not depend on the import service: `importStatement`'s result
+// satisfies it, and so does a test double.
+export interface ImportOutcome {
+  added: readonly unknown[]
+  duplicates: readonly unknown[]
+  /** Rows deleted before; skipped so they stay deleted. */
+  previouslyDeleted: readonly unknown[]
+  /** Stored rows whose garbled description the import repaired (#192). */
+  repaired: readonly unknown[]
+  /** Repairs that did not save; importing again retries them. */
+  repairsFailed?: number
+  /** Enrichment did not run at all: what it threw (`importAiErrorMessage`). */
+  aiError?: unknown
+  /** Enrichment ran but some batches failed: the text to show. */
+  aiPartial?: string
+  fileType: FileType
+  /** The month "Ver transacciones" opens. */
+  month: { y: number; m: number } | null
+}
+
 interface ImportCSVProps {
   /** "Ver transacciones" on the summary; the import itself never navigates. */
   onViewTransactions?: (filter: TransactionsFilter) => void
   /**
    * Imports the picked file (`importStatement`, bound to the signed-in user).
-   * Calls `onParsed` once the file is understood: a rejection before it is a
-   * file that could not be read, after it a failure to save.
+   * A file it could not read rejects with a `StatementReadError`; any other
+   * rejection is a failure to save. `onParsed` is progress only.
    */
   onTransactionsImported: (
-    file: StatementFile,
-    options: ImportStatementOptions
-  ) => Promise<StatementImportResult>
+    file: { bytes: ArrayBuffer; fileName: string },
+    options: { onParsed?: () => void }
+  ) => Promise<ImportOutcome>
 }
+
+const READ_FAILED = 'Error al leer el archivo'
 
 // Bytes, not text: the encoding is decided by the import (#192), since
 // Santander exports are Latin-1 and File.text() would read them as UTF-8.
@@ -93,12 +111,10 @@ async function readFileBytes(file: File): Promise<ArrayBuffer> {
       // Not `instanceof ArrayBuffer`: the reader's buffer may come from
       // another realm (jsdom).
       const result = reader.result
-      resolve(
-        result && typeof result !== 'string' ? result : new ArrayBuffer(0)
-      )
+      if (result && typeof result !== 'string') resolve(result)
+      else reject(new StatementReadError(READ_FAILED))
     }
-    reader.onerror = () =>
-      reject(new UserFacingError('Error al leer el archivo'))
+    reader.onerror = () => reject(new StatementReadError(READ_FAILED))
     reader.readAsArrayBuffer(file)
   })
 }
@@ -168,10 +184,6 @@ export function ImportCSV({
     setImportState('validating')
     setErrorMessage('')
 
-    // Parser errors are UserFacingErrors (Spanish, say what to do); anything
-    // else — a parser bug, saving, the network — is translated so raw
-    // English never shows.
-    let parsed = false
     try {
       const bytes = await readFileBytes(file)
       const {
@@ -186,12 +198,7 @@ export function ImportCSV({
         month,
       } = await onTransactionsImported(
         { bytes, fileName: file.name },
-        {
-          onParsed: () => {
-            parsed = true
-            setImportState('importing')
-          },
-        }
+        { onParsed: () => setImportState('importing') }
       )
 
       // The dialog stays open on this summary (#202): no toast, no
@@ -228,17 +235,20 @@ export function ImportCSV({
       }
     } catch (error) {
       console.error('import failed:', error)
+      // A file that could not be read says why (its message is the text to
+      // show; a parser crash travels as its cause). Anything else — saving,
+      // the network, a session that ended — is a failure to import, and its
+      // text is translated so raw English never shows.
+      const unreadable = error instanceof StatementReadError
       setImportState('error')
-      setFailedWhileSaving(parsed)
+      setFailedWhileSaving(!unreadable)
       setErrorMessage(
         userErrorMessage(
           error,
-          parsed
-            ? 'No se pudo guardar la importación'
-            : 'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.',
+          'No se pudo guardar la importación',
           // Reported once, by userErrorMessage. A parse crash may mean
           // Santander changed its export format.
-          parsed ? 'import' : 'import-parse'
+          unreadable ? 'import-parse' : 'import'
         )
       )
     }

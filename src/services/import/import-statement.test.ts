@@ -9,13 +9,21 @@ import { createInMemoryRepository } from '../repository/in-memory-repository'
 import { replaceDescriptionOverrides } from '../descriptions/description-overrides'
 import { replaceMerchantCategoryOverrides } from '../categorizer/category-overrides'
 import { replaceCustomPatterns } from '../categorizer/custom-patterns'
-import { UserFacingError } from '../../utils/user-error'
+import { StatementReadError } from '../../utils/user-error'
+import { parseCSV } from '../parsers/csv-parser'
 import { sha256Hex } from '../supabase/import-runs'
 import { decodeCsvBytes } from '../parsers/decode-csv'
 
 // The whole import, from a statement file's bytes to rows saved through the
 // repository and shown in the store. Real parsers, real categorizer, real
 // sample files; persistence is the in-memory repository adapter.
+
+// The real parser, wrapped only so one test can make it crash the way a
+// parser bug would (no real input does).
+vi.mock('../parsers/csv-parser', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../parsers/csv-parser')>()
+  return { ...actual, parseCSV: vi.fn(actual.parseCSV) }
+})
 
 const SAMPLES = join(__dirname, '../../../samples')
 const sample = (name: string): StatementFile => ({
@@ -195,43 +203,58 @@ describe('importStatement', () => {
   })
 
   describe('read vs save failures', () => {
-    it('rejects a file that is not a Santander statement, before saving anything', async () => {
+    it('rejects a file that is not a Santander statement as a read error, before saving anything', async () => {
       const repo = signedIn()
-      const onParsed = vi.fn()
 
-      const error = await importStatement(
-        repo,
-        {
-          bytes: utf8('date,description,amount\n2026-01-01,Coffee,3.50\n'),
-          fileName: 'other.csv',
-        },
-        { onParsed }
-      ).catch((e: unknown) => e)
+      const error = await importStatement(repo, {
+        bytes: utf8('date,description,amount\n2026-01-01,Coffee,3.50\n'),
+        fileName: 'other.csv',
+      }).catch((e: unknown) => e)
 
-      expect(error).toBeInstanceOf(UserFacingError)
+      expect(error).toBeInstanceOf(StatementReadError)
       expect((error as Error).message).toBe(
         'No reconocemos este archivo. Tatú importa extractos CSV de Santander Uruguay (tarjeta de crédito o caja de ahorro).'
       )
-      expect(onParsed).not.toHaveBeenCalled()
       expect(repo.rows()).toEqual([])
       expect(repo.importRuns).toEqual([])
     })
 
-    it('says an empty file is empty', async () => {
+    it('says an empty file is empty, as a read error', async () => {
       const repo = signedIn()
-      const onParsed = vi.fn()
 
-      await expect(
-        importStatement(
-          repo,
-          { bytes: new Uint8Array(), fileName: 'empty.csv' },
-          { onParsed }
-        )
-      ).rejects.toThrow('El archivo está vacío.')
-      expect(onParsed).not.toHaveBeenCalled()
+      const error = await importStatement(repo, {
+        bytes: new Uint8Array(),
+        fileName: 'empty.csv',
+      }).catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(StatementReadError)
+      expect((error as Error).message).toBe('El archivo está vacío.')
     })
 
-    it('says the file was understood before the first write', async () => {
+    it('turns a parser crash into a read error that keeps the crash as its cause', async () => {
+      const repo = signedIn()
+      const bug = new TypeError(
+        "Cannot read properties of undefined (reading 'trim')"
+      )
+      vi.mocked(parseCSV).mockImplementationOnce(() => {
+        throw bug
+      })
+
+      const error = await importStatement(
+        repo,
+        sample('UYUmovements.csv')
+      ).catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(StatementReadError)
+      // Never the raw text of a bug.
+      expect((error as Error).message).toBe(
+        'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
+      )
+      expect((error as StatementReadError).cause).toBe(bug)
+      expect(repo.importRuns).toEqual([])
+    })
+
+    it('reports progress once the file is understood, before the first write', async () => {
       const repo = signedIn()
       let runsWhenParsed = -1
       const onParsed = vi.fn(() => {
@@ -244,15 +267,18 @@ describe('importStatement', () => {
       expect(runsWhenParsed).toBe(0)
     })
 
-    it('rejects with the save error after saying the file was understood', async () => {
+    it('rejects with the save error itself, not a read error', async () => {
       const repo = signedIn()
-      repo.failOn('insert', { error: new Error('network down') })
-      const onParsed = vi.fn()
+      const failure = new Error('network down')
+      repo.failOn('insert', { error: failure })
 
-      await expect(
-        importStatement(repo, sample('UYUmovements.csv'), { onParsed })
-      ).rejects.toThrow('network down')
-      expect(onParsed).toHaveBeenCalledTimes(1)
+      const error = await importStatement(
+        repo,
+        sample('UYUmovements.csv')
+      ).catch((e: unknown) => e)
+
+      expect(error).toBe(failure)
+      expect(error).not.toBeInstanceOf(StatementReadError)
       expect(repo.rows()).toEqual([])
       expect(storedIds()).toEqual([])
     })
