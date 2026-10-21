@@ -6,99 +6,18 @@ import { ROUTER_FUTURE } from './router-future'
 import App from './App'
 import { preloadViews } from './lazy-views'
 import { transactionStore } from './stores/transaction-store'
-import { teardownWorkspace } from './stores/workspace-store'
+import {
+  DEFAULT_PREFERENCES,
+  teardownWorkspace,
+} from './stores/workspace-store'
 import { listCustomCategories } from './services/categories/category-store'
+import { makeSession } from './services/auth/in-memory-auth'
+import { createFakeBackend, type FakeBackend } from './test/fake-backend'
 
-const MOCK_SESSION = {
-  access_token: 'access',
-  refresh_token: 'refresh',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999,
-  user: { id: 'user-1', email: 'test@example.com' },
-}
-
-const {
-  getCurrentSessionMock,
-  subscribeToAuthChangesMock,
-  loadUserTransactionsMock,
-  listCategoryOverridesMock,
-  listDescriptionOverridesMock,
-  listCustomCategoriesMock,
-  listCustomPatternsMock,
-  loadUserPreferencesMock,
-  updateTransactionMock,
-  softDeleteTransactionMock,
-} = vi.hoisted(() => ({
-  getCurrentSessionMock: vi.fn(),
-  subscribeToAuthChangesMock: vi.fn(),
-  loadUserTransactionsMock: vi.fn(),
-  listCategoryOverridesMock: vi.fn(),
-  listDescriptionOverridesMock: vi.fn(),
-  listCustomCategoriesMock: vi.fn(),
-  listCustomPatternsMock: vi.fn(),
-  loadUserPreferencesMock: vi.fn(),
-  updateTransactionMock: vi.fn(),
-  softDeleteTransactionMock: vi.fn(),
-}))
-
-vi.mock('./services/supabase/client', () => ({
-  isSupabaseConfigured: () => true,
-  getSupabaseClient: vi.fn(),
-}))
-
-vi.mock('./services/supabase/auth', () => ({
-  getCurrentSession: getCurrentSessionMock,
-  subscribeToAuthChanges: subscribeToAuthChangesMock,
-  signOut: vi.fn().mockResolvedValue(undefined),
-  signInWithPassword: vi.fn(),
-  signUpWithPassword: vi.fn(),
-  requestPasswordReset: vi.fn(),
-  updatePassword: vi.fn(),
-}))
-
-vi.mock('./services/supabase/transactions', () => ({
-  loadUserTransactions: loadUserTransactionsMock,
-  persistTransactions: vi.fn().mockResolvedValue(undefined),
-  // Nothing stored yet: every imported row is new.
-  findImportCandidates: vi.fn().mockResolvedValue([]),
-  findExistingTransactionIds: vi.fn().mockResolvedValue([]),
-  setTransactionsDeleted: softDeleteTransactionMock,
-  updateTransactionsByIds: updateTransactionMock,
-}))
-
-vi.mock('./services/supabase/category-overrides', () => ({
-  listCategoryOverrides: listCategoryOverridesMock,
-  upsertCategoryOverride: vi.fn().mockResolvedValue(undefined),
-  deleteCategoryOverride: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('./services/supabase/description-overrides', () => ({
-  listDescriptionOverrides: listDescriptionOverridesMock,
-  upsertDescriptionOverride: vi.fn().mockResolvedValue(undefined),
-  deleteDescriptionOverride: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('./services/supabase/custom-categories', () => ({
-  listCustomCategories: listCustomCategoriesMock,
-  upsertCustomCategory: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('./services/supabase/custom-patterns', () => ({
-  listCustomPatterns: listCustomPatternsMock,
-}))
-
-vi.mock('./services/supabase/user-preferences', () => ({
-  loadUserPreferences: loadUserPreferencesMock,
-  saveUserPreferences: vi.fn().mockResolvedValue(undefined),
-}))
-
-vi.mock('./services/supabase/import-runs', () => ({
-  createImportRun: vi.fn().mockResolvedValue('run-1'),
-  completeImportRun: vi.fn().mockResolvedValue(undefined),
-  failImportRun: vi.fn().mockResolvedValue(undefined),
-  sha256Hex: vi.fn().mockResolvedValue('hash'),
-}))
+// The backend: user-1 is signed in, with nothing stored until a test seeds
+// it. A fresh one per test.
+let backend: FakeBackend
+const seed = (data: Parameters<FakeBackend['seed']>[0]) => backend.seed(data)
 
 // Exposes the router's location and a back button, so tests can observe the
 // URL and history the way a user would.
@@ -120,7 +39,7 @@ function RouterProbe() {
 function renderApp(path = '/') {
   return render(
     <MemoryRouter initialEntries={[path]} future={ROUTER_FUTURE}>
-      <App />
+      <App auth={backend.auth} createRepository={backend.createRepository} />
       <RouterProbe />
     </MemoryRouter>
   )
@@ -178,19 +97,9 @@ describe('App', () => {
     localStorage.clear()
     window.history.replaceState({}, '', '/')
 
-    getCurrentSessionMock.mockReturnValue(MOCK_SESSION)
-    subscribeToAuthChangesMock.mockReturnValue(() => undefined)
-    loadUserTransactionsMock.mockResolvedValue([])
-    listCategoryOverridesMock.mockResolvedValue([])
-    listDescriptionOverridesMock.mockResolvedValue([])
-    listCustomCategoriesMock.mockResolvedValue([])
-    listCustomPatternsMock.mockResolvedValue([])
-    loadUserPreferencesMock.mockResolvedValue(null)
-    // The server confirms every id it was sent.
-    updateTransactionMock.mockImplementation(async (_s, ids: string[]) => ids)
-    softDeleteTransactionMock.mockImplementation(
-      async (_s, ids: string[]) => ids
-    )
+    backend = createFakeBackend({
+      session: makeSession('user-1', 'test@example.com'),
+    })
   })
 
   it('renders overview (dashboard) view by default', async () => {
@@ -219,7 +128,7 @@ describe('App', () => {
   })
 
   it('announces the loading state while the first sync runs (#203)', async () => {
-    loadUserTransactionsMock.mockReturnValue(new Promise(() => {}))
+    backend.repo().hold('load')
     renderApp('/configuracion')
 
     const statuses = await screen.findAllByRole('status')
@@ -326,18 +235,20 @@ describe('App', () => {
   })
 
   it('switches to transactions view from sidebar navigation', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-nav',
-        date: new Date('2026-01-10T00:00:00.000Z'),
-        description: 'Comercio Nav',
-        amount: 100,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
+    seed({
+      transactions: [
+        {
+          id: 'tx-nav',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Comercio Nav',
+          amount: 100,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
     renderApp()
     await waitFor(() =>
       expect(
@@ -353,18 +264,20 @@ describe('App', () => {
   })
 
   it('auto-categorizes selected transactions from the transactions view', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-1',
-        date: new Date('2026-01-10T00:00:00.000Z'),
-        description: 'Devoto Supermercado',
-        amount: 100,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
+    seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Devoto Supermercado',
+          amount: 100,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
 
     renderApp()
     await waitFor(() =>
@@ -404,18 +317,20 @@ describe('App', () => {
   })
 
   it('shows a notice when auto-categorization finds no category matches', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-1',
-        date: new Date('2026-01-10T00:00:00.000Z'),
-        description: 'Comercio Inventado XYZ',
-        amount: 100,
-        currency: 'UYU',
-        type: 'credit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
+    seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Comercio Inventado XYZ',
+          amount: 100,
+          currency: 'UYU',
+          type: 'credit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
 
     renderApp()
     await waitFor(() =>
@@ -468,30 +383,32 @@ describe('App', () => {
   })
 
   it('filters Transacciones by category when deep-linking from Resumen', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-cat',
-        date: new Date('2026-01-10T00:00:00.000Z'),
-        description: 'Devoto Supermercado',
-        amount: 100,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        category: 'groceries',
-        rawData: {},
-      },
-      {
-        id: 'tx-other',
-        date: new Date('2026-01-11T00:00:00.000Z'),
-        description: 'Café Bacacay',
-        amount: 50,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        category: 'restaurants',
-        rawData: {},
-      },
-    ])
+    seed({
+      transactions: [
+        {
+          id: 'tx-cat',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Devoto Supermercado',
+          amount: 100,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          category: 'groceries',
+          rawData: {},
+        },
+        {
+          id: 'tx-other',
+          date: new Date('2026-01-11T00:00:00.000Z'),
+          description: 'Café Bacacay',
+          amount: 50,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          category: 'restaurants',
+          rawData: {},
+        },
+      ],
+    })
 
     renderApp()
     await waitFor(() =>
@@ -524,10 +441,13 @@ describe('App', () => {
   })
 
   it('applies dark theme when user preferences return dark', async () => {
-    loadUserPreferencesMock.mockResolvedValue({
-      theme: 'dark',
-      currency: 'USD',
-      fxRate: 40.5,
+    seed({
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        theme: 'dark',
+        currency: 'USD',
+        fxRate: 40.5,
+      },
     })
 
     renderApp()
@@ -561,28 +481,30 @@ describe('App', () => {
   })
 
   it('bulk categorizes selected transactions and updates the store', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-1',
-        date: new Date('2026-01-10T00:00:00.000Z'),
-        description: 'Comercio A',
-        amount: 100,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-      {
-        id: 'tx-2',
-        date: new Date('2026-01-11T00:00:00.000Z'),
-        description: 'Comercio B',
-        amount: 50,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
+    seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Comercio A',
+          amount: 100,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+        {
+          id: 'tx-2',
+          date: new Date('2026-01-11T00:00:00.000Z'),
+          description: 'Comercio B',
+          amount: 50,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
 
     renderApp()
     await waitFor(() =>
@@ -619,38 +541,41 @@ describe('App', () => {
       expect(txs.find((t) => t.id === 'tx-1')?.category).toBe('entertainment')
       expect(txs.find((t) => t.id === 'tx-2')?.category).toBe('entertainment')
     })
-    // One request for the whole selection (#60).
-    expect(updateTransactionMock).toHaveBeenCalledTimes(1)
-    expect(updateTransactionMock).toHaveBeenCalledWith(
-      expect.anything(),
-      ['tx-1', 'tx-2'],
-      { category: 'entertainment', categoryConfidence: 1 }
-    )
+    // One request for the whole selection (#60), saved for both rows.
+    expect(backend.repo().requests.update).toBe(1)
+    for (const id of ['tx-1', 'tx-2']) {
+      expect(backend.repo().row(id)).toMatchObject({
+        category: 'entertainment',
+        categoryConfidence: 1,
+      })
+    }
   })
 
   it('bulk deletes selected transactions and removes them from the store', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-1',
-        date: new Date('2026-01-10T00:00:00.000Z'),
-        description: 'Comercio A',
-        amount: 100,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-      {
-        id: 'tx-2',
-        date: new Date('2026-01-11T00:00:00.000Z'),
-        description: 'Comercio B',
-        amount: 50,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
+    seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Comercio A',
+          amount: 100,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+        {
+          id: 'tx-2',
+          date: new Date('2026-01-11T00:00:00.000Z'),
+          description: 'Comercio B',
+          amount: 50,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
     renderApp()
     await waitFor(() =>
       expect(
@@ -672,30 +597,29 @@ describe('App', () => {
     await waitFor(() => {
       expect(transactionStore.getState().transactions).toHaveLength(0)
     })
-    expect(softDeleteTransactionMock).toHaveBeenCalledTimes(1)
-    expect(softDeleteTransactionMock).toHaveBeenCalledWith(
-      expect.anything(),
-      ['tx-1', 'tx-2'],
-      true
-    )
+    expect(backend.repo().requests.softDelete).toBe(1)
+    expect(backend.repo().isDeleted('tx-1')).toBe(true)
+    expect(backend.repo().isDeleted('tx-2')).toBe(true)
     expect(
       await screen.findByText('2 transacciones eliminadas')
     ).toBeInTheDocument()
   })
 
   it('bulk tags selected transactions and updates the store', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-1',
-        date: new Date('2026-01-10T00:00:00.000Z'),
-        description: 'Comercio A',
-        amount: 100,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
+    seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Comercio A',
+          amount: 100,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
 
     renderApp()
     await waitFor(() =>
@@ -731,22 +655,25 @@ describe('App', () => {
         .transactions.find((t) => t.id === 'tx-1')
       expect(tx?.tags).toContain('recurrente')
     })
-    expect(updateTransactionMock).toHaveBeenCalledTimes(1)
+    expect(backend.repo().requests.update).toBe(1)
+    expect(backend.repo().row('tx-1')?.tags).toContain('recurrente')
   })
 
   it('bulk action buttons are disabled when no transactions are selected', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-1',
-        date: new Date('2026-01-10T00:00:00.000Z'),
-        description: 'Comercio A',
-        amount: 100,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
+    seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Comercio A',
+          amount: 100,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
 
     renderApp()
     await waitFor(() =>
@@ -771,18 +698,20 @@ describe('App', () => {
   })
 
   it('mobile hamburger opens nav sheet and closes on nav item click', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      {
-        id: 'tx-mobile',
-        date: new Date('2026-01-10T00:00:00.000Z'),
-        description: 'Comercio Mobile',
-        amount: 200,
-        currency: 'UYU',
-        type: 'debit',
-        source: 'bank_account',
-        rawData: {},
-      },
-    ])
+    seed({
+      transactions: [
+        {
+          id: 'tx-mobile',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Comercio Mobile',
+          amount: 200,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
     renderApp()
     await waitFor(() =>
       expect(
@@ -820,17 +749,19 @@ describe('App', () => {
   })
 
   it('clears custom categories from memory on sign out', async () => {
-    listCustomCategoriesMock.mockResolvedValue([
-      {
-        id: 'mi-cat',
-        label: 'Mi Categoría',
-        color: '#ff0000',
-        isIgnored: false,
-        isArchived: false,
-        createdAt: '2026-01-01T00:00:00Z',
-        updatedAt: '2026-01-01T00:00:00Z',
-      },
-    ])
+    seed({
+      customCategories: [
+        {
+          id: 'mi-cat',
+          label: 'Mi Categoría',
+          color: '#ff0000',
+          isIgnored: false,
+          isArchived: false,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
 
     renderApp()
     await waitFor(() =>
@@ -908,21 +839,28 @@ describe('App', () => {
     })
 
     it('deep-links to "Restaurantes en marzo"', async () => {
-      loadUserTransactionsMock.mockResolvedValue([
-        tx(
-          'mar-rest',
-          '2026-03-10T12:00:00.000Z',
-          'Cantina marzo',
-          'restaurants'
-        ),
-        tx('mar-food', '2026-03-11T12:00:00.000Z', 'Devoto marzo', 'groceries'),
-        tx(
-          'apr-rest',
-          '2026-04-10T12:00:00.000Z',
-          'Cantina abril',
-          'restaurants'
-        ),
-      ])
+      seed({
+        transactions: [
+          tx(
+            'mar-rest',
+            '2026-03-10T12:00:00.000Z',
+            'Cantina marzo',
+            'restaurants'
+          ),
+          tx(
+            'mar-food',
+            '2026-03-11T12:00:00.000Z',
+            'Devoto marzo',
+            'groceries'
+          ),
+          tx(
+            'apr-rest',
+            '2026-04-10T12:00:00.000Z',
+            'Cantina abril',
+            'restaurants'
+          ),
+        ],
+      })
       renderApp('/transacciones?categoria=restaurants&periodo=2026-03')
 
       expect(
@@ -933,9 +871,11 @@ describe('App', () => {
     })
 
     it('keeps the filters when re-clicking Transacciones', async () => {
-      loadUserTransactionsMock.mockResolvedValue([
-        tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),
-      ])
+      seed({
+        transactions: [
+          tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),
+        ],
+      })
       renderApp('/transacciones?q=cantina&periodo=todo')
       await screen.findAllByText('Cantina')
 
@@ -948,9 +888,11 @@ describe('App', () => {
     })
 
     it('drops the period from the URL when filters are cleared', async () => {
-      loadUserTransactionsMock.mockResolvedValue([
-        tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),
-      ])
+      seed({
+        transactions: [
+          tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),
+        ],
+      })
       renderApp('/transacciones?categoria=restaurants&periodo=2026-03')
       await screen.findAllByText('Cantina')
 
@@ -962,9 +904,11 @@ describe('App', () => {
     })
 
     it('keeps filter edits in the URL without adding history entries', async () => {
-      loadUserTransactionsMock.mockResolvedValue([
-        tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),
-      ])
+      seed({
+        transactions: [
+          tx('a', '2026-03-10T12:00:00.000Z', 'Cantina', 'restaurants'),
+        ],
+      })
       renderApp('/')
       fireEvent.click(
         await screen.findByRole('button', { name: /Transacciones/ })
@@ -995,11 +939,7 @@ describe('App', () => {
       category: 'restaurants',
       rawData: {},
     })
-    loadUserTransactionsMock.mockResolvedValue([
-      row('a', '10'),
-      row('b', '11'),
-      row('c', '12'),
-    ])
+    seed({ transactions: [row('a', '10'), row('b', '11'), row('c', '12')] })
     renderApp()
 
     fireEvent.click(
@@ -1020,11 +960,13 @@ describe('App', () => {
   it('opens exactly a merchant\'s rows from "Mayores comercios"', async () => {
     // One merchant under two auth codes (merged by the merchant key, #120)
     // and a different merchant sharing its first word.
-    loadUserTransactionsMock.mockResolvedValue([
-      tx('a', '2026-03-10T12:00:00.000Z', 'UBER 1234TT56', 'transport'),
-      tx('b', '2026-03-11T12:00:00.000Z', 'UBER 7890TT12', 'transport'),
-      tx('c', '2026-03-12T12:00:00.000Z', 'UBER EATS', 'restaurants'),
-    ])
+    seed({
+      transactions: [
+        tx('a', '2026-03-10T12:00:00.000Z', 'UBER 1234TT56', 'transport'),
+        tx('b', '2026-03-11T12:00:00.000Z', 'UBER 7890TT12', 'transport'),
+        tx('c', '2026-03-12T12:00:00.000Z', 'UBER EATS', 'restaurants'),
+      ],
+    })
     renderApp('/')
 
     // Labelled by its most recent variant.
@@ -1049,11 +991,13 @@ describe('App', () => {
   })
 
   it('badges Transacciones with how many have no category', async () => {
-    loadUserTransactionsMock.mockResolvedValue([
-      tx('a', '2026-03-10T12:00:00.000Z', 'Sin cat 1', ''),
-      tx('b', '2026-03-11T12:00:00.000Z', 'Sin cat 2', 'uncategorized'),
-      tx('c', '2026-03-12T12:00:00.000Z', 'Devoto', 'groceries'),
-    ])
+    seed({
+      transactions: [
+        tx('a', '2026-03-10T12:00:00.000Z', 'Sin cat 1', ''),
+        tx('b', '2026-03-11T12:00:00.000Z', 'Sin cat 2', 'uncategorized'),
+        tx('c', '2026-03-12T12:00:00.000Z', 'Devoto', 'groceries'),
+      ],
+    })
     renderApp('/')
 
     expect(
@@ -1081,8 +1025,8 @@ describe('App', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-03T12:00:00.000Z'))
     const months = ['2026-06', '2026-07', '2026-08', '2026-09']
-    loadUserTransactionsMock.mockResolvedValue(
-      months.flatMap((m, i) => [
+    seed({
+      transactions: months.flatMap((m, i) => [
         tx(`a${i}`, `${m}-01T12:00:00.000Z`, 'Borde', 'fees'),
         tx(`b${i}`, `${m}-28T12:00:00.000Z`, 'Borde', 'fees'),
         tx(`r${i}`, `${m}-10T12:00:00.000Z`, 'Cantina', 'restaurants'),
@@ -1108,8 +1052,8 @@ describe('App', () => {
               },
             ]
           : []),
-      ])
-    )
+      ]),
+    })
     try {
       renderApp('/')
       const link = await screen.findByRole('button', {

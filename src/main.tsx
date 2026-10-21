@@ -4,6 +4,8 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import { ROUTER_FUTURE } from './router-future'
+import { supabaseAuth } from './services/auth/supabase-auth'
+import { createSupabaseRepository } from './services/repository/supabase-repository'
 import './services/firebase'
 import './index.css'
 
@@ -28,7 +30,8 @@ window.addEventListener('vite:preloadError', (event) => {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter future={ROUTER_FUTURE}>
-      <App />
+      {/* The production adapters of the two ports (tests pass in-memory ones). */}
+      <App auth={supabaseAuth} createRepository={createSupabaseRepository} />
     </BrowserRouter>
   </React.StrictMode>
 )

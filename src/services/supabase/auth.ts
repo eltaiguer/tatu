@@ -74,10 +74,7 @@ export async function signUpWithPassword(
   return data.session
 }
 
-export async function signOut(
-  session: SupabaseSession | null | undefined
-): Promise<void> {
-  void session
+export async function signOut(): Promise<void> {
   const client = getSupabaseClient()
   try {
     const { error } = await client.auth.signOut()

@@ -1,16 +1,11 @@
 import { useCallback, useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { teardownWorkspace, workspaceStore } from '../stores/workspace-store'
 import {
-  getCurrentSession,
-  requestPasswordReset,
-  signInWithPassword,
-  signOut,
-  signUpWithPassword,
-  subscribeToAuthChanges,
-  updatePassword,
-} from '../services/supabase/auth'
-import type { SupabaseSession } from '../services/supabase/client'
+  endSession,
+  teardownWorkspace,
+  workspaceStore,
+} from '../stores/workspace-store'
+import type { AuthPort, AuthSession } from '../services/auth/auth-port'
 import { setErrorReportingUser } from '../services/monitoring/error-reporting'
 import { mapAuthError } from '../utils/auth-errors'
 
@@ -61,15 +56,16 @@ function clearPasswordResetModeFromUrl(): void {
   )
 }
 
-export function useAuthSession() {
-  const [session, setSessionState] = useState<SupabaseSession | null>(() =>
-    getCurrentSession()
+/** The signed-in session and the sign-in screen's state, over `auth`. */
+export function useAuthSession(auth: AuthPort) {
+  const [session, setSessionState] = useState<AuthSession | null>(() =>
+    auth.getSession()
   )
   // Every session change goes through here. When the session ends or turns
   // into another user, the previous user's workspace is torn down before the
   // new session is rendered, so no frame ever pairs one user's session with
   // another user's data (#117).
-  const setSession = useCallback((next: SupabaseSession | null) => {
+  const setSession = useCallback((next: AuthSession | null) => {
     const loadedFor = workspaceStore.getState().userId
     if (loadedFor !== null && next?.user.id !== loadedFor) {
       teardownWorkspace()
@@ -90,7 +86,7 @@ export function useAuthSession() {
   }, [session?.user?.id])
 
   useEffect(() => {
-    const unsubscribe = subscribeToAuthChanges(
+    const unsubscribe = auth.onAuthChange(
       (nextSession) => {
         // SIGNED_OUT (this tab or another): drop everything of the user.
         if (!nextSession) teardownWorkspace()
@@ -106,7 +102,7 @@ export function useAuthSession() {
     return () => {
       unsubscribe()
     }
-  }, [setSession])
+  }, [auth, setSession])
 
   async function handleAuth(action: 'signin' | 'signup') {
     setAuthSubmitting(true)
@@ -116,8 +112,8 @@ export function useAuthSession() {
     try {
       const nextSession =
         action === 'signin'
-          ? await signInWithPassword(email, password)
-          : await signUpWithPassword(email, password)
+          ? await auth.signIn(email, password)
+          : await auth.signUp(email, password)
       setSession(nextSession)
       toast.success('Sesión iniciada')
     } catch (error) {
@@ -137,7 +133,7 @@ export function useAuthSession() {
     setAuthNotice('')
 
     try {
-      await requestPasswordReset(email)
+      await auth.requestPasswordReset(email)
       setAuthNotice('Te enviamos un email para restablecer tu contraseña')
     } catch (error) {
       setAuthError(mapAuthError(error))
@@ -152,14 +148,10 @@ export function useAuthSession() {
     setAuthNotice('')
 
     try {
-      await updatePassword(password)
-      try {
-        await signOut(session)
-      } catch {
-        // Ignore sign-out errors after a successful password change.
-      }
+      await auth.updatePassword(password)
+      // Sign-out errors are ignored after a successful password change.
+      await endSession(() => auth.signOut().catch(() => {}))
       setSession(null)
-      teardownWorkspace()
       setPassword('')
       setAuthMode('signin')
       clearPasswordResetModeFromUrl()

@@ -89,7 +89,7 @@ describe('supabase auth service', () => {
     signOutMock.mockResolvedValue({ error: null })
 
     const { signOut } = await import('./auth')
-    await signOut(null)
+    await signOut()
 
     expect(clearStoredSessionMock).toHaveBeenCalledTimes(1)
   })

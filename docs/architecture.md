@@ -220,15 +220,25 @@ Ordering guarantees:
 - **One teardown.** `teardownWorkspace` clears transactions, both override
   maps, custom patterns, custom categories, preferences (back to
   `DEFAULT_PREFERENCES`, including the Claude key) and the AI config. Sign
-  out, back-to-sign-in, password update, Supabase's `SIGNED_OUT` event and
-  a session that switches to another user (`setSession` in `useAuthSession`)
-  all call it. Reset-all-data calls `startEmptyWorkspace`, which tears down
-  and marks the same user ready with nothing.
+  out, back-to-sign-in and password update end the session through
+  `endSession` (wait for pending preference saves, at most
+  `PREFERENCE_FLUSH_TIMEOUT_MS`; sign out; tear down — a failed sign-out
+  keeps the workspace for "Cerrar sesión" and is ignored by the other two).
+  Supabase's `SIGNED_OUT` event and a session that switches to another user
+  (`setSession` in `useAuthSession`) call it directly.
+- **Reset all data.** `resetWorkspace(repository)` waits for pending saves,
+  then `repository.resetAll()` (one table at a time, stopping at the first
+  failure; the insights cache last and best-effort). On success the same
+  user is marked ready with nothing and default preferences; on a failure
+  what remains is reloaded and a `UserFacingError` with the failure as
+  `cause` is thrown (reported, ADR-0004). If another user signed in
+  meanwhile, their workspace is left alone.
 - **Late loads are discarded.** Each hydrate takes a generation number; a
   teardown, a newer hydrate or an abandoned effect invalidates it, and a load
   that resolves late applies nothing.
 - **Saves only for the loaded user.** There is no save effect. `setPreference`
-  saves only when the session's user is the one whose workspace is `ready`,
+  saves only when the signed-in user is the one whose workspace is `ready`,
+  through the repository that workspace was loaded with,
   so loading preferences never writes them back and one user's values (e.g.
   their API key, #123) can't reach another user's row. Saves go out one at a
   time, coalesced to the latest values; sign-out and reset wait for them.
@@ -541,10 +551,20 @@ and Configuración shows it instead of a success toast.
 
 Every write goes through a `Repository` bound to one signed-in user
 (`src/services/repository/repository.ts`, #119). There is no ambient session:
-App builds `createSupabaseRepository(session)` and hands it to
-`useTransactionHandlers` and to the views that save rules; tests use
-`createInMemoryRepository` (same chunking, plus fault injection and `hold`
-for races). The mutations are tested at their own interface, in
+`App` receives `createRepository: (session) => Repository` as a prop, builds
+the signed-in user's repository once per session and hands it to
+`useUserWorkspace`, `useTransactionHandlers`, the views that save rules,
+Insights (its cache: `loadInsights` / `saveInsights`) and Configuración
+("reset all data": `resetAll`, through `resetWorkspace`). `main.tsx` passes
+`createSupabaseRepository`; tests use `createInMemoryRepository` (same
+chunking, plus fault injection and `hold` for races), and the App suites a
+`createFakeBackend()` (`src/test/fake-backend.ts`) holding one per user.
+
+Auth is a port too (`src/services/auth/auth-port.ts`): `App` receives
+`auth: AuthPort` (`supabaseAuth` in `main.tsx`, `createInMemoryAuth` in
+tests) and `useAuthSession(auth)` is its only user. Only the two Supabase
+adapters import `services/supabase/*` at runtime;
+`src/services/supabase-boundary.test.ts` fails the build otherwise. The mutations are tested at their own interface, in
 `src/services/mutations/transaction-mutations.test.ts`; the hook's test
 covers only the binding (signed out, current repository, argument
 pass-through, error clearing). `hydrateWorkspace` loads, and preferences
@@ -587,7 +607,7 @@ and skip their rollback after a switch.
 | Description overrides, merchant overrides, custom patterns, custom categories | Supabase `description_overrides`, `category_overrides`, `custom_patterns`, `custom_categories`  | Module-level state in their services, replaced on sync; edits also write through to Supabase |
 | Preferences, including the Claude API key                                     | Supabase `user_preferences`                                                                     | `workspaceStore` preferences; the AI config in `ai-config.ts`, derived from them             |
 | Import audit                                                                  | Supabase `import_runs`                                                                          | Not loaded                                                                                   |
-| Insights cache                                                                | Supabase `ai_insights`, one row per user                                                        | `Insights.tsx` state                                                                         |
+| Insights cache                                                                | Supabase `ai_insights`, one row per user, via `repository.loadInsights` / `saveInsights`        | `Insights.tsx` state                                                                         |
 | Auth session                                                                  | Supabase Auth                                                                                   | Cached in `localStorage` under `tatu:supabase:session` (`src/services/supabase/client.ts`)   |
 
 - **Supabase is required.** There is no offline mode or local fallback;

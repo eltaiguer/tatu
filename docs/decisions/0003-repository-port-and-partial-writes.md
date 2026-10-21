@@ -83,3 +83,27 @@ never got.
   (category, then each tag) stops at the first partial step.
 - A same user signing out and back in mid-write is still treated as the same
   owner (the guard is on the user id, not the load generation).
+
+## Amendments
+
+### 2026-10-21: the port covers every remote call, injected at the root
+
+Callers still went around the port: the Insights cache and "reset all data"
+called `services/supabase/*` directly, the workspace store fell back to
+building a Supabase repository itself, and the App suites mocked six to nine
+Supabase modules each.
+
+- `Repository` gained `loadInsights()` / `saveInsights(row)` (the
+  `ai_insights` cache; a missing table is still a `UserFacingError`) and
+  `resetAll()` (table by table, stopping at the first failure; the insights
+  cache last and best-effort). The in-memory adapter implements them with
+  the same fault injection (`resetAll` fails per table).
+- A second port, `AuthPort` (`src/services/auth/`), with a Supabase and an
+  in-memory adapter.
+- `App` receives `auth` and `createRepository` as props; `main.tsx` wires the
+  Supabase adapters. `hydrateWorkspace` takes the repository (no default),
+  and the end-of-session sequences live in the workspace store
+  (`endSession`, `resetWorkspace`).
+- Only the two Supabase adapters import `services/supabase/*` at runtime
+  (`src/services/supabase-boundary.test.ts`). App-level tests run against
+  `createFakeBackend()` (`src/test/fake-backend.ts`) instead of module mocks.

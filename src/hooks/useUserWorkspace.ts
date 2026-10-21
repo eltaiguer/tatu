@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
 import type { SupabaseSession } from '../services/supabase/client'
+import type { Repository } from '../services/repository/repository'
 import {
   hydrateWorkspace,
   setPreference,
@@ -18,10 +19,13 @@ export type SyncStatus = 'loading' | 'ready' | 'error'
  */
 export function useUserWorkspace({
   session,
+  repository,
   authMode,
   onHydrateStart,
 }: {
   session: SupabaseSession | null
+  /** The signed-in user's repository; the workspace loads through it. */
+  repository: Repository | null
   authMode: 'signin' | 'reset'
   /** Runs when a load starts (App clears stale auth messages). */
   onHydrateStart?: () => void
@@ -30,8 +34,12 @@ export function useUserWorkspace({
   const [syncKey, setSyncKey] = useState(0)
   const refetch = useCallback(() => setSyncKey((k) => k + 1), [])
 
-  const sessionRef = useRef(session)
-  sessionRef.current = session
+  // Read through a ref: a token refresh hands App a new session, and so a
+  // new repository object, for the same user — that must not reload.
+  const repositoryRef = useRef(repository)
+  repositoryRef.current = repository
+  const userIdRef = useRef(userId)
+  userIdRef.current = userId
   const onHydrateStartRef = useRef(onHydrateStart)
   onHydrateStartRef.current = onHydrateStart
 
@@ -44,8 +52,8 @@ export function useUserWorkspace({
     // teardown never leaves the previous user's data behind.
     if (loadedFor !== null && loadedFor !== userId) teardownWorkspace()
 
-    const current = sessionRef.current
-    if (!current || authMode === 'reset') return
+    const current = repositoryRef.current
+    if (!current || current.userId !== userId || authMode === 'reset') return
 
     onHydrateStartRef.current?.()
     const hydration = hydrateWorkspace(current)
@@ -67,7 +75,7 @@ export function useUserWorkspace({
 
   const save = useCallback(
     <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
-      setPreference(sessionRef.current, key, value)
+      setPreference(userIdRef.current, key, value)
     },
     []
   )

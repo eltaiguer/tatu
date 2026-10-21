@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { Button } from '../ui/button'
-import type { SupabaseSession } from '../../services/supabase/client'
-import { loadUserTransactions } from '../../services/supabase/transactions'
-import { listCategoryOverrides } from '../../services/supabase/category-overrides'
+import type { Repository } from '../../services/repository/repository'
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
 import { merchantOverrideKey } from '../../services/categorizer/category-overrides'
@@ -33,11 +31,11 @@ function tier(confidence: number): 'high' | 'medium' | 'low' {
   return 'low'
 }
 
-async function runAnalysis(session: SupabaseSession): Promise<AnalysisResult> {
-  const [transactions, overrides] = await Promise.all([
-    loadUserTransactions(session),
-    listCategoryOverrides(session),
-  ])
+// Reads the stored rows, not the store's: these are the categories as saved,
+// before transfer inference rewrites them in memory.
+async function runAnalysis(repository: Repository): Promise<AnalysisResult> {
+  const { transactions, categoryOverrides: overrides } =
+    await repository.loadWorkspace()
 
   const overrideKeys = new Set(overrides.map((o) => o.merchantNormalized))
 
@@ -267,9 +265,9 @@ function MerchantTable({ rows }: { rows: MerchantStat[] }) {
 }
 
 export function CoverageAnalysis({
-  session,
+  repository,
 }: {
-  session: SupabaseSession | null
+  repository: Repository | null
 }) {
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [loading, setLoading] = useState(false)
@@ -277,11 +275,11 @@ export function CoverageAnalysis({
   const [activeTab, setActiveTab] = useState<'low' | 'medium' | 'high'>('low')
 
   async function handleRun() {
-    if (!session) return
+    if (!repository) return
     setLoading(true)
     setError(null)
     try {
-      setResult(await runAnalysis(session))
+      setResult(await runAnalysis(repository))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
@@ -305,7 +303,7 @@ export function CoverageAnalysis({
         <Button
           variant="outline"
           onClick={() => void handleRun()}
-          disabled={loading || !session}
+          disabled={loading || !repository}
           style={{ fontSize: 13 }}
         >
           {loading ? 'Analizando…' : 'Analizar cobertura'}

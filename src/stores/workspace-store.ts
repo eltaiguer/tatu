@@ -3,9 +3,13 @@
 // and the AI config derived from them). This module is the one owner of that
 // lifecycle (#117):
 //
-//  - `hydrateWorkspace` is the only thing that fills it, from Supabase.
+//  - `hydrateWorkspace` is the only thing that fills it, through the user's
+//    repository (the persistence port).
 //  - `teardownWorkspace` is the only thing that empties it. Every path that
-//    ends a session calls it; adding per-user state means adding it here.
+//    ends a session calls it (most through `endSession`); adding per-user
+//    state means adding it here.
+//  - `resetWorkspace` deletes everything the user stored and starts them
+//    over empty.
 //  - `setPreference` is the only thing that saves preferences, and only for
 //    the user whose preferences are loaded — so one user's values (e.g. their
 //    Claude API key, #123) can never be written into another user's row.
@@ -20,13 +24,11 @@ import {
   type WorkspaceState,
   type WorkspaceStatus,
 } from './workspace-state'
-import type { SupabaseSession } from '../services/supabase/client'
 import type { UserPreferences } from '../services/supabase/user-preferences'
 import type {
   Repository,
   WorkspaceSnapshot,
 } from '../services/repository/repository'
-import { createSupabaseRepository } from '../services/repository/supabase-repository'
 import {
   clearAllCategoryOverrides,
   replaceMerchantCategoryOverrides,
@@ -41,6 +43,7 @@ import { setAiConfig } from '../services/ai/ai-config'
 import { DEFAULT_PREFERENCES } from '../services/preferences/defaults'
 import { transactionStore } from './transaction-store'
 import { captureError } from '../services/monitoring/error-reporting'
+import { UserFacingError } from '../utils/user-error'
 
 export type { UserPreferences }
 export { DEFAULT_PREFERENCES }
@@ -85,13 +88,42 @@ export function teardownWorkspace(): void {
 }
 
 /**
- * Tears down, then marks `session`'s user as loaded with nothing: no data and
- * default preferences. For "reset all data", once the server delete has
- * succeeded — the server is known to be empty, so there's nothing to load.
+ * Ends the signed-in user's session: lets a pending preference save reach
+ * the server while the token is still valid (bounded by
+ * PREFERENCE_FLUSH_TIMEOUT_MS), signs out, then tears the workspace down.
+ * If signing out rejects, the error is rethrown and the workspace kept.
  */
-export function startEmptyWorkspace(session: SupabaseSession): void {
+export async function endSession(signOut: () => Promise<void>): Promise<void> {
+  await flushPreferenceSaves()
+  await signOut()
   teardownWorkspace()
-  workspaceStore.setState({ userId: session.user.id, status: 'ready' })
+}
+
+export const RESET_FAILED_MESSAGE =
+  'No se pudieron borrar todos los datos. Recargamos lo que quedó guardado; intentá de nuevo.'
+
+/**
+ * Deletes everything the user has stored, then starts them over empty and
+ * ready, still signed in, with default preferences (no key, AI off). Waits
+ * for pending preference saves first, so a late save can't recreate the
+ * row it deletes. The delete is several requests: if one fails, what remains
+ * is reloaded and a UserFacingError carrying the failure as `cause` is
+ * thrown. If another user's workspace was loaded meanwhile, it is left alone.
+ */
+export async function resetWorkspace(repository: Repository): Promise<void> {
+  await flushPreferenceSaves()
+  try {
+    await repository.resetAll()
+  } catch (error) {
+    console.error('reset failed:', error)
+    if (isWorkspaceOwner(repository.userId)) hydrateWorkspace(repository)
+    throw new UserFacingError(RESET_FAILED_MESSAGE, { cause: error })
+  }
+  if (!isWorkspaceOwner(repository.userId)) return
+  // The server now holds nothing for this user: nothing to load.
+  teardownWorkspace()
+  preferenceRepository = repository
+  workspaceStore.setState({ userId: repository.userId, status: 'ready' })
 }
 
 export interface Hydration {
@@ -102,16 +134,12 @@ export interface Hydration {
 }
 
 /**
- * Loads `session`'s user through the repository port (Supabase unless a
- * test passes another adapter) and replaces the workspace with it.
- * Switching to a different user tears the previous one down first. Nothing is
- * applied unless this is still the latest hydrate when the load resolves.
+ * Loads `repository`'s user and replaces the workspace with it. Switching to
+ * a different user tears the previous one down first. Nothing is applied
+ * unless this is still the latest hydrate when the load resolves.
  */
-export function hydrateWorkspace(
-  session: SupabaseSession,
-  repository: Repository = createSupabaseRepository(session)
-): Hydration {
-  const userId = session.user.id
+export function hydrateWorkspace(repository: Repository): Hydration {
+  const userId = repository.userId
   const current = workspaceStore.getState().userId
   if (current !== null && current !== userId) {
     teardownWorkspace()
@@ -192,37 +220,39 @@ function applyLoaded(loaded: WorkspaceSnapshot) {
 }
 
 /**
- * Changes one preference and saves all of them to `session`'s row. Returns
- * false and changes nothing unless `session`'s user is the one whose
- * workspace is loaded and ready — so nothing is saved before a user's own
- * preferences have been read, or into anyone else's row.
+ * Changes one preference and saves all of them to `forUserId`'s row, through
+ * the repository the workspace was loaded with. Returns false and changes
+ * nothing unless `forUserId` is the user whose workspace is loaded and ready
+ * — so nothing is saved before a user's own preferences have been read, or
+ * into anyone else's row.
  */
 export function setPreference<K extends keyof UserPreferences>(
-  session: SupabaseSession | null,
+  forUserId: string | null,
   key: K,
   value: UserPreferences[K]
 ): boolean {
   const { userId, status, preferences } = workspaceStore.getState()
-  if (!session || status !== 'ready' || session.user.id !== userId) {
+  const repository = preferenceRepository
+  if (
+    forUserId === null ||
+    status !== 'ready' ||
+    forUserId !== userId ||
+    repository?.userId !== forUserId
+  ) {
     return false
   }
   if (Object.is(preferences[key], value)) return true
   const next = { ...preferences, [key]: value }
   applyPreferences(next)
-  enqueueSave(
-    preferenceRepository?.userId === session.user.id
-      ? preferenceRepository
-      : createSupabaseRepository(session),
-    next
-  )
+  enqueueSave(repository, next)
   return true
 }
 
 // Saves go out one at a time, coalesced to the latest values: Configuración
 // saves on every keystroke, and parallel full-row upserts could land out of
 // order (an older key overwriting a newer one).
-// The repository the current workspace was loaded through (tests pass an
-// in-memory one); preference saves go to the same place.
+// The repository the current workspace was loaded through; preference saves
+// go to the same place.
 let preferenceRepository: Repository | null = null
 let queuedSave: {
   repository: Repository

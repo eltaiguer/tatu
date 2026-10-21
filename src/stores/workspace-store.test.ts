@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from '../services/supabase/client'
 import type { UserPreferences } from '../services/supabase/user-preferences'
 import type { Transaction } from '../models'
 
@@ -11,117 +10,33 @@ vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
   captureError: reporting.captureError,
 }))
 
-// One deferred load per user, so a test decides when (and in which order)
-// each user's data arrives.
-type Loaded = {
-  transactions: Transaction[]
-  merchant: string
-  preferences: UserPreferences | null
-}
-const pending = new Map<
-  string,
-  { resolve: (v: Loaded) => void; reject: (e: Error) => void }
->()
-const loads = new Map<string, Promise<Loaded>>()
-function loadFor(session: SupabaseSession): Promise<Loaded> {
-  const id = session.user.id
-  if (!loads.has(id)) {
-    loads.set(
-      id,
-      new Promise<Loaded>((resolve, reject) =>
-        pending.set(id, { resolve, reject })
-      )
-    )
-  }
-  return loads.get(id)!
-}
-
-// The pending load for `id`, created on demand: a hydrate only starts
-// loading after pending saves have flushed, a microtask later.
-function deferred(id: string) {
-  loadFor({ user: { id } } as SupabaseSession)
-  return pending.get(id)!
-}
-
-const saveUserPreferences = vi.fn<
-  [SupabaseSession, UserPreferences],
-  Promise<void>
->(async () => {})
-
-vi.mock('../services/supabase/transactions', () => ({
-  loadUserTransactions: async (s: SupabaseSession) =>
-    (await loadFor(s)).transactions,
-}))
-vi.mock('../services/supabase/category-overrides', () => ({
-  listCategoryOverrides: async (s: SupabaseSession) => [
-    {
-      merchantNormalized: (await loadFor(s)).merchant,
-      merchantOriginal: (await loadFor(s)).merchant,
-      category: 'restaurants',
-      updatedAt: '2026-01-01T00:00:00Z',
-    },
-  ],
-}))
-vi.mock('../services/supabase/description-overrides', () => ({
-  listDescriptionOverrides: async (s: SupabaseSession) => [
-    {
-      descriptionNormalized: (await loadFor(s)).merchant,
-      descriptionOriginal: (await loadFor(s)).merchant,
-      friendlyDescription: `${(await loadFor(s)).merchant} (friendly)`,
-      updatedAt: '2026-01-01T00:00:00Z',
-    },
-  ],
-}))
-vi.mock('../services/supabase/custom-patterns', () => ({
-  listCustomPatterns: async (s: SupabaseSession) => [
-    {
-      id: `pattern-${s.user.id}`,
-      pattern: (await loadFor(s)).merchant,
-      category: 'restaurants',
-      isRegex: false,
-      createdAt: '2026-01-01T00:00:00Z',
-    },
-  ],
-}))
-vi.mock('../services/supabase/custom-categories', () => ({
-  listCustomCategories: async (s: SupabaseSession) => {
-    await loadFor(s)
-    return [{ id: `cat-${s.user.id}`, label: 'Mía', color: '#ff0000' }]
-  },
-}))
-vi.mock('../services/supabase/user-preferences', () => ({
-  loadUserPreferences: async (s: SupabaseSession) =>
-    (await loadFor(s)).preferences,
-  saveUserPreferences: (s: SupabaseSession, p: UserPreferences) =>
-    saveUserPreferences(s, p),
-}))
-
 import {
   DEFAULT_PREFERENCES,
+  endSession,
   flushPreferenceSaves,
   hydrateWorkspace,
   PREFERENCE_FLUSH_TIMEOUT_MS,
+  resetWorkspace,
   setPreference,
-  startEmptyWorkspace,
   teardownWorkspace,
   workspaceStore,
 } from './workspace-store'
 import { transactionStore } from './transaction-store'
-import { createInMemoryRepository } from '../services/repository/in-memory-repository'
+import {
+  createInMemoryRepository,
+  type InMemoryRepository,
+} from '../services/repository/in-memory-repository'
 import { getAiConfig } from '../services/ai/ai-config'
 import { listMerchantCategoryOverrides } from '../services/categorizer/category-overrides'
 import { listDescriptionOverrides } from '../services/descriptions/description-overrides'
 import { listCustomPatterns } from '../services/categorizer/custom-patterns'
 import { listCustomCategories } from '../services/categories/category-store'
-
-function session(id: string): SupabaseSession {
-  return { user: { id, email: `${id}@example.uy` } } as SupabaseSession
-}
+import { UserFacingError } from '../utils/user-error'
 
 function tx(id: string): Transaction {
   return {
     id,
-    date: new Date('2026-03-01'),
+    date: new Date('2026-03-01T00:00:00.000Z'),
     description: id,
     amount: 100,
     currency: 'UYU',
@@ -129,7 +44,7 @@ function tx(id: string): Transaction {
     source: 'credit_card',
     category: 'restaurants',
     rawData: {},
-  } as Transaction
+  }
 }
 
 const A_PREFS: UserPreferences = {
@@ -141,8 +56,55 @@ const A_PREFS: UserPreferences = {
   aiModel: 'claude-sonnet-4-5',
 }
 
-function dataOf(userId: string, preferences: UserPreferences | null) {
-  return { transactions: [tx(`tx-${userId}`)], merchant: userId, preferences }
+// One stored user: a row, one of each rule keyed on their id, and
+// `preferences` (null: they never saved any).
+function repoOf(
+  userId: string,
+  preferences: UserPreferences | null = null
+): InMemoryRepository {
+  return createInMemoryRepository({
+    userId,
+    transactions: [tx(`tx-${userId}`)],
+    categoryOverrides: [
+      {
+        merchantNormalized: userId,
+        merchantOriginal: userId,
+        category: 'restaurants',
+        createdAt: '',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+    descriptionOverrides: [
+      {
+        descriptionNormalized: userId,
+        descriptionOriginal: userId,
+        friendlyDescription: `${userId} (friendly)`,
+        createdAt: '',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+    customPatterns: [
+      {
+        id: `pattern-${userId}`,
+        pattern: userId,
+        matchType: 'contains',
+        category: 'restaurants',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+    customCategories: [
+      {
+        id: `cat-${userId}`,
+        label: 'Mía',
+        color: '#ff0000',
+        isIgnored: false,
+        isArchived: false,
+        createdAt: '',
+        updatedAt: '',
+      },
+    ],
+    preferences,
+  })
 }
 
 // Everything a user could have in memory, in one comparable snapshot.
@@ -172,50 +134,23 @@ const EMPTY = {
   categories: [],
 }
 
-async function signIn(id: string, preferences: UserPreferences | null) {
-  const hydration = hydrateWorkspace(session(id))
-  deferred(id).resolve(dataOf(id, preferences))
-  await hydration.done
+async function signIn(repo: InMemoryRepository) {
+  await hydrateWorkspace(repo).done
+}
+
+// A request that waits for the test: `release()` lets it land.
+function heldSave(repo: InMemoryRepository) {
+  return repo.hold('savePreferences')
 }
 
 describe('workspace store', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    pending.clear()
-    loads.clear()
     teardownWorkspace()
   })
 
-  it('loads through the repository port it is given (#119)', async () => {
-    const repo = createInMemoryRepository({
-      userId: 'user-r',
-      transactions: [tx('tx-repo')],
-      deleted: [tx('tx-gone')],
-      customPatterns: [
-        {
-          id: 'cp-1',
-          pattern: 'disco',
-          matchType: 'contains',
-          category: 'groceries',
-          createdAt: '',
-        },
-      ],
-      preferences: A_PREFS,
-    })
-
-    await hydrateWorkspace(session('user-r'), repo).done
-
-    expect(snapshot()).toMatchObject({
-      userId: 'user-r',
-      status: 'ready',
-      preferences: A_PREFS,
-      transactions: ['tx-repo'],
-      patterns: ['cp-1'],
-    })
-  })
-
   it('hydrates every piece of a user’s state, and teardown empties all of it', async () => {
-    await signIn('a', A_PREFS)
+    await signIn(repoOf('a', A_PREFS))
 
     expect(snapshot()).toEqual({
       userId: 'a',
@@ -239,8 +174,8 @@ describe('workspace store', () => {
   })
 
   it('gives a user without a preferences row the defaults, not the previous user’s', async () => {
-    await signIn('a', A_PREFS)
-    await signIn('b', null)
+    await signIn(repoOf('a', A_PREFS))
+    await signIn(repoOf('b'))
 
     expect(workspaceStore.getState().preferences).toEqual(DEFAULT_PREFERENCES)
     expect(getAiConfig()).toBeNull()
@@ -248,22 +183,25 @@ describe('workspace store', () => {
   })
 
   it('discards A’s load when it resolves after teardown', async () => {
-    const hydration = hydrateWorkspace(session('a'))
+    const a = repoOf('a', A_PREFS)
+    const load = a.hold('load')
+    const hydration = hydrateWorkspace(a)
     teardownWorkspace()
 
-    deferred('a').resolve(dataOf('a', A_PREFS))
+    load.release()
     await hydration.done
 
     expect(snapshot()).toEqual(EMPTY)
   })
 
   it('discards A’s load when it resolves after B’s', async () => {
-    const forA = hydrateWorkspace(session('a'))
-    const forB = hydrateWorkspace(session('b'))
+    const a = repoOf('a', A_PREFS)
+    const loadA = a.hold('load')
+    const forA = hydrateWorkspace(a)
+    const forB = hydrateWorkspace(repoOf('b'))
 
-    deferred('b').resolve(dataOf('b', null))
     await forB.done
-    deferred('a').resolve(dataOf('a', A_PREFS))
+    loadA.release()
     await forA.done
 
     expect(snapshot()).toMatchObject({
@@ -279,10 +217,12 @@ describe('workspace store', () => {
   })
 
   it('discards an abandoned load (an effect cleaned up before it landed)', async () => {
-    const hydration = hydrateWorkspace(session('a'))
+    const a = repoOf('a', A_PREFS)
+    const load = a.hold('load')
+    const hydration = hydrateWorkspace(a)
     hydration.abandon()
 
-    deferred('a').resolve(dataOf('a', A_PREFS))
+    load.release()
     await hydration.done
 
     expect(snapshot().transactions).toEqual([])
@@ -290,9 +230,10 @@ describe('workspace store', () => {
   })
 
   it('reports a failed load without applying anything', async () => {
-    const hydration = hydrateWorkspace(session('a'))
-    deferred('a').reject(new Error('offline'))
-    await hydration.done
+    const a = repoOf('a', A_PREFS)
+    a.failOn('load', { error: new Error('offline') })
+
+    await hydrateWorkspace(a).done
 
     expect(snapshot()).toEqual({ ...EMPTY, userId: 'a', status: 'error' })
     expect(reporting.captureError).toHaveBeenCalledWith(
@@ -303,80 +244,80 @@ describe('workspace store', () => {
 
   describe('saving preferences', () => {
     it('never saves while the user’s own preferences are still loading', () => {
-      hydrateWorkspace(session('b'))
+      const b = repoOf('b')
+      b.hold('load')
+      hydrateWorkspace(b)
 
-      expect(setPreference(session('b'), 'theme', 'dark')).toBe(false)
-      expect(saveUserPreferences).not.toHaveBeenCalled()
+      expect(setPreference('b', 'theme', 'dark')).toBe(false)
+      expect(b.requests.savePreferences).toBeUndefined()
       expect(workspaceStore.getState().preferences.theme).toBe('auto')
     })
 
     it('never saves into another user’s row', async () => {
-      await signIn('a', A_PREFS)
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
 
-      expect(setPreference(session('b'), 'theme', 'light')).toBe(false)
-      expect(saveUserPreferences).not.toHaveBeenCalled()
+      expect(setPreference('b', 'theme', 'light')).toBe(false)
+      expect(a.requests.savePreferences).toBeUndefined()
     })
 
     it('does not save just because preferences were loaded', async () => {
-      await signIn('a', A_PREFS)
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
 
-      expect(saveUserPreferences).not.toHaveBeenCalled()
+      expect(a.requests.savePreferences).toBeUndefined()
     })
 
     it('saves the loaded user’s full preferences on an edit, and updates the AI config', async () => {
-      await signIn('a', A_PREFS)
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
 
-      setPreference(session('a'), 'claudeApiKey', 'sk-ant-a-2')
+      setPreference('a', 'claudeApiKey', 'sk-ant-a-2')
       await flushPreferenceSaves()
 
-      expect(saveUserPreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ user: expect.objectContaining({ id: 'a' }) }),
-        { ...A_PREFS, claudeApiKey: 'sk-ant-a-2' }
-      )
+      expect(a.preferences).toEqual({ ...A_PREFS, claudeApiKey: 'sk-ant-a-2' })
       expect(getAiConfig()?.apiKey).toBe('sk-ant-a-2')
     })
 
     it('sends one save at a time, ending with the latest values', async () => {
-      await signIn('a', null)
-      let release: () => void = () => {}
-      saveUserPreferences.mockImplementationOnce(
-        () => new Promise<void>((resolve) => (release = resolve))
-      )
+      const a = repoOf('a')
+      await signIn(a)
+      const saved: string[] = []
+      const save = a.savePreferences
+      a.savePreferences = async (prefs) => {
+        saved.push(prefs.claudeApiKey)
+        await save(prefs)
+      }
+      const first = heldSave(a)
 
-      setPreference(session('a'), 'claudeApiKey', 'sk')
-      setPreference(session('a'), 'claudeApiKey', 'sk-a')
-      setPreference(session('a'), 'claudeApiKey', 'sk-an')
-      expect(saveUserPreferences).toHaveBeenCalledTimes(1)
+      setPreference('a', 'claudeApiKey', 'sk')
+      setPreference('a', 'claudeApiKey', 'sk-a')
+      setPreference('a', 'claudeApiKey', 'sk-an')
+      expect(saved).toEqual(['sk'])
 
-      release()
+      first.release()
       await flushPreferenceSaves()
 
-      const keys = saveUserPreferences.mock.calls.map(([, p]) => p.claudeApiKey)
-      expect(keys).toEqual(['sk', 'sk-an'])
+      expect(saved).toEqual(['sk', 'sk-an'])
+      expect(a.preferences?.claudeApiKey).toBe('sk-an')
     })
 
     it('a reload waits for a pending save, so it reads the saved values instead of reverting them', async () => {
-      await signIn('a', A_PREFS)
-      let release: () => void = () => {}
-      saveUserPreferences.mockImplementationOnce(
-        () => new Promise<void>((resolve) => (release = resolve))
-      )
-      setPreference(session('a'), 'fxRate', 43)
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      const save = heldSave(a)
+      setPreference('a', 'fxRate', 43)
 
       // Refetch (e.g. Transacciones' reload) while the save is in flight.
-      loads.delete('a')
-      pending.delete('a')
-      const reload = hydrateWorkspace(session('a'))
+      const reload = hydrateWorkspace(a)
       await Promise.resolve()
       await Promise.resolve()
-      expect(pending.has('a')).toBe(false)
+      expect(a.requests.load).toBe(1)
 
-      release()
-      await vi.waitFor(() => expect(pending.has('a')).toBe(true))
-      // The server row now has the saved value.
-      deferred('a').resolve(dataOf('a', { ...A_PREFS, fxRate: 43 }))
+      save.release()
       await reload.done
 
+      expect(a.requests.load).toBe(2)
       expect(workspaceStore.getState().preferences.fxRate).toBe(43)
       expect(workspaceStore.getState().status).toBe('ready')
     })
@@ -384,11 +325,10 @@ describe('workspace store', () => {
     it('stops waiting for a hung save after a bounded time', async () => {
       vi.useFakeTimers()
       try {
-        await signIn('a', A_PREFS)
-        saveUserPreferences.mockImplementationOnce(
-          () => new Promise<void>(() => {})
-        )
-        setPreference(session('a'), 'fxRate', 43)
+        const a = repoOf('a', A_PREFS)
+        await signIn(a)
+        heldSave(a)
+        setPreference('a', 'fxRate', 43)
 
         let flushed = false
         void flushPreferenceSaves().then(() => (flushed = true))
@@ -402,27 +342,27 @@ describe('workspace store', () => {
     })
 
     it('drops a not-yet-sent save of a user who signs out', async () => {
-      await signIn('a', A_PREFS)
-      let release: () => void = () => {}
-      saveUserPreferences.mockImplementationOnce(
-        () => new Promise<void>((resolve) => (release = resolve))
-      )
-      setPreference(session('a'), 'fxRate', 43)
-      setPreference(session('a'), 'fxRate', 44)
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      const save = heldSave(a)
+      setPreference('a', 'fxRate', 43)
+      setPreference('a', 'fxRate', 44)
 
       teardownWorkspace()
-      release()
+      save.release()
       await flushPreferenceSaves()
+      await vi.waitFor(() => expect(a.preferences?.fxRate).toBe(43))
 
-      expect(saveUserPreferences).toHaveBeenCalledTimes(1)
+      expect(a.requests.savePreferences).toBe(1)
     })
 
     it('reports a failed save', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      await signIn('a', A_PREFS)
-      saveUserPreferences.mockRejectedValueOnce(new Error('boom'))
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      a.failOn('savePreferences', { times: 1, error: new Error('boom') })
 
-      setPreference(session('a'), 'theme', 'light')
+      setPreference('a', 'theme', 'light')
       await flushPreferenceSaves()
 
       expect(errorSpy).toHaveBeenCalledWith(
@@ -436,17 +376,130 @@ describe('workspace store', () => {
     })
   })
 
-  it('starts a reset user over empty and ready, with saves allowed', async () => {
-    await signIn('a', A_PREFS)
+  describe('ending a session', () => {
+    it('lets the last preference edit land, then signs out, then tears down', async () => {
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      const save = heldSave(a)
+      setPreference('a', 'fxRate', 43)
+      const order: string[] = []
 
-    startEmptyWorkspace(session('a'))
+      const ended = endSession(async () => {
+        order.push(`signOut (saved fxRate ${a.preferences?.fxRate})`)
+      })
+      save.release()
+      await ended
 
-    expect(snapshot()).toEqual({ ...EMPTY, userId: 'a', status: 'ready' })
-    expect(setPreference(session('a'), 'theme', 'dark')).toBe(true)
-    await flushPreferenceSaves()
-    expect(saveUserPreferences).toHaveBeenCalledWith(expect.anything(), {
-      ...DEFAULT_PREFERENCES,
-      theme: 'dark',
+      expect(order).toEqual(['signOut (saved fxRate 43)'])
+      expect(snapshot()).toEqual(EMPTY)
+    })
+
+    it('keeps the workspace when signing out fails', async () => {
+      await signIn(repoOf('a', A_PREFS))
+
+      await expect(
+        endSession(() => Promise.reject(new Error('offline')))
+      ).rejects.toThrow('offline')
+
+      expect(snapshot().userId).toBe('a')
+      expect(snapshot().transactions).toEqual(['tx-a'])
+    })
+
+    it('does not wait forever for a hung save', async () => {
+      vi.useFakeTimers()
+      try {
+        const a = repoOf('a', A_PREFS)
+        await signIn(a)
+        heldSave(a)
+        setPreference('a', 'fxRate', 43)
+        const signOut = vi.fn(async () => {})
+
+        const ended = endSession(signOut)
+        await vi.advanceTimersByTimeAsync(PREFERENCE_FLUSH_TIMEOUT_MS)
+        await ended
+
+        expect(signOut).toHaveBeenCalled()
+        expect(snapshot()).toEqual(EMPTY)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  describe('resetting all data', () => {
+    it('deletes everything on the server and starts the user over empty, ready, with saves allowed', async () => {
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+
+      await resetWorkspace(a)
+
+      expect(snapshot()).toEqual({ ...EMPTY, userId: 'a', status: 'ready' })
+      expect(a.rows()).toEqual([])
+      expect(a.preferences).toBeNull()
+      expect(setPreference('a', 'theme', 'dark')).toBe(true)
+      await flushPreferenceSaves()
+      expect(a.preferences).toEqual({ ...DEFAULT_PREFERENCES, theme: 'dark' })
+    })
+
+    it('waits for a pending preference save, so it cannot recreate the deleted row', async () => {
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      const save = heldSave(a)
+      setPreference('a', 'fxRate', 43)
+
+      const reset = resetWorkspace(a)
+      save.release()
+      await reset
+
+      expect(a.preferences).toBeNull()
+    })
+
+    it('on a partial failure, reloads what remains and explains it, carrying the cause', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      const failure = new Error('permission denied')
+      a.failOn('resetAll', {
+        when: ([table]) => table === 'custom_categories',
+        error: failure,
+      })
+
+      const error = await resetWorkspace(a).catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(UserFacingError)
+      expect((error as UserFacingError).message).toBe(
+        'No se pudieron borrar todos los datos. Recargamos lo que quedó guardado; intentá de nuevo.'
+      )
+      expect((error as UserFacingError).cause).toBe(failure)
+      expect(errorSpy).toHaveBeenCalledWith('reset failed:', failure)
+      // The rows went; the custom category and the preferences did not.
+      await vi.waitFor(() =>
+        expect(snapshot()).toMatchObject({
+          userId: 'a',
+          status: 'ready',
+          transactions: [],
+          categories: ['cat-a'],
+          preferences: A_PREFS,
+        })
+      )
+    })
+
+    it('leaves the next user alone when the account changes during the reset', async () => {
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      const deleting = a.hold('resetAll')
+
+      const reset = resetWorkspace(a)
+      await Promise.resolve()
+      await signIn(repoOf('b'))
+      deleting.release()
+      await reset
+
+      expect(snapshot()).toMatchObject({
+        userId: 'b',
+        status: 'ready',
+        transactions: ['tx-b'],
+      })
     })
   })
 })
