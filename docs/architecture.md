@@ -352,9 +352,8 @@ A transaction's `date` is a **calendar day, held as that day's UTC midnight**
   a transaction date — in Uruguay that shows `T00:00Z` as the previous day.
 - **Ranges:** month/period bounds are UTC (`periodDateRange` and the
   `T00:00:00.000Z`…`T23:59:59.999Z` bounds in `filterTransactions`,
-  `services/filters/transaction-filter.ts`; `getDateRangeForPeriod`), so a
-  Transacciones drill-through holds exactly the rows Resumen summed
-  (`toMonthKey`) for that month.
+  `services/filters/transaction-filter.ts`), so a Transacciones drill-through
+  holds exactly the rows Resumen summed (`toMonthKey`) for that month.
 
 ## Transacciones filtering
 
@@ -472,7 +471,15 @@ rows. Never group by `description` or `getDisplayDescription` directly.
   kept instead.
 - `merchantLabelFor(rows)`: what the user sees and the Insights model echoes —
   the most recent rename, else the most common raw description (ties: most
-  recent row).
+  recent row). A transfer's label is read off its key: the counterparty plus
+  the bank concept ("TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO
+  GAZZANO" → "FEDERICO GAZZANO · Transferencia enviada"). The concept stays
+  because the key keeps it: a Supernet debit and the TRANSFERENCIA ENVIADA leg
+  beside it name the same person but are different merchants. Deriving the
+  label from the key means two keys never share a label. A key that opens
+  with no known concept, or leaves no name, keeps the raw text. Insights
+  matches the merchant the model echoes ignoring case, accents and the
+  separator.
 - `npx vite-node scripts/merchant-groups.ts [paths…]` prints, for Santander
   CSVs or Tatu's own CSV export, every key that merges several variants.
 
@@ -561,3 +568,15 @@ and skip their rollback after a switch.
 - **Derived state is not persisted:** inferred transfer categories, converted
   amounts, learned patterns and temporal patterns are recomputed from the
   stored data.
+
+## Error reporting
+
+Unexpected errors go to Sentry from a production build with `VITE_SENTRY_DSN`
+set, and nowhere
+otherwise (ADR-0004, `src/services/monitoring/error-reporting.ts`).
+`userErrorMessage` reports every error it did not write itself. Code that
+catches an error without passing it there calls `captureError(error, area)`.
+Before anything is sent, the browser strips URLs down to their path, redacts
+quoted values and Postgres key values from messages, and drops `extra`
+and every breadcrumb except navigation. `UserFacingError` and `NeedsConfirmationError`
+are never sent.

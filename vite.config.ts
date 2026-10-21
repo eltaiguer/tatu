@@ -1,6 +1,16 @@
 import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { sentryVitePlugin } from '@sentry/vite-plugin'
+
+// Source maps go to Sentry only from `npm run deploy:firebase`, which sets
+// SENTRY_UPLOAD_SOURCEMAPS, and only with SENTRY_AUTH_TOKEN (plus
+// SENTRY_ORG / SENTRY_PROJECT) exported. A token in the shell alone must not
+// upload maps of a work-in-progress `npm run build`. The maps are deleted
+// from dist/ after the upload so Firebase never serves them.
+const uploadSourceMaps = Boolean(
+  process.env.SENTRY_UPLOAD_SOURCEMAPS && process.env.SENTRY_AUTH_TOKEN
+)
 
 // Tests run in a pinned time zone so a date bug can't pass on one machine and
 // fail on another: Uruguay (the user's zone) by default, others through
@@ -13,8 +23,20 @@ if (process.env.VITEST) {
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    uploadSourceMaps &&
+      sentryVitePlugin({
+        org: process.env.SENTRY_ORG,
+        project: process.env.SENTRY_PROJECT,
+        authToken: process.env.SENTRY_AUTH_TOKEN,
+        telemetry: false,
+        sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
+      }),
+  ],
   build: {
+    sourcemap: uploadSourceMaps ? 'hidden' : false,
     rollupOptions: {
       output: {
         // Long-lived vendor code in its own chunks, so an app deploy doesn't
@@ -25,6 +47,7 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom', 'scheduler'],
           supabase: ['@supabase/supabase-js'],
+          sentry: ['@sentry/react'],
         },
       },
     },

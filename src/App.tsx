@@ -212,7 +212,8 @@ function App() {
         console.error('reset failed:', error)
         refetch()
         throw new UserFacingError(
-          'No se pudieron borrar todos los datos. Recargamos lo que quedó guardado; intentá de nuevo.'
+          'No se pudieron borrar todos los datos. Recargamos lo que quedó guardado; intentá de nuevo.',
+          { cause: error }
         )
       }
     }

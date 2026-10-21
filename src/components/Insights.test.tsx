@@ -5,6 +5,7 @@ import type { Transaction } from '../models'
 import { Category } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 import type { InsightsResult } from '../services/insights/insight-generator'
+import { UserFacingError } from '../utils/user-error'
 
 const { getCachedInsightsMock, saveCachedInsightsMock, generateInsightsMock } =
   vi.hoisted(() => ({
@@ -27,6 +28,14 @@ vi.mock('../services/insights/insight-generator', async () => {
     generateInsights: generateInsightsMock,
   }
 })
+
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
+  captureError: reporting.captureError,
+}))
 
 const session = { user: { id: 'user-1' } } as unknown as SupabaseSession
 
@@ -220,5 +229,78 @@ describe('Insights', () => {
       sampleResult,
       'claude-opus-5-5'
     )
+  })
+
+  it('reports an unexpected failure to generate insights, not a bad key', async () => {
+    getCachedInsightsMock.mockResolvedValue(null)
+    const bug = new TypeError('x is undefined')
+    generateInsightsMock
+      .mockRejectedValueOnce(new Error('401 invalid x-api-key'))
+      .mockRejectedValueOnce(bug)
+    renderInsights()
+
+    fireEvent.click(await screen.findByText('Generar insights'))
+    await screen.findByText(
+      'No se pudieron generar los insights: la clave API de Anthropic no es válida'
+    )
+    // Handed over without a cause, which reporting drops (sentry test).
+    for (const [error] of reporting.captureError.mock.calls) {
+      expect(error).toBeInstanceOf(UserFacingError)
+      expect((error as UserFacingError).cause).toBeUndefined()
+    }
+
+    fireEvent.click(screen.getByText('Generar insights'))
+    await screen.findByText(
+      'No se pudieron generar los insights: error inesperado del servicio de IA'
+    )
+    expect(screen.queryByText(/x is undefined/)).not.toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'insights')
+  })
+
+  it('does not report a missing insights table, which needs schema.sql', async () => {
+    getCachedInsightsMock.mockRejectedValue(
+      new UserFacingError(
+        'Falta crear la tabla de insights en la base de datos.'
+      )
+    )
+    renderInsights()
+
+    await screen.findByText(
+      'Falta crear la tabla de insights en la base de datos.'
+    )
+    // Handed over without a cause, which reporting drops (sentry test).
+    for (const [error] of reporting.captureError.mock.calls) {
+      expect(error).toBeInstanceOf(UserFacingError)
+      expect((error as UserFacingError).cause).toBeUndefined()
+    }
+  })
+
+  it('reports a failure to save generated insights as a storage failure', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    getCachedInsightsMock.mockResolvedValue(null)
+    generateInsightsMock.mockResolvedValue(sampleResult)
+    const failure = new Error('permission denied for table ai_insights')
+    saveCachedInsightsMock.mockRejectedValue(failure)
+    renderInsights()
+
+    fireEvent.click(await screen.findByText('Generar insights'))
+    await screen.findByText('No se pudieron guardar los insights')
+    // Generated (and paid for) already: shown even though it wasn't saved.
+    expect(screen.getByText('Restaurantes domina tu gasto')).toBeInTheDocument()
+    expect(screen.queryByText(failure.message)).not.toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledWith(failure, 'insights')
+    expect(errorSpy).toHaveBeenCalledWith(failure)
+  })
+
+  it('reports a failure to load cached insights', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const failure = new Error('permission denied for table ai_insights')
+    getCachedInsightsMock.mockRejectedValue(failure)
+    renderInsights()
+
+    await screen.findByText('No se pudieron cargar los insights')
+    expect(screen.queryByText(failure.message)).not.toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledWith(failure, 'insights')
+    expect(errorSpy).toHaveBeenCalledWith(failure)
   })
 })

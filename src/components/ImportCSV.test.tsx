@@ -19,6 +19,13 @@ const { parseCSVMock, addTransactionsMock, toastMock } = vi.hoisted(() => ({
 }))
 
 vi.mock('sonner', () => ({ toast: toastMock }))
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
+  captureError: reporting.captureError,
+}))
 
 vi.mock('../services/parsers/csv-parser', () => ({
   parseCSV: parseCSVMock,
@@ -374,6 +381,30 @@ describe('ImportCSV', () => {
     ).toBeInTheDocument()
     expect(screen.queryByText(/Cannot read/)).not.toBeInTheDocument()
     expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+  })
+
+  it('reports an unexpected parser failure to Sentry once, as a parse failure', async () => {
+    const bug = new TypeError(
+      "Cannot read properties of undefined (reading 'trim')"
+    )
+    parseCSVMock.mockImplementation(() => {
+      throw bug
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    reporting.captureError.mockClear()
+    render(<ImportCSV />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    await screen.findByText(
+      'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
+    )
+    expect(reporting.captureError).toHaveBeenCalledTimes(1)
+    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'import-parse')
   })
 
   it('shows file read errors and does not persist', async () => {

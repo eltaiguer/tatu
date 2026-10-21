@@ -23,7 +23,7 @@
     "ci:check": "npm run tdd:verify && npm run build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "format": "prettier --write .",
-    "deploy:firebase": "npm run build && npx firebase-tools deploy",
+    "deploy:firebase": "SENTRY_UPLOAD_SOURCEMAPS=1 npm run build && npx firebase-tools deploy",
     "format:check": "prettier --check .",
     "dev:backend": "node scripts/dev-backend.mjs"
   },
@@ -34,6 +34,7 @@
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-popover": "^1.1.6",
     "@radix-ui/react-slot": "^1.1.2",
+    "@sentry/react": "^11.4.0",
     "@supabase/supabase-js": "^2.97.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -52,6 +53,7 @@
     "zustand": "^4.4.7"
   },
   "devDependencies": {
+    "@sentry/vite-plugin": "^5.4.0",
     "@tailwindcss/vite": "^4.1.12",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.1.5",
