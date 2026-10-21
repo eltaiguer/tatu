@@ -1,10 +1,10 @@
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type SetStateAction,
 } from 'react'
 import {
   countsTowardTotals,
@@ -80,6 +80,13 @@ function sameValue(a: unknown, b: unknown): boolean {
 // `current` with the patch's defined fields applied — or `current` itself
 // when no field changes, so the value (and the URL written from it) only
 // changes when a filter does.
+function sameMonth(a: Date, b: Date): boolean {
+  return (
+    a.getUTCFullYear() === b.getUTCFullYear() &&
+    a.getUTCMonth() === b.getUTCMonth()
+  )
+}
+
 function applyPatch(current: FilterState, patch: FilterPatch): FilterState {
   const changes = Object.fromEntries(
     Object.entries(patch).filter(
@@ -117,19 +124,28 @@ export function useTransactionFiltering({
   // The filters, and the month "últimos n meses" counts back from: the
   // newest month with data at the moment it is chosen (or the page is
   // opened); it does not move when rows are imported or deleted afterwards.
-  // One state, so choosing that period updates both at once.
-  const [{ filters, recentAnchor }, setState] = useState<{
-    filters: FilterState
-    recentAnchor: Date
-  }>(() => ({
-    filters: {
-      ...initial,
-      categories: [...initial.categories],
-      accounts: [...initial.accounts],
-      period: initial.period ?? { mode: 'all' },
-    },
-    recentAnchor: newestOf(transactions) ?? todayAsUtcDate(),
-  }))
+  // The sort and the page shown are part of the same state: anything that
+  // changes which rows are on a page (a filter, the anchor's month, the sort)
+  // goes back to page 1 in the same update (#231), and a no-op keeps it.
+  const [{ filters, recentAnchor, sortField, sortDirection, page }, setState] =
+    useState<{
+      filters: FilterState
+      recentAnchor: Date
+      sortField: SortField
+      sortDirection: SortDirection
+      page: number
+    }>(() => ({
+      filters: {
+        ...initial,
+        categories: [...initial.categories],
+        accounts: [...initial.accounts],
+        period: initial.period ?? { mode: 'all' },
+      },
+      recentAnchor: newestOf(transactions) ?? todayAsUtcDate(),
+      sortField: 'date',
+      sortDirection: 'desc',
+      page: 1,
+    }))
 
   // Applied to the latest state, so several changes in one batch all stick.
   // Choosing "últimos n meses" (again) anchors it to the newest row now.
@@ -141,14 +157,15 @@ export function useTransactionFiltering({
         : null
     setState((current) => {
       const nextFilters = applyPatch(current.filters, patch)
-      const anchor = chosenAnchor ?? current.recentAnchor
-      if (
-        nextFilters === current.filters &&
-        anchor.getTime() === current.recentAnchor.getTime()
-      ) {
+      // The window counts whole months back, so only the month matters.
+      const anchor =
+        chosenAnchor && !sameMonth(chosenAnchor, current.recentAnchor)
+          ? chosenAnchor
+          : current.recentAnchor
+      if (nextFilters === current.filters && anchor === current.recentAnchor) {
         return current
       }
-      return { filters: nextFilters, recentAnchor: anchor }
+      return { ...current, filters: nextFilters, recentAnchor: anchor, page: 1 }
     })
   }, [])
 
@@ -165,7 +182,7 @@ export function useTransactionFiltering({
       })
       return nextFilters === current.filters
         ? current
-        : { ...current, filters: nextFilters }
+        : { ...current, filters: nextFilters, page: 1 }
     })
   }, [])
 
@@ -174,10 +191,6 @@ export function useTransactionFiltering({
 
   // The period as days, for the date inputs.
   const dateRange = periodDateRange(filters.period, recentAnchor)
-
-  const [sortField, setSortField] = useState<SortField>('date')
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  const [currentPage, setCurrentPage] = useState(1)
 
   // Every matching row, ignored ones included (the totals strip and the
   // "n ignoradas" count need them), sorted for the table.
@@ -223,14 +236,18 @@ export function useTransactionFiltering({
     [transactions]
   )
 
-  function handleSort(field: SortField) {
-    if (sortField === field) {
-      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-    setSortField(field)
-    setSortDirection('desc')
-  }
+  // Same column flips the direction; a new column starts descending.
+  const handleSort = useCallback((field: SortField) => {
+    setState((current) => ({
+      ...current,
+      sortField: field,
+      sortDirection:
+        current.sortField === field && current.sortDirection === 'desc'
+          ? 'asc'
+          : 'desc',
+      page: 1,
+    }))
+  }, [])
 
   const groupedTransactions = useMemo(
     () => groupSplitRows(filteredTransactions, transactions),
@@ -240,9 +257,26 @@ export function useTransactionFiltering({
   const totalPages = Math.ceil(groupedTransactions.length / ITEMS_PER_PAGE)
   const safeTotalPages = Math.max(1, totalPages)
 
-  useEffect(() => {
-    setCurrentPage((p) => Math.min(p, safeTotalPages))
+  // Clamped where it is read, so a page past the end (the rows shrank) never
+  // renders empty; the stored page comes back if the rows grow again.
+  const currentPage = Math.min(page, safeTotalPages)
+  const lastPageRef = useRef(safeTotalPages)
+  useLayoutEffect(() => {
+    lastPageRef.current = safeTotalPages
   }, [safeTotalPages])
+
+  // Kept within 1..last page; an updater sees the page as shown.
+  const setCurrentPage = useCallback((next: SetStateAction<number>) => {
+    setState((current) => {
+      const last = lastPageRef.current
+      const shown = Math.min(current.page, last)
+      const asked = typeof next === 'function' ? next(shown) : next
+      const page = Number.isFinite(asked)
+        ? Math.min(Math.max(1, Math.trunc(asked)), last)
+        : 1
+      return current.page === page ? current : { ...current, page }
+    })
+  }, [])
 
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
 
