@@ -5,8 +5,7 @@ import type {
   CategoryChange,
   CategoryChanges,
 } from '../services/charts/category-changes'
-import { getCategoryDisplay } from '../utils/category-display'
-import { getCategoryDefinition } from '../services/categories/category-registry'
+import { resolveCategory } from '../services/categories/category-registry'
 import { formatCurrency } from '../utils/formatting'
 
 function monthName(key: string, style: 'long' | 'short' = 'long'): string {
@@ -57,8 +56,7 @@ function ChangeRow({
   homeCurrency: Currency
   onOpen?: (filter: TransactionsFilter) => void
 }) {
-  const display = getCategoryDisplay(change.category)
-  const icon = getCategoryDefinition(display.id).icon
+  const display = resolveCategory(change.category)
   const open = (filter: TransactionsFilter) => () => onOpen?.(filter)
   const base = {
     categories: [change.category],
@@ -67,7 +65,7 @@ function ChangeRow({
   return (
     <li className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-0.5 border-b border-border py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1.4fr)_auto_auto]">
       <span className="flex min-w-0 items-center gap-2 text-body font-medium">
-        <span aria-hidden>{icon}</span>
+        <span aria-hidden>{display.icon}</span>
         <span className="truncate">
           {down ? `Bajaste en ${display.label}` : display.label}
         </span>

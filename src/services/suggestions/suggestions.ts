@@ -3,7 +3,7 @@
 // the custom-category registry.
 import { Category } from '../../models'
 import { listCustomCategories } from '../categories/category-store'
-import { getCategoryDisplay } from '../../utils/category-display'
+import { resolveCategory } from '../categories/category-registry'
 
 function uniqueTrimmed(values: Iterable<string>): string[] {
   return Array.from(
@@ -23,7 +23,7 @@ export function buildCategorySuggestions(extra: string[] = []): string[] {
     ...listCustomCategories().map((category) => category.id),
     ...extra,
   ]).sort((a, b) =>
-    getCategoryDisplay(a).label.localeCompare(getCategoryDisplay(b).label, 'es')
+    resolveCategory(a).label.localeCompare(resolveCategory(b).label, 'es')
   )
 }
 
@@ -35,7 +35,7 @@ export function filterCategorySuggestions(
   const needle = query.trim().toLowerCase()
   if (!needle) return categories
   return categories.filter((category) => {
-    const label = getCategoryDisplay(category).label.toLowerCase()
+    const label = resolveCategory(category).label.toLowerCase()
     return category.toLowerCase().includes(needle) || label.includes(needle)
   })
 }

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Loader2, Pencil, Slash, Sparkles, Tag, Trash2 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
-import { getCategoryDisplay } from '../../utils/category-display'
+import { resolveCategory } from '../../services/categories/category-registry'
 
 /* ---- BulkBar ---- */
 export function BulkBar({
@@ -84,7 +84,7 @@ export function BulkBar({
           {catOpen && (
             <div className="absolute bottom-[calc(100%+10px)] left-0 z-[80] max-h-[280px] w-[220px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[6px] shadow-[var(--shadow-lg)]">
               {categorySuggestions.map((cat) => {
-                const { label, color } = getCategoryDisplay(cat)
+                const { label, color } = resolveCategory(cat)
                 return (
                   <button
                     key={cat}

@@ -1,26 +1,26 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CustomCategory } from './category-store'
-
-const { listCustomCategoriesMock } = vi.hoisted(() => ({
-  listCustomCategoriesMock: vi.fn<[], CustomCategory[]>(),
-}))
-
-vi.mock('./category-store', () => ({
-  listCustomCategories: listCustomCategoriesMock,
-}))
-
+import { afterEach, describe, expect, it } from 'vitest'
 import {
-  getCategoryDefinition,
-  getCategoryDefinitions,
-  isCategoryIgnored,
-} from './category-registry'
+  removeCustomCategory,
+  replaceCustomCategories,
+  type CustomCategory,
+} from './category-store'
+import { getCategoryDefinitions, resolveCategory } from './category-registry'
+import { normalizeCategoryId } from './category-aliases'
 import { Category } from '../../models'
 
-describe('getCategoryDefinitions', () => {
-  beforeEach(() => {
-    listCustomCategoriesMock.mockReturnValue([])
-  })
+// The registry reads the real in-memory store: tests load it the way the app
+// does on sign-in (replaceCustomCategories) instead of mocking it.
+function loadCustom(rows: CustomCategory[]) {
+  replaceCustomCategories(rows)
+}
 
+afterEach(() => {
+  replaceCustomCategories([])
+})
+
+const isIgnored = (id?: string | null) => resolveCategory(id).isIgnored
+
+describe('getCategoryDefinitions', () => {
   it('returns all 18 built-in categories', () => {
     const defs = getCategoryDefinitions()
     expect(defs).toHaveLength(Object.values(Category).length)
@@ -54,9 +54,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('includes custom categories after built-ins', () => {
-    listCustomCategoriesMock.mockReturnValue([
-      { id: 'my-custom', label: 'Mi categoría', color: '#ff0000' },
-    ])
+    loadCustom([{ id: 'my-custom', label: 'Mi categoría', color: '#ff0000' }])
 
     const defs = getCategoryDefinitions()
     const custom = defs.find((d) => d.id === 'my-custom')
@@ -65,7 +63,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('deduplicates custom categories with repeated ids', () => {
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       { id: 'my-custom', label: 'A', color: '#ff0000' },
       { id: 'my-custom', label: 'B', color: '#00ff00' },
     ])
@@ -76,7 +74,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('uses default icon for custom categories with no icon', () => {
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       {
         id: 'my-custom',
         label: 'Mi categoría',
@@ -91,9 +89,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('applies label override from a custom entry matching a built-in id', () => {
-    listCustomCategoriesMock.mockReturnValue([
-      { id: Category.Groceries, label: 'Comida', color: '#ff0000' },
-    ])
+    loadCustom([{ id: Category.Groceries, label: 'Comida', color: '#ff0000' }])
 
     const defs = getCategoryDefinitions()
     const groceries = defs.find((d) => d.id === Category.Groceries)
@@ -102,7 +98,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('marks built-in category as ignored via custom override', () => {
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       {
         id: Category.Shopping,
         label: 'Compras',
@@ -117,7 +113,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('uses override icon when a built-in category has a custom icon override', () => {
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       {
         id: Category.Groceries,
         label: 'Comida',
@@ -132,9 +128,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('falls back to built-in icon when override has no icon', () => {
-    listCustomCategoriesMock.mockReturnValue([
-      { id: Category.Groceries, label: 'Comida', color: '#ff0000' },
-    ])
+    loadCustom([{ id: Category.Groceries, label: 'Comida', color: '#ff0000' }])
 
     const defs = getCategoryDefinitions()
     const groceries = defs.find((d) => d.id === Category.Groceries)
@@ -142,7 +136,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('folds a legacy-id custom row (pre-rename "transfer") into the current built-in instead of duplicating it', () => {
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       { id: 'transfer', label: 'Transferencias internas', color: '#0284c7' },
     ])
 
@@ -157,7 +151,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('carries over label/color overrides from a legacy-id row onto the current built-in', () => {
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       { id: 'transfer', label: 'Mis transferencias', color: '#123456' },
     ])
 
@@ -170,7 +164,7 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('folds a legacy-id custom row ("transfers" -> external transfer) into the current built-in', () => {
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       { id: 'transfers', label: 'Transferencias externas', color: '#7c3aed' },
     ])
 
@@ -181,209 +175,295 @@ describe('getCategoryDefinitions', () => {
   })
 })
 
-describe('getCategoryDefinition', () => {
-  beforeEach(() => {
-    listCustomCategoriesMock.mockReturnValue([])
-  })
+describe('resolveCategory', () => {
+  describe('built-in categories', () => {
+    it('resolves a built-in id to its label, colour and icon', () => {
+      expect(resolveCategory(Category.Groceries)).toEqual({
+        id: 'groceries',
+        label: 'Alimentación',
+        color: expect.any(String),
+        icon: '🛒',
+        isCustom: false,
+        isIgnored: false,
+        known: true,
+      })
+    })
 
-  it('returns definition for a valid built-in category', () => {
-    const def = getCategoryDefinition(Category.Groceries)
-    expect(def.id).toBe(Category.Groceries)
-    expect(def.label).toBe('Alimentación')
-  })
+    it('resolves pre-rename aliases to the current built-in', () => {
+      expect(resolveCategory('food').id).toBe(Category.Groceries)
+      expect(resolveCategory('food').label).toBe('Alimentación')
+      expect(resolveCategory('restaurant').id).toBe(Category.Restaurants)
+      expect(resolveCategory('health').id).toBe(Category.Healthcare)
+      expect(resolveCategory('salary').id).toBe(Category.Income)
+      expect(resolveCategory('other').id).toBe(Category.Uncategorized)
+    })
 
-  it('returns Uncategorized fallback for undefined', () => {
-    const def = getCategoryDefinition(undefined)
-    expect(def.id).toBe(Category.Uncategorized)
-  })
+    it('ignores casing', () => {
+      expect(resolveCategory('GROCERIES').id).toBe(Category.Groceries)
+      expect(resolveCategory('Food').label).toBe('Alimentación')
+    })
 
-  it('returns Uncategorized fallback for unknown id', () => {
-    const def = getCategoryDefinition('totally-unknown-id')
-    expect(def.id).toBe(Category.Uncategorized)
-  })
+    it('treats a missing or empty id as Sin categoría', () => {
+      for (const id of [undefined, null, '']) {
+        const resolved = resolveCategory(id)
+        expect(resolved.id).toBe(Category.Uncategorized)
+        expect(resolved.label).toBe('Sin categoría')
+        expect(resolved.isIgnored).toBe(false)
+        expect(resolved.known).toBe(true)
+      }
+    })
 
-  it('resolves alias: food → groceries', () => {
-    const def = getCategoryDefinition('food')
-    expect(def.id).toBe(Category.Groceries)
-  })
+    it('has a label and icon for every built-in category', () => {
+      Object.values(Category).forEach((category) => {
+        const resolved = resolveCategory(category)
+        expect(resolved.label.length).toBeGreaterThan(0)
+        expect(resolved.icon.length).toBeGreaterThan(0)
+        expect(resolved.known).toBe(true)
+      })
+    })
 
-  it('resolves alias: restaurant → restaurants', () => {
-    const def = getCategoryDefinition('restaurant')
-    expect(def.id).toBe(Category.Restaurants)
-  })
+    it("applies the user's label, colour and icon override", () => {
+      loadCustom([
+        {
+          id: Category.Transport,
+          label: 'Movilidad',
+          color: '#0000ff',
+          icon: '🚲',
+        },
+      ])
 
-  it('resolves alias: health → healthcare', () => {
-    const def = getCategoryDefinition('health')
-    expect(def.id).toBe(Category.Healthcare)
-  })
-
-  it('resolves alias: salary → income', () => {
-    const def = getCategoryDefinition('salary')
-    expect(def.id).toBe(Category.Income)
-  })
-
-  it('resolves alias: other → uncategorized', () => {
-    const def = getCategoryDefinition('other')
-    expect(def.id).toBe(Category.Uncategorized)
-  })
-
-  it('is case-insensitive for built-in ids', () => {
-    const def = getCategoryDefinition('GROCERIES')
-    expect(def.id).toBe(Category.Groceries)
-  })
-
-  it('applies custom override label for a built-in', () => {
-    listCustomCategoriesMock.mockReturnValue([
-      { id: Category.Transport, label: 'Movilidad', color: '#0000ff' },
-    ])
-
-    const def = getCategoryDefinition(Category.Transport)
-    expect(def.label).toBe('Movilidad')
-    expect(def.isOverridden).toBe(true)
-  })
-
-  it('uses override icon for a built-in when override has an icon', () => {
-    listCustomCategoriesMock.mockReturnValue([
-      {
-        id: Category.InternalTransfer,
-        label: 'Mis transferencias',
+      expect(resolveCategory(Category.Transport)).toMatchObject({
+        id: Category.Transport,
+        label: 'Movilidad',
         color: '#0000ff',
-        icon: '💼',
-      },
+        icon: '🚲',
+        isCustom: false,
+      })
+    })
+
+    it('keeps the built-in icon when the override has none', () => {
+      loadCustom([
+        {
+          id: Category.InternalTransfer,
+          label: 'Mis transferencias',
+          color: '#0000ff',
+        },
+      ])
+
+      expect(resolveCategory(Category.InternalTransfer).icon).toBe('↔️')
+    })
+
+    it('does not apply an override to an unrelated built-in', () => {
+      loadCustom([{ id: Category.Groceries, label: 'Comida', color: '#f00' }])
+
+      expect(resolveCategory(Category.Transport).label).toBe('Transporte')
+    })
+  })
+
+  describe('custom categories', () => {
+    it('resolves a custom category to its stored name, colour and icon', () => {
+      loadCustom([
+        { id: 'cafe', label: 'Café y bares', color: '#123456', icon: '☕' },
+      ])
+
+      expect(resolveCategory('cafe')).toEqual({
+        id: 'cafe',
+        label: 'Café y bares',
+        color: '#123456',
+        icon: '☕',
+        isCustom: true,
+        isIgnored: false,
+        known: true,
+      })
+    })
+
+    it('uses the default icon for a custom category without one', () => {
+      loadCustom([{ id: 'my-custom', label: 'Mi categoría', color: '#f00' }])
+
+      expect(resolveCategory('my-custom').icon).toBe('🏷️')
+    })
+
+    it('honours a custom category flagged as ignored', () => {
+      loadCustom([
+        {
+          id: 'reintegros',
+          label: 'Reintegros',
+          color: '#f00',
+          isIgnored: true,
+        },
+      ])
+
+      expect(isIgnored('reintegros')).toBe(true)
+    })
+
+    it('picks up categories loaded after a first lookup', () => {
+      expect(resolveCategory('cafe').known).toBe(false)
+
+      loadCustom([{ id: 'cafe', label: 'Café', color: '#123456' }])
+
+      expect(resolveCategory('cafe').label).toBe('Café')
+      expect(resolveCategory('cafe').known).toBe(true)
+    })
+  })
+
+  describe('ids with no definition (e.g. a deleted custom category)', () => {
+    it('keeps the id and labels it from the id, never as Sin categoría', () => {
+      expect(resolveCategory('home_office')).toEqual({
+        id: 'home_office',
+        label: 'Home office',
+        color: resolveCategory(Category.Uncategorized).color,
+        icon: '🏷️',
+        isCustom: false,
+        isIgnored: false,
+        known: false,
+      })
+      expect(resolveCategory('non-existent-category').label).toBe(
+        'Non existent category'
+      )
+    })
+
+    it('lowercases the id it keeps', () => {
+      expect(resolveCategory('Home_Office').id).toBe('home_office')
+    })
+  })
+
+  describe("the 'ignored' id written by Ignorar", () => {
+    it('is a known pseudo-category that never counts toward totals', () => {
+      expect(resolveCategory('ignored')).toMatchObject({
+        id: 'ignored',
+        label: 'Ignorada',
+        isIgnored: true,
+        isCustom: false,
+        known: true,
+      })
+      expect(isIgnored('IGNORED')).toBe(true)
+    })
+  })
+
+  it('always returns the id normalizeCategoryId groups rows under', () => {
+    loadCustom([
+      { id: 'cafe', label: 'Café', color: '#123456' },
+      { id: Category.Groceries, label: 'Comida', color: '#f00' },
     ])
-
-    const def = getCategoryDefinition(Category.InternalTransfer)
-    expect(def.icon).toBe('💼')
+    const ids = [
+      undefined,
+      null,
+      '',
+      'groceries',
+      'GROCERIES',
+      'food',
+      'transfer',
+      'transfers',
+      'other',
+      'cafe',
+      'CAFE',
+      'ignored',
+      'Ignored',
+      'home_office',
+      'Viajes-Familia',
+    ]
+    for (const id of ids) {
+      expect(resolveCategory(id).id).toBe(normalizeCategoryId(id))
+    }
   })
 
-  it('falls back to built-in icon for a built-in override with no icon', () => {
-    listCustomCategoriesMock.mockReturnValue([
-      {
-        id: Category.InternalTransfer,
-        label: 'Mis transferencias',
-        color: '#0000ff',
-      },
-    ])
-
-    const def = getCategoryDefinition(Category.InternalTransfer)
-    expect(def.icon).toBe('↔️')
-  })
-
-  it('returns a custom category definition when found', () => {
-    listCustomCategoriesMock.mockReturnValue([
-      { id: 'my-custom', label: 'Mi categoría', color: '#ff0000' },
-    ])
-
-    const def = getCategoryDefinition('my-custom')
-    expect(def.id).toBe('my-custom')
-    expect(def.isCustom).toBe(true)
-  })
-})
-
-describe('accessor agreement', () => {
-  beforeEach(() => {
-    listCustomCategoriesMock.mockReturnValue([])
-  })
-
-  it('resolves legacy override rows the same way in all three accessors', () => {
-    listCustomCategoriesMock.mockReturnValue([
+  it('agrees with getCategoryDefinitions on every listed category', () => {
+    loadCustom([
       {
         id: 'transfer',
         label: 'Transferencias internas',
         color: '#ff0000',
         isIgnored: false,
       },
+      { id: 'cafe', label: 'Café', color: '#123456', isIgnored: true },
     ])
 
-    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(false)
-    expect(
-      getCategoryDefinitions().find((c) => c.id === Category.InternalTransfer)
-        ?.isIgnored
-    ).toBe(false)
-    expect(getCategoryDefinition(Category.InternalTransfer).isIgnored).toBe(
-      false
+    for (const def of getCategoryDefinitions()) {
+      expect(resolveCategory(def.id)).toEqual(def)
+    }
+  })
+})
+
+describe('an archived (deleted) custom category', () => {
+  it('stops resolving to its stored name but stays its own category', () => {
+    loadCustom([
+      { id: 'viajes-familia', label: 'Viajes', color: '#123456', icon: '✈️' },
+    ])
+    removeCustomCategory('viajes-familia')
+
+    // Archived rows are not loaded, so the stored name is gone: the row keeps
+    // its id and is labelled from it — not "Sin categoría", not ignored.
+    expect(resolveCategory('viajes-familia')).toMatchObject({
+      id: 'viajes-familia',
+      label: 'Viajes familia',
+      isIgnored: false,
+      known: false,
+    })
+    expect(getCategoryDefinitions().map((d) => d.id)).not.toContain(
+      'viajes-familia'
     )
   })
 })
 
-describe('isCategoryIgnored', () => {
-  beforeEach(() => {
-    listCustomCategoriesMock.mockReturnValue([])
+describe('resolveCategory(...).isIgnored', () => {
+  it('is true for transfers by default, false for other built-ins', () => {
+    expect(isIgnored(Category.InternalTransfer)).toBe(true)
+    expect(isIgnored(Category.ExternalTransfer)).toBe(true)
+    expect(isIgnored(Category.Groceries)).toBe(false)
+    expect(isIgnored(Category.Income)).toBe(false)
   })
 
-  it('returns true for legacy ignored string (backward compat)', () => {
-    expect(isCategoryIgnored('ignored')).toBe(true)
-  })
-
-  it('returns false for built-in categories', () => {
-    expect(isCategoryIgnored(Category.Groceries)).toBe(false)
-    expect(isCategoryIgnored(Category.Income)).toBe(false)
-  })
-
-  it('returns false for undefined', () => {
-    expect(isCategoryIgnored(undefined)).toBe(false)
-  })
-
-  it('returns true when custom override sets isIgnored: true', () => {
-    listCustomCategoriesMock.mockReturnValue([
+  it('treats a missing id exactly like Sin categoría', () => {
+    // A row with no category counts under "Sin categoría" everywhere (donut,
+    // filters), so ignoring that category drops it from totals too.
+    expect(isIgnored(undefined)).toBe(false)
+    loadCustom([
       {
-        id: Category.Shopping,
-        label: 'Compras',
-        color: '#ff0000',
+        id: Category.Uncategorized,
+        label: 'Sin categoría',
+        color: '#94a3b8',
         isIgnored: true,
       },
     ])
-
-    expect(isCategoryIgnored(Category.Shopping)).toBe(true)
+    expect(isIgnored(undefined)).toBe(true)
+    expect(isIgnored('')).toBe(true)
   })
 
-  it('returns false when custom override sets isIgnored: false', () => {
-    listCustomCategoriesMock.mockReturnValue([
+  it('follows a custom override that sets isIgnored', () => {
+    loadCustom([
       {
         id: Category.Shopping,
         label: 'Compras',
-        color: '#ff0000',
+        color: '#f00',
+        isIgnored: true,
+      },
+    ])
+    expect(isIgnored(Category.Shopping)).toBe(true)
+
+    loadCustom([
+      {
+        id: Category.Shopping,
+        label: 'Compras',
+        color: '#f00',
         isIgnored: false,
       },
     ])
-
-    expect(isCategoryIgnored(Category.Shopping)).toBe(false)
+    expect(isIgnored(Category.Shopping)).toBe(false)
   })
 
-  it('returns true for pre-rename transfer ids stored on transactions', () => {
-    expect(isCategoryIgnored('transfer')).toBe(true)
-    expect(isCategoryIgnored('transfers')).toBe(true)
+  it('is true for pre-rename transfer ids stored on transactions', () => {
+    expect(isIgnored('transfer')).toBe(true)
+    expect(isIgnored('transfers')).toBe(true)
   })
 
   it('ignores casing on stored ids', () => {
-    expect(isCategoryIgnored('Internal_Transfer')).toBe(true)
-    expect(isCategoryIgnored('IGNORED')).toBe(true)
-  })
-
-  it('prefers the current-id override over a stale legacy duplicate', () => {
-    // upsertBuiltinOverride matches on the exact id and appends otherwise, so
-    // un-ignoring Transferencias internas leaves the pre-rename row in place.
-    // getCategoryDefinitions resolves this last-wins; the predicate must agree.
-    listCustomCategoriesMock.mockReturnValue([
-      {
-        id: 'transfer',
-        label: 'Transferencias internas',
-        color: '#ff0000',
-        isIgnored: true,
-      },
-      {
-        id: Category.InternalTransfer,
-        label: 'Transferencias internas',
-        color: '#ff0000',
-        isIgnored: false,
-      },
-    ])
-
-    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(false)
-    expect(isCategoryIgnored('transfer')).toBe(false)
+    expect(isIgnored('Internal_Transfer')).toBe(true)
+    expect(isIgnored('IGNORED')).toBe(true)
   })
 
   it('prefers the current-id override whatever order the rows arrive in', () => {
+    // upsertBuiltinOverride matches on the exact id and appends otherwise, so
+    // un-ignoring Transferencias internas leaves the pre-rename row in place;
     // Supabase returns custom_categories without an ORDER BY, so the stale
     // legacy row can come back either side of the canonical one.
     const legacy = {
@@ -403,9 +483,9 @@ describe('isCategoryIgnored', () => {
       [legacy, current],
       [current, legacy],
     ]) {
-      listCustomCategoriesMock.mockReturnValue(rows)
-      expect(isCategoryIgnored(Category.InternalTransfer)).toBe(false)
-      expect(isCategoryIgnored('transfer')).toBe(false)
+      loadCustom(rows)
+      expect(isIgnored(Category.InternalTransfer)).toBe(false)
+      expect(isIgnored('transfer')).toBe(false)
       expect(
         getCategoryDefinitions().find((c) => c.id === Category.InternalTransfer)
           ?.isIgnored
@@ -430,11 +510,11 @@ describe('isCategoryIgnored', () => {
       isIgnored: false,
     }
 
-    listCustomCategoriesMock.mockReturnValue([lower, upper])
-    const first = isCategoryIgnored(Category.InternalTransfer)
+    loadCustom([lower, upper])
+    const first = resolveCategory(Category.InternalTransfer)
 
-    listCustomCategoriesMock.mockReturnValue([upper, lower])
-    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(first)
+    loadCustom([upper, lower])
+    expect(resolveCategory(Category.InternalTransfer)).toEqual(first)
   })
 
   it('keeps the transfer default when a legacy row records no preference', () => {
@@ -442,7 +522,7 @@ describe('isCategoryIgnored', () => {
     // default rather than read as an explicit "not ignored" and let transfers
     // back into totals. Defensive: schema.sql has is_ignored NOT NULL DEFAULT
     // false, so today only the in-memory store can produce undefined.
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       {
         id: 'transfer',
         label: 'Transferencias',
@@ -451,8 +531,8 @@ describe('isCategoryIgnored', () => {
       },
     ])
 
-    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(true)
-    expect(isCategoryIgnored('transfer')).toBe(true)
+    expect(isIgnored(Category.InternalTransfer)).toBe(true)
+    expect(isIgnored('transfer')).toBe(true)
   })
 
   it('lets the Categorías toggle override a legacy alias row', () => {
@@ -460,12 +540,12 @@ describe('isCategoryIgnored', () => {
     // built-in's ignore flag. Unticking "ignorar" in Categorías calls
     // upsertBuiltinOverride, which appends a row keyed by the current id —
     // that row must win, so the state is always correctable from the UI.
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       { id: 'food', label: 'Food', color: '#ff0000', isIgnored: true },
     ])
-    expect(isCategoryIgnored(Category.Groceries)).toBe(true)
+    expect(isIgnored(Category.Groceries)).toBe(true)
 
-    listCustomCategoriesMock.mockReturnValue([
+    loadCustom([
       { id: 'food', label: 'Food', color: '#ff0000', isIgnored: true },
       {
         id: Category.Groceries,
@@ -474,20 +554,6 @@ describe('isCategoryIgnored', () => {
         isIgnored: false,
       },
     ])
-    expect(isCategoryIgnored(Category.Groceries)).toBe(false)
-  })
-
-  it('honours a legacy-id override when un-ignoring a renamed built-in', () => {
-    listCustomCategoriesMock.mockReturnValue([
-      {
-        id: 'transfer',
-        label: 'Transferencias internas',
-        color: '#ff0000',
-        isIgnored: false,
-      },
-    ])
-
-    expect(isCategoryIgnored(Category.InternalTransfer)).toBe(false)
-    expect(isCategoryIgnored('transfer')).toBe(false)
+    expect(isIgnored(Category.Groceries)).toBe(false)
   })
 })

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { TransactionFilters } from './TransactionFilters'
-import { getCategoryDisplay } from '../utils/category-display'
+import { resolveCategory } from '../services/categories/category-registry'
 import { replaceCustomCategories } from '../services/categories/category-store'
 
 type FilterProps = ComponentProps<typeof TransactionFilters>
@@ -62,8 +62,8 @@ describe('TransactionFilters', () => {
   })
 
   describe('category filter', () => {
-    const groceries = getCategoryDisplay('groceries').label
-    const restaurants = getCategoryDisplay('restaurants').label
+    const groceries = resolveCategory('groceries').label
+    const restaurants = resolveCategory('restaurants').label
 
     it('adds a category picked from the list', () => {
       const props = renderFilters()

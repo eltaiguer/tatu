@@ -5,10 +5,7 @@ import { IconTile } from '../ui/icon-tile'
 import { CategoryBadge } from '../CategoryBadge'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency, Transaction } from '../../models'
-import {
-  getCategoryDefinition,
-  isCategoryIgnored,
-} from '../../services/categories/category-registry'
+import { resolveCategory } from '../../services/categories/category-registry'
 import {
   getDisplayDescription,
   needsCategoryReview,
@@ -52,7 +49,7 @@ export function TransactionRow({
 }: TransactionRowProps) {
   const displayDescription = getDisplayDescription(transaction)
   const hasFriendlyOverride = displayDescription !== transaction.description
-  const isIgnored = isCategoryIgnored(transaction.category)
+  const isIgnored = resolveCategory(transaction.category).isIgnored
   const isSplitParent = isSplitParentTx(transaction)
   // Muted when the row adds nothing to the totals.
   const muted = !countsTowardTotals(transaction)
@@ -102,8 +99,7 @@ export function TransactionRow({
       >
         <div className="flex items-start gap-[10px]">
           {(() => {
-            const catId = transaction.category ?? 'uncategorized'
-            const definition = getCategoryDefinition(catId)
+            const definition = resolveCategory(transaction.category)
             return (
               <IconTile
                 aria-hidden="true"
@@ -111,12 +107,7 @@ export function TransactionRow({
                 color={definition.color}
                 className="mt-[1px]"
               >
-                {definition.icon ?? (
-                  <span
-                    className="block h-[8px] w-[8px] rounded-full"
-                    style={{ background: definition.color }}
-                  />
-                )}
+                {definition.icon}
               </IconTile>
             )
           })()}

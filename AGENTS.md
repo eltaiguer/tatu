@@ -100,7 +100,7 @@ src/
     dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57); duplicate-review.ts: groups stored rows from different import runs for the one-off cleanup (#167)
     repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
     mutations/             # bulk-steps.ts: runs a bulk edit's steps in order (retry resumes the chain); transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
-    categories/            # Category registry + user custom categories (source of isCategoryIgnored); category-counts.ts: rows per category
+    categories/            # category-registry.ts: resolveCategory = THE answer to "what is this category id?" (label, colour, icon, isIgnored, known) for every surface — never re-derive it; getCategoryDefinitions lists the pickable ones. category-store.ts: custom categories; category-counts.ts: rows per category
     filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; url-filters.ts: that state <-> URL query; period-label.ts: a period's Spanish label
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
@@ -127,7 +127,7 @@ src/
     tailwind.css           # Tailwind 4 import + sources
     theme.css              # CSS custom properties — light + dark tokens
                            # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
-  utils/                   # date-utils, formatting, category-display, memo, transaction-display, user-display, user-error, auth-errors
+  utils/                   # date-utils, formatting, memo, transaction-display, user-display, user-error, auth-errors
   test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV
 supabase/
   schema.sql               # PostgreSQL schema (tables, RLS policies)

@@ -2,7 +2,7 @@
 
 import { ArrowRight } from 'lucide-react'
 import type { Currency, Transaction, TransactionsFilter } from '../../models'
-import { getCategoryDefinition } from '../../services/categories/category-registry'
+import { resolveCategory } from '../../services/categories/category-registry'
 import { convert } from '../../services/currency/convert'
 import { formatCurrency, formatDateCompact } from '../../utils/formatting'
 import { getDisplayDescription } from '../../utils/transaction-display'
@@ -39,7 +39,7 @@ export function RecentTransactionsCard({
       </div>
       <div className="flex flex-col">
         {recentTransactions.map((tx, i) => {
-          const catDef = getCategoryDefinition(tx.category ?? 'uncategorized')
+          const catDef = resolveCategory(tx.category)
           const isCredit = tx.type === 'credit'
           const showConverted = tx.currency !== homeCurrency
           const convertedAmt = showConverted

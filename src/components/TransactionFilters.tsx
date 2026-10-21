@@ -5,7 +5,7 @@ import { cn } from './ui/utils'
 import { Card } from './ui/card'
 import { Input } from './ui/input'
 import { SegmentedToggle } from './ui/segmented-toggle'
-import { getCategoryDisplay } from '../utils/category-display'
+import { resolveCategory } from '../services/categories/category-registry'
 import { useClickOutside } from '../hooks/useClickOutside'
 
 const ACCOUNT_OPTIONS = [
@@ -184,8 +184,8 @@ export function TransactionFilters({
 
   const categoryOptions = availableCategories.map((cat) => ({
     value: cat,
-    label: getCategoryDisplay(cat).label,
-    color: getCategoryDisplay(cat).color,
+    label: resolveCategory(cat).label,
+    color: resolveCategory(cat).color,
   }))
 
   const amountActive = Boolean(minAmount) || Boolean(maxAmount)
@@ -194,7 +194,7 @@ export function TransactionFilters({
   const chips: { label: string; onClear: () => void }[] = []
   categoryFilters.forEach((c) => {
     chips.push({
-      label: getCategoryDisplay(c).label,
+      label: resolveCategory(c).label,
       onClear: () =>
         onCategoryFiltersChange(categoryFilters.filter((x) => x !== c)),
     })

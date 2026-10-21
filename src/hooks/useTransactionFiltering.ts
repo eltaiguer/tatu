@@ -4,7 +4,7 @@ import {
   countsAsRow,
 } from '../services/spending/spending-rules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
-import { getCategoryDisplay } from '../utils/category-display'
+import { resolveCategory } from '../services/categories/category-registry'
 import { todayAsUtcDate } from '../utils/date-utils'
 import type { Transaction } from '../models'
 import {
@@ -176,10 +176,7 @@ export function useTransactionFiltering({
             .map((tx) => normalizeCategoryId(tx.category))
         )
       ).sort((a, b) =>
-        getCategoryDisplay(a).label.localeCompare(
-          getCategoryDisplay(b).label,
-          'es'
-        )
+        resolveCategory(a).label.localeCompare(resolveCategory(b).label, 'es')
       ),
     [transactions]
   )

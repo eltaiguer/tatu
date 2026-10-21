@@ -4,7 +4,7 @@ import { Checkbox } from '../ui/checkbox'
 import { CategoryBadge } from '../CategoryBadge'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency } from '../../models'
-import { isCategoryIgnored } from '../../services/categories/category-registry'
+import { resolveCategory } from '../../services/categories/category-registry'
 import {
   getDisplayDescription,
   needsCategoryReview,
@@ -35,7 +35,7 @@ export function TransactionCard({
 }: TransactionRowProps) {
   const displayDescription = getDisplayDescription(transaction)
   const hasFriendlyOverride = displayDescription !== transaction.description
-  const isIgnored = isCategoryIgnored(transaction.category)
+  const isIgnored = resolveCategory(transaction.category).isIgnored
   const isSplitParentM = isSplitParentTx(transaction)
   const mutedM = !countsTowardTotals(transaction)
   const isSplitChildM = isSplitChildTx(transaction)

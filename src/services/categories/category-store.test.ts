@@ -47,7 +47,7 @@ describe('Custom category store', () => {
   })
 
   it('never hands a custom category the legacy ignored id', () => {
-    // isCategoryIgnored treats 'ignored' as ignore-by-default, so a category
+    // resolveCategory treats 'ignored' as ignore-by-default, so a category
     // slugged that way would silently drop its transactions from every total.
     const c = addCustomCategory({ label: 'Ignored', color: '#ff0000' })
     expect(c.id).not.toBe('ignored')

@@ -24,10 +24,10 @@ and every predicate that decides which rows count.
   owns it, so a number the user clicks equals the sum of the rows it opens:
   `countsAsRow` (every row except a split parent — lists and row counts),
   `countsTowardTotals` (a row whose category isn't ignored per
-  `isCategoryIgnored`, which includes the transfer categories),
+  `resolveCategory(id).isIgnored`, which includes the transfer categories),
   `isCountedExpense` / `isCountedIncome` (the same, by `type`) and
   `sumCountedTotals` (income, expense and net in the home currency). Callers
-  never re-derive this from `isSplitParent` or `isCategoryIgnored`; a new
+  never re-derive this from `isSplitParent` or `resolveCategory(id).isIgnored`; a new
   exclusion goes into `spending-rules.ts` and its table in
   `docs/architecture.md`.
 - **Round at the edge.** Keep full precision while summing.

@@ -39,7 +39,7 @@ export function normalizeCategoryId(id?: string | null): string {
 }
 
 // The legacy pseudo-category that "Ignorar" assigns. Not a Category value, but
-// isCategoryIgnored treats it as ignore-by-default, so a custom category
+// resolveCategory treats it as ignore-by-default, so a custom category
 // slugged 'ignored' would silently drop its transactions from every total.
 export const LEGACY_IGNORED_ID = 'ignored'
 

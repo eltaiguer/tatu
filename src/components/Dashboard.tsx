@@ -5,7 +5,6 @@ import { PageHeader } from './ui/page-header'
 import type { Transaction, Currency, TransactionsFilter } from '../models'
 import { Category } from '../models'
 import { useMemo } from 'react'
-import { getCategoryDefinitions } from '../services/categories/category-registry'
 import {
   buildCurrentMonthSummary,
   buildMerchantSpendingConverted,
@@ -109,19 +108,12 @@ export function Dashboard({
   )
 
   // Category breakdown — all history (for donut)
-  const emojiLookup = useMemo(() => {
-    const map = new Map<string, string>()
-    getCategoryDefinitions().forEach((d) => map.set(d.id, d.icon))
-    return map
-  }, [])
-
   const categoryData = useMemo(
     () =>
       toCategorySpendRows(
-        buildCategorySpendingConverted(transactions, homeCurrency, fxRate),
-        emojiLookup
+        buildCategorySpendingConverted(transactions, homeCurrency, fxRate)
       ),
-    [transactions, homeCurrency, fxRate, emojiLookup]
+    [transactions, homeCurrency, fxRate]
   )
 
   const changes = useMemo(
@@ -325,7 +317,6 @@ export function Dashboard({
             {topMerchants.length > 0 && (
               <TopMerchantsCard
                 topMerchants={topMerchants}
-                emojiLookup={emojiLookup}
                 periodRange={periodRange}
                 homeCurrency={homeCurrency}
                 onNavigateToTransactions={onNavigateToTransactions}

@@ -7,7 +7,7 @@ import {
 } from './suggestions'
 import { Category } from '../../models'
 import { replaceCustomCategories } from '../categories/category-store'
-import { getCategoryDisplay } from '../../utils/category-display'
+import { resolveCategory } from '../categories/category-registry'
 
 describe('buildCategorySuggestions', () => {
   beforeEach(() => {
@@ -18,7 +18,7 @@ describe('buildCategorySuggestions', () => {
     const suggestions = buildCategorySuggestions()
 
     expect(new Set(suggestions)).toEqual(new Set(Object.values(Category)))
-    const labels = suggestions.map((id) => getCategoryDisplay(id).label)
+    const labels = suggestions.map((id) => resolveCategory(id).label)
     expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, 'es')))
   })
 
@@ -54,7 +54,7 @@ describe('filterCategorySuggestions', () => {
   })
 
   it('matches the id or the label, ignoring case and spaces around', () => {
-    const restaurantsLabel = getCategoryDisplay('restaurants').label
+    const restaurantsLabel = resolveCategory('restaurants').label
 
     expect(
       filterCategorySuggestions(['groceries', 'restaurants'], ' GROC ')

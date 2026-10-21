@@ -1,6 +1,6 @@
 import type { Currency, Transaction } from '../../models'
 import { isSplitParentTx } from '../../models'
-import { isCategoryIgnored } from '../categories/category-registry'
+import { resolveCategory } from '../categories/category-registry'
 import { convert } from '../currency/convert'
 
 // The one place that decides which rows count. Every list, count and money
@@ -25,7 +25,7 @@ export function countsAsRow(tx: Transaction): boolean {
 // flagged "Ignorar en totales"). Transacciones hides the rows that fail this
 // unless "show ignored" is on, so a future exclusion lands there too.
 export function countsTowardTotals(tx: Transaction): boolean {
-  return countsAsRow(tx) && !isCategoryIgnored(tx.category)
+  return countsAsRow(tx) && !resolveCategory(tx.category).isIgnored
 }
 
 export function isCountedExpense(tx: Transaction): boolean {

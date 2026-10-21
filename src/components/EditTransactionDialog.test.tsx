@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { EditTransactionDialog } from './EditTransactionDialog'
 import type { Transaction } from '../models'
-import { getCategoryDisplay } from '../utils/category-display'
+import { resolveCategory } from '../services/categories/category-registry'
 import { replaceCustomCategories } from '../services/categories/category-store'
 
 type DialogProps = ComponentProps<typeof EditTransactionDialog>
@@ -41,8 +41,8 @@ function save() {
 }
 
 describe('EditTransactionDialog', () => {
-  const restaurants = getCategoryDisplay('restaurants').label
-  const groceries = getCategoryDisplay('groceries').label
+  const restaurants = resolveCategory('restaurants').label
+  const groceries = resolveCategory('groceries').label
 
   beforeEach(() => {
     replaceCustomCategories([])
@@ -121,7 +121,7 @@ describe('EditTransactionDialog', () => {
     fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     fireEvent.click(
       screen.getByRole('button', {
-        name: getCategoryDisplay('uncategorized').label,
+        name: resolveCategory('uncategorized').label,
       })
     )
     save()
