@@ -7,6 +7,12 @@ const { messagesCreateMock } = vi.hoisted(() => ({
   messagesCreateMock: vi.fn(),
 }))
 
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../monitoring/error-reporting')>()),
+  captureError: reporting.captureError,
+}))
+
 vi.mock('@anthropic-ai/sdk', () => {
   return {
     default: class Anthropic {
@@ -762,22 +768,6 @@ describe('enrichTransactionsWithAi — partial batch failures', () => {
     expect(partialFailure).toBeUndefined()
   })
 
-  it('hands back the first failure of a partial run, as thrown', async () => {
-    const bug = new TypeError('x is undefined')
-    messagesCreateMock
-      .mockResolvedValueOnce(textResponse([]))
-      .mockRejectedValueOnce(bug)
-      .mockResolvedValueOnce(textResponse([]))
-
-    const { partialError } = await enrichTransactionsWithAi(
-      makeInputs(450),
-      baseConfig,
-      emptyContext
-    )
-
-    expect(partialError).toBe(bug)
-  })
-
   it('rethrows the first error as thrown when every batch fails', async () => {
     const bug = new TypeError('x is undefined')
     messagesCreateMock.mockRejectedValue(bug)
@@ -785,6 +775,44 @@ describe('enrichTransactionsWithAi — partial batch failures', () => {
     await expect(
       enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
     ).rejects.toBe(bug)
+  })
+
+  it('reports a code bug in a later batch even when an earlier one hit a rate limit', async () => {
+    reporting.captureError.mockClear()
+    const bug = new TypeError('x is undefined')
+    messagesCreateMock
+      .mockRejectedValueOnce(new Error('429 rate_limit_error'))
+      .mockRejectedValueOnce(bug)
+      .mockResolvedValueOnce(textResponse([]))
+
+    await enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
+
+    expect(reporting.captureError).toHaveBeenCalledTimes(1)
+    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
+  })
+
+  it('reports a code bug once even when every batch fails with it', async () => {
+    reporting.captureError.mockClear()
+    const bug = new TypeError('x is undefined')
+    messagesCreateMock.mockRejectedValue(bug)
+
+    await expect(
+      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
+    ).rejects.toBe(bug)
+
+    expect(reporting.captureError).toHaveBeenCalledTimes(1)
+    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
+  })
+
+  it('does not report a bad key', async () => {
+    reporting.captureError.mockClear()
+    messagesCreateMock.mockRejectedValue(new Error('401 invalid x-api-key'))
+
+    await expect(
+      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
+    ).rejects.toThrow()
+
+    expect(reporting.captureError).not.toHaveBeenCalled()
   })
 
   it('throws when no batch succeeds at all', async () => {

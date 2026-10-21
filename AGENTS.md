@@ -245,7 +245,7 @@ Requires `.env` with Supabase vars (see `.env.example`):
 - `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` — required for auth + all data
 - `VITE_SUPABASE_PASSWORD_RESET_REDIRECT_URL` — for password reset emails
 - `VITE_FIREBASE_*` — Firebase Hosting + analytics (optional for local dev)
-- `VITE_SENTRY_DSN` — Sentry error reporting (optional; unset = off; production builds only). Exporting `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` in the shell at deploy time uploads source maps. See ADR-0004
+- `VITE_SENTRY_DSN` — Sentry error reporting (optional; unset = off; production builds only). Exporting `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` before `npm run deploy:firebase` uploads source maps (other builds never do). See ADR-0004
 
 **Running the app locally** (no production data): `npm run dev:backend` (needs Docker) then `npm run dev`, log in as `dev@tatu.local` / `tatu-dev-password`. `dev:backend` writes `.env.local`, which overrides `.env`; delete it to point the app back at the remote project. `npx supabase stop` tears the stack down.
 

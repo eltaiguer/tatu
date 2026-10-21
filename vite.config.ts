@@ -3,10 +3,14 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { sentryVitePlugin } from '@sentry/vite-plugin'
 
-// Source maps go to Sentry only when deploying with SENTRY_AUTH_TOKEN set
-// (plus SENTRY_ORG / SENTRY_PROJECT); they are deleted from dist/ after the
-// upload so Firebase never serves them. Other builds skip this entirely.
-const uploadSourceMaps = Boolean(process.env.SENTRY_AUTH_TOKEN)
+// Source maps go to Sentry only from `npm run deploy:firebase`, which sets
+// SENTRY_UPLOAD_SOURCEMAPS, and only with SENTRY_AUTH_TOKEN (plus
+// SENTRY_ORG / SENTRY_PROJECT) exported. A token in the shell alone must not
+// upload maps of a work-in-progress `npm run build`. The maps are deleted
+// from dist/ after the upload so Firebase never serves them.
+const uploadSourceMaps = Boolean(
+  process.env.SENTRY_UPLOAD_SOURCEMAPS && process.env.SENTRY_AUTH_TOKEN
+)
 
 // Tests run in a pinned time zone so a date bug can't pass on one machine and
 // fail on another: Uruguay (the user's zone) by default, others through

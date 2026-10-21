@@ -243,7 +243,11 @@ describe('Insights', () => {
     await screen.findByText(
       'No se pudieron generar los insights: la clave API de Anthropic no es válida'
     )
-    expect(reporting.captureError).not.toHaveBeenCalled()
+    // Handed over without a cause, which reporting drops (sentry test).
+    for (const [error] of reporting.captureError.mock.calls) {
+      expect(error).toBeInstanceOf(UserFacingError)
+      expect((error as UserFacingError).cause).toBeUndefined()
+    }
 
     fireEvent.click(screen.getByText('Generar insights'))
     await screen.findByText(
@@ -264,7 +268,11 @@ describe('Insights', () => {
     await screen.findByText(
       'Falta crear la tabla de insights en la base de datos.'
     )
-    expect(reporting.captureError).not.toHaveBeenCalled()
+    // Handed over without a cause, which reporting drops (sentry test).
+    for (const [error] of reporting.captureError.mock.calls) {
+      expect(error).toBeInstanceOf(UserFacingError)
+      expect((error as UserFacingError).cause).toBeUndefined()
+    }
   })
 
   it('reports a failure to save generated insights as a storage failure', async () => {

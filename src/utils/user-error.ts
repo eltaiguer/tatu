@@ -1,5 +1,6 @@
 import {
   captureError,
+  errorMessage,
   isNetworkError,
 } from '../services/monitoring/error-reporting'
 
@@ -7,11 +8,14 @@ import {
 // Anything else — Supabase/PostgREST text, fetch failures — is translated by
 // `userErrorMessage` so raw English never reaches a toast.
 export class UserFacingError extends Error {
-  /** Not a bug: error reporting drops it (services/monitoring). */
+  /** Not a bug: error reporting sends its `cause` instead, if any. */
   readonly explained = true
-  constructor(message: string) {
+  /** The failure this message explains (a server error), for reporting. */
+  readonly cause?: unknown
+  constructor(message: string, options?: { cause?: unknown }) {
     super(message)
     this.name = 'UserFacingError'
+    if (options?.cause !== undefined) this.cause = options.cause
   }
 }
 
@@ -39,9 +43,10 @@ export class PartialWriteError<R = unknown> extends UserFacingError {
     readonly done: number,
     readonly total: number,
     readonly retry?: () => Promise<unknown>,
-    readonly result?: R
+    readonly result?: R,
+    cause?: unknown
   ) {
-    super(message)
+    super(message, { cause })
     this.name = 'PartialWriteError'
   }
 }
@@ -70,6 +75,7 @@ export function userErrorMessage(
   area?: string
 ): string {
   if (error instanceof UserFacingError) {
+    captureError(error, area) // sends its cause, if it has one
     return error.message
   }
   console.error(error)
@@ -136,7 +142,7 @@ const CODE_BUG_TYPES = [TypeError, ReferenceError, RangeError, SyntaxError]
 // bad key, a rate limit, no credit or an outage is the user's setup or
 // Anthropic's, and the toast already explains it.
 export function isUnexpectedAiError(error: unknown): boolean {
-  const raw = error instanceof Error ? error.message : String(error)
+  const raw = errorMessage(error)
   // A lost connection or a chunk gone after a deploy (both TypeErrors), and
   // a refusal that depends on the user's data, are not code bugs.
   if (isNetworkError(error) || CHUNK_LOAD_FAILED.test(raw)) return false

@@ -6,6 +6,7 @@ import {
   userErrorMessage,
 } from '../../utils/user-error'
 import { useConfirm } from '../ConfirmDialog'
+import { captureError } from '../../services/monitoring/error-reporting'
 
 export type DeleteResult = { removed: Transaction[]; reversible: boolean }
 
@@ -42,6 +43,7 @@ export function useMutationFeedback({
     // Some rows saved and are already shown (#60): say how many, offer to
     // retry just the rest, and keep the undo for what a delete did remove.
     if (error instanceof PartialWriteError) {
+      captureError(error, 'write') // sends its cause, the server failure
       if (isDeleteResult(error.result) && error.result.removed.length > 0) {
         reportDeleted(error.result)
       }
@@ -71,7 +73,7 @@ export function useMutationFeedback({
       return
     }
     toast.error(
-      userErrorMessage(error, fallback),
+      userErrorMessage(error, fallback, 'write'),
       onReload ? { action: { label: 'Recargar', onClick: onReload } } : {}
     )
   }

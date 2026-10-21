@@ -118,4 +118,21 @@ describe('error reporting through the Sentry SDK', () => {
 
     expect(sent).toHaveLength(0)
   })
+
+  it('reports the cause of an error written for the user', async () => {
+    const sent = initWithFakeTransport()
+
+    captureError(
+      new UserFacingError('Se guardaron 2 de 3', {
+        cause: new Error('statement timeout'),
+      }),
+      'write'
+    )
+    await Sentry.flush()
+
+    expect(sent).toHaveLength(1)
+    const values = sent[0].exception?.values ?? []
+    expect(values[values.length - 1]?.value).toBe('statement timeout')
+    expect(sent[0].tags).toMatchObject({ area: 'write' })
+  })
 })

@@ -56,18 +56,20 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
   write itself. Sites that log an error and do not pass it to
   `userErrorMessage` call `captureError(error, area)` with an `area` tag
   (`view`, `import-parse`, `import`, `ai`, `insights`, `preferences`,
-  `workspace`, `write`, `reset`). Where a server failure is wrapped in an
-  explained error ("Se actualizaron N de M", an incomplete split), the cause
-  is reported at the wrap, because the explained error itself never is. A
+  `workspace`, `write`, `reset`). An explained error carries the server
+  failure it explains as `cause`; `captureError` sends that cause, so the
+  screen that shows the message reports it (`userErrorMessage`, the
+  partial-write toast) and wrap sites need no reporting call of their own. A
   network failure is never reported (`captureError` filters it for every
   caller), nor is a model refusal, and a missing
   `ai_insights` table is expected until `schema.sql` is applied: reset ignores
   it, and the Insights service turns its codes (42P01, PGRST205) into a
   `UserFacingError`.
 - **User identity is the Supabase user id only**, set from `useAuthSession`.
-- **Source maps** are uploaded by `@sentry/vite-plugin` only when
-  `SENTRY_AUTH_TOKEN` (plus `SENTRY_ORG`, `SENTRY_PROJECT`) is set at build
-  time, and deleted from `dist/` after the upload, so Firebase never serves
+- **Source maps** are uploaded by `@sentry/vite-plugin` only from
+  `npm run deploy:firebase` (it sets `SENTRY_UPLOAD_SOURCEMAPS`) with
+  `SENTRY_AUTH_TOKEN` (plus `SENTRY_ORG`, `SENTRY_PROJECT`) exported, so a
+  local build never uploads, and deleted from `dist/` after the upload, so Firebase never serves
   them.
 
 ## Alternatives considered

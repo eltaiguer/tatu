@@ -326,44 +326,6 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     expect(reporting.captureError).not.toHaveBeenCalled()
   })
 
-  it('reports an unexpected AI failure to Sentry', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    const bug = new TypeError(
-      "Cannot read properties of undefined (reading 'map')"
-    )
-    ai.enrichTransactionsWithAi.mockRejectedValueOnce(bug)
-    const { handlers } = signedIn()
-
-    await handlers.handleTransactionsImported(
-      [makeTransaction('tx-1')],
-      makeImportContext()
-    )
-
-    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
-  })
-
-  it('reports a code bug in one AI batch to Sentry, but not an outage', async () => {
-    const bug = new TypeError('x is undefined')
-    ai.enrichTransactionsWithAi.mockResolvedValueOnce({
-      results: new Map(),
-      partialFailure: '1 de 3 lotes fallaron: x is undefined',
-      partialError: bug,
-    })
-    const first = signedIn()
-    await first.handlers.handleTransactionsImported([makeTransaction('tx-1')])
-    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
-
-    reporting.captureError.mockClear()
-    ai.enrichTransactionsWithAi.mockResolvedValueOnce({
-      results: new Map(),
-      partialFailure: '1 de 3 lotes fallaron: 529 overloaded',
-      partialError: new Error('529 overloaded'),
-    })
-    const second = signedIn()
-    await second.handlers.handleTransactionsImported([makeTransaction('tx-1')])
-    expect(reporting.captureError).not.toHaveBeenCalled()
-  })
-
   it('does not call the AI when it is disabled', async () => {
     ai.getAiConfig.mockReturnValue({ ...AI_ON, enabled: false, apiKey: '' })
     const { handlers } = signedIn()
@@ -431,10 +393,8 @@ describe('useTransactionHandlers — import persistence (#61)', () => {
     expect(storedIds()).toEqual(rows.slice(0, 500).map((t) => t.id))
     expect(repo.importRuns[0]).toMatchObject({ status: 'failed' })
     expect(repo.importRuns[0].errorMessage).toMatch(/^500 de 1200 guardadas/)
-    expect(reporting.captureError).toHaveBeenCalledWith(
-      expect.anything(),
-      'import'
-    )
+    // Reported where it is shown, through its cause.
+    expect((error as UserFacingError).cause).toBeInstanceOf(Error)
   })
 
   it('finishes the job when the same file is imported again', async () => {
@@ -1069,17 +1029,15 @@ describe('useTransactionHandlers — apply scope', () => {
       repo.failOn('upsertCategoryOverride')
       repo.failOn('deleteDescriptionOverride')
 
-      await expect(
-        handlers.handleUpdateTransaction('same-1', {
+      const error = (await handlers
+        .handleUpdateTransaction('same-1', {
           displayDescription: 'Disco',
           category: 'restaurants',
           applyScope: 'matching_past_and_future',
         })
-      ).rejects.toThrow('Se guardó el nombre, pero no la categoría')
-      expect(reporting.captureError).toHaveBeenCalledWith(
-        expect.anything(),
-        'write'
-      )
+        .catch((e: unknown) => e)) as UserFacingError
+      expect(error.message).toMatch('Se guardó el nombre, pero no la categoría')
+      expect(error.cause).toBeInstanceOf(Error)
 
       // Screen mirrors database: the name override is on the server, so it
       // is shown; the category override is not.
@@ -1113,10 +1071,7 @@ describe('useTransactionHandlers — apply scope', () => {
       expect(stored('tx-150')?.category).toBe('groceries')
       expect(repo.row('tx-150')?.category).toBe('groceries')
       expect(getMerchantCategoryOverride(MERCHANT)).toBe('restaurants')
-      expect(reporting.captureError).toHaveBeenCalledWith(
-        expect.anything(),
-        'write'
-      )
+      expect(error.cause).toBeInstanceOf(Error)
 
       const upserts = repo.requests.upsertCategoryOverride
       await error.retry!()
@@ -1418,10 +1373,7 @@ describe('useTransactionHandlers — bulk operations (#60)', () => {
     expect(error.message).toBe('Se actualizaron 200 de 300')
     expect(error.done).toBe(200)
     expect(error.total).toBe(300)
-    expect(reporting.captureError).toHaveBeenCalledWith(
-      expect.anything(),
-      'write'
-    )
+    expect(error.cause).toBeInstanceOf(Error)
     // Screen mirrors database, row by row.
     for (const tx of transactionStore.getState().transactions) {
       expect(tx.category).toBe(repo.row(tx.id)?.category)
@@ -1860,10 +1812,7 @@ describe('useTransactionHandlers — delete and undo', () => {
     expect(transactionStore.getState().transactions).toHaveLength(50)
     expect(repo.rows()).toHaveLength(50)
     expect(error.result?.removed).toHaveLength(100)
-    expect(reporting.captureError).toHaveBeenCalledWith(
-      expect.anything(),
-      'write'
-    )
+    expect(error.cause).toBeInstanceOf(Error)
 
     const retried = (await error.retry!()) as DeleteResult
     expect(transactionStore.getState().transactions).toHaveLength(0)
@@ -1934,13 +1883,11 @@ describe('useTransactionHandlers — split and unsplit', () => {
     repo.failOn('splitMark')
     repo.failOn('splitUndo')
 
-    await expect(
-      handlers.handleSplitTransaction('parent', parts)
-    ).rejects.toThrow(/partes/)
-    expect(reporting.captureError).toHaveBeenCalledWith(
-      expect.anything(),
-      'write'
-    )
+    const error = (await handlers
+      .handleSplitTransaction('parent', parts)
+      .catch((e: unknown) => e)) as UserFacingError
+    expect(error.message).toMatch(/partes/)
+    expect(error.cause).toBeInstanceOf(Error)
 
     // Never a split parent without parts: both visible, parts deletable.
     expect(stored('parent')?.isSplitParent).toBeFalsy()

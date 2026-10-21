@@ -1,5 +1,4 @@
 import { getSupabaseClient, type SupabaseSession } from './client'
-import { captureError } from '../monitoring/error-reporting'
 import { UserFacingError } from '../../utils/user-error'
 
 const IMPORT_RUN_FAILED = 'No se pudo iniciar la importación. Intentá de nuevo.'
@@ -37,13 +36,13 @@ export async function createImportRun(
 
   if (error) {
     console.error('createImportRun failed:', error.message)
-    captureError(error, 'import')
-    throw new UserFacingError(IMPORT_RUN_FAILED)
+    throw new UserFacingError(IMPORT_RUN_FAILED, { cause: error })
   }
 
   if (!data?.id) {
-    captureError(new Error('createImportRun returned no id'), 'import')
-    throw new UserFacingError(IMPORT_RUN_FAILED)
+    throw new UserFacingError(IMPORT_RUN_FAILED, {
+      cause: new Error('createImportRun returned no id'),
+    })
   }
 
   return data.id as string

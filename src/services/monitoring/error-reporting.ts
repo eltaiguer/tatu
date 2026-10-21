@@ -38,6 +38,8 @@ export function redactMessage(message: string): string {
   return (
     message
       .replace(/"[\s\S]*"|"[\s\S]*$/, `"${REDACTED}"`)
+      // Single quotes: V8 quotes the token it choked on ("Unexpected token 'D'").
+      .replace(/'[^']*'/g, `'${REDACTED}'`)
       // Greedy: a key value can hold parentheses itself ("(UY) DISCO").
       .replace(/=\(.*\)/g, `=(${REDACTED})`)
   )
@@ -103,8 +105,7 @@ export function isNetworkError(error: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return true
   }
-  const message =
-    error instanceof Error ? error.message : describeNonError(error)
+  const message = errorMessage(error)
   // Safari's bare "Load failed" is anchored: "Preload failed" is not one.
   return /\bfailed to fetch\b|\bnetworkerror\b|(?:^|: )load failed$|\bnetwork request failed\b/i.test(
     message
@@ -163,16 +164,25 @@ export function sentryOptions(dsn: string): Sentry.BrowserOptions {
  * Reports an unexpected error. Callers keep their own console logging; this
  * only sends to Sentry (a no-op when it isn't configured). `area` tags the
  * event so Sentry can group by feature (import, ai, preferences, ...).
+ * Safe to call with any error: one written for the user is not a bug, but
+ * its `cause` (the server failure it explains) is, and that is what goes.
  */
 export function captureError(error: unknown, area?: string): void {
+  let reported = error
+  while (isExplainedError(reported)) {
+    reported = (reported as { cause?: unknown }).cause
+    if (reported === undefined) return
+  }
   // The user is told about these; they are not bugs, whoever reports them.
-  if (isNetworkError(error)) return
+  if (isNetworkError(reported)) return
   const exception =
-    error instanceof Error ? error : new Error(describeNonError(error))
+    reported instanceof Error ? reported : new Error(errorMessage(reported))
   Sentry.captureException(exception, area ? { tags: { area } } : undefined)
 }
 
-function describeNonError(error: unknown): string {
+/** The message of an Error, a Supabase error object or a thrown string. */
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
   if (error && typeof error === 'object' && 'message' in error) {
     return String((error as { message: unknown }).message)
   }

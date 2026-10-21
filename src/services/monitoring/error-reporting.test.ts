@@ -81,6 +81,12 @@ describe('redactMessage', () => {
     expect(message).toContain('already exists')
   })
 
+  it('hides single-quoted values too', () => {
+    expect(
+      redactMessage('Unexpected token \'D\', "DISCO" is not valid JSON')
+    ).not.toMatch(/'D'/)
+  })
+
   it('leaves messages without values alone', () => {
     expect(redactMessage('No se pudo iniciar la importación')).toBe(
       'No se pudo iniciar la importación'

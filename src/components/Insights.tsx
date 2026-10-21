@@ -34,6 +34,7 @@ import {
   reportAiError,
   userErrorMessage,
 } from '../utils/user-error'
+import { errorMessage } from '../services/monitoring/error-reporting'
 
 interface InsightsProps {
   transactions: Transaction[]
@@ -157,17 +158,10 @@ export function Insights({
   async function handleGenerate() {
     setGenerating(true)
     setError('')
-    let result: Awaited<ReturnType<typeof generateInsights>>
+    let step: 'generate' | 'save' = 'generate'
     try {
-      result = await generateInsights(input, claudeApiKey)
-    } catch (e) {
-      reportAiError(e, 'insights')
-      const raw = e instanceof Error ? e.message : String(e)
-      setError(`No se pudieron generar los insights: ${aiErrorMessage(raw)}`)
-      setGenerating(false)
-      return
-    }
-    try {
+      const result = await generateInsights(input, claudeApiKey)
+      step = 'save'
       await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
       setCached({
         result,
@@ -176,9 +170,16 @@ export function Insights({
         isStale: false,
       })
     } catch (e) {
-      setError(
-        userErrorMessage(e, 'No se pudieron guardar los insights', 'insights')
-      )
+      if (step === 'generate') {
+        reportAiError(e, 'insights')
+        setError(
+          `No se pudieron generar los insights: ${aiErrorMessage(errorMessage(e))}`
+        )
+      } else {
+        setError(
+          userErrorMessage(e, 'No se pudieron guardar los insights', 'insights')
+        )
+      }
     } finally {
       setGenerating(false)
     }

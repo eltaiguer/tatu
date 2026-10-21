@@ -19,16 +19,20 @@ describe('userErrorMessage', () => {
     vi.restoreAllMocks()
   })
 
-  it('reports unexpected errors but not ones written for the user', () => {
+  it('reports unexpected errors and hands explained ones over (dropped there)', () => {
     vi.mocked(captureError).mockClear()
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const unexpected = new Error('relation "x" does not exist')
 
     userErrorMessage(unexpected, 'x')
-    userErrorMessage(new UserFacingError('Ya existe'), 'x')
+    const explained = new UserFacingError('Ya existe')
+    userErrorMessage(explained, 'x')
 
-    expect(captureError).toHaveBeenCalledTimes(1)
-    expect(captureError).toHaveBeenCalledWith(unexpected, undefined)
+    // captureError drops an explained error with no cause (sentry test).
+    expect(vi.mocked(captureError).mock.calls).toEqual([
+      [unexpected, undefined],
+      [explained, undefined],
+    ])
   })
 
   it('does not report a network failure it tells the user about', () => {
@@ -38,6 +42,19 @@ describe('userErrorMessage', () => {
     userErrorMessage(new Error('network request failed'), 'x')
 
     expect(captureError).not.toHaveBeenCalled()
+  })
+
+  it('hands an explained error to reporting, which sends its cause', () => {
+    vi.mocked(captureError).mockClear()
+    const shown = new UserFacingError(
+      'No se pudieron borrar todos los datos.',
+      {
+        cause: new Error('timeout'),
+      }
+    )
+
+    expect(userErrorMessage(shown, 'x', 'reset')).toBe(shown.message)
+    expect(captureError).toHaveBeenCalledWith(shown, 'reset')
   })
 
   it('tags the report with the area the caller names', () => {

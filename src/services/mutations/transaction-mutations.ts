@@ -63,7 +63,6 @@ import {
   PartialWriteError,
   UserFacingError,
   WorkspaceChangedError,
-  reportAiError,
 } from '../../utils/user-error'
 
 const MISSING_TRANSACTION = new UserFacingError(
@@ -114,14 +113,13 @@ function settle<R>(
       : undefined
   const suffix =
     missing.length > 0 && !retry ? '. Recargá para ver el estado actual.' : ''
-  // The user is told how many saved; the cause would otherwise be lost.
-  if (failed.length > 0) captureError(error, 'write')
   throw new PartialWriteError(
     options.message(saved.length, total) + suffix,
     saved.length,
     total,
     retry,
-    options.result
+    options.result,
+    failed.length > 0 ? error : undefined
   )
 }
 
@@ -294,14 +292,10 @@ export async function importTransactions(
         )
         toStore = applyAiEnrichment(added, outcome.results)
         aiPartial = outcome.partialFailure
-        if (outcome.partialError !== undefined) {
-          reportAiError(outcome.partialError, 'ai')
-        }
       } catch (error) {
         aiError =
           error instanceof Error ? error.message : 'Error desconocido de IA'
         console.error('AI enrichment failed during import:', error)
-        reportAiError(error, 'ai')
       }
       assertOwner(repo)
     }
@@ -342,9 +336,9 @@ export async function importTransactions(
     }
     if (!owner) throw new WorkspaceChangedError()
     if (saved.length === 0) throw error
-    captureError(error, 'import')
     throw new UserFacingError(
-      `Se guardaron ${saved.length} de ${toStore.length} transacciones nuevas. Importá el archivo de nuevo para completar el resto.`
+      `Se guardaron ${saved.length} de ${toStore.length} transacciones nuevas. Importá el archivo de nuevo para completar el resto.`,
+      { cause: error }
     )
   }
   if (!owner) throw new WorkspaceChangedError()
@@ -583,9 +577,9 @@ async function writeOverrides(
       } catch {
         assertOwner(repo)
         applyDescLocally()
-        captureError(error, 'write')
         throw new UserFacingError(
-          'Se guardó el nombre, pero no la categoría. Intentá de nuevo.'
+          'Se guardó el nombre, pero no la categoría. Intentá de nuevo.',
+          { cause: error }
         )
       }
       throw error
@@ -610,9 +604,9 @@ async function writeOverrides(
       await repo.deleteCategoryOverride(legacyMerchantKey)
     } catch (error) {
       assertOwner(repo)
-      captureError(error, 'write')
       throw new UserFacingError(
-        'Se guardó la categoría, pero no se pudo quitar la regla anterior. Intentá de nuevo.'
+        'Se guardó la categoría, pero no se pudo quitar la regla anterior. Intentá de nuevo.',
+        { cause: error }
       )
     }
     assertOwner(repo)
@@ -769,13 +763,13 @@ async function deleteRows(
     const done = softDone.size + hardDone.size
     const total = done + leftover.length
     if (done === 0) throw soft.error ?? hard.error
-    captureError(soft.error ?? hard.error, 'write')
     throw new PartialWriteError(
       deletedMessage(done, total),
       done,
       total,
       () => deleteTransactions(repo, leftover, { allowIrreversible: true }),
-      result
+      result,
+      soft.error ?? hard.error
     )
   }
   return result
@@ -883,8 +877,7 @@ export async function splitTransaction(
       // (both visible, the parts deletable), never a parent without parts.
       assertOwner(repo)
       store().addTransactions(children)
-      captureError(error, 'write')
-      throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE)
+      throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE, { cause: error })
     }
     throw error
   }
@@ -908,8 +901,7 @@ export async function unsplitTransaction(
     if (error instanceof UnsplitIncompleteError) {
       assertOwner(repo)
       store().updateTransaction(parent.id, { isSplitParent: false })
-      captureError(error, 'write')
-      throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE)
+      throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE, { cause: error })
     }
     throw error
   }

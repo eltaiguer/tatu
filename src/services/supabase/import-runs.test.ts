@@ -90,7 +90,8 @@ describe('supabase import runs service', () => {
     }).catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(UserFacingError)
-    expect(reporting.captureError).toHaveBeenCalledWith(failure, 'import')
+    // Reported where it is shown (ImportCSV), through its cause.
+    expect((error as InstanceType<typeof UserFacingError>).cause).toBe(failure)
   })
 
   it('completes an import run with counters', async () => {

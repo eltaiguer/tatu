@@ -5,6 +5,8 @@ import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { AiConfig } from './ai-config'
 import { firstTextBlock, type ClaudeResponseLike } from './text-block'
 import { resolveBuiltinAlias } from '../categories/category-aliases'
+import { captureError, errorMessage } from '../monitoring/error-reporting'
+import { isUnexpectedAiError } from '../../utils/user-error'
 
 export interface AiEnrichmentInput {
   id: string
@@ -280,8 +282,6 @@ export interface AiEnrichmentOutcome {
    * worth of enrichment.
    */
   partialFailure?: string
-  /** The first failed batch's error as thrown, for error reporting. */
-  partialError?: unknown
 }
 
 export async function enrichTransactionsWithAi(
@@ -314,6 +314,7 @@ export async function enrichTransactionsWithAi(
 
   const results = new Map<string, AiEnrichmentResult>()
   const errors: unknown[] = []
+  let reportedBug = false
   let batchCount = 0
 
   for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
@@ -337,6 +338,12 @@ export async function enrichTransactionsWithAi(
       }
     } catch (error) {
       errors.push(error)
+      // This loop is the only place that sees every batch's error: report
+      // the first bug, even after an expected failure (a rate limit).
+      if (!reportedBug && isUnexpectedAiError(error)) {
+        captureError(error, 'ai')
+        reportedBug = true
+      }
 
       // Batch isolation is for transient faults. A bad key or revoked
       // permission fails identically for every remaining batch, so carrying
@@ -351,15 +358,13 @@ export async function enrichTransactionsWithAi(
 
   if (errors.length === 0) return { results }
   const [first] = errors
-  // Every batch failed: a hard failure, rethrown as thrown so its type and
-  // stack survive for error reporting.
+  // Every batch failed: a hard failure, rethrown as thrown (its type and
+  // stack intact). Already reported above if it was a bug.
   if (errors.length === batchCount) {
     throw first instanceof Error ? first : new Error(String(first))
   }
-  const firstMessage = first instanceof Error ? first.message : String(first)
   return {
     results,
-    partialFailure: `${errors.length} de ${batchCount} lotes fallaron: ${firstMessage}`,
-    partialError: first,
+    partialFailure: `${errors.length} de ${batchCount} lotes fallaron: ${errorMessage(first)}`,
   }
 }
