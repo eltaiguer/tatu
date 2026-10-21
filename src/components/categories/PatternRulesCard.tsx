@@ -10,8 +10,8 @@ import type { Transaction } from '../../models'
 import { Category } from '../../models'
 import { countsAsRow } from '../../services/spending/spending-rules'
 import {
-  getCategoryDefinition,
   getCategoryDefinitions,
+  resolveCategory,
 } from '../../services/categories/category-registry'
 import {
   addCustomPatternWithSync,
@@ -256,7 +256,7 @@ export function PatternRulesCard({
       {customPatterns.length > 0 ? (
         <div className="flex flex-col gap-[6px]">
           {customPatterns.map((cp) => {
-            const catDisplay = getCategoryDefinition(cp.category)
+            const catDisplay = resolveCategory(cp.category)
             const matchLabel =
               cp.matchType === 'contains'
                 ? 'contiene'

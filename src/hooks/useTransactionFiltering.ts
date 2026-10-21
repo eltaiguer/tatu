@@ -11,7 +11,7 @@ import {
   countsAsRow,
 } from '../services/spending/spending-rules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
-import { getCategoryDisplay } from '../utils/category-display'
+import { sortCategoryIdsByLabel } from '../services/categories/category-registry'
 import { todayAsUtcDate } from '../utils/date-utils'
 import type { Transaction } from '../models'
 import {
@@ -211,16 +211,13 @@ export function useTransactionFiltering({
 
   const availableCategories = useMemo(
     () =>
-      Array.from(
-        new Set(
-          transactions
-            .filter(countsAsRow)
-            .map((tx) => normalizeCategoryId(tx.category))
-        )
-      ).sort((a, b) =>
-        getCategoryDisplay(a).label.localeCompare(
-          getCategoryDisplay(b).label,
-          'es'
+      sortCategoryIdsByLabel(
+        Array.from(
+          new Set(
+            transactions
+              .filter(countsAsRow)
+              .map((tx) => normalizeCategoryId(tx.category))
+          )
         )
       ),
     [transactions]

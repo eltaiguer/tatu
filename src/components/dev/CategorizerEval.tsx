@@ -14,7 +14,7 @@ import {
   classifyWithJev,
 } from '../../services/ai/jev-classifier'
 import { JEV_MODEL } from '../../services/ai/models'
-import { getCategoryDefinition } from '../../services/categories/category-registry'
+import { resolveCategory } from '../../services/categories/category-registry'
 import {
   labelledRows,
   rulePredictions,
@@ -62,7 +62,7 @@ function percent(ratio: number): string {
 }
 
 function label(id: string): string {
-  return getCategoryDefinition(id).label
+  return resolveCategory(id).label
 }
 
 function toInputs(sample: LabelledRow[]): AiEnrichmentInput[] {

@@ -1,5 +1,5 @@
 import type { Transaction } from '../../models'
-import { getCategoryDisplay } from '../../utils/category-display'
+import { resolveCategory } from '../categories/category-registry'
 import { countsTowardTotals } from '../spending/spending-rules'
 import { UserFacingError } from '../../utils/user-error'
 
@@ -16,7 +16,7 @@ export interface PdfReportOptions {
 }
 
 function getExportCategoryLabel(category: string | undefined): string {
-  return getCategoryDisplay(category).label
+  return resolveCategory(category).label
 }
 
 // Whether the row counts toward totals (1) or not (0), so summing the 1 rows
