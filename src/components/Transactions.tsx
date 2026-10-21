@@ -14,7 +14,7 @@ import { BulkEditDialog } from './BulkEditDialog'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
-import { todayAsUtcDate } from '../utils/date-utils'
+import { newestDataMonth, todayAsUtcDate } from '../utils/date-utils'
 import { exportTransactions } from '../services/export/export'
 import {
   addCustomCategoryWithSync,
@@ -70,20 +70,11 @@ export function Transactions({
   // time; a plain visit starts on the newest month.
   const [initialState] = useState<UrlFilterState>(() => {
     if (initialFilters.period) return initialFilters
-    if (hasActiveFilters(initialFilters) || transactions.length === 0) {
-      return { ...initialFilters, period: { mode: 'all' } }
-    }
-    const newest = new Date(
-      Math.max(...transactions.map((tx) => tx.date.getTime()))
-    )
-    return {
-      ...initialFilters,
-      period: {
-        mode: 'month',
-        y: newest.getUTCFullYear(),
-        m: newest.getUTCMonth(),
-      },
-    }
+    const newest = hasActiveFilters(initialFilters)
+      ? null
+      : newestDataMonth(transactions)
+    if (!newest) return { ...initialFilters, period: { mode: 'all' } }
+    return { ...initialFilters, period: { mode: 'month', ...newest } }
   })
 
   const {
@@ -99,7 +90,7 @@ export function Transactions({
     filteredTransactions,
     ignoredCount,
     availableCategories,
-    newestDate,
+    newestRowDate,
     currentPage,
     setCurrentPage,
     safeTotalPages,
@@ -142,11 +133,8 @@ export function Transactions({
     onFiltersChange(serializeFilterParams(filters))
   }, [onFiltersChange, filters])
 
-  const newestForNav =
-    newestDate ??
-    (transactions.length > 0
-      ? new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
-      : todayAsUtcDate())
+  // `newestRowDate` is null only without rows.
+  const newestForNav = newestRowDate ?? todayAsUtcDate()
 
   /* ---- Edit state ---- */
   // Rows with a mutation in flight. A set, not a single id, so two

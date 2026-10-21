@@ -43,6 +43,23 @@ const parts = [
   { description: 'Bebida', amount: 600, category: 'restaurants' },
 ]
 
+// A one-row UYU account statement, as the import dialog hands it over.
+const STATEMENT = {
+  bytes: new TextEncoder().encode(`Cliente,Test,
+Cuenta,Ca De Ahorro Atm,
+Número,007003529520,
+Moneda,UYU,
+Sucursal,02 - 18 De Julio,
+
+Movimientos,
+Desde:,01/11/2025,Hasta:,30/11/2025
+
+Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
+24/11/2025,5,COMPRA CON TARJETA DEBITO FARMACIA,,-900.00,,100.00,
+`),
+  fileName: 'movements.csv',
+}
+
 const rule = {
   id: 'r1',
   pattern: 'SUPERMERCADO',
@@ -90,7 +107,7 @@ describe('useTransactionHandlers — one contract without a repository', () => {
     )
     const h = result.current
     const calls = [
-      h.handleTransactionsImported([makeTransaction('a')]),
+      h.handleTransactionsImported(STATEMENT),
       h.handleUpdateTransaction('a', { applyScope: 'single' }),
       h.handleDeleteTransaction('a'),
       h.handleBulkDeleteTransactions(['a']),
@@ -151,7 +168,7 @@ describe('useTransactionHandlers — the view error', () => {
   > = [
     [
       'handleTransactionsImported',
-      { write: (h) => h.handleTransactionsImported([makeTransaction('b')]) },
+      { write: (h) => h.handleTransactionsImported(STATEMENT) },
     ],
     [
       'handleUpdateTransaction',
@@ -251,15 +268,18 @@ describe('useTransactionHandlers — arguments reach the mutation', () => {
     }
   )
 
-  it('passes the import context, so the import run is recorded', async () => {
+  it('imports the statement file and says when it was understood', async () => {
     const { repo, result } = signedIn()
+    const onParsed = vi.fn()
 
-    await result.current.handleTransactionsImported([makeTransaction('b')], {
-      parsedData: { fileType: 'bank_account_uyu' },
-      csvContent: 'raw,csv',
-      fileName: 'movements.csv',
-    })
+    const imported = await result.current.handleTransactionsImported(
+      STATEMENT,
+      { onParsed }
+    )
 
+    expect(imported).toMatchObject({ fileType: 'bank_account_uyu' })
+    expect(onParsed).toHaveBeenCalledTimes(1)
+    expect(repo.rows()).toHaveLength(2)
     expect(repo.importRuns).toHaveLength(1)
     expect(repo.importRuns[0]).toMatchObject({
       fileName: 'movements.csv',

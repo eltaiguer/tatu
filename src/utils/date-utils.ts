@@ -44,3 +44,30 @@ export function toMonthKey(date: Date): string {
   const month = `${date.getUTCMonth() + 1}`.padStart(2, '0')
   return `${year}-${month}`
 }
+
+/**
+ * The newest `date` among `rows`, or null when there are none. Which rows
+ * count is the caller's choice (every row, or only those that count toward
+ * totals). A loop, not `Math.max(...dates)`: spreading a long history
+ * overflows the call stack.
+ */
+export function newestDate(rows: ReadonlyArray<{ date: Date }>): Date | null {
+  let newest: Date | null = null
+  for (const { date } of rows) {
+    if (newest === null || date.getTime() > newest.getTime()) newest = date
+  }
+  return newest
+}
+
+/**
+ * The month of the newest row (`m` 0-based, read in UTC like every
+ * transaction date, #58), or null when there are none: the month a view
+ * opens on when it starts "on the newest month with data".
+ */
+export function newestDataMonth(
+  rows: ReadonlyArray<{ date: Date }>
+): { y: number; m: number } | null {
+  const newest = newestDate(rows)
+  if (!newest) return null
+  return { y: newest.getUTCFullYear(), m: newest.getUTCMonth() }
+}

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import {
   render,
@@ -9,13 +11,27 @@ import {
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ImportCSV } from './ImportCSV'
-import { UserFacingError } from '../utils/user-error'
+import { StatementReadError } from '../utils/user-error'
+import { useTransactionHandlers } from '../hooks/useTransactionHandlers'
 import { AiError } from '../services/ai/ai-error'
-import type { ParsedData, Transaction } from '../models'
+import {
+  importStatement,
+  type ImportStatementOptions,
+  type StatementFile,
+  type StatementImportResult,
+} from '../services/import/import-statement'
+import { createInMemoryRepository } from '../services/repository/in-memory-repository'
+import { transactionStore } from '../stores/transaction-store'
+import { workspaceStore } from '../stores/workspace-state'
+import type { Transaction } from '../models'
 
-const { parseCSVMock, addTransactionsMock, toastMock } = vi.hoisted(() => ({
-  parseCSVMock: vi.fn(),
-  addTransactionsMock: vi.fn(),
+// The dialog picks a file, hands its bytes to the import, and reports what
+// came back. What the import does with them is tested at its own interface
+// (services/import/import-statement.test.ts); here the import is a test
+// double, except in "the real import", which runs it over the in-memory
+// repository to check the double's assumptions.
+
+const { toastMock } = vi.hoisted(() => ({
   toastMock: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
 }))
 
@@ -26,18 +42,6 @@ vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
     typeof import('../services/monitoring/error-reporting')
   >()),
   captureError: reporting.captureError,
-}))
-
-vi.mock('../services/parsers/csv-parser', () => ({
-  parseCSV: parseCSVMock,
-}))
-
-vi.mock('../stores/transaction-store', () => ({
-  transactionStore: {
-    getState: () => ({
-      addTransactions: addTransactionsMock,
-    }),
-  },
 }))
 
 const OriginalFileReader = globalThis.FileReader
@@ -56,6 +60,7 @@ class SuccessfulFileReaderMock {
 
 class DeferredFileReaderMock {
   static instances: DeferredFileReaderMock[] = []
+  result: ArrayBuffer | null = null
   onload: ((event: ProgressEvent<FileReader>) => void) | null = null
   onerror: (() => void) | null = null
 
@@ -88,22 +93,56 @@ function makeTx(id: string): Transaction {
   }
 }
 
-function makeParsedData(): ParsedData {
+type Importer = (
+  file: StatementFile,
+  options: ImportStatementOptions
+) => Promise<StatementImportResult>
+
+function result(
+  overrides: Partial<StatementImportResult> = {}
+): StatementImportResult {
   return {
+    added: [],
+    duplicates: [],
+    previouslyDeleted: [],
+    repaired: [],
     fileType: 'bank_account_uyu',
-    transactions: [makeTx('tx-1'), makeTx('tx-2'), makeTx('tx-3')],
-    metadata: {
-      cliente: 'Test',
-      cuenta: 'Cuenta',
-      numero: '123',
-      moneda: 'UYU',
-      sucursal: '01',
-      periodoDesde: '01/01/2026',
-      periodoHasta: '31/01/2026',
-    },
-    fileName: 'movements.csv',
-    parsedAt: new Date('2026-01-31T12:00:00.000Z'),
+    month: { y: 2026, m: 0 },
+    ...overrides,
   }
+}
+
+// Test doubles of the import, one per outcome, mirroring its contract: a file
+// it could not read rejects with a StatementReadError; anything else it
+// rejects with happened while saving (after reporting progress, onParsed).
+const parsedThen = (overrides: Partial<StatementImportResult> = {}) =>
+  vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+    async (_file, { onParsed }) => {
+      onParsed?.()
+      return result(overrides)
+    }
+  )
+const failsToRead = (error: StatementReadError) =>
+  vi.fn<Parameters<Importer>, ReturnType<Importer>>(async () => {
+    throw error
+  })
+// Rejects before reporting progress with something other than a read error.
+const failsUnexpectedly = (error: unknown) =>
+  vi.fn<Parameters<Importer>, ReturnType<Importer>>(async () => {
+    throw error
+  })
+const failsToSave = (error: unknown) =>
+  vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+    async (_file, { onParsed }) => {
+      onParsed?.()
+      throw error
+    }
+  )
+
+function pick(name = 'movements.csv', content: BlobPart = 'a,b') {
+  fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+    target: { files: [new File([content], name, { type: 'text/csv' })] },
+  })
 }
 
 // A line of the import summary, e.g. "2 nuevas" (count and label are
@@ -128,7 +167,7 @@ describe('ImportCSV', () => {
   describe('choosing a file by keyboard (#193)', () => {
     it('Tab reaches "Seleccionar archivo" and Enter opens the file chooser', async () => {
       const user = userEvent.setup()
-      render(<ImportCSV />)
+      render(<ImportCSV onTransactionsImported={parsedThen()} />)
       const input = screen.getByLabelText('Seleccionar archivo')
       const click = vi.spyOn(input, 'click').mockImplementation(() => {})
       const button = screen.getByText('Seleccionar archivo')
@@ -142,7 +181,7 @@ describe('ImportCSV', () => {
 
     it('Space on the focused button opens the file chooser too', async () => {
       const user = userEvent.setup()
-      render(<ImportCSV />)
+      render(<ImportCSV onTransactionsImported={parsedThen()} />)
       const input = screen.getByLabelText('Seleccionar archivo')
       const click = vi.spyOn(input, 'click').mockImplementation(() => {})
 
@@ -152,7 +191,7 @@ describe('ImportCSV', () => {
     })
 
     it('does not promise a clickable drop zone', () => {
-      render(<ImportCSV />)
+      render(<ImportCSV onTransactionsImported={parsedThen()} />)
       expect(
         screen.queryByText('o hacé clic para seleccionar')
       ).not.toBeInTheDocument()
@@ -161,7 +200,7 @@ describe('ImportCSV', () => {
 
   describe('copy and states (#204)', () => {
     it('uses sentence case and the copy guide’s account names', () => {
-      render(<ImportCSV />)
+      render(<ImportCSV onTransactionsImported={parsedThen()} />)
 
       expect(
         screen.getByRole('heading', { name: 'Importar transacciones' })
@@ -178,176 +217,118 @@ describe('ImportCSV', () => {
     })
 
     it('says "Importando…" while a valid file’s rows are being saved', async () => {
-      parseCSVMock.mockReturnValue(makeParsedData())
-      const onTransactionsImported = vi.fn(() => new Promise<never>(() => {}))
-      render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+      const saving = vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+        (_file, { onParsed }) => {
+          onParsed?.()
+          return new Promise<never>(() => {})
+        }
+      )
+      render(<ImportCSV onTransactionsImported={saving} />)
 
-      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-        target: {
-          files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-        },
-      })
+      pick()
 
       expect(await screen.findByText('Importando…')).toBeInTheDocument()
-      expect(screen.queryByText(/Validando archivo/)).not.toBeInTheDocument()
+      expect(screen.queryByText('Validando archivo…')).not.toBeInTheDocument()
     })
 
     it('titles a save failure "No se pudo importar", not a validation error', async () => {
-      parseCSVMock.mockReturnValue(makeParsedData())
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      const onTransactionsImported = vi
-        .fn()
-        .mockRejectedValue(new Error('duplicate key value violates'))
-      render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+      render(
+        <ImportCSV
+          onTransactionsImported={failsToSave(new Error('network down'))}
+        />
+      )
 
-      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-        target: {
-          files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-        },
-      })
+      pick()
 
       expect(await screen.findByText('No se pudo importar')).toBeInTheDocument()
       expect(
-        screen.queryByText('Error al validar archivo')
-      ).not.toBeInTheDocument()
-      expect(
         screen.getByText('No se pudo guardar la importación')
       ).toBeInTheDocument()
+      expect(
+        screen.queryByText('Error al validar archivo')
+      ).not.toBeInTheDocument()
       expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
     })
 
     it('labels the account type of a successful import in sentence case', async () => {
-      parseCSVMock.mockReturnValue({
-        ...makeParsedData(),
-        fileType: 'credit_card',
-      })
-      addTransactionsMock.mockReturnValue({
-        added: [makeTx('tx-1')],
-        duplicates: [],
-      })
-      render(<ImportCSV />)
+      render(
+        <ImportCSV
+          onTransactionsImported={parsedThen({
+            fileType: 'credit_card',
+            added: [makeTx('tx-1')],
+          })}
+        />
+      )
 
-      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-        target: {
-          files: [new File(['a,b'], 'card.csv', { type: 'text/csv' })],
-        },
-      })
+      pick('card.csv')
 
       await screen.findByText('Importación completada')
       expect(screen.getAllByText('Tarjeta de crédito')).toHaveLength(2)
     })
   })
 
-  it('rejects non-csv files before parsing', () => {
-    render(<ImportCSV />)
+  it('rejects non-csv files before reading them', () => {
+    const importer = parsedThen()
+    render(<ImportCSV onTransactionsImported={importer} />)
 
-    const input = screen.getByLabelText('Seleccionar archivo')
-    fireEvent.change(input, {
-      target: {
-        files: [new File(['x'], 'notes.txt', { type: 'text/plain' })],
-      },
-    })
+    pick('notes.txt', 'x')
 
     expect(screen.getByText('Error al validar archivo')).toBeInTheDocument()
     expect(
       screen.getByText('El archivo debe estar en formato CSV')
     ).toBeInTheDocument()
-    expect(parseCSVMock).not.toHaveBeenCalled()
-    expect(addTransactionsMock).not.toHaveBeenCalled()
-  })
-
-  describe('files that are not a Santander statement (#198)', () => {
-    async function useRealParser() {
-      const actual = await vi.importActual<
-        typeof import('../services/parsers/csv-parser')
-      >('../services/parsers/csv-parser')
-      parseCSVMock.mockImplementation(actual.parseCSV)
-    }
-
-    function pick(content: string, name: string) {
-      globalThis.FileReader = class {
-        onload: ((event: ProgressEvent<FileReader>) => void) | null = null
-        onerror: (() => void) | null = null
-        result: ArrayBuffer | null = null
-        readAsArrayBuffer() {
-          this.result = new TextEncoder().encode(content).buffer
-          this.onload?.({} as ProgressEvent<FileReader>)
-        }
-      } as unknown as typeof FileReader
-      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-        target: { files: [new File([content], name, { type: 'text/csv' })] },
-      })
-    }
-
-    it('explains in Spanish that another bank’s CSV is not recognized', async () => {
-      await useRealParser()
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      render(<ImportCSV />)
-
-      pick('date,description,amount\n2026-01-01,Coffee,3.50\n', 'other.csv')
-
-      expect(
-        await screen.findByText(
-          'No reconocemos este archivo. Tatú importa extractos CSV de Santander Uruguay (tarjeta de crédito o caja de ahorro).'
-        )
-      ).toBeInTheDocument()
-      expect(screen.queryByText(/Unable to detect/)).not.toBeInTheDocument()
-      expect(addTransactionsMock).not.toHaveBeenCalled()
-      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
-    })
-
-    it('says an empty file is empty', async () => {
-      await useRealParser()
-      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-      render(<ImportCSV />)
-
-      pick('', 'empty.csv')
-
-      expect(
-        await screen.findByText('El archivo está vacío.')
-      ).toBeInTheDocument()
-      expect(screen.queryByText(/Unable to detect/)).not.toBeInTheDocument()
-      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
-    })
+    expect(importer).not.toHaveBeenCalled()
   })
 
   it('accepts a .CSV extension in upper case', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    addTransactionsMock.mockReturnValue({
-      added: [makeTx('tx-1')],
-      duplicates: [],
-    })
-    render(<ImportCSV />)
+    const importer = parsedThen({ added: [makeTx('tx-1')] })
+    render(<ImportCSV onTransactionsImported={importer} />)
 
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'MOVIMIENTOS.CSV', { type: 'text/csv' })],
-      },
-    })
+    pick('MOVIMIENTOS.CSV')
 
     expect(
       await screen.findByText('Importación completada')
     ).toBeInTheDocument()
-    expect(parseCSVMock).toHaveBeenCalledWith(
-      expect.any(String),
-      'MOVIMIENTOS.CSV'
+    expect(importer).toHaveBeenCalledWith(
+      expect.objectContaining({ fileName: 'MOVIMIENTOS.CSV' }),
+      expect.anything()
     )
   })
 
-  it('shows parser errors and does not persist', async () => {
-    parseCSVMock.mockImplementation(() => {
-      throw new UserFacingError('Fila 17: Importe ilegible: "abc"')
-    })
+  it("hands the file's bytes to the import undecoded (#192)", async () => {
+    // "Descripción,PEÑAROL" in Latin-1, as Santander exports it: the import
+    // decides the encoding, so the dialog must not read it as text.
+    const LATIN1 = new Uint8Array([
+      0x44, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x63, 0x69, 0xf3, 0x6e, 0x2c,
+      0x50, 0x45, 0xd1, 0x41, 0x52, 0x4f, 0x4c,
+    ])
+    // jsdom's real FileReader reads the File's bytes.
+    globalThis.FileReader = OriginalFileReader
+    const importer = parsedThen()
+    render(<ImportCSV onTransactionsImported={importer} />)
+
+    pick('movements.csv', LATIN1 as BlobPart)
+
+    await waitFor(() => expect(importer).toHaveBeenCalledTimes(1))
+    const [file] = importer.mock.calls[0]
+    expect(file.fileName).toBe('movements.csv')
+    expect(Array.from(new Uint8Array(file.bytes))).toEqual(Array.from(LATIN1))
+  })
+
+  it('shows parser errors and does not navigate', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const onViewTransactions = vi.fn()
-    render(<ImportCSV onViewTransactions={onViewTransactions} />)
+    render(
+      <ImportCSV
+        onViewTransactions={onViewTransactions}
+        onTransactionsImported={failsToRead(
+          new StatementReadError('Fila 17: Importe ilegible: "abc"')
+        )}
+      />
+    )
 
-    const input = screen.getByLabelText('Seleccionar archivo')
-    fireEvent.change(input, {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     expect(
       await screen.findByText('Error al validar archivo')
@@ -355,106 +336,208 @@ describe('ImportCSV', () => {
     expect(
       screen.getByText('Fila 17: Importe ilegible: "abc"')
     ).toBeInTheDocument()
-    expect(addTransactionsMock).not.toHaveBeenCalled()
     expect(onViewTransactions).not.toHaveBeenCalled()
     expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
   })
 
-  it('never shows the raw text of an unexpected parser failure', async () => {
-    parseCSVMock.mockImplementation(() => {
-      throw new TypeError(
-        "Cannot read properties of undefined (reading 'trim')"
-      )
-    })
+  it('never shows the raw text of an unexpected failure while saving', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    render(<ImportCSV />)
+    render(
+      <ImportCSV
+        onTransactionsImported={failsToSave(
+          new TypeError("Cannot read properties of undefined (reading 'id')")
+        )}
+      />
+    )
 
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
+
+    expect(
+      await screen.findByText('No se pudo guardar la importación')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Cannot read/)).not.toBeInTheDocument()
+    expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+  })
+
+  it('reports a parser crash to Sentry once, as a parse failure', async () => {
+    const bug = new TypeError(
+      "Cannot read properties of undefined (reading 'trim')"
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <ImportCSV
+        onTransactionsImported={failsToRead(
+          new StatementReadError(
+            'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.',
+            { cause: bug }
+          )
+        )}
+      />
+    )
+
+    pick()
 
     expect(
       await screen.findByText(
         'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
       )
     ).toBeInTheDocument()
-    expect(screen.queryByText(/Cannot read/)).not.toBeInTheDocument()
-    expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
-  })
-
-  it('reports an unexpected parser failure to Sentry once, as a parse failure', async () => {
-    const bug = new TypeError(
-      "Cannot read properties of undefined (reading 'trim')"
-    )
-    parseCSVMock.mockImplementation(() => {
-      throw bug
-    })
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    reporting.captureError.mockClear()
-    render(<ImportCSV />)
-
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
-
-    await screen.findByText(
-      'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
-    )
+    expect(screen.getByText('Error al validar archivo')).toBeInTheDocument()
+    // Error reporting sends the explained error's cause: the crash itself.
     expect(reporting.captureError).toHaveBeenCalledTimes(1)
-    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'import-parse')
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ cause: bug }),
+      'import-parse'
+    )
   })
 
-  it('shows file read errors and does not persist', async () => {
+  it('treats a failure before any progress that is not a read error as a save failure', async () => {
+    // Signed out: the handler refuses before the file is even parsed.
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    function SignedOutImport() {
+      const { handleTransactionsImported } = useTransactionHandlers({
+        repository: null,
+        setError: () => {},
+      })
+      return <ImportCSV onTransactionsImported={handleTransactionsImported} />
+    }
+    render(<SignedOutImport />)
+
+    pick()
+
+    expect(await screen.findByText('No se pudo importar')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Tu sesión terminó. Iniciá sesión de nuevo para guardar cambios.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Error al validar archivo')
+    ).not.toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledTimes(1)
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      'import'
+    )
+  })
+
+  it('reports a save failure to Sentry once, as an import failure', async () => {
+    const failure = new Error('network down')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<ImportCSV onTransactionsImported={failsToSave(failure)} />)
+
+    pick()
+
+    await screen.findByText('No se pudo importar')
+    expect(reporting.captureError).toHaveBeenCalledTimes(1)
+    expect(reporting.captureError).toHaveBeenCalledWith(failure, 'import')
+  })
+
+  it('shows file read errors and does not import', async () => {
     globalThis.FileReader =
       FailingFileReaderMock as unknown as typeof FileReader
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    render(<ImportCSV />)
+    const importer = parsedThen()
+    render(<ImportCSV onTransactionsImported={importer} />)
 
-    const input = screen.getByLabelText('Seleccionar archivo')
-    fireEvent.change(input, {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
+    pick()
+
+    expect(
+      await screen.findByText('Error al validar archivo')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Error al leer el archivo')).toBeInTheDocument()
+    expect(importer).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+  })
+
+  it('treats a file the browser cannot read as a read error', async () => {
+    const unreadable = new DOMException(
+      'The file could not be read',
+      'NotReadableError'
+    )
+    const file = new File(['a,b'], 'movements.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'arrayBuffer', {
+      value: () => Promise.reject(unreadable),
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const importer = parsedThen()
+    render(<ImportCSV onTransactionsImported={importer} />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: { files: [file] },
     })
 
     expect(
       await screen.findByText('Error al validar archivo')
     ).toBeInTheDocument()
     expect(screen.getByText('Error al leer el archivo')).toBeInTheDocument()
-    expect(parseCSVMock).not.toHaveBeenCalled()
-    expect(addTransactionsMock).not.toHaveBeenCalled()
+    expect(importer).not.toHaveBeenCalled()
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ cause: unreadable }),
+      'import-parse'
+    )
+  })
+
+  it('reports an unexpected failure before progress as an import failure', async () => {
+    // e.g. a categorizer bug: the file was fine, the app was not.
+    const bug = new TypeError(
+      "Cannot read properties of undefined (reading 'type')"
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<ImportCSV onTransactionsImported={failsUnexpectedly(bug)} />)
+
+    pick()
+
+    expect(await screen.findByText('No se pudo importar')).toBeInTheDocument()
+    expect(
+      screen.getByText('No se pudo guardar la importación')
+    ).toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledTimes(1)
+    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'import')
+  })
+
+  it('treats a reader that returns no bytes as a read error', async () => {
+    globalThis.FileReader = class {
+      onload: ((event: ProgressEvent<FileReader>) => void) | null = null
+      onerror: (() => void) | null = null
+      result: string | null = null
+      readAsArrayBuffer() {
+        this.onload?.({} as ProgressEvent<FileReader>)
+      }
+    } as unknown as typeof FileReader
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const importer = parsedThen()
+    render(<ImportCSV onTransactionsImported={importer} />)
+
+    pick()
+
+    expect(
+      await screen.findByText('Error al validar archivo')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Error al leer el archivo')).toBeInTheDocument()
+    expect(importer).not.toHaveBeenCalled()
     expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
   })
 
   it('shows validating state while file is being processed', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    addTransactionsMock.mockReturnValue({
-      added: [makeTx('tx-1'), makeTx('tx-2'), makeTx('tx-3')],
-      duplicates: [],
-    })
     globalThis.FileReader =
       DeferredFileReaderMock as unknown as typeof FileReader
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({
+          added: [makeTx('tx-1'), makeTx('tx-2'), makeTx('tx-3')],
+        })}
+      />
+    )
 
-    render(<ImportCSV />)
-
-    const input = screen.getByLabelText('Seleccionar archivo')
-    fireEvent.change(input, {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     expect(screen.getByText('Validando archivo…')).toBeInTheDocument()
 
     const reader = DeferredFileReaderMock.instances[0]
     await act(async () => {
-      reader.onload?.({
-        target: { result: 'mock-csv-content' },
-      } as unknown as ProgressEvent<FileReader>)
+      reader.result = new TextEncoder().encode('a,b').buffer
+      reader.onload?.({} as ProgressEvent<FileReader>)
     })
 
     expect(
@@ -462,89 +545,43 @@ describe('ImportCSV', () => {
     ).toBeInTheDocument()
   })
 
-  it('persists immediately and reports duplicates without leaving the dialog', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    addTransactionsMock.mockReturnValue({
+  it('reports new rows and duplicates without leaving the dialog', async () => {
+    const onViewTransactions = vi.fn()
+    const importer = parsedThen({
       added: [makeTx('tx-1')],
       duplicates: [makeTx('tx-2'), makeTx('tx-3')],
     })
-    const onViewTransactions = vi.fn()
+    render(
+      <ImportCSV
+        onTransactionsImported={importer}
+        onViewTransactions={onViewTransactions}
+      />
+    )
 
-    render(<ImportCSV onViewTransactions={onViewTransactions} />)
-
-    const input = screen.getByLabelText('Seleccionar archivo')
-    fireEvent.change(input, {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     expect(
       await screen.findByText('Importación completada')
     ).toBeInTheDocument()
     expect(summaryLine('1 nueva')).toBeInTheDocument()
     expect(summaryLine('2 duplicadas omitidas')).toBeInTheDocument()
-
-    expect(parseCSVMock).toHaveBeenCalledTimes(1)
-    expect(addTransactionsMock).toHaveBeenCalledTimes(1)
+    expect(importer).toHaveBeenCalledTimes(1)
     // Navigating is the user's choice ("Ver transacciones"), never automatic.
     expect(onViewTransactions).not.toHaveBeenCalled()
   })
 
-  it('uses custom import handler when provided', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    addTransactionsMock.mockReturnValue({
-      added: [],
-      duplicates: [],
-    })
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [makeTx('tx-1'), makeTx('tx-2')],
-      duplicates: [makeTx('tx-3')],
-    })
-
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-
-    const input = screen.getByLabelText('Seleccionar archivo')
-    fireEvent.change(input, {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
-
-    expect(
-      await screen.findByText('Importación completada')
-    ).toBeInTheDocument()
-    expect(summaryLine('2 nuevas')).toBeInTheDocument()
-    expect(summaryLine('1 duplicada omitida')).toBeInTheDocument()
-    expect(onTransactionsImported).toHaveBeenCalledTimes(1)
-    expect(onTransactionsImported).toHaveBeenCalledWith(
-      expect.any(Array),
-      expect.objectContaining({
-        fileName: 'movements.csv',
-        csvContent: expect.any(String),
-        parsedData: expect.objectContaining({
-          fileType: 'bank_account_uyu',
-        }),
-      })
-    )
-    expect(addTransactionsMock).not.toHaveBeenCalled()
-  })
-
   it('warns that AI categorization failed while still reporting a successful import', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [makeTx('tx-1'), makeTx('tx-2')],
-      duplicates: [makeTx('tx-3')],
-      aiError: new AiError('auth'),
-    })
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({
+          added: [makeTx('tx-1'), makeTx('tx-2')],
+          duplicates: [makeTx('tx-3')],
+          aiError: new AiError('auth'),
+        })}
+      />
+    )
 
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     // The import still succeeded ...
     expect(
@@ -563,82 +600,33 @@ describe('ImportCSV', () => {
   })
 
   it('tells the user deleted rows were skipped, with the right plural', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [makeTx('tx-1')],
-      duplicates: [],
-      previouslyDeleted: [makeTx('tx-2')],
-    })
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({
+          added: [makeTx('tx-1')],
+          previouslyDeleted: [makeTx('tx-2')],
+        })}
+      />
+    )
 
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     expect(await findSummaryLine('1 eliminada antes')).toBeInTheDocument()
     expect(summaryLine('1 nueva')).toBeInTheDocument()
     expect(summaryLine('0 duplicadas omitidas')).toBeInTheDocument()
   })
 
-  describe('file encoding (#192)', () => {
-    // "Descripción,PEÑAROL" in Latin-1, as Santander exports it.
-    const LATIN1 = new Uint8Array([
-      0x44, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x63, 0x69, 0xf3, 0x6e, 0x2c,
-      0x50, 0x45, 0xd1, 0x41, 0x52, 0x4f, 0x4c,
-    ])
-
-    function pickBytes(bytes: Uint8Array) {
-      // jsdom's real FileReader reads the File's bytes.
-      globalThis.FileReader = OriginalFileReader
-      parseCSVMock.mockReturnValue(makeParsedData())
-      addTransactionsMock.mockReturnValue({ added: [], duplicates: [] })
-      render(<ImportCSV />)
-      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-        target: {
-          files: [
-            new File([bytes as BlobPart], 'movements.csv', {
-              type: 'text/csv',
-            }),
-          ],
-        },
-      })
-    }
-
-    it('reads a Latin-1 export with its accents', async () => {
-      pickBytes(LATIN1)
-      await waitFor(() => expect(parseCSVMock).toHaveBeenCalled())
-      expect(parseCSVMock).toHaveBeenCalledWith(
-        'Descripción,PEÑAROL',
-        'movements.csv'
-      )
-    })
-
-    it('reads a UTF-8 export unchanged', async () => {
-      pickBytes(new TextEncoder().encode('Descripción,PEÑAROL'))
-      await waitFor(() => expect(parseCSVMock).toHaveBeenCalled())
-      expect(parseCSVMock).toHaveBeenCalledWith(
-        'Descripción,PEÑAROL',
-        'movements.csv'
-      )
-    })
-  })
-
   it('says how many garbled descriptions the import repaired', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [],
-      duplicates: [makeTx('tx-3')],
-      repaired: [makeTx('tx-1'), makeTx('tx-2')],
-    })
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({
+          duplicates: [makeTx('tx-3')],
+          repaired: [makeTx('tx-1'), makeTx('tx-2')],
+        })}
+      />
+    )
 
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     // Nothing new, but the import did something: say what (#202).
     expect(
@@ -658,19 +646,16 @@ describe('ImportCSV', () => {
   })
 
   it('lists a repaired description in the summary of a successful import', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [makeTx('tx-2')],
-      duplicates: [],
-      repaired: [makeTx('tx-1')],
-    })
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({
+          added: [makeTx('tx-2')],
+          repaired: [makeTx('tx-1')],
+        })}
+      />
+    )
 
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     expect(
       await screen.findByRole('heading', { name: 'Importación completada' })
@@ -680,20 +665,16 @@ describe('ImportCSV', () => {
   })
 
   it('warns when some garbled descriptions could not be repaired', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [makeTx('tx-1')],
-      duplicates: [],
-      repaired: [],
-      repairsFailed: 2,
-    })
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({
+          added: [makeTx('tx-1')],
+          repairsFailed: 2,
+        })}
+      />
+    )
 
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     await waitFor(() => expect(toastMock.warning).toHaveBeenCalled())
     expect(toastMock.warning.mock.calls[0][0]).toBe(
@@ -702,19 +683,13 @@ describe('ImportCSV', () => {
   })
 
   it('does not warn about AI when the import reports no AI failure', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [makeTx('tx-1')],
-      duplicates: [],
-    })
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({ added: [makeTx('tx-1')] })}
+      />
+    )
 
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     expect(
       await screen.findByText('Importación completada')
@@ -723,20 +698,16 @@ describe('ImportCSV', () => {
   })
 
   it('suggests a smaller file when the AI answer was cut off', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [makeTx('tx-1')],
-      duplicates: [],
-      aiError: new AiError('truncated'),
-    })
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({
+          added: [makeTx('tx-1')],
+          aiError: new AiError('truncated'),
+        })}
+      />
+    )
 
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     expect(
       await screen.findByText('Importación completada')
@@ -749,20 +720,16 @@ describe('ImportCSV', () => {
   })
 
   it('warns about an AI failure even when its message is empty', async () => {
-    parseCSVMock.mockReturnValue(makeParsedData())
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [makeTx('tx-1')],
-      duplicates: [],
-      aiError: new Error(''),
-    })
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({
+          added: [makeTx('tx-1')],
+          aiError: new Error(''),
+        })}
+      />
+    )
 
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     expect(
       await screen.findByText('Importación completada')
@@ -776,21 +743,17 @@ describe('ImportCSV', () => {
 
   it('says the AI run was incomplete, not unavailable, on a partial failure', async () => {
     // "no disponible" would be plainly wrong when 10 of 12 batches enriched.
-    parseCSVMock.mockReturnValue(makeParsedData())
-    const onTransactionsImported = vi.fn().mockResolvedValue({
-      added: [makeTx('tx-1')],
-      duplicates: [],
-      aiPartial:
-        '2 de 12 lotes fallaron (el servicio de IA no está disponible en este momento)',
-    })
+    render(
+      <ImportCSV
+        onTransactionsImported={parsedThen({
+          added: [makeTx('tx-1')],
+          aiPartial:
+            '2 de 12 lotes fallaron (el servicio de IA no está disponible en este momento)',
+        })}
+      />
+    )
 
-    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
-
-    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
-      target: {
-        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
-      },
-    })
+    pick()
 
     expect(
       await screen.findByText('Importación completada')
@@ -800,12 +763,8 @@ describe('ImportCSV', () => {
       'Categorización con IA incompleta: 2 de 12 lotes fallaron (el servicio de IA no está disponible en este momento). El resto se categorizó con reglas.'
     )
   })
-  describe('summary after an import (#202)', () => {
-    // Transaction dates are calendar days at UTC midnight (#58).
-    function txOn(id: string, y: number, m: number, d: number): Transaction {
-      return { ...makeTx(id), date: new Date(Date.UTC(y, m, d)) }
-    }
 
+  describe('summary after an import (#202)', () => {
     function importFile(user: ReturnType<typeof userEvent.setup>) {
       return user.upload(
         screen.getByLabelText('Seleccionar archivo'),
@@ -823,16 +782,14 @@ describe('ImportCSV', () => {
 
     it('stays open on the summary with the counts, without navigating away', async () => {
       const user = userEvent.setup()
-      parseCSVMock.mockReturnValue(makeParsedData())
       const onViewTransactions = vi.fn()
-      const onTransactionsImported = vi.fn().mockResolvedValue({
-        added: [txOn('a', 2026, 2, 3), txOn('b', 2026, 2, 9)],
-        duplicates: [txOn('c', 2026, 2, 1)],
-        previouslyDeleted: [txOn('d', 2026, 1, 28)],
-      })
       render(
         <ImportCSV
-          onTransactionsImported={onTransactionsImported}
+          onTransactionsImported={parsedThen({
+            added: [makeTx('a'), makeTx('b')],
+            duplicates: [makeTx('c')],
+            previouslyDeleted: [makeTx('d')],
+          })}
           onViewTransactions={onViewTransactions}
         />
       )
@@ -853,17 +810,15 @@ describe('ImportCSV', () => {
       expect(toastMock.success).not.toHaveBeenCalled()
     })
 
-    it('"Ver transacciones" goes to the month of the newest new row', async () => {
+    it('"Ver transacciones" goes to the month the import names', async () => {
       const user = userEvent.setup()
-      parseCSVMock.mockReturnValue(makeParsedData())
       const onViewTransactions = vi.fn()
-      const onTransactionsImported = vi.fn().mockResolvedValue({
-        added: [txOn('a', 2026, 1, 27), txOn('b', 2026, 2, 2)],
-        duplicates: [],
-      })
       render(
         <ImportCSV
-          onTransactionsImported={onTransactionsImported}
+          onTransactionsImported={parsedThen({
+            added: [makeTx('a')],
+            month: { y: 2026, m: 2 },
+          })}
           onViewTransactions={onViewTransactions}
         />
       )
@@ -879,46 +834,15 @@ describe('ImportCSV', () => {
       })
     })
 
-    it('"Ver transacciones" reads the newest row month as a UTC calendar day (#58)', async () => {
-      // 1 March at UTC midnight is still 28 February in Uruguay's local time.
-      const user = userEvent.setup()
-      parseCSVMock.mockReturnValue(makeParsedData())
-      const onViewTransactions = vi.fn()
-      const onTransactionsImported = vi.fn().mockResolvedValue({
-        added: [txOn('a', 2026, 1, 27), txOn('b', 2026, 2, 1)],
-        duplicates: [],
-      })
-      render(
-        <ImportCSV
-          onTransactionsImported={onTransactionsImported}
-          onViewTransactions={onViewTransactions}
-        />
-      )
-
-      await importFile(user)
-      await user.click(
-        await screen.findByRole('button', { name: 'Ver transacciones' })
-      )
-
-      expect(onViewTransactions).toHaveBeenCalledWith({
-        period: { mode: 'month', y: 2026, m: 2 },
-      })
-    })
-
     it('a file with nothing new is a neutral state, not a success', async () => {
       const user = userEvent.setup()
-      parseCSVMock.mockReturnValue({
-        ...makeParsedData(),
-        transactions: [txOn('a', 2025, 10, 4), txOn('b', 2025, 10, 27)],
-      })
       const onViewTransactions = vi.fn()
-      const onTransactionsImported = vi.fn().mockResolvedValue({
-        added: [],
-        duplicates: [txOn('a', 2025, 10, 4), txOn('b', 2025, 10, 27)],
-      })
       render(
         <ImportCSV
-          onTransactionsImported={onTransactionsImported}
+          onTransactionsImported={parsedThen({
+            duplicates: [makeTx('a'), makeTx('b')],
+            month: { y: 2025, m: 10 },
+          })}
           onViewTransactions={onViewTransactions}
         />
       )
@@ -952,14 +876,9 @@ describe('ImportCSV', () => {
 
     it('"Importar otro archivo" goes back to the file picker', async () => {
       const user = userEvent.setup()
-      parseCSVMock.mockReturnValue(makeParsedData())
-      const onTransactionsImported = vi.fn().mockResolvedValue({
-        added: [txOn('a', 2026, 2, 3)],
-        duplicates: [],
-      })
       render(
         <ImportCSV
-          onTransactionsImported={onTransactionsImported}
+          onTransactionsImported={parsedThen({ added: [makeTx('a')] })}
           onViewTransactions={vi.fn()}
         />
       )
@@ -979,15 +898,11 @@ describe('ImportCSV', () => {
 
     it('keeps a failed import in the dialog and never navigates', async () => {
       const user = userEvent.setup()
-      parseCSVMock.mockReturnValue(makeParsedData())
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const onViewTransactions = vi.fn()
-      const onTransactionsImported = vi
-        .fn()
-        .mockRejectedValue(new Error('network down'))
       render(
         <ImportCSV
-          onTransactionsImported={onTransactionsImported}
+          onTransactionsImported={failsToSave(new Error('network down'))}
           onViewTransactions={onViewTransactions}
         />
       )
@@ -999,6 +914,89 @@ describe('ImportCSV', () => {
         screen.queryByRole('button', { name: 'Ver transacciones' })
       ).not.toBeInTheDocument()
       expect(onViewTransactions).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+    })
+  })
+
+  // The doubles above assume when the real import calls onParsed and what it
+  // throws; these run it, over the in-memory repository, to keep them honest.
+  describe('the real import', () => {
+    function renderWithRealImport(
+      onViewTransactions: (filter: unknown) => void = vi.fn()
+    ) {
+      // jsdom's real FileReader reads the File's bytes.
+      globalThis.FileReader = OriginalFileReader
+      transactionStore.getState().clearTransactions()
+      const repo = createInMemoryRepository()
+      workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+      render(
+        <ImportCSV
+          onViewTransactions={onViewTransactions}
+          onTransactionsImported={(file, options) =>
+            importStatement(repo, file, options)
+          }
+        />
+      )
+      return repo
+    }
+
+    afterEach(() => {
+      transactionStore.getState().clearTransactions()
+      workspaceStore.setState({ userId: null, status: 'idle' })
+    })
+
+    it('imports a Santander statement and opens its month', async () => {
+      const user = userEvent.setup()
+      const onViewTransactions = vi.fn()
+      const repo = renderWithRealImport(onViewTransactions)
+      const bytes = readFileSync(
+        join(__dirname, '../../samples/UYUmovements.csv')
+      )
+
+      pick('UYUmovements.csv', new Uint8Array(bytes) as BlobPart)
+
+      expect(
+        await screen.findByRole('heading', { name: 'Importación completada' })
+      ).toBeInTheDocument()
+      expect(summaryLine('13 nuevas')).toBeInTheDocument()
+      expect(screen.getAllByText('Cuenta $U')).toHaveLength(2)
+      expect(repo.rows()).toHaveLength(13)
+
+      await user.click(
+        screen.getByRole('button', { name: 'Ver transacciones' })
+      )
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2025, m: 10 },
+      })
+    })
+
+    it('explains in Spanish that another bank’s CSV is not recognized (#198)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const repo = renderWithRealImport()
+
+      pick('other.csv', 'date,description,amount\n2026-01-01,Coffee,3.50\n')
+
+      expect(
+        await screen.findByText(
+          'No reconocemos este archivo. Tatú importa extractos CSV de Santander Uruguay (tarjeta de crédito o caja de ahorro).'
+        )
+      ).toBeInTheDocument()
+      expect(screen.getByText('Error al validar archivo')).toBeInTheDocument()
+      expect(screen.queryByText(/Unable to detect/)).not.toBeInTheDocument()
+      expect(repo.rows()).toEqual([])
+      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+    })
+
+    it('says an empty file is empty (#198)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      renderWithRealImport()
+
+      pick('empty.csv', '')
+
+      expect(
+        await screen.findByText('El archivo está vacío.')
+      ).toBeInTheDocument()
+      expect(screen.getByText('Error al validar archivo')).toBeInTheDocument()
       expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
     })
   })
