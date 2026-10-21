@@ -352,7 +352,7 @@ A transaction's `date` is a **calendar day, held as that day's UTC midnight**
   a transaction date — in Uruguay that shows `T00:00Z` as the previous day.
 - **Ranges:** month/period bounds are UTC (`periodDateRange` and the
   `T00:00:00.000Z`…`T23:59:59.999Z` bounds in `filterTransactions`,
-  `services/filters/transaction-filter.ts`; `getDateRangeForPeriod`), so a
+  `services/filters/transaction-filter.ts`), so a
   Transacciones drill-through holds exactly the rows Resumen summed
   (`toMonthKey`) for that month.
 
