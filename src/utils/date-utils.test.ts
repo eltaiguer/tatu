@@ -5,6 +5,7 @@ import {
   todayAsUtcDate,
   toCalendarDay,
   calendarDaysBetween,
+  toMonthKey,
 } from './date-utils'
 
 // #58: a transaction date is a calendar day stored at UTC midnight (rows
@@ -49,5 +50,11 @@ describe('UTC calendar dates', () => {
         day('2026-03-01T03:00:00.000Z')
       )
     ).toBe(2)
+  })
+
+  it('keys a month by its UTC calendar day, in both stored shapes', () => {
+    expect(toMonthKey(day('2026-02-28T00:00:00.000Z'))).toBe('2026-02')
+    expect(toMonthKey(day('2026-03-01T03:00:00.000Z'))).toBe('2026-03')
+    expect(toMonthKey(day('2026-03-31T00:00:00.000Z'))).toBe('2026-03')
   })
 })
