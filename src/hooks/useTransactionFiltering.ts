@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   countsTowardTotals,
   countsAsRow,
@@ -10,27 +17,85 @@ import type { Transaction } from '../models'
 import {
   DEFAULT_URL_FILTERS,
   type UrlFilterState,
-  type UrlPeriod,
 } from '../services/filters/url-filters'
 import {
   filterTransactions,
+  groupSplitRows,
   periodDateRange,
+  periodWithDateBound,
   sortTransactions,
+  type FilterPatch,
+  type FilterState,
   type SortDirection,
   type SortField,
 } from '../services/filters/transaction-filter'
 
-export type { SortDirection, SortField }
+export type { FilterPatch, FilterState, SortDirection, SortField }
 
 export const ITEMS_PER_PAGE = 25
+
+// Fresh lists every time: the state never shares DEFAULT_URL_FILTERS' arrays.
+function clearedFilters(): FilterState {
+  return {
+    ...DEFAULT_URL_FILTERS,
+    categories: [],
+    accounts: [],
+    period: { mode: 'all' },
+  }
+}
 
 function newestOf(transactions: Transaction[]): Date | null {
   if (transactions.length === 0) return null
   return new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
 }
 
-// React state + pagination around filterTransactions (#121), which owns what
-// "matches" means. `initial` seeds the filters once (from the URL), period
+// Structural equality over filter values: primitives, lists and the period
+// (a plain object), however the state grows.
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return (
+      a.length === b.length && a.every((value, i) => sameValue(value, b[i]))
+    )
+  }
+  if (
+    a !== null &&
+    b !== null &&
+    typeof a === 'object' &&
+    typeof b === 'object' &&
+    !Array.isArray(a) &&
+    !Array.isArray(b)
+  ) {
+    const left = a as Record<string, unknown>
+    const right = b as Record<string, unknown>
+    const keys = Object.keys(left)
+    return (
+      keys.length === Object.keys(right).length &&
+      keys.every((key) => key in right && sameValue(left[key], right[key]))
+    )
+  }
+  return false
+}
+
+// `current` with the patch's defined fields applied — or `current` itself
+// when no field changes, so the value (and the URL written from it) only
+// changes when a filter does.
+function applyPatch(current: FilterState, patch: FilterPatch): FilterState {
+  const changes = Object.fromEntries(
+    Object.entries(patch).filter(
+      ([key, value]) =>
+        value !== undefined &&
+        !sameValue(value, current[key as keyof FilterState])
+    )
+  ) as FilterPatch
+  return Object.keys(changes).length === 0
+    ? current
+    : { ...current, ...changes }
+}
+
+// The Transacciones filters as one value in the URL's shape (what
+// filterTransactions, #121, decides matches on), plus sort, split grouping
+// and pagination. `initial` seeds the filters once (from the URL), period
 // included, so a deep-linked month filters the very first render; no period
 // means all dates (the view supplies its own default). To apply a different
 // initial state, remount the consumer — the view does this on navigations.
@@ -41,98 +106,74 @@ export function useTransactionFiltering({
   transactions: Transaction[]
   initial?: UrlFilterState
 }) {
-  const [searchTerm, setSearchTerm] = useState(initial.search)
-  const [merchantFilter, setMerchantFilter] = useState(initial.merchant)
-  const [period, setPeriodState] = useState<UrlPeriod>(
-    initial.period ?? { mode: 'all' }
-  )
-  const [categoryFilters, setCategoryFilters] = useState<string[]>(
-    initial.categories
-  )
-  const [accountFilters, setAccountFilters] = useState<string[]>(
-    initial.accounts
-  )
-  const [currencyFilter, setCurrencyFilter] = useState<'all' | 'USD' | 'UYU'>(
-    initial.currency
-  )
-  const [typeFilter, setTypeFilter] = useState<'all' | 'credit' | 'debit'>(
-    initial.type
-  )
-  const [minAmount, setMinAmount] = useState(initial.min)
-  const [maxAmount, setMaxAmount] = useState(initial.max)
-  const [showIgnored, setShowIgnored] = useState(initial.showIgnored)
-
   const newestDate = useMemo(() => newestOf(transactions), [transactions])
+  // The newest row as of the last commit, for the stable updaters below
+  // (read when they are called, never written during render).
+  const newestRef = useRef(newestDate)
+  useLayoutEffect(() => {
+    newestRef.current = newestDate
+  }, [newestDate])
 
-  // "Últimos n meses" counts back from the newest month with data at the
-  // moment it is chosen (or the page is opened); it does not move when rows
-  // are imported or deleted afterwards.
-  const [recentAnchor, setRecentAnchor] = useState<Date>(
-    () => newestOf(transactions) ?? todayAsUtcDate()
-  )
+  // The filters, and the month "últimos n meses" counts back from: the
+  // newest month with data at the moment it is chosen (or the page is
+  // opened); it does not move when rows are imported or deleted afterwards.
+  // One state, so choosing that period updates both at once.
+  const [{ filters, recentAnchor }, setState] = useState<{
+    filters: FilterState
+    recentAnchor: Date
+  }>(() => ({
+    filters: {
+      ...initial,
+      categories: [...initial.categories],
+      accounts: [...initial.accounts],
+      period: initial.period ?? { mode: 'all' },
+    },
+    recentAnchor: newestOf(transactions) ?? todayAsUtcDate(),
+  }))
 
-  function setPeriod(next: UrlPeriod) {
-    if (next.mode === 'recent') {
-      setRecentAnchor(newestDate ?? todayAsUtcDate())
-    }
-    setPeriodState(next)
-  }
-
-  // The period as days, for the date inputs. Editing one makes the period a
-  // custom range (kept in the URL as desde/hasta).
-  const { from: dateFromFilter, to: dateToFilter } = periodDateRange(
-    period,
-    recentAnchor
-  )
-  // Updater form, so setting both ends in one batch keeps both.
-  function setDateBound(bound: 'from' | 'to', value: string) {
-    setPeriodState((current) => {
-      const range = {
-        ...periodDateRange(current, recentAnchor),
-        [bound]: value,
+  // Applied to the latest state, so several changes in one batch all stick.
+  // Choosing "últimos n meses" (again) anchors it to the newest row now.
+  const update = useCallback((patch: FilterPatch) => {
+    // Taken when the change is made, from committed rows.
+    const chosenAnchor =
+      patch.period?.mode === 'recent'
+        ? (newestRef.current ?? todayAsUtcDate())
+        : null
+    setState((current) => {
+      const nextFilters = applyPatch(current.filters, patch)
+      const anchor = chosenAnchor ?? current.recentAnchor
+      if (
+        nextFilters === current.filters &&
+        anchor.getTime() === current.recentAnchor.getTime()
+      ) {
+        return current
       }
-      return range.from || range.to
-        ? { mode: 'range', from: range.from, to: range.to }
-        : { mode: 'all' }
+      return { filters: nextFilters, recentAnchor: anchor }
     })
-  }
-  function setDateFromFilter(value: string) {
-    setDateBound('from', value)
-  }
-  function setDateToFilter(value: string) {
-    setDateBound('to', value)
-  }
+  }, [])
 
-  // The filter state in the URL's shape: what filterTransactions reads and
-  // what the view serializes.
-  const filters = useMemo<UrlFilterState>(
-    () => ({
-      search: searchTerm,
-      merchant: merchantFilter,
-      categories: categoryFilters,
-      // Passed through unchanged: the filter bar only offers these two, and
-      // dropping an unknown value would widen the match to every account.
-      accounts: accountFilters as UrlFilterState['accounts'],
-      currency: currencyFilter,
-      type: typeFilter,
-      min: minAmount,
-      max: maxAmount,
-      showIgnored,
-      period,
-    }),
-    [
-      searchTerm,
-      merchantFilter,
-      categoryFilters,
-      accountFilters,
-      currencyFilter,
-      typeFilter,
-      minAmount,
-      maxAmount,
-      showIgnored,
-      period,
-    ]
-  )
+  // Editing one end of the date inputs: a custom range that keeps the other
+  // end of the period as it is now (not as last rendered).
+  const setDateBound = useCallback((bound: 'from' | 'to', value: string) => {
+    setState((current) => {
+      const range = periodDateRange(
+        current.filters.period,
+        current.recentAnchor
+      )
+      const nextFilters = applyPatch(current.filters, {
+        period: periodWithDateBound(range, bound, value),
+      })
+      return nextFilters === current.filters
+        ? current
+        : { ...current, filters: nextFilters }
+    })
+  }, [])
+
+  // Every filter back to its default: all dates, ignored rows hidden.
+  const clear = useCallback(() => update(clearedFilters()), [update])
+
+  // The period as days, for the date inputs.
+  const dateRange = periodDateRange(filters.period, recentAnchor)
 
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
@@ -154,6 +195,7 @@ export function useTransactionFiltering({
     [transactions, filters, recentAnchor, sortField, sortDirection]
   )
 
+  const showIgnored = filters.showIgnored
   const filteredTransactions = useMemo(() => {
     if (showIgnored) return allFilteredTransactions
     // Split parents are already out, so the rows that don't count are the
@@ -184,37 +226,6 @@ export function useTransactionFiltering({
     [transactions]
   )
 
-  const hasActiveFilters =
-    Boolean(searchTerm.trim()) ||
-    Boolean(merchantFilter) ||
-    categoryFilters.length > 0 ||
-    accountFilters.length > 0 ||
-    currencyFilter !== 'all' ||
-    typeFilter !== 'all' ||
-    Boolean(minAmount) ||
-    Boolean(maxAmount)
-
-  const activeCurrencies = useMemo(
-    () =>
-      (['UYU', 'USD'] as const).filter((c) =>
-        transactions.some((tx) => tx.currency === c)
-      ),
-    [transactions]
-  )
-
-  function clearAllFilters() {
-    setSearchTerm('')
-    setMerchantFilter('')
-    setPeriodState({ mode: 'all' })
-    setCategoryFilters([])
-    setAccountFilters([])
-    setCurrencyFilter('all')
-    setTypeFilter('all')
-    setMinAmount('')
-    setMaxAmount('')
-    setShowIgnored(false)
-  }
-
   function handleSort(field: SortField) {
     if (sortField === field) {
       setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -224,40 +235,10 @@ export function useTransactionFiltering({
     setSortDirection('desc')
   }
 
-  // Matching split parts are shown under their parent (as context, not as a
-  // counted row); other rows keep their order.
-  const groupedTransactions = useMemo(() => {
-    const byId = new Map(transactions.map((tx) => [tx.id, tx]))
-    const childrenByParent = new Map<string, Transaction[]>()
-    filteredTransactions.forEach((tx) => {
-      if (tx.splitParentId) {
-        const arr = childrenByParent.get(tx.splitParentId) ?? []
-        arr.push(tx)
-        childrenByParent.set(tx.splitParentId, arr)
-      }
-    })
-
-    const result: Transaction[] = []
-    const emitted = new Set<string>()
-
-    filteredTransactions.forEach((tx) => {
-      if (emitted.has(tx.id)) return
-      const parent = tx.splitParentId ? byId.get(tx.splitParentId) : undefined
-      if (parent && !emitted.has(parent.id)) {
-        result.push(parent)
-        emitted.add(parent.id)
-        ;(childrenByParent.get(parent.id) ?? []).forEach((child) => {
-          result.push(child)
-          emitted.add(child.id)
-        })
-        return
-      }
-      result.push(tx)
-      emitted.add(tx.id)
-    })
-
-    return result
-  }, [filteredTransactions, transactions])
+  const groupedTransactions = useMemo(
+    () => groupSplitRows(filteredTransactions, transactions),
+    [filteredTransactions, transactions]
+  )
 
   const totalPages = Math.ceil(groupedTransactions.length / ITEMS_PER_PAGE)
   const safeTotalPages = Math.max(1, totalPages)
@@ -286,31 +267,11 @@ export function useTransactionFiltering({
   )
 
   return {
-    searchTerm,
-    setSearchTerm,
-    merchantFilter,
-    setMerchantFilter,
-    period,
-    setPeriod,
     filters,
-    dateFromFilter,
-    setDateFromFilter,
-    dateToFilter,
-    setDateToFilter,
-    categoryFilters,
-    setCategoryFilters,
-    accountFilters,
-    setAccountFilters,
-    currencyFilter,
-    setCurrencyFilter,
-    typeFilter,
-    setTypeFilter,
-    minAmount,
-    setMinAmount,
-    maxAmount,
-    setMaxAmount,
-    showIgnored,
-    setShowIgnored,
+    update,
+    clear,
+    setDateBound,
+    dateRange,
     sortField,
     sortDirection,
     handleSort,
@@ -318,9 +279,7 @@ export function useTransactionFiltering({
     filteredTransactions,
     ignoredCount,
     availableCategories,
-    hasActiveFilters,
     newestDate,
-    activeCurrencies,
     currentPage,
     setCurrentPage,
     totalPages,
@@ -332,6 +291,5 @@ export function useTransactionFiltering({
     displayedRowCount: groupedTransactions.length,
     paginatedTransactionIds,
     filteredTransactionIds,
-    clearAllFilters,
   }
 }
