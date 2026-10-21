@@ -134,6 +134,85 @@ describe('parseInsightsResponse', () => {
     expect(result.insights[0].merchant).toBe('Spotify')
   })
 
+  it('matches a merchant the model echoed with other accents, case or separator', () => {
+    const input: InsightInput = {
+      ...baseInput,
+      topMerchants: [
+        {
+          merchant: 'JOSÉ PEÑA · Transf. instantánea enviada',
+          amount: 15,
+          count: 1,
+        },
+      ],
+    }
+    const echoed = [
+      'JOSE PENA · Transf. instantanea enviada',
+      'José Peña - Transf. instantánea enviada',
+      'JOSÉ PEÑA  —  Transf. instantánea enviada',
+    ]
+    for (const merchant of echoed) {
+      const text = JSON.stringify({
+        insights: [
+          {
+            type: 'bleeding_money',
+            title: 'Transferencias',
+            narrative: 'x',
+            merchant,
+            severity: 'low',
+          },
+        ],
+      })
+      expect(parseInsightsResponse(text, input).insights[0].merchant).toBe(
+        'JOSÉ PEÑA · Transf. instantánea enviada'
+      )
+    }
+  })
+
+  it('drops a merchant that matches two input merchants once folded', () => {
+    const input: InsightInput = {
+      ...baseInput,
+      topMerchants: [
+        { merchant: 'Uber - Eats', amount: 15, count: 1 },
+        { merchant: 'UBER EATS', amount: 10, count: 1 },
+      ],
+    }
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'bleeding_money',
+          title: 'Delivery',
+          narrative: 'x',
+          merchant: 'uber eats',
+          severity: 'low',
+        },
+      ],
+    })
+    expect(parseInsightsResponse(text, input).insights[0].merchant).toBe(
+      undefined
+    )
+  })
+
+  it('matches a merchant echoed with a space where the key folds a "*"', () => {
+    const input: InsightInput = {
+      ...baseInput,
+      topMerchants: [{ merchant: 'MERPAGO*FOO', amount: 15, count: 1 }],
+    }
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'bleeding_money',
+          title: 'Foo',
+          narrative: 'x',
+          merchant: 'MERPAGO FOO',
+          severity: 'low',
+        },
+      ],
+    })
+    expect(parseInsightsResponse(text, input).insights[0].merchant).toBe(
+      'MERPAGO*FOO'
+    )
+  })
+
   it('drops insights missing a title, narrative, or valid type', () => {
     const text = JSON.stringify({
       insights: [

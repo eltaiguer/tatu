@@ -6,6 +6,7 @@ import {
   buildInsightSystemPrompt,
   buildInsightUserMessage,
 } from './insight-prompt'
+import { fold } from '../merchants/merchant-key'
 
 export type InsightType =
   | 'bleeding_money'
@@ -57,17 +58,28 @@ function isKnownCategory(category: string, input: InsightInput): boolean {
   return input.categoryTotals.some((c) => c.category === category)
 }
 
-function isKnownMerchant(merchant: string, input: InsightInput): boolean {
-  return (
-    input.topMerchants.some((m) => m.merchant === merchant) ||
-    input.recurringCharges.some((r) => r.merchant === merchant)
-  )
+// How a merchant name is compared with what the model echoes: the merchant
+// key's folding (case, accents, "*", spacing), and separators (" · ", " - ",
+// " — ") may drift too.
+function merchantMatchKey(name: string): string {
+  return fold(name.replace(/\s+[·•|\-–—]\s+/g, ' '))
 }
 
-// Every numeric/category/merchant field is verified against the InsightInput
-// that was actually sent — an insight referencing a number, category, or
-// merchant not present in the input is dropped rather than trusted (same
-// discipline as validateCategory() in transaction-ai.ts).
+// The input's own spelling of the merchant the model named, if exactly one
+// input merchant matches it.
+function knownMerchant(
+  merchant: string,
+  input: InsightInput
+): string | undefined {
+  const wanted = merchantMatchKey(merchant)
+  const names = new Set([
+    ...input.topMerchants.map((m) => m.merchant),
+    ...input.recurringCharges.map((r) => r.merchant),
+  ])
+  const matches = [...names].filter((name) => merchantMatchKey(name) === wanted)
+  return matches.length === 1 ? matches[0] : undefined
+}
+
 function sanitizeInsight(raw: unknown, input: InsightInput): Insight | null {
   if (typeof raw !== 'object' || raw === null) return null
   const item = raw as Record<string, unknown>
@@ -101,12 +113,11 @@ function sanitizeInsight(raw: unknown, input: InsightInput): Insight | null {
   ) {
     insight.category = item.category
   }
-  if (
-    typeof item.merchant === 'string' &&
-    isKnownMerchant(item.merchant, input)
-  ) {
-    insight.merchant = item.merchant
-  }
+  const merchant =
+    typeof item.merchant === 'string'
+      ? knownMerchant(item.merchant, input)
+      : undefined
+  if (merchant !== undefined) insight.merchant = merchant
 
   return insight
 }
