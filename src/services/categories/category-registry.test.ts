@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  DEFAULT_CATEGORY_COLOR,
   removeCustomCategory,
   replaceCustomCategories,
   type CustomCategory,
@@ -20,6 +21,7 @@ function loadCustom(rows: CustomCategory[]) {
 
 afterEach(() => {
   replaceCustomCategories([])
+  vi.restoreAllMocks()
 })
 
 const isIgnored = (id?: string | null) => resolveCategory(id).isIgnored
@@ -67,6 +69,8 @@ describe('getCategoryDefinitions', () => {
   })
 
   it('deduplicates custom categories with repeated ids', () => {
+    // The store reports rows that name one category with different settings.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     loadCustom([
       { id: 'my-custom', label: 'A', color: '#ff0000' },
       { id: 'my-custom', label: 'B', color: '#00ff00' },
@@ -75,6 +79,7 @@ describe('getCategoryDefinitions', () => {
     const defs = getCategoryDefinitions()
     const matches = defs.filter((d) => d.id === 'my-custom')
     expect(matches).toHaveLength(1)
+    expect(warn).toHaveBeenCalled()
   })
 
   it('uses default icon for custom categories with no icon', () => {
@@ -279,6 +284,23 @@ describe('resolveCategory', () => {
         isIgnored: false,
         known: true,
       })
+    })
+
+    it('falls back to a label from the id and the default colour when a row has none', () => {
+      loadCustom([{ id: 'home-office', label: '', color: '' }])
+
+      expect(resolveCategory('home-office')).toMatchObject({
+        label: 'Home office',
+        color: DEFAULT_CATEGORY_COLOR,
+        isCustom: true,
+      })
+    })
+
+    it('ignores surrounding whitespace in a stored id', () => {
+      loadCustom([{ id: 'viajes', label: 'Viajes', color: '#123456' }])
+
+      expect(resolveCategory(' viajes ')).toEqual(resolveCategory('viajes'))
+      expect(normalizeCategoryId(' Viajes ')).toBe('viajes')
     })
 
     it('uses the default icon for a custom category without one', () => {
@@ -548,9 +570,9 @@ describe('resolveCategory(...).isIgnored', () => {
   })
 
   it('prefers the current-id override whatever order the rows arrive in', () => {
-    // upsertBuiltinOverride matches on the exact id and appends otherwise, so
-    // un-ignoring Transferencias internas leaves the pre-rename row in place;
-    // Supabase returns custom_categories without an ORDER BY, so the stale
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    // Rows written before upsertBuiltinOverride updated alias rows in place
+    // can hold both ids; Supabase returns custom_categories without an ORDER BY, so the stale
     // legacy row can come back either side of the canonical one.
     const legacy = {
       id: 'transfer',
@@ -577,6 +599,7 @@ describe('resolveCategory(...).isIgnored', () => {
           ?.isIgnored
       ).toBe(false)
     }
+    expect(warn).toHaveBeenCalled()
   })
 
   it('keeps the transfer default when a legacy row records no preference', () => {
@@ -598,10 +621,10 @@ describe('resolveCategory(...).isIgnored', () => {
   })
 
   it('lets the Categorías toggle override a legacy alias row', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     // A pre-existing row keyed by an alias ('food' -> groceries) controls the
-    // built-in's ignore flag. Unticking "ignorar" in Categorías calls
-    // upsertBuiltinOverride, which appends a row keyed by the current id —
-    // that row must win, so the state is always correctable from the UI.
+    // built-in's ignore flag. A row keyed by the current id (written before
+    // alias rows were updated in place) must win when both are stored.
     loadCustom([
       { id: 'food', label: 'Food', color: '#ff0000', isIgnored: true },
     ])
@@ -617,5 +640,6 @@ describe('resolveCategory(...).isIgnored', () => {
       },
     ])
     expect(isIgnored(Category.Groceries)).toBe(false)
+    expect(warn).toHaveBeenCalled()
   })
 })

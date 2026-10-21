@@ -5,13 +5,12 @@ import {
   CATEGORY_LABELS,
 } from '../../models'
 import type { CustomCategory } from './category-store'
-import { listCustomCategories } from './category-store'
+import { DEFAULT_CATEGORY_COLOR, listCustomCategories } from './category-store'
 import { memoizeByReference } from '../../utils/memo'
 import {
   ID_ALIASES,
   LEGACY_IGNORED_ID,
   normalizeCategoryId,
-  resolveBuiltinAlias,
 } from './category-aliases'
 
 export { ID_ALIASES }
@@ -42,31 +41,13 @@ export interface CategoryDefinition {
 
 const DEFAULT_CUSTOM_ICON = '🏷️'
 
-// Override rows keyed by the category they actually apply to. A legacy row
-// ('transfer') and a current one ('internal_transfer') can coexist —
-// upsertBuiltinOverride matches on the exact id and appends otherwise — and
-// Supabase returns custom_categories unordered, so resolution must not depend
-// on array order: aliased rows claim their built-in first, then any row
-// already keyed by the current id overwrites it. Memoized on the store's
-// array identity, which every mutator replaces rather than mutating.
-const resolvedOverrides = memoizeByReference((categories: CustomCategory[]) => {
-  const aliased = new Map<string, CustomCategory>()
-  const exact = new Map<string, CustomCategory>()
-
-  categories.forEach((c) => {
-    // c.id is already lowercase: the store normalizes ids as they load.
-    const resolved = resolveBuiltinAlias(c.id)
-    const target = resolved === c.id ? exact : aliased
-    const held = target.get(resolved)
-    // Two alias keys can land on one built-in ('restaurant' and
-    // 'restaurants'). Break the tie on the id so the winner never depends on
-    // the order Supabase happened to return the rows in.
-    if (!held || c.id < held.id) target.set(resolved, c)
-  })
-
-  // A row already keyed by the current id always beats a stale alias row.
-  return new Map([...aliased, ...exact])
-})
+// Custom/override rows by category id. The store already normalized ids
+// (case, whitespace, pre-rename aliases) and collapsed rows naming one
+// category, so this is a plain lookup. Memoized on the store's array
+// identity, which every mutator replaces rather than mutating.
+const resolvedOverrides = memoizeByReference(
+  (categories: CustomCategory[]) => new Map(categories.map((c) => [c.id, c]))
+)
 
 const BUILTIN_IDS = new Set<string>(Object.values(Category))
 
@@ -104,8 +85,8 @@ function builtinDefinition(
 function customDefinition(key: string, c: CustomCategory): CategoryDefinition {
   return {
     id: key,
-    label: c.label,
-    color: c.color,
+    label: c.label || humanizeCategoryId(key),
+    color: c.color || DEFAULT_CATEGORY_COLOR,
     icon: c.icon || DEFAULT_CUSTOM_ICON,
     isCustom: true,
     isIgnored: ignoredFor(key, c),
@@ -211,8 +192,8 @@ export function needsIgnoredFlag(category: CategoryDefinition): boolean {
 
 /** Category ids in Spanish label order, resolving each id once. */
 export function sortCategoryIdsByLabel(ids: string[]): string[] {
-  const labels = new Map(ids.map((id) => [id, resolveCategory(id).label]))
-  return [...ids].sort((a, b) =>
-    (labels.get(a) ?? a).localeCompare(labels.get(b) ?? b, 'es')
-  )
+  return ids
+    .map((id) => ({ id, label: resolveCategory(id).label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'es'))
+    .map(({ id }) => id)
 }

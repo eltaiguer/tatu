@@ -1,4 +1,4 @@
-import { isReservedCategoryId } from './category-aliases'
+import { isReservedCategoryId, normalizeCategoryId } from './category-aliases'
 import { UserFacingError } from '../../utils/user-error'
 import type { Repository } from '../repository/repository'
 import { isWorkspaceOwner } from '../../stores/workspace-state'
@@ -12,14 +12,16 @@ export type CategoryRepository = Pick<
 export const DEFAULT_CATEGORY_COLOR = '#0ea5e9'
 
 export interface CustomCategory {
-  /** Lowercase: the id rows are grouped under (= normalizeCategoryId). */
+  /** The id rows are grouped under: always normalizeCategoryId(stored id). */
   id: string
   /**
-   * The server row's id when it differs from `id` — a row stored before
-   * slugs were lowercased ('Viajes-Familia'). Writes always target it, so
-   * editing a legacy row never creates a lowercase duplicate.
+   * The server rows behind this category when they are not just `id`: a row
+   * stored before slugs were lowercased ('Viajes-Familia'), a pre-rename
+   * alias row ('transfer' for internal_transfer), or several rows that name
+   * one category. Every write and archive goes to all of them, so editing a
+   * legacy row never creates a duplicate and the server converges.
    */
-  storedId?: string
+  storedIds?: string[]
   label: string
   color: string
   icon?: string
@@ -57,52 +59,67 @@ export function listCustomCategories(): CustomCategory[] {
   return _customCategories
 }
 
-function serverId(c: CustomCategory): string {
-  return c.storedId ?? c.id
+function serverIds(c: CustomCategory): string[] {
+  return c.storedIds ?? [c.id]
 }
 
-// Which of two rows whose ids differ only by case to keep: the one already
-// stored lowercase (what the app writes today), else the smaller stored id —
-// never whichever order Supabase happened to return them in.
-function preferred(a: CustomCategory, b: CustomCategory): CustomCategory {
-  const aLower = serverId(a) === a.id
-  const bLower = serverId(b) === b.id
-  if (aLower !== bLower) return aLower ? a : b
-  return serverId(a) <= serverId(b) ? a : b
+// Which stored row's settings a category shows when several rows name it:
+// the one stored under the current id (what the app writes today), else the
+// smallest stored id — never whichever order Supabase returned them in.
+function rank(key: string, storedId: string): [number, string] {
+  return [storedId === key ? 0 : 1, storedId]
+}
+
+function sameSettings(a: CustomCategory, b: CustomCategory): boolean {
+  return (
+    a.label === b.label &&
+    a.color === b.color &&
+    (a.icon ?? '') === (b.icon ?? '') &&
+    (a.isIgnored ?? false) === (b.isIgnored ?? false)
+  )
 }
 
 /**
  * Loads a user's categories — the one place ids are normalized. Each row is
- * keyed by its lowercase id, keeping the server's id in `storedId` for
- * writes. Rows whose ids differ only by case are one category: one is kept
- * deterministically, the others are reported and left untouched on the
- * server.
+ * keyed by normalizeCategoryId (trimmed, lowercase, pre-rename alias
+ * resolved), keeping the server ids in `storedIds` for writes. Rows that
+ * name one category collapse into it: the preferred row's settings win, and
+ * the next write goes to every row, so the server converges. Until then the
+ * disagreement is reported once per load.
  */
 export function replaceCustomCategories(categories: CustomCategory[]): void {
-  const byId = new Map<string, CustomCategory>()
+  const groups = new Map<
+    string,
+    Array<{ storedId: string; row: CustomCategory }>
+  >()
   for (const row of categories) {
-    const stored = serverId(row)
-    const id = stored.toLowerCase()
-    const next: CustomCategory = {
-      ...row,
-      id,
-      storedId: stored === id ? undefined : stored,
+    for (const storedId of serverIds(row)) {
+      const key = normalizeCategoryId(storedId)
+      groups.set(key, [...(groups.get(key) ?? []), { storedId, row }])
     }
-    const held = byId.get(id)
-    if (!held) {
-      byId.set(id, next)
-      continue
-    }
-    const keep = preferred(held, next)
-    const drop = keep === held ? next : held
-    if (serverId(drop) !== serverId(keep)) {
+  }
+
+  _customCategories = Array.from(groups, ([key, rows]) => {
+    const sorted = [...rows].sort((a, b) => {
+      const [ra, ia] = rank(key, a.storedId)
+      const [rb, ib] = rank(key, b.storedId)
+      return ra - rb || (ia < ib ? -1 : ia > ib ? 1 : 0)
+    })
+    const storedIds = Array.from(new Set(sorted.map((r) => r.storedId)))
+    const winner = sorted[0].row
+    const diverging = sorted.filter((r) => !sameSettings(r.row, winner))
+    if (diverging.length > 0) {
       console.warn(
-        `[categories] custom categories "${serverId(drop)}" and "${serverId(keep)}" differ only by case; using "${serverId(keep)}", ignoring "${serverId(drop)}"`
+        `[categories] stored categories ${storedIds.map((id) => `"${id}"`).join(', ')} are one category with different settings; showing "${sorted[0].storedId}" until the next save updates them all`
       )
     }
-    byId.set(id, keep)
-  }
-  _customCategories = Array.from(byId.values())
+    return {
+      ...winner,
+      id: key,
+      storedIds:
+        storedIds.length === 1 && storedIds[0] === key ? undefined : storedIds,
+    }
+  })
 }
 
 export function addCustomCategory(input: {
@@ -161,14 +178,16 @@ async function pushCategory(
 ): Promise<void> {
   const category = _customCategories.find((c) => c.id === id)
   if (!category) return
-  await repo.upsertCustomCategory({
-    id: serverId(category),
-    label: category.label,
-    color: category.color,
-    icon: category.icon,
-    isIgnored: category.isIgnored,
-    isArchived: false,
-  })
+  for (const storedId of serverIds(category)) {
+    await repo.upsertCustomCategory({
+      id: storedId,
+      label: category.label,
+      color: category.color,
+      icon: category.icon,
+      isIgnored: category.isIgnored,
+      isArchived: false,
+    })
+  }
 }
 
 function restoreCategory(
@@ -275,7 +294,9 @@ export async function removeCustomCategoryWithSync(
   const previous = _customCategories.find((c) => c.id === id)
   removeCustomCategory(id)
   try {
-    await repo.archiveCustomCategory(previous ? serverId(previous) : id)
+    for (const storedId of previous ? serverIds(previous) : [id]) {
+      await repo.archiveCustomCategory(storedId)
+    }
   } catch (error) {
     restoreCategory(repo, id, previous)
     throw error

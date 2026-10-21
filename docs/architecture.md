@@ -435,13 +435,17 @@ totals path, and `needsIgnoredFlag` decides when a row also shows the
 
 Custom category and override ids are normalized once, as they enter the
 store (`replaceCustomCategories` in `category-store.ts`): each row is keyed
-by its lowercase id, and a row stored before slugs were lowercased keeps its
-server id in `storedId`, which every write (upsert, archive) targets — so
-editing a legacy `Viajes-Familia` row never creates a `viajes-familia`
-duplicate, and a new category's slug can't collide with it. Two stored rows
-whose ids differ only by case are one category: the store keeps the one
-stored lowercase (else the smaller id), logs a `console.warn` naming the
-other, and leaves both untouched on the server (no migration).
+by `normalizeCategoryId` (trimmed, lowercase, pre-rename alias resolved), and
+the server ids behind a category are kept in `storedIds`. Several stored
+rows can name one category — `Viajes` and `viajes`, or a legacy `transfer`
+row next to `internal_transfer`: the row stored under the current id (else
+the smallest id) supplies the settings shown, and every write (upsert,
+archive) goes to **all** of them, so editing a legacy `Viajes-Familia` row
+never creates a `viajes-familia` duplicate, a deleted category can't come
+back from a row the screen never showed, and the server converges. While
+collapsed rows disagree, each load logs one `console.warn` naming them. No
+schema change, no migration. The registry therefore does a plain lookup by
+id; it no longer resolves aliases or breaks ties itself.
 
 | Stored id                                   | Resolves to                                                                                                                 |
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |

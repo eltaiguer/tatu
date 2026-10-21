@@ -24,13 +24,14 @@ function uniqueTrimmed(values: Iterable<string>): string[] {
 // Spanish label.
 export function buildCategorySuggestions(extra: string[] = []): string[] {
   return sortCategoryIdsByLabel(
+    // A blank extra normalizes to uncategorized, which is listed anyway.
     Array.from(
       new Set(
-        uniqueTrimmed([
+        [
           ...Object.values(Category),
           ...listCustomCategories().map((category) => category.id),
           ...extra,
-        ]).map(normalizeCategoryId)
+        ].map(normalizeCategoryId)
       )
     )
   )
