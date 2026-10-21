@@ -10,7 +10,13 @@ import type { CategoryOverrideRecord } from '../supabase/category-overrides'
 import type { DescriptionOverrideRecord } from '../supabase/description-overrides'
 import type { CustomCategoryRecord } from '../supabase/custom-categories'
 import type { UserPreferences } from '../supabase/user-preferences'
+import type {
+  CachedInsightsRow,
+  SaveInsightsParams,
+} from '../supabase/ai-insights'
 import type { CustomPattern } from '../categorizer/custom-patterns'
+
+export type { CachedInsightsRow, SaveInsightsParams }
 
 /**
  * One change to one row, written once and applied to both the repository and
@@ -136,6 +142,10 @@ export interface Repository {
   readonly userId: string
 
   loadWorkspace(): Promise<WorkspaceSnapshot>
+  /** Just the live rows, as stored (one table: for the dev panels). */
+  loadTransactions(): Promise<Transaction[]>
+  /** Just the merchant (category) overrides (one table: for the dev panels). */
+  loadCategoryOverrides(): Promise<CategoryOverrideRecord[]>
   savePreferences(preferences: UserPreferences): Promise<void>
 
   // Transactions --------------------------------------------------------
@@ -214,4 +224,24 @@ export interface Repository {
     isArchived?: boolean
   }): Promise<void>
   archiveCustomCategory(id: string): Promise<void>
+
+  // Insights cache (ADR-0001/0002: one row per user) -----------------------
+  /**
+   * The cached insights, or null when there are none (also when the row is
+   * unusable, e.g. a database still on the old per-period key). A missing
+   * `ai_insights` table (schema.sql not applied) rejects with a
+   * UserFacingError.
+   */
+  loadInsights(): Promise<CachedInsightsRow | null>
+  /** Replaces the cached insights; the server stamps `generatedAt`. */
+  saveInsights(row: SaveInsightsParams): Promise<void>
+
+  // Account -----------------------------------------------------------------
+  /**
+   * Deletes everything the user has stored, one table at a time, stopping
+   * at the first table that fails (the tables before it stay deleted; the
+   * caller reloads to show what remains). The insights cache is cleared
+   * last and best-effort: failing to clear it only warns.
+   */
+  resetAll(): Promise<void>
 }

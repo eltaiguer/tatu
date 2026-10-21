@@ -74,19 +74,25 @@ export async function signUpWithPassword(
   return data.session
 }
 
-export async function signOut(
-  session: SupabaseSession | null | undefined
-): Promise<void> {
-  void session
+/**
+ * Signs out everywhere (global scope). If that request fails (5xx, offline),
+ * supabase-js keeps its session — it would sign the user back in on the next
+ * refresh — so this falls back to the local scope, which revokes only this
+ * device's token and removes the session here. Either way a failure of the
+ * global sign-out is rethrown, for the caller to report. If even the local
+ * sign-out fails, the session is kept (here and in supabase-js) and the user
+ * is still signed in.
+ */
+export async function signOut(): Promise<void> {
   const client = getSupabaseClient()
-  try {
-    const { error } = await client.auth.signOut()
-    if (error) {
-      throw new Error(error.message)
-    }
-  } finally {
+  const { error } = await client.auth.signOut()
+  if (!error) {
     clearStoredSession()
+    return
   }
+  const { error: localError } = await client.auth.signOut({ scope: 'local' })
+  if (!localError) clearStoredSession()
+  throw new Error(error.message)
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {

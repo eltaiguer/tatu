@@ -1,16 +1,11 @@
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { teardownWorkspace, workspaceStore } from '../stores/workspace-store'
 import {
-  getCurrentSession,
-  requestPasswordReset,
-  signInWithPassword,
-  signOut,
-  signUpWithPassword,
-  subscribeToAuthChanges,
-  updatePassword,
-} from '../services/supabase/auth'
-import type { SupabaseSession } from '../services/supabase/client'
+  endSession,
+  teardownWorkspace,
+  workspaceStore,
+} from '../stores/workspace-store'
+import type { AuthPort, AuthSession } from '../services/auth/auth-port'
 import { setErrorReportingUser } from '../services/monitoring/error-reporting'
 import { mapAuthError } from '../utils/auth-errors'
 
@@ -61,15 +56,16 @@ function clearPasswordResetModeFromUrl(): void {
   )
 }
 
-export function useAuthSession() {
-  const [session, setSessionState] = useState<SupabaseSession | null>(() =>
-    getCurrentSession()
+/** The signed-in session and the sign-in screen's state, over `auth`. */
+export function useAuthSession(auth: AuthPort) {
+  const [session, setSessionState] = useState<AuthSession | null>(() =>
+    auth.getSession()
   )
   // Every session change goes through here. When the session ends or turns
   // into another user, the previous user's workspace is torn down before the
   // new session is rendered, so no frame ever pairs one user's session with
   // another user's data (#117).
-  const setSession = useCallback((next: SupabaseSession | null) => {
+  const setSession = useCallback((next: AuthSession | null) => {
     const loadedFor = workspaceStore.getState().userId
     if (loadedFor !== null && next?.user.id !== loadedFor) {
       teardownWorkspace()
@@ -85,12 +81,27 @@ export function useAuthSession() {
     isPasswordResetMode() ? 'reset' : 'signin'
   )
 
+  // A load clears the auth messages (they belong to the screen before it),
+  // except a message set by the very transition that triggers the load.
+  const keepMessagesRef = useRef(false)
+  const keepMessagesThroughNextLoad = useCallback(() => {
+    keepMessagesRef.current = true
+  }, [])
+  const clearMessagesForLoad = useCallback(() => {
+    if (keepMessagesRef.current) {
+      keepMessagesRef.current = false
+      return
+    }
+    setAuthError('')
+    setAuthNotice('')
+  }, [])
+
   useEffect(() => {
     setErrorReportingUser(session?.user?.id ?? null)
   }, [session?.user?.id])
 
   useEffect(() => {
-    const unsubscribe = subscribeToAuthChanges(
+    const unsubscribe = auth.onAuthChange(
       (nextSession) => {
         // SIGNED_OUT (this tab or another): drop everything of the user.
         if (!nextSession) teardownWorkspace()
@@ -106,7 +117,7 @@ export function useAuthSession() {
     return () => {
       unsubscribe()
     }
-  }, [setSession])
+  }, [auth, setSession])
 
   async function handleAuth(action: 'signin' | 'signup') {
     setAuthSubmitting(true)
@@ -116,8 +127,8 @@ export function useAuthSession() {
     try {
       const nextSession =
         action === 'signin'
-          ? await signInWithPassword(email, password)
-          : await signUpWithPassword(email, password)
+          ? await auth.signIn(email, password)
+          : await auth.signUp(email, password)
       setSession(nextSession)
       toast.success('Sesión iniciada')
     } catch (error) {
@@ -137,7 +148,7 @@ export function useAuthSession() {
     setAuthNotice('')
 
     try {
-      await requestPasswordReset(email)
+      await auth.requestPasswordReset(email)
       setAuthNotice('Te enviamos un email para restablecer tu contraseña')
     } catch (error) {
       setAuthError(mapAuthError(error))
@@ -152,18 +163,22 @@ export function useAuthSession() {
     setAuthNotice('')
 
     try {
-      await updatePassword(password)
-      try {
-        await signOut(session)
-      } catch {
-        // Ignore sign-out errors after a successful password change.
-      }
-      setSession(null)
-      teardownWorkspace()
+      await auth.updatePassword(password)
+      // A failed sign-out is not an error here: the password did change. If
+      // the session could not even be removed from this device, the user
+      // simply stays signed in (with the new password) and the app loads.
+      const ended = await endSession(auth)
+      const stillSignedIn = ended === 'still-signed-in'
+      if (stillSignedIn) keepMessagesThroughNextLoad()
+      setSession(auth.getSession())
       setPassword('')
       setAuthMode('signin')
       clearPasswordResetModeFromUrl()
-      setAuthNotice('Contraseña actualizada. Iniciá sesión nuevamente')
+      setAuthNotice(
+        stillSignedIn
+          ? 'Contraseña actualizada.'
+          : 'Contraseña actualizada. Iniciá sesión nuevamente'
+      )
     } catch (error) {
       setAuthError(mapAuthError(error))
     } finally {
@@ -190,5 +205,7 @@ export function useAuthSession() {
     handlePasswordReset,
     handlePasswordUpdate,
     clearPasswordResetModeFromUrl,
+    keepMessagesThroughNextLoad,
+    clearMessagesForLoad,
   }
 }

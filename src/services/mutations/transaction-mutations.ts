@@ -27,7 +27,7 @@ import {
   classifyImport,
   type ImportClassification,
 } from '../dedup/import-dedup'
-import { sha256Hex } from '../supabase/import-runs'
+import { sha256Hex } from '../../utils/sha256'
 import { captureError } from '../monitoring/error-reporting'
 import {
   countSimilarEditReach,

@@ -3,21 +3,18 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Insights } from './Insights'
 import type { Transaction } from '../models'
 import { Category } from '../models'
-import type { SupabaseSession } from '../services/supabase/client'
 import type { InsightsResult } from '../services/insights/insight-generator'
 import { UserFacingError } from '../utils/user-error'
+import {
+  createInMemoryRepository,
+  type InMemoryRepository,
+} from '../services/repository/in-memory-repository'
+import { buildInsightInput } from '../services/insights/insight-data'
+import { hashInsightInput } from '../services/insights/insight-cache'
 import { AiError } from '../services/ai/ai-error'
 
-const { getCachedInsightsMock, saveCachedInsightsMock, generateInsightsMock } =
-  vi.hoisted(() => ({
-    getCachedInsightsMock: vi.fn(),
-    saveCachedInsightsMock: vi.fn(),
-    generateInsightsMock: vi.fn(),
-  }))
-
-vi.mock('../services/insights/insight-cache', () => ({
-  getCachedInsights: getCachedInsightsMock,
-  saveCachedInsights: saveCachedInsightsMock,
+const { generateInsightsMock } = vi.hoisted(() => ({
+  generateInsightsMock: vi.fn(),
 }))
 
 vi.mock('../services/insights/insight-generator', async () => {
@@ -38,7 +35,7 @@ vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
   captureError: reporting.captureError,
 }))
 
-const session = { user: { id: 'user-1' } } as unknown as SupabaseSession
+let repo: InMemoryRepository
 
 function makeTransaction(
   id: string,
@@ -82,7 +79,7 @@ function renderInsights(
       transactions={transactions}
       homeCurrency="USD"
       fxRate={40.5}
-      session={session}
+      repository={repo}
       aiEnabled={true}
       claudeApiKey="sk-test"
       onNavigateToTransactions={vi.fn()}
@@ -92,9 +89,22 @@ function renderInsights(
   )
 }
 
+// Stores `sampleResult` as this user's cached insights, computed from the
+// rendered transactions (fresh) or from other data (stale).
+function cacheInsights({ stale }: { stale: boolean }) {
+  const input = buildInsightInput(transactions, 'USD', 40.5)
+  repo.insights = {
+    inputHash: stale ? 'stale-hash' : hashInsightInput(input),
+    model: 'claude-opus-4-8',
+    insights: sampleResult,
+    generatedAt: '2026-06-20T10:00:00.000Z',
+  }
+}
+
 describe('Insights', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    repo = createInMemoryRepository()
   })
 
   it('shows an empty state pointing to import when there are no transactions', () => {
@@ -104,7 +114,7 @@ describe('Insights', () => {
     expect(
       screen.getByText('Importá tus movimientos primero')
     ).toBeInTheDocument()
-    expect(getCachedInsightsMock).not.toHaveBeenCalled()
+    expect(repo.requests.loadInsights).toBeUndefined()
   })
 
   it('shows a disabled state pointing to Settings when AI is not configured', () => {
@@ -114,12 +124,10 @@ describe('Insights', () => {
     expect(
       screen.getByText('Activá la IA para ver insights')
     ).toBeInTheDocument()
-    expect(getCachedInsightsMock).not.toHaveBeenCalled()
+    expect(repo.requests.loadInsights).toBeUndefined()
   })
 
   it('shows an empty state with a generate CTA when there is no cached result', async () => {
-    getCachedInsightsMock.mockResolvedValue(null)
-
     renderInsights()
 
     await waitFor(() =>
@@ -134,22 +142,15 @@ describe('Insights', () => {
   })
 
   it('fetches cached insights exactly once on mount', async () => {
-    getCachedInsightsMock.mockResolvedValue(null)
-
     renderInsights()
 
-    await waitFor(() => expect(getCachedInsightsMock).toHaveBeenCalled())
+    await waitFor(() => expect(repo.requests.loadInsights).toBe(1))
     await new Promise((resolve) => setTimeout(resolve, 200))
-    expect(getCachedInsightsMock.mock.calls.length).toBeLessThanOrEqual(1)
+    expect(repo.requests.loadInsights).toBe(1)
   })
 
   it('renders cached insight cards grouped by type with the hard number from the input', async () => {
-    getCachedInsightsMock.mockResolvedValue({
-      result: sampleResult,
-      model: 'claude-opus-4-8',
-      generatedAt: '2026-06-20T10:00:00.000Z',
-      isStale: false,
-    })
+    cacheInsights({ stale: false })
 
     renderInsights()
 
@@ -164,12 +165,7 @@ describe('Insights', () => {
   })
 
   it('navigates to Transactions filtered by category when "Ver transacciones" is clicked', async () => {
-    getCachedInsightsMock.mockResolvedValue({
-      result: sampleResult,
-      model: 'claude-opus-4-8',
-      generatedAt: '2026-06-20T10:00:00.000Z',
-      isStale: false,
-    })
+    cacheInsights({ stale: false })
     const onNavigateToTransactions = vi.fn()
 
     renderInsights({ onNavigateToTransactions })
@@ -185,12 +181,7 @@ describe('Insights', () => {
   })
 
   it('shows a stale banner when the cached input no longer matches the current data', async () => {
-    getCachedInsightsMock.mockResolvedValue({
-      result: sampleResult,
-      model: 'claude-opus-4-8',
-      generatedAt: '2026-06-20T10:00:00.000Z',
-      isStale: true,
-    })
+    cacheInsights({ stale: true })
 
     renderInsights()
 
@@ -200,9 +191,7 @@ describe('Insights', () => {
   })
 
   it('generates and caches new insights when the generate button is clicked', async () => {
-    getCachedInsightsMock.mockResolvedValue(null)
     generateInsightsMock.mockResolvedValue(sampleResult)
-    saveCachedInsightsMock.mockResolvedValue(undefined)
 
     renderInsights()
 
@@ -224,16 +213,14 @@ describe('Insights', () => {
       }),
       'sk-test'
     )
-    expect(saveCachedInsightsMock).toHaveBeenCalledWith(
-      session,
-      expect.objectContaining({ historyStart: '2026-06-10' }),
-      sampleResult,
-      'claude-opus-5-5'
-    )
+    expect(repo.insights).toMatchObject({
+      inputHash: hashInsightInput(buildInsightInput(transactions, 'USD', 40.5)),
+      model: 'claude-opus-5-5',
+      insights: sampleResult,
+    })
   })
 
   it('reports an unexpected failure to generate insights, not a bad key', async () => {
-    getCachedInsightsMock.mockResolvedValue(null)
     const bug = new TypeError('x is undefined')
     generateInsightsMock
       .mockRejectedValueOnce(new AiError('auth'))
@@ -259,11 +246,11 @@ describe('Insights', () => {
   })
 
   it('does not report a missing insights table, which needs schema.sql', async () => {
-    getCachedInsightsMock.mockRejectedValue(
-      new UserFacingError(
+    repo.failOn('loadInsights', {
+      error: new UserFacingError(
         'Falta crear la tabla de insights en la base de datos.'
-      )
-    )
+      ),
+    })
     renderInsights()
 
     await screen.findByText(
@@ -278,10 +265,9 @@ describe('Insights', () => {
 
   it('reports a failure to save generated insights as a storage failure', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    getCachedInsightsMock.mockResolvedValue(null)
     generateInsightsMock.mockResolvedValue(sampleResult)
     const failure = new Error('permission denied for table ai_insights')
-    saveCachedInsightsMock.mockRejectedValue(failure)
+    repo.failOn('saveInsights', { error: failure })
     renderInsights()
 
     fireEvent.click(await screen.findByText('Generar insights'))
@@ -296,7 +282,7 @@ describe('Insights', () => {
   it('reports a failure to load cached insights', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const failure = new Error('permission denied for table ai_insights')
-    getCachedInsightsMock.mockRejectedValue(failure)
+    repo.failOn('loadInsights', { error: failure })
     renderInsights()
 
     await screen.findByText('No se pudieron cargar los insights')

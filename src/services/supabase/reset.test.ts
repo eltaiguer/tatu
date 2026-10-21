@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from './client'
 
 const { deleteMock, eqMock, fromMock } = vi.hoisted(() => ({
   deleteMock: vi.fn(),
@@ -16,21 +15,7 @@ vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
 }))
 
-const session: SupabaseSession = {
-  access_token: 'access-token',
-  refresh_token: 'refresh-token',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999999999,
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-  },
-}
+const userId = 'user-1'
 
 describe('supabase reset service', () => {
   beforeEach(() => {
@@ -43,7 +28,7 @@ describe('supabase reset service', () => {
 
   it('deletes all user data from supabase tables', async () => {
     const { resetUserSupabaseData } = await import('./reset')
-    await resetUserSupabaseData(session)
+    await resetUserSupabaseData(userId)
 
     expect(fromMock).toHaveBeenCalledTimes(8)
     // Cached insights were computed from the deleted data.
@@ -64,7 +49,7 @@ describe('supabase reset service', () => {
     }))
 
     const { resetUserSupabaseData } = await import('./reset')
-    await expect(resetUserSupabaseData(session)).resolves.toBeUndefined()
+    await expect(resetUserSupabaseData(userId)).resolves.toBeUndefined()
     // Expected until schema.sql is applied by hand; not a bug.
     expect(reporting.captureError).not.toHaveBeenCalled()
   })

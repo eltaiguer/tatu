@@ -13,10 +13,6 @@ import type { SupabaseSession } from '../../services/supabase/client'
 import type { DeleteResult } from '../../services/mutations/transaction-mutations'
 import { UserFacingError } from '../../utils/user-error'
 
-vi.mock('../../services/supabase/client', () => ({
-  isSupabaseConfigured: () => false,
-}))
-
 const session = {
   user: { id: 'user-1', email: 'jose@example.uy' },
 } as unknown as SupabaseSession

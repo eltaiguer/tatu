@@ -50,21 +50,36 @@ import { Menu, Upload } from 'lucide-react'
 import { Button } from './components/ui/button'
 import { useStore } from 'zustand'
 import { transactionStore } from './stores/transaction-store'
-import { signOut } from './services/supabase/auth'
-import { resetUserSupabaseData } from './services/supabase/reset'
 import {
-  flushPreferenceSaves,
-  startEmptyWorkspace,
+  endSession,
+  resetWorkspace,
   teardownWorkspace,
 } from './stores/workspace-store'
 import { useUserWorkspace } from './hooks/useUserWorkspace'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
-import { createSupabaseRepository } from './services/repository/supabase-repository'
+import type { AuthPort } from './services/auth/auth-port'
+import type { Repository } from './services/repository/repository'
 import { getFriendlyName } from './utils/user-display'
-import { UserFacingError } from './utils/user-error'
 
-function App() {
+// Shown as is, not through userErrorMessage: there is nothing to retry on
+// the sign-in screen, and a network failure is the likely cause.
+const SIGN_OUT_FAILED_MESSAGE =
+  'No se pudo cerrar la sesión en el servidor; en este dispositivo ya está cerrada.'
+const SIGN_OUT_RETRY_MESSAGE =
+  'No se pudo cerrar sesión. Revisá tu conexión e intentá de nuevo.'
+
+export interface AppProps {
+  /** Who is signed in (Supabase Auth in `main.tsx`, in-memory in tests). */
+  auth: AuthPort
+  /**
+   * The persistence port for the signed-in user (Supabase in `main.tsx`,
+   * in-memory in tests). Every read and write of user data goes through it.
+   */
+  createRepository: (userId: string) => Repository
+}
+
+function App({ auth, createRepository }: AppProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const navigationType = useNavigationType()
@@ -72,6 +87,8 @@ function App() {
   // links all work).
   const currentView = viewFromPath(location.pathname)
   const [importOpen, setImportOpen] = useState(false)
+  // Back-to-sign-in is ending the session in the background.
+  const [leaving, setLeaving] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Navigates unless already there, so re-clicking the current view doesn't
@@ -125,7 +142,20 @@ function App() {
     handlePasswordReset,
     handlePasswordUpdate,
     clearPasswordResetModeFromUrl,
-  } = useAuthSession()
+    keepMessagesThroughNextLoad,
+    clearMessagesForLoad,
+  } = useAuthSession(auth)
+
+  // The signed-in user's repository (#119): every read and write goes
+  // through it. One per user: a token refresh hands us a new session object
+  // for the same user, which must not rebuild it (Insights would refetch its
+  // cache). The repository is bound to the user, not to the token: the
+  // Supabase client sends the current token itself.
+  const userId = session?.user.id ?? null
+  const repository = useMemo(
+    () => (userId ? createRepository(userId) : null),
+    [userId, createRepository]
+  )
 
   // Signed in: fetch every view's chunk now, while the first sync runs, so
   // switching views never waits on the network. A failure here is retried
@@ -165,63 +195,71 @@ function App() {
     aiModel,
     setAiModel,
   } = useUserWorkspace({
-    session,
-    authMode,
-    onHydrateStart: () => {
-      setAuthError('')
-      setAuthNotice('')
-    },
+    repository,
+    // Nothing loads while the auth screen is shown over a live session.
+    paused: authMode === 'reset' || leaving,
+    onHydrateStart: clearMessagesForLoad,
   })
 
+  // Signs out and goes back to the sign-in screen. If the request fails but
+  // the session is gone from this device, leave anyway and say the server
+  // may not know; if the session could not be removed at all (offline), the
+  // user is still signed in: stay, and let them retry.
   async function handleSignOut() {
     setAuthSubmitting(true)
-    try {
-      // Let the last preference edit reach the server while the token is
-      // still valid.
-      await flushPreferenceSaves()
-      await signOut(session)
-      clearPasswordResetModeFromUrl()
-      setSession(null)
-      teardownWorkspace()
-      setAuthMode('signin')
-      toast('Sesión cerrada')
-      navigate('/', { replace: true })
-      setImportOpen(false)
-      setAuthError('')
-      setAuthNotice('')
-    } catch (error) {
-      setAuthError(
-        error instanceof Error ? error.message : 'No se pudo cerrar sesión'
-      )
-    } finally {
+    const ended = await endSession(auth)
+    if (ended === 'still-signed-in') {
+      setAuthError(SIGN_OUT_RETRY_MESSAGE)
       setAuthSubmitting(false)
+      return
     }
+    clearPasswordResetModeFromUrl()
+    setSession(null)
+    setAuthMode('signin')
+    navigate('/', { replace: true })
+    setImportOpen(false)
+    setAuthNotice('')
+    if (ended === 'local-only') {
+      setAuthError(SIGN_OUT_FAILED_MESSAGE)
+    } else {
+      setAuthError('')
+      toast('Sesión cerrada')
+    }
+    setAuthSubmitting(false)
   }
 
   // Deletes on the server first and clears local state only once that
-  // succeeded. The server delete is several requests; if one fails part-way,
-  // local state is reloaded so it shows what actually remains.
+  // succeeded (see resetWorkspace).
   async function handleResetAllData() {
-    if (session) {
-      try {
-        // A save still in flight could recreate the preferences row after
-        // the delete.
-        await flushPreferenceSaves()
-        await resetUserSupabaseData(session)
-      } catch (error) {
-        console.error('reset failed:', error)
-        refetch()
-        throw new UserFacingError(
-          'No se pudieron borrar todos los datos. Recargamos lo que quedó guardado; intentá de nuevo.',
-          { cause: error }
-        )
-      }
-    }
-
-    // The server now holds nothing for this user: start them over empty,
-    // with default preferences (no key, AI off), still signed in.
-    if (session) startEmptyWorkspace(session)
+    if (repository) await resetWorkspace(repository, refetch)
     else teardownWorkspace()
+  }
+
+  // Leaves the new-password screen. The sign-in screen shows at once
+  // (`leaving` keeps it up while the session still exists); the session
+  // ends in the background, in the usual order — pending preference saves,
+  // sign-out, teardown — and the auth event clears the session. If it could
+  // not be removed at all, the user is still signed in and is told so.
+  function handleBackToSignIn() {
+    setAuthMode('signin')
+    setPassword('')
+    setAuthError('')
+    setAuthNotice('')
+    clearPasswordResetModeFromUrl()
+    // The sign-in form stays disabled until the session has ended: a sign-in
+    // submitted meanwhile would be ended by the pending sign-out.
+    setLeaving(true)
+    setAuthSubmitting(true)
+    void endSession(auth).then((ended) => {
+      if (ended === 'still-signed-in') {
+        // Back in the app, which loads again: keep the message through it.
+        keepMessagesThroughNextLoad()
+        setAuthError(SIGN_OUT_RETRY_MESSAGE)
+      }
+      setSession(auth.getSession())
+      setLeaving(false)
+      setAuthSubmitting(false)
+    })
   }
 
   function navigateToTransactions(
@@ -229,12 +267,6 @@ function App() {
   ) {
     go('transactions', filterToSearch(filter))
   }
-
-  // The signed-in user's repository (#119): every write goes through it.
-  const repository = useMemo(
-    () => (session ? createSupabaseRepository(session) : null),
-    [session]
-  )
 
   const {
     handleTransactionsImported,
@@ -253,7 +285,7 @@ function App() {
     setError: setAuthError,
   })
 
-  if (!session || authMode === 'reset') {
+  if (!session || authMode === 'reset' || leaving) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 space-y-4">
@@ -281,27 +313,18 @@ function App() {
             onEmailChange={setEmail}
             onPasswordChange={setPassword}
             onSignIn={() => {
-              void handleAuth('signin')
+              if (!leaving) void handleAuth('signin')
             }}
             onSignUp={() => {
-              void handleAuth('signup')
+              if (!leaving) void handleAuth('signup')
             }}
             onResetPassword={() => {
-              void handlePasswordReset()
+              if (!leaving) void handlePasswordReset()
             }}
             onUpdatePassword={() => {
               void handlePasswordUpdate()
             }}
-            onBackToSignIn={() => {
-              setAuthMode('signin')
-              setPassword('')
-              setAuthError('')
-              setAuthNotice('')
-              clearPasswordResetModeFromUrl()
-              void signOut(session)
-              setSession(null)
-              teardownWorkspace()
-            }}
+            onBackToSignIn={handleBackToSignIn}
           />
         </div>
       </main>
@@ -471,12 +494,12 @@ function App() {
                     onUnsplitTransaction={handleUnsplitTransaction}
                   />
                 )}
-                {currentView === 'insights' && session && (
+                {currentView === 'insights' && repository && (
                   <Insights
                     transactions={transactions}
                     homeCurrency={preferredCurrency}
                     fxRate={fxRate}
-                    session={session}
+                    repository={repository}
                     aiEnabled={aiEnabled}
                     claudeApiKey={claudeApiKey}
                     onNavigateToTransactions={navigateToTransactions}
@@ -503,6 +526,7 @@ function App() {
                     fxRate={fxRate}
                     onSetFxRate={setFxRate}
                     session={session}
+                    repository={repository}
                     supabaseEnabled={true}
                     onSignOut={() => {
                       void handleSignOut()

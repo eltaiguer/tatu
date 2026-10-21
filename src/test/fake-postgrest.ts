@@ -25,12 +25,16 @@ const PRIMARY_KEYS: Record<string, string[]> = {
   custom_patterns: ['user_id', 'id'],
   custom_categories: ['user_id', 'id'],
   user_preferences: ['user_id'],
+  ai_insights: ['user_id'],
 }
 
 export function createFakePostgrest() {
   const tables = new Map<string, Row[]>()
   const requests: FakeRequest[] = []
-  let failWhen: ((request: FakeRequest) => boolean)[] = []
+  let failWhen: {
+    fails: (request: FakeRequest) => boolean
+    code: string
+  }[] = []
   let nextId = 1
 
   function rowsOf(table: string): Row[] {
@@ -49,6 +53,7 @@ export function createFakePostgrest() {
     let started = false
     let onConflictUpsert = false
     let single = false
+    let maybeSingle = false
     let limit = Infinity
     let orderBy: string | null = null
 
@@ -129,6 +134,10 @@ export function createFakePostgrest() {
         single = true
         return builder
       },
+      maybeSingle() {
+        maybeSingle = true
+        return builder
+      },
       then<T>(
         resolve: (value: { data: unknown; error: unknown }) => T,
         reject?: (reason: unknown) => T
@@ -141,8 +150,12 @@ export function createFakePostgrest() {
 
     function execute(): { data: unknown; error: unknown } {
       requests.push(request)
-      if (failWhen.some((fails) => fails(request))) {
-        return { data: null, error: { message: 'request failed', code: '' } }
+      const failure = failWhen.find(({ fails }) => fails(request))
+      if (failure) {
+        return {
+          data: null,
+          error: { message: 'request failed', code: failure.code },
+        }
       }
       const all = rowsOf(table)
       const matches = () => all.filter((row) => filters.every((f) => f(row)))
@@ -162,6 +175,13 @@ export function createFakePostgrest() {
               error: { message: 'not exactly one row', code: 'PGRST116' },
             }
           }
+          if (maybeSingle && rows.length > 1) {
+            return {
+              data: null,
+              error: { message: 'more than one row', code: 'PGRST116' },
+            }
+          }
+          if (maybeSingle) return { data: rows[0] ?? null, error: null }
           return { data: single ? rows[0] : rows, error: null }
         }
         case 'insert':
@@ -220,9 +240,15 @@ export function createFakePostgrest() {
     seed(table: string, rows: Row[]) {
       rowsOf(table).push(...rows.map((row) => ({ ...row })))
     },
-    /** Makes every request matching `predicate` fail (until `heal`). */
-    failWhen(predicate: (request: FakeRequest) => boolean) {
-      failWhen.push(predicate)
+    /**
+     * Makes every request matching `predicate` fail (until `heal`), with
+     * PostgREST error `code` (default: none).
+     */
+    failWhen(
+      predicate: (request: FakeRequest) => boolean,
+      { code = '' }: { code?: string } = {}
+    ) {
+      failWhen.push({ fails: predicate, code })
     },
     heal() {
       failWhen = []

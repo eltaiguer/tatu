@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from './client'
 
 const {
   selectMock,
@@ -23,21 +22,7 @@ vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
 }))
 
-const session: SupabaseSession = {
-  access_token: 'access-token',
-  refresh_token: 'refresh-token',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999999999,
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-  },
-}
+const userId = 'user-1'
 
 describe('supabase description overrides service', () => {
   beforeEach(() => {
@@ -79,7 +64,7 @@ describe('supabase description overrides service', () => {
 
   it('lists overrides for current user', async () => {
     const { listDescriptionOverrides } = await import('./description-overrides')
-    const overrides = await listDescriptionOverrides(session)
+    const overrides = await listDescriptionOverrides(userId)
 
     expect(selectMock).toHaveBeenCalledWith('*')
     expect(eqMock).toHaveBeenCalledWith('user_id', 'user-1')
@@ -89,7 +74,7 @@ describe('supabase description overrides service', () => {
   it('upserts an override', async () => {
     const { upsertDescriptionOverride } =
       await import('./description-overrides')
-    await upsertDescriptionOverride(session, {
+    await upsertDescriptionOverride(userId, {
       descriptionNormalized: 'devoto',
       descriptionOriginal: 'AUT 998877 DEVOTO',
       friendlyDescription: 'Devoto',
@@ -105,7 +90,7 @@ describe('supabase description overrides service', () => {
   it('deletes an override', async () => {
     const { deleteDescriptionOverride } =
       await import('./description-overrides')
-    await deleteDescriptionOverride(session, 'devoto')
+    await deleteDescriptionOverride(userId, 'devoto')
 
     expect(deleteMock).toHaveBeenCalledTimes(1)
     expect(eqDeleteUserMock).toHaveBeenCalledWith('user_id', 'user-1')

@@ -1,8 +1,4 @@
-import type { SupabaseSession } from '../supabase/client'
-import {
-  loadCachedInsights as loadCachedInsightsRow,
-  saveInsights as saveInsightsRow,
-} from '../supabase/ai-insights'
+import type { Repository } from '../repository/repository'
 import { INSIGHTS_MODEL } from '../ai/models'
 import type { InsightInput } from './insight-data'
 import type { InsightsResult } from './insight-generator'
@@ -53,10 +49,10 @@ export interface CachedInsightsLookup {
  * regenerate?" banner instead of silently regenerating.
  */
 export async function getCachedInsights(
-  session: SupabaseSession,
+  repository: Repository,
   input: InsightInput
 ): Promise<CachedInsightsLookup | null> {
-  const row = await loadCachedInsightsRow(session)
+  const row = await repository.loadInsights()
   if (!row) return null
 
   return {
@@ -68,12 +64,12 @@ export async function getCachedInsights(
 }
 
 export async function saveCachedInsights(
-  session: SupabaseSession,
+  repository: Repository,
   input: InsightInput,
   result: InsightsResult,
   model: string
 ): Promise<void> {
-  await saveInsightsRow(session, {
+  await repository.saveInsights({
     inputHash: hashInsightInput(input, { model }),
     model,
     insights: result,

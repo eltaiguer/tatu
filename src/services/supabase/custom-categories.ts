@@ -1,4 +1,4 @@
-import { getSupabaseClient, type SupabaseSession } from './client'
+import { getSupabaseClient } from './client'
 
 interface CustomCategoryRow {
   user_id: string
@@ -42,13 +42,13 @@ function rowToRecord(row: CustomCategoryRow): CustomCategoryRecord {
 }
 
 export async function listCustomCategories(
-  session: SupabaseSession
+  userId: string
 ): Promise<CustomCategoryRecord[]> {
   const client = getSupabaseClient()
   const { data, error } = await client
     .from('custom_categories')
     .select('*')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .is('is_archived', false)
 
   if (error) {
@@ -59,7 +59,7 @@ export async function listCustomCategories(
 }
 
 export async function upsertCustomCategory(
-  session: SupabaseSession,
+  userId: string,
   category: {
     id: string
     label: string
@@ -72,7 +72,7 @@ export async function upsertCustomCategory(
   const client = getSupabaseClient()
   const { error } = await client.from('custom_categories').upsert(
     {
-      user_id: session.user.id,
+      user_id: userId,
       id: category.id,
       label: category.label,
       color: category.color,
@@ -91,14 +91,14 @@ export async function upsertCustomCategory(
 }
 
 export async function archiveCustomCategory(
-  session: SupabaseSession,
+  userId: string,
   categoryId: string
 ): Promise<void> {
   const client = getSupabaseClient()
   const { error } = await client
     .from('custom_categories')
     .update({ is_archived: true })
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('id', categoryId)
 
   if (error) {

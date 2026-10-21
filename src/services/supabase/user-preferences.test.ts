@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from './client'
 import { DEFAULT_CATEGORIZATION_MODEL } from '../ai/models'
 
 const { fromMock, selectMock, eqMock, singleMock, upsertMock } = vi.hoisted(
@@ -16,21 +15,7 @@ vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
 }))
 
-const session: SupabaseSession = {
-  access_token: 'access-token',
-  refresh_token: 'refresh-token',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999999999,
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-  },
-}
+const userId = 'user-1'
 
 describe('user-preferences service', () => {
   beforeEach(() => {
@@ -69,7 +54,7 @@ describe('user-preferences service', () => {
       })
 
       const { loadUserPreferences } = await import('./user-preferences')
-      const result = await loadUserPreferences(session)
+      const result = await loadUserPreferences(userId)
 
       expect(result).toBeNull()
     })
@@ -81,14 +66,14 @@ describe('user-preferences service', () => {
       })
 
       const { loadUserPreferences } = await import('./user-preferences')
-      await expect(loadUserPreferences(session)).rejects.toThrow(
+      await expect(loadUserPreferences(userId)).rejects.toThrow(
         'relation does not exist'
       )
     })
 
     it('maps row fields to the preferences shape', async () => {
       const { loadUserPreferences } = await import('./user-preferences')
-      const prefs = await loadUserPreferences(session)
+      const prefs = await loadUserPreferences(userId)
 
       expect(prefs).toEqual({
         theme: 'dark',
@@ -114,7 +99,7 @@ describe('user-preferences service', () => {
       })
 
       const { loadUserPreferences } = await import('./user-preferences')
-      const prefs = await loadUserPreferences(session)
+      const prefs = await loadUserPreferences(userId)
 
       expect(prefs?.theme).toBe('auto')
       expect(prefs?.currency).toBe('USD')
@@ -137,7 +122,7 @@ describe('user-preferences service', () => {
       })
 
       const { loadUserPreferences } = await import('./user-preferences')
-      const prefs = await loadUserPreferences(session)
+      const prefs = await loadUserPreferences(userId)
 
       expect(prefs?.aiModel).toBe(DEFAULT_CATEGORIZATION_MODEL)
       // Behavior unchanged: the fallback is still Haiku.
@@ -148,7 +133,7 @@ describe('user-preferences service', () => {
   describe('saveUserPreferences', () => {
     it('upserts with the correct column shape and conflict target', async () => {
       const { saveUserPreferences } = await import('./user-preferences')
-      await saveUserPreferences(session, {
+      await saveUserPreferences(userId, {
         theme: 'light',
         currency: 'USD',
         fxRate: 38,
@@ -178,7 +163,7 @@ describe('user-preferences service', () => {
 
       const { saveUserPreferences } = await import('./user-preferences')
       await expect(
-        saveUserPreferences(session, {
+        saveUserPreferences(userId, {
           theme: 'auto',
           currency: 'UYU',
           fxRate: 40.5,

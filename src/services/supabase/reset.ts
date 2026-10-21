@@ -1,35 +1,27 @@
-import { getSupabaseClient, type SupabaseSession } from './client'
+import { getSupabaseClient } from './client'
 
-async function deleteByUser(
-  session: SupabaseSession,
-  table: string
-): Promise<void> {
+async function deleteByUser(userId: string, table: string): Promise<void> {
   const client = getSupabaseClient()
-  const { error } = await client
-    .from(table)
-    .delete()
-    .eq('user_id', session.user.id)
+  const { error } = await client.from(table).delete().eq('user_id', userId)
 
   if (error) {
     throw new Error(error.message)
   }
 }
 
-export async function resetUserSupabaseData(
-  session: SupabaseSession
-): Promise<void> {
-  await deleteByUser(session, 'transactions')
-  await deleteByUser(session, 'import_runs')
-  await deleteByUser(session, 'category_overrides')
-  await deleteByUser(session, 'description_overrides')
-  await deleteByUser(session, 'custom_categories')
-  await deleteByUser(session, 'custom_patterns')
-  await deleteByUser(session, 'user_preferences')
+export async function resetUserSupabaseData(userId: string): Promise<void> {
+  await deleteByUser(userId, 'transactions')
+  await deleteByUser(userId, 'import_runs')
+  await deleteByUser(userId, 'category_overrides')
+  await deleteByUser(userId, 'description_overrides')
+  await deleteByUser(userId, 'custom_categories')
+  await deleteByUser(userId, 'custom_patterns')
+  await deleteByUser(userId, 'user_preferences')
   // Cached insights were computed from the data just deleted. Best-effort:
   // the table only exists once schema.sql was applied manually (see
   // supabase/README.md), and a stale cache must not fail the reset.
   try {
-    await deleteByUser(session, 'ai_insights')
+    await deleteByUser(userId, 'ai_insights')
   } catch (error) {
     console.warn('Could not clear cached insights during reset:', error)
   }

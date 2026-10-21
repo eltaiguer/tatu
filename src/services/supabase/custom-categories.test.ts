@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from './client'
 
 const {
   selectMock,
@@ -25,21 +24,7 @@ vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
 }))
 
-const session: SupabaseSession = {
-  access_token: 'access-token',
-  refresh_token: 'refresh-token',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999999999,
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-  },
-}
+const userId = 'user-1'
 
 describe('supabase custom categories service', () => {
   beforeEach(() => {
@@ -85,7 +70,7 @@ describe('supabase custom categories service', () => {
 
   it('lists active custom categories', async () => {
     const { listCustomCategories } = await import('./custom-categories')
-    const categories = await listCustomCategories(session)
+    const categories = await listCustomCategories(userId)
 
     expect(eqMock).toHaveBeenCalledWith('user_id', 'user-1')
     expect(isMock).toHaveBeenCalledWith('is_archived', false)
@@ -94,7 +79,7 @@ describe('supabase custom categories service', () => {
 
   it('reads the is_ignored flag from stored rows', async () => {
     const { listCustomCategories } = await import('./custom-categories')
-    const categories = await listCustomCategories(session)
+    const categories = await listCustomCategories(userId)
 
     expect(categories[0].isIgnored).toBe(true)
   })
@@ -118,7 +103,7 @@ describe('supabase custom categories service', () => {
     })
 
     const { listCustomCategories } = await import('./custom-categories')
-    const categories = await listCustomCategories(session)
+    const categories = await listCustomCategories(userId)
 
     // NULL means "no preference recorded" and must stay distinct from an
     // explicit false, which would override a built-in's own default.
@@ -127,7 +112,7 @@ describe('supabase custom categories service', () => {
 
   it('upserts custom category', async () => {
     const { upsertCustomCategory } = await import('./custom-categories')
-    await upsertCustomCategory(session, {
+    await upsertCustomCategory(userId, {
       id: 'mates',
       label: 'Mates',
       color: '#00AA11',
@@ -146,7 +131,7 @@ describe('supabase custom categories service', () => {
     // custom_categories.is_ignored is NOT NULL DEFAULT false in schema.sql —
     // a null here is rejected by Postgres at runtime.
     const { upsertCustomCategory } = await import('./custom-categories')
-    await upsertCustomCategory(session, {
+    await upsertCustomCategory(userId, {
       id: 'mates',
       label: 'Mates',
       color: '#00AA11',
@@ -160,7 +145,7 @@ describe('supabase custom categories service', () => {
 
   it('persists the is_ignored flag on upsert', async () => {
     const { upsertCustomCategory } = await import('./custom-categories')
-    await upsertCustomCategory(session, {
+    await upsertCustomCategory(userId, {
       id: 'mates',
       label: 'Mates',
       color: '#00AA11',
@@ -177,7 +162,7 @@ describe('supabase custom categories service', () => {
 
   it('archives custom category', async () => {
     const { archiveCustomCategory } = await import('./custom-categories')
-    await archiveCustomCategory(session, 'mates')
+    await archiveCustomCategory(userId, 'mates')
 
     expect(updateMock).toHaveBeenCalledWith({ is_archived: true })
     expect(eqUpdateUserMock).toHaveBeenCalledWith('user_id', 'user-1')

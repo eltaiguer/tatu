@@ -16,10 +16,6 @@ import type { SupabaseSession } from '../services/supabase/client'
 import { captureCsvDownload } from '../test/csv-download'
 import { capturePrintFrame } from '../test/print-frame'
 
-vi.mock('../services/supabase/client', () => ({
-  isSupabaseConfigured: () => false,
-}))
-
 function makeTx(overrides: Partial<Transaction> = {}): Transaction {
   return {
     id: 'tx-1',

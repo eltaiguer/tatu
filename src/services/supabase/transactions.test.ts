@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from './client'
 
 const {
   selectMock,
@@ -39,21 +38,7 @@ vi.mock('./client', () => ({
   }),
 }))
 
-const session: SupabaseSession = {
-  access_token: 'access-token',
-  refresh_token: 'refresh-token',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999999999,
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-  },
-}
+const userId = 'user-1'
 
 type FakeRow = Record<string, unknown> & { transaction_id: string }
 
@@ -170,7 +155,7 @@ describe('supabase transactions service', () => {
 
   it('loads active transactions for current user', async () => {
     const { loadUserTransactions } = await import('./transactions')
-    const transactions = await loadUserTransactions(session)
+    const transactions = await loadUserTransactions(userId)
 
     expect(selectMock).toHaveBeenCalledWith('*')
     expect(eqMock).toHaveBeenCalledWith('user_id', 'user-1')
@@ -189,7 +174,7 @@ describe('supabase transactions service', () => {
       { ...makeRow(3), date: '2026-02-28T23:00:00+00:00' },
     ]
     const { loadUserTransactions } = await import('./transactions')
-    const transactions = await loadUserTransactions(session)
+    const transactions = await loadUserTransactions(userId)
 
     expect(transactions.map((tx) => tx.date.toISOString())).toEqual([
       '2026-03-01T00:00:00.000Z',
@@ -209,7 +194,7 @@ describe('supabase transactions service', () => {
     ]
 
     const { loadUserTransactions } = await import('./transactions')
-    const transactions = await loadUserTransactions(session)
+    const transactions = await loadUserTransactions(userId)
     const byId = new Map(transactions.map((tx) => [tx.id, tx]))
 
     expect(byId.get('tx-0001')?.importId).toBe('run-a')
@@ -228,7 +213,7 @@ describe('supabase transactions service', () => {
     table.rows = Array.from({ length: 1053 }, (_, i) => makeRow(i))
 
     const { loadUserTransactions } = await import('./transactions')
-    const transactions = await loadUserTransactions(session)
+    const transactions = await loadUserTransactions(userId)
 
     expect(transactions).toHaveLength(1053)
     expect(new Set(transactions.map((tx) => tx.id)).size).toBe(1053)
@@ -239,7 +224,7 @@ describe('supabase transactions service', () => {
     table.rows = Array.from({ length: 700 }, (_, i) => makeRow(i))
 
     const { loadUserTransactions } = await import('./transactions')
-    const transactions = await loadUserTransactions(session)
+    const transactions = await loadUserTransactions(userId)
 
     expect(transactions).toHaveLength(700)
   })
@@ -256,7 +241,7 @@ describe('supabase transactions service', () => {
     }
 
     const { loadUserTransactions } = await import('./transactions')
-    const ids = (await loadUserTransactions(session)).map((tx) => tx.id)
+    const ids = (await loadUserTransactions(userId)).map((tx) => tx.id)
 
     expect(new Set(ids).size).toBe(ids.length)
     for (let i = 1; i < 1053; i++) {
@@ -269,12 +254,12 @@ describe('supabase transactions service', () => {
     table.failOnPage = 1
 
     const { loadUserTransactions } = await import('./transactions')
-    await expect(loadUserTransactions(session)).rejects.toThrow('timeout')
+    await expect(loadUserTransactions(userId)).rejects.toThrow('timeout')
   })
 
   it('inserts imported transactions with user ownership', async () => {
     const { persistTransactions } = await import('./transactions')
-    await persistTransactions(session, [
+    await persistTransactions(userId, [
       {
         id: 'tx-99',
         date: new Date('2026-02-03T00:00:00.000Z'),
@@ -305,7 +290,7 @@ describe('supabase transactions service', () => {
     const { persistTransactions } = await import('./transactions')
 
     await expect(
-      persistTransactions(session, [
+      persistTransactions(userId, [
         {
           id: 'tx-taken',
           date: new Date('2026-02-03T00:00:00.000Z'),
@@ -346,7 +331,7 @@ describe('supabase transactions service', () => {
       ]
 
       const { findExistingTransactionIds } = await import('./transactions')
-      const result = await findExistingTransactionIds(session, ids)
+      const result = await findExistingTransactionIds(userId, ids)
 
       expect(inMock).toHaveBeenCalledTimes(2)
       expect([...result.deleted]).toEqual(['gone-1'])
@@ -363,7 +348,7 @@ describe('supabase transactions service', () => {
         }),
       }))
       const { findExistingTransactionIds } = await import('./transactions')
-      await expect(findExistingTransactionIds(session, ['a'])).rejects.toThrow(
+      await expect(findExistingTransactionIds(userId, ['a'])).rejects.toThrow(
         'timeout'
       )
     })
@@ -455,7 +440,7 @@ describe('findImportCandidates', () => {
     ])
 
     const { findImportCandidates } = await import('./transactions')
-    const found = await findImportCandidates(session, [
+    const found = await findImportCandidates(userId, [
       incoming('new', '2026-02-01T03:00:00.000Z'),
     ])
 
@@ -475,7 +460,7 @@ describe('findImportCandidates', () => {
     )
 
     const { findImportCandidates } = await import('./transactions')
-    const found = await findImportCandidates(session, [
+    const found = await findImportCandidates(userId, [
       incoming('new', '2026-02-01T00:00:00.000Z'),
     ])
 
@@ -489,7 +474,7 @@ describe('findImportCandidates', () => {
     ])
 
     const { findImportCandidates } = await import('./transactions')
-    const found = await findImportCandidates(session, [
+    const found = await findImportCandidates(userId, [
       incoming('same-id', '2026-02-01T03:00:00.000Z'),
     ])
 
@@ -503,7 +488,7 @@ describe('findImportCandidates', () => {
     ])
 
     const { findImportCandidates } = await import('./transactions')
-    const found = await findImportCandidates(session, [
+    const found = await findImportCandidates(userId, [
       incoming('new', '2026-02-01T00:00:00.000Z'),
     ])
 
@@ -512,7 +497,7 @@ describe('findImportCandidates', () => {
 
   it('returns nothing without querying for an empty import', async () => {
     const { findImportCandidates } = await import('./transactions')
-    expect(await findImportCandidates(session, [])).toEqual([])
+    expect(await findImportCandidates(userId, [])).toEqual([])
     expect(fromMock).not.toHaveBeenCalled()
   })
 })
