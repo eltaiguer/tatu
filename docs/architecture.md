@@ -367,12 +367,23 @@ totals match only with `showIgnored`; categories are compared through
 see Merchant key below), amounts by absolute value, search over display name +
 raw description + tags. `sortTransactions` orders the result.
 
-`useTransactionFiltering` only holds that state in React (seeded once from the
-URL; the view fills in its default period first), sorts, groups split parts
-under their parent, and paginates. It freezes the "últimos n meses" anchor
-(the newest row) when that period is chosen, so an import does not shift the
-window. Export writes the rows it is handed; if it ever has to filter, it calls
-`filterTransactions`.
+`useTransactionFiltering` holds that state in React as one value (seeded once
+from the URL; the view fills in its default period first): it returns
+`filters` (a `FilterState`, period always set), `update(patch)` (merges the
+patch's defined fields; a patch that changes nothing keeps the same value, so
+the URL write-back stays quiet), `clear()` (every filter back to its default,
+all dates, ignored rows hidden) and `setDateBound(bound, value)` for the date
+inputs (a custom range keeping the other end of the current period,
+`periodWithDateBound`). The three updaters are stable and apply to the latest
+state. When the results shrink, the current page is clamped to the last one.
+The hook sorts, groups split parts under their parent (`groupSplitRows`) and
+paginates. It freezes the "últimos n meses" anchor (the newest row) when that
+period is chosen, so an import does not shift the window. `TransactionFilters`
+takes `filters` and emits patches; "filtrado" is `hasActiveFilters(filters)`
+(`url-filters.ts`; the period and "show ignored" don't count), computed once
+by the view and passed down. The same rule decides that a link which filters
+but names no period means all time (`filterToSearch` and the view's default). Export writes the rows it is handed; if it ever has to filter, it
+calls `filterTransactions`.
 
 - **Day distances** (transfer pairing's ±2 days, recurring cadences) count
   whole calendar days with `calendarDaysBetween` / `utcDayNumber`.

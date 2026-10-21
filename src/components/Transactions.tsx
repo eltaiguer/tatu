@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
@@ -31,8 +31,10 @@ import {
 } from '../services/merchants/merchant-key'
 import {
   DEFAULT_URL_FILTERS,
+  hasActiveFilters,
   serializeFilterParams,
   type UrlFilterState,
+  type UrlPeriod,
 } from '../services/filters/url-filters'
 import { getPeriodLabel } from '../services/filters/period-label'
 import { MonthNav } from './transactions/MonthNav'
@@ -64,15 +66,11 @@ export function Transactions({
 }: TransactionsProps) {
   /* ---- Filter state (period included) ---- */
   // The URL's filters, with the view's default period filled in once: a link
-  // that filters by category/account/currency but names no period means all
+  // that filters at all (hasActiveFilters) but names no period means all
   // time; a plain visit starts on the newest month.
   const [initialState] = useState<UrlFilterState>(() => {
     if (initialFilters.period) return initialFilters
-    const deepLinked =
-      initialFilters.categories.length > 0 ||
-      initialFilters.accounts.length > 0 ||
-      initialFilters.currency !== 'all'
-    if (deepLinked || transactions.length === 0) {
+    if (hasActiveFilters(initialFilters) || transactions.length === 0) {
       return { ...initialFilters, period: { mode: 'all' } }
     }
     const newest = new Date(
@@ -89,31 +87,11 @@ export function Transactions({
   })
 
   const {
-    searchTerm,
-    setSearchTerm,
-    merchantFilter,
-    setMerchantFilter,
-    period,
-    setPeriod,
     filters,
-    dateFromFilter,
-    setDateFromFilter,
-    dateToFilter,
-    setDateToFilter,
-    categoryFilters,
-    setCategoryFilters,
-    accountFilters,
-    setAccountFilters,
-    currencyFilter,
-    setCurrencyFilter,
-    typeFilter,
-    setTypeFilter,
-    minAmount,
-    setMinAmount,
-    maxAmount,
-    setMaxAmount,
-    showIgnored,
-    setShowIgnored,
+    update: updateFilters,
+    clear: clearFilters,
+    setDateBound,
+    dateRange,
     sortField,
     sortDirection,
     handleSort,
@@ -121,7 +99,6 @@ export function Transactions({
     filteredTransactions,
     ignoredCount,
     availableCategories,
-    hasActiveFilters,
     newestDate,
     currentPage,
     setCurrentPage,
@@ -131,11 +108,21 @@ export function Transactions({
     displayedRowCount,
     paginatedTransactionIds,
     filteredTransactionIds,
-    clearAllFilters,
   } = useTransactionFiltering({
     transactions,
     initial: initialState,
   })
+  const { merchant: merchantFilter, period } = filters
+  const filtered = hasActiveFilters(filters)
+  // Stable, like the per-field setters these children were handed before.
+  const setPeriod = useCallback(
+    (next: UrlPeriod) => updateFilters({ period: next }),
+    [updateFilters]
+  )
+  const setShowIgnored = useCallback(
+    (show: boolean) => updateFilters({ showIgnored: show }),
+    [updateFilters]
+  )
 
   // The merchant filter holds a merchant key (#120); the chip shows the same
   // label Resumen's "Mayores comercios" row did.
@@ -357,7 +344,7 @@ export function Transactions({
           <>
             {filteredTransactions.length} movimiento
             {filteredTransactions.length !== 1 ? 's' : ''}
-            {hasActiveFilters ? ' · filtrado' : ''} · {periodLabelText}
+            {filtered ? ' · filtrado' : ''} · {periodLabelText}
           </>
         }
         actions={
@@ -384,7 +371,7 @@ export function Transactions({
         {merchantFilter && (
           <button
             type="button"
-            onClick={() => setMerchantFilter('')}
+            onClick={() => updateFilters({ merchant: '' })}
             aria-label={`Quitar filtro de comercio ${merchantLabel}`}
             className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs"
           >
@@ -432,27 +419,13 @@ export function Transactions({
 
       {/* Filters */}
       <TransactionFilters
-        searchTerm={searchTerm}
-        dateFromFilter={dateFromFilter}
-        dateToFilter={dateToFilter}
-        categoryFilters={categoryFilters}
-        accountFilters={accountFilters}
-        currencyFilter={currencyFilter}
-        typeFilter={typeFilter}
-        minAmount={minAmount}
-        maxAmount={maxAmount}
+        filters={filters}
+        hasActiveFilters={filtered}
+        dateRange={dateRange}
         availableCategories={availableCategories}
-        hasActiveFilters={hasActiveFilters}
-        onSearchChange={setSearchTerm}
-        onDateFromChange={setDateFromFilter}
-        onDateToChange={setDateToFilter}
-        onCategoryFiltersChange={setCategoryFilters}
-        onAccountFiltersChange={setAccountFilters}
-        onCurrencyChange={setCurrencyFilter}
-        onTypeChange={setTypeFilter}
-        onMinAmountChange={setMinAmount}
-        onMaxAmountChange={setMaxAmount}
-        onClearAll={clearAllFilters}
+        onChange={updateFilters}
+        onDateBoundChange={setDateBound}
+        onClearAll={clearFilters}
       />
 
       {/* Table */}
@@ -465,17 +438,17 @@ export function Transactions({
         pendingTransactionIds={pendingTransactionIds}
         sortField={sortField}
         sortDirection={sortDirection}
-        hasActiveFilters={hasActiveFilters}
+        hasActiveFilters={filtered}
         selectionCount={selectionCount}
         totalCount={filteredTransactions.length}
-        showIgnored={showIgnored}
+        showIgnored={filters.showIgnored}
         ignoredCount={ignoredCount}
         homeCurrency={homeCurrency}
         fxRate={fxRate}
         onToggleSelect={toggleTransactionSelection}
         onHeaderCheckboxChange={handleHeaderCheckboxChange}
         onSort={handleSort}
-        onClearFilters={clearAllFilters}
+        onClearFilters={clearFilters}
         onShowIgnoredChange={setShowIgnored}
         onEdit={setEditingTransaction}
         onDelete={(transaction) => {

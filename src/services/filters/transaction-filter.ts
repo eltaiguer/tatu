@@ -12,6 +12,13 @@ import type { UrlFilterState, UrlPeriod } from './url-filters'
 // anything else that needs filtered rows (export, if it ever filters) calls
 // this too, so the two can't drift apart.
 
+// The view's filters: the URL state with the period always set (the view
+// fills in its default when the URL names none).
+export type FilterState = UrlFilterState & { period: UrlPeriod }
+
+// A change to some of the filters; fields left out (or undefined) stay.
+export type FilterPatch = Partial<FilterState>
+
 export type SortField = 'date' | 'amount' | 'description' | 'category'
 export type SortDirection = 'asc' | 'desc'
 
@@ -142,4 +149,56 @@ export function sortTransactions(
     }
     return (a.category ?? '').localeCompare(b.category ?? '', 'es') * sign
   })
+}
+
+// Editing one end of the date inputs (shown as `range`, see
+// periodDateRange) makes the period a custom range that keeps the other end;
+// with both ends empty it is all dates.
+export function periodWithDateBound(
+  range: { from: string; to: string },
+  bound: 'from' | 'to',
+  value: string
+): UrlPeriod {
+  const next = { ...range, [bound]: value }
+  return next.from || next.to
+    ? { mode: 'range', from: next.from, to: next.to }
+    : { mode: 'all' }
+}
+
+// The rows as the table lists them: a split parent (from `all`; it never
+// matches the filter itself) is shown, as context, right above its matching
+// parts, gathered where the first of them appears. Other rows keep their
+// order; a part whose parent is gone is a row of its own.
+export function groupSplitRows(
+  rows: Transaction[],
+  all: Transaction[]
+): Transaction[] {
+  const byId = new Map(all.map((tx) => [tx.id, tx]))
+  const partsByParent = new Map<string, Transaction[]>()
+  rows.forEach((tx) => {
+    if (!tx.splitParentId) return
+    const parts = partsByParent.get(tx.splitParentId) ?? []
+    parts.push(tx)
+    partsByParent.set(tx.splitParentId, parts)
+  })
+
+  const result: Transaction[] = []
+  const emitted = new Set<string>()
+  function emit(tx: Transaction) {
+    result.push(tx)
+    emitted.add(tx.id)
+  }
+
+  rows.forEach((tx) => {
+    if (emitted.has(tx.id)) return
+    const parent = tx.splitParentId ? byId.get(tx.splitParentId) : undefined
+    if (parent && !emitted.has(parent.id)) {
+      emit(parent)
+      ;(partsByParent.get(parent.id) ?? []).forEach(emit)
+      return
+    }
+    emit(tx)
+  })
+
+  return result
 }
