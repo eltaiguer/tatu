@@ -7,7 +7,7 @@ import {
 import { groupByMerchant } from '../merchants/merchant-key'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { convert } from '../currency/convert'
-import { toMonthKey } from '../../utils/date-utils'
+import { newestDate, toMonthKey } from '../../utils/date-utils'
 
 export interface CategorySpendingDatum {
   category: string
@@ -104,7 +104,8 @@ export function buildCurrentMonthSummary(
   // Reference month comes from countable transactions only — a trailing
   // transfer or ignored row must not drag "este mes" onto an empty month.
   const counted = transactions.filter(countsTowardTotals)
-  if (counted.length === 0) {
+  const latest = newestDate(counted)
+  if (!latest) {
     return {
       income: 0,
       expense: 0,
@@ -115,11 +116,6 @@ export function buildCurrentMonthSummary(
       isCurrentMonth: false,
     }
   }
-
-  const latest = counted.reduce(
-    (max, tx) => (tx.date > max ? tx.date : max),
-    counted[0].date
-  )
   const m = latest.getUTCMonth()
   const y = latest.getUTCFullYear()
 

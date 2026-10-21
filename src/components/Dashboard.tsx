@@ -34,7 +34,7 @@ import { RecentTransactionsCard } from './dashboard/RecentTransactionsCard'
 import { SavingsCard } from './dashboard/SavingsCard'
 import { SectionDivider } from './dashboard/SectionDivider'
 import { TopMerchantsCard } from './dashboard/TopMerchantsCard'
-import { todayAsUtcDate } from '../utils/date-utils'
+import { newestDate, todayAsUtcDate } from '../utils/date-utils'
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -78,14 +78,11 @@ export function Dashboard({
   // Falls back to the raw rows when everything is ignored, so a transfers-only
   // dataset still labels the statement month instead of today's.
   const latestDate = useMemo(() => {
-    const source = countedTransactions.length
-      ? countedTransactions
-      : transactions
     // Formatted in UTC like every tx date, so "today" must be one too (#58).
-    if (source.length === 0) return todayAsUtcDate()
-    return source.reduce(
-      (latest, tx) => (tx.date > latest ? tx.date : latest),
-      source[0].date
+    return (
+      newestDate(countedTransactions) ??
+      newestDate(transactions) ??
+      todayAsUtcDate()
     )
   }, [countedTransactions, transactions])
 

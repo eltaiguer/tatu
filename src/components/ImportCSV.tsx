@@ -14,19 +14,20 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   importAiErrorMessage,
-  UserFacingError,
+  StatementReadError,
   userErrorMessage,
 } from '../utils/user-error'
-import { parseCSV } from '../services/parsers/csv-parser'
-import { decodeCsvBytes } from '../services/parsers/decode-csv'
-import { categorizeParsedData } from '../services/categorizer/import-categorization'
-import { transactionStore } from '../stores/transaction-store'
-import type { ParsedData, Transaction, TransactionsFilter } from '../models'
+import type { FileType, TransactionsFilter } from '../models'
+import type {
+  ImportStatementOptions,
+  StatementFile,
+  StatementImportResult,
+} from '../services/import/import-statement'
+import { ACCOUNT_LABELS } from '../utils/account-display'
 
 // validating = reading/parsing the file; importing = the file is valid and
 // its rows are being saved.
 type ImportState = 'idle' | 'validating' | 'importing' | 'success' | 'error'
-type UiFileType = 'credit_card' | 'usd_account' | 'uyu_account'
 
 interface ImportSummary {
   added: number
@@ -34,6 +35,7 @@ interface ImportSummary {
   previouslyDeleted: number
   /** Stored rows whose garbled description this import repaired (#192). */
   repaired: number
+  fileType: FileType
   // The month "Ver transacciones" opens: the newest new row's, or the file's
   // newest when nothing was new.
   month: { y: number; m: number } | null
@@ -61,63 +63,60 @@ function summaryLines(summary: ImportSummary) {
   ]
 }
 
-function newestMonth(rows: Transaction[]): ImportSummary['month'] {
-  if (rows.length === 0) return null
-  const newest = new Date(Math.max(...rows.map((tx) => tx.date.getTime())))
-  // A calendar day at UTC midnight (#58): read in UTC, as Resumen does.
-  return { y: newest.getUTCFullYear(), m: newest.getUTCMonth() }
-}
+// The part of an import's result the dialog reads. Type-only imports: the
+// dialog has no runtime dependency on the import service, and a test double
+// only has to supply these fields.
+export type ImportOutcome = Pick<
+  StatementImportResult,
+  | 'added'
+  | 'duplicates'
+  | 'previouslyDeleted'
+  | 'repaired'
+  | 'repairsFailed'
+  | 'aiError'
+  | 'aiPartial'
+  | 'fileType'
+  | 'month'
+>
 
 interface ImportCSVProps {
   /** "Ver transacciones" on the summary; the import itself never navigates. */
   onViewTransactions?: (filter: TransactionsFilter) => void
-  onTransactionsImported?: (
-    transactions: Transaction[],
-    context?: {
-      parsedData: ParsedData
-      csvContent: string
-      fileName: string
-    }
-  ) => Promise<{
-    added: Transaction[]
-    duplicates: Transaction[]
-    /** Rows deleted before; skipped so they stay deleted. */
-    previouslyDeleted?: Transaction[]
-    /** Stored rows whose garbled description the import repaired (#192). */
-    repaired?: Transaction[]
-    /** Repairs that did not save; importing again retries them. */
-    repairsFailed?: number
-    /**
-     * Set when the import succeeded but AI enrichment did not, so the user can
-     * tell a dead API key apart from the model categorizing badly.
-     */
-    /** Enrichment did not run at all: what it threw (`aiErrorMessage`). */
-    aiError?: unknown
-    /**
-     * Enrichment ran but some batches failed; the rest were applied. Already
-     * the text to show ("2 de 12 lotes fallaron (…)").
-     */
-    aiPartial?: string
-  }>
+  /**
+   * Imports the picked file (`importStatement`, bound to the signed-in user).
+   * A file it could not read rejects with a `StatementReadError`; any other
+   * rejection is a failure to save. `onParsed` is progress only.
+   */
+  onTransactionsImported: (
+    file: StatementFile,
+    options: ImportStatementOptions
+  ) => Promise<ImportOutcome>
 }
 
-// Bytes, not text: the encoding is decided by decodeCsvBytes (#192), since
+const READ_FAILED = 'Error al leer el archivo'
+
+// Bytes, not text: the encoding is decided by the import (#192), since
 // Santander exports are Latin-1 and File.text() would read them as UTF-8.
-async function readFileAsText(file: File): Promise<string> {
+async function readFileBytes(file: File): Promise<ArrayBuffer> {
   if (typeof file.arrayBuffer === 'function') {
-    return decodeCsvBytes(await file.arrayBuffer())
+    try {
+      return await file.arrayBuffer()
+    } catch (error) {
+      // e.g. NotReadableError: the file moved or lost permission.
+      throw new StatementReadError(READ_FAILED, { cause: error })
+    }
   }
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => {
+      // Not `instanceof ArrayBuffer`: the reader's buffer may come from
+      // another realm (jsdom).
       const result = reader.result
-      if (result == null) resolve('')
-      else if (typeof result === 'string') resolve(result)
-      else resolve(decodeCsvBytes(result))
+      if (result && typeof result !== 'string') resolve(result)
+      else reject(new StatementReadError(READ_FAILED))
     }
-    reader.onerror = () =>
-      reject(new UserFacingError('Error al leer el archivo'))
+    reader.onerror = () => reject(new StatementReadError(READ_FAILED))
     reader.readAsArrayBuffer(file)
   })
 }
@@ -129,7 +128,6 @@ export function ImportCSV({
   const [importState, setImportState] = useState<ImportState>('idle')
   const [dragActive, setDragActive] = useState(false)
   const [fileName, setFileName] = useState<string>('')
-  const [fileType, setFileType] = useState<UiFileType | null>(null)
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null)
   const [errorMessage, setErrorMessage] = useState<string>('')
   // Whether the failure happened after the file was understood (saving), so
@@ -188,48 +186,22 @@ export function ImportCSV({
     setImportState('validating')
     setErrorMessage('')
 
-    // Parser errors are UserFacingErrors (Spanish, say what to do); anything
-    // else — a parser bug, saving, the network — is translated so raw
-    // English never shows.
-    let parsed = false
     try {
-      const csvContent = await readFileAsText(file)
-      // Parsers return uncategorized rows; categorize before anything else
-      // sees them (dedup, AI enrichment, the store).
-      const result = categorizeParsedData(parseCSV(csvContent, file.name))
-      parsed = true
-      setImportState('importing')
-
-      if (result.fileType === 'credit_card') {
-        setFileType('credit_card')
-      } else if (result.fileType === 'bank_account_usd') {
-        setFileType('usd_account')
-      } else {
-        setFileType('uyu_account')
-      }
-
+      const bytes = await readFileBytes(file)
       const {
         added,
         duplicates,
-        previouslyDeleted = [],
-        repaired = [],
+        previouslyDeleted,
+        repaired,
         repairsFailed = 0,
         aiError,
         aiPartial,
-      } = onTransactionsImported
-        ? await onTransactionsImported(result.transactions, {
-            parsedData: result,
-            csvContent,
-            fileName: file.name,
-          })
-        : {
-            ...transactionStore.getState().addTransactions(result.transactions),
-            // Local-only path never runs AI enrichment.
-            repaired: [] as Transaction[],
-            repairsFailed: 0,
-            aiError: undefined as unknown,
-            aiPartial: undefined as string | undefined,
-          }
+        fileType,
+        month,
+      } = await onTransactionsImported(
+        { bytes, fileName: file.name },
+        { onParsed: () => setImportState('importing') }
+      )
 
       // The dialog stays open on this summary (#202): no toast, no
       // navigation until the user picks "Ver transacciones".
@@ -238,7 +210,8 @@ export function ImportCSV({
         duplicates: duplicates.length,
         previouslyDeleted: previouslyDeleted.length,
         repaired: repaired.length,
-        month: newestMonth(added.length > 0 ? added : result.transactions),
+        fileType,
+        month,
       })
 
       setImportState('success')
@@ -264,17 +237,20 @@ export function ImportCSV({
       }
     } catch (error) {
       console.error('import failed:', error)
+      // A file that could not be read says why (its message is the text to
+      // show; a parser crash travels as its cause). Anything else — saving,
+      // the network, a session that ended — is a failure to import, and its
+      // text is translated so raw English never shows.
+      const unreadable = error instanceof StatementReadError
       setImportState('error')
-      setFailedWhileSaving(parsed)
+      setFailedWhileSaving(!unreadable)
       setErrorMessage(
         userErrorMessage(
           error,
-          parsed
-            ? 'No se pudo guardar la importación'
-            : 'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.',
+          'No se pudo guardar la importación',
           // Reported once, by userErrorMessage. A parse crash may mean
           // Santander changed its export format.
-          parsed ? 'import' : 'import-parse'
+          unreadable ? 'import-parse' : 'import'
         )
       )
     }
@@ -290,23 +266,9 @@ export function ImportCSV({
     focusPickerRef.current = true
     setImportState('idle')
     setFileName('')
-    setFileType(null)
     setImportSummary(null)
     setErrorMessage('')
     setFailedWhileSaving(false)
-  }
-
-  const getAccountTypeLabel = (type: UiFileType) => {
-    switch (type) {
-      case 'credit_card':
-        return 'Tarjeta de crédito'
-      case 'usd_account':
-        return 'Cuenta USD'
-      case 'uyu_account':
-        return 'Cuenta $U'
-      default:
-        return ''
-    }
   }
 
   return (
@@ -382,7 +344,7 @@ export function ImportCSV({
           <ImportSummaryPanel
             summary={importSummary}
             fileName={fileName}
-            accountLabel={fileType ? getAccountTypeLabel(fileType) : null}
+            accountLabel={ACCOUNT_LABELS[importSummary.fileType]}
             headingRef={summaryHeadingRef}
             onImportAnother={resetImport}
             onViewTransactions={
@@ -427,7 +389,7 @@ export function ImportCSV({
             <div className="p-2 rounded-lg bg-brand-soft">
               <FileText className="text-primary" size={20} />
             </div>
-            <h4>Tarjeta de crédito</h4>
+            <h4>{ACCOUNT_LABELS.credit_card}</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Extracto de tarjeta Santander con compras y pagos en UYU y USD.
@@ -439,7 +401,7 @@ export function ImportCSV({
             <div className="p-2 rounded-lg bg-accent-soft">
               <FileText className="text-accent" size={20} />
             </div>
-            <h4>Cuenta USD</h4>
+            <h4>{ACCOUNT_LABELS.bank_account_usd}</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Caja de ahorro en dólares con movimientos de débito y crédito.
@@ -451,7 +413,7 @@ export function ImportCSV({
             <div className="p-2 rounded-lg bg-pos-soft">
               <FileText className="text-pos" size={20} />
             </div>
-            <h4>Cuenta $U</h4>
+            <h4>{ACCOUNT_LABELS.bank_account_uyu}</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Caja de ahorro en pesos uruguayos con todas las operaciones.
@@ -516,7 +478,7 @@ function ImportSummaryPanel({
 }: {
   summary: ImportSummary
   fileName: string
-  accountLabel: string | null
+  accountLabel: string
   headingRef: React.RefObject<HTMLHeadingElement>
   onImportAnother: () => void
   onViewTransactions?: () => void
@@ -561,11 +523,9 @@ function ImportSummaryPanel({
           <p className="text-sm text-muted-foreground mb-4 break-all">
             {fileName}
           </p>
-          {accountLabel && (
-            <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
-              {accountLabel}
-            </div>
-          )}
+          <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
+            {accountLabel}
+          </div>
           <ul
             aria-label="Resumen de la importación"
             className="mt-4 space-y-1 text-sm"

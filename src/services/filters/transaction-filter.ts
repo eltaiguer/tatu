@@ -3,7 +3,7 @@ import { normalizeCategoryId } from '../categories/category-aliases'
 import { countsAsRow, countsTowardTotals } from '../spending/spending-rules'
 import { getDisplayDescription } from '../../utils/transaction-display'
 import { merchantKeyOf } from '../merchants/merchant-key'
-import { toDateKey, todayAsUtcDate } from '../../utils/date-utils'
+import { newestDate, toDateKey, todayAsUtcDate } from '../../utils/date-utils'
 import type { UrlFilterState, UrlPeriod } from './url-filters'
 
 // THE definition of "matches the Transacciones filter" (#121): one pure
@@ -30,11 +30,6 @@ export interface TransactionFilterOptions {
 
 function utcDay(y: number, m: number, d: number): Date {
   return new Date(Date.UTC(y, m, d))
-}
-
-function newestDate(transactions: Transaction[]): Date {
-  if (transactions.length === 0) return todayAsUtcDate()
-  return new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
 }
 
 // A period as inclusive ISO calendar days ('' = unbounded). Transaction
@@ -76,7 +71,7 @@ export function filterTransactions(
     filters.period,
     options.recentAnchor ??
       (filters.period?.mode === 'recent'
-        ? newestDate(transactions)
+        ? (newestDate(transactions) ?? todayAsUtcDate())
         : todayAsUtcDate())
   )
   // An inverted range is ignored rather than matching nothing.

@@ -9,6 +9,7 @@ import type {
 import { formatCurrency } from '../../utils/formatting'
 import { Card } from '../ui/card'
 import { DrillTarget } from './DrillTarget'
+import { ACCOUNT_LABELS } from '../../utils/account-display'
 
 // The period an account card's own number covers (accounts are imported
 // separately, so one global range would be wrong for some of them).
@@ -113,7 +114,7 @@ export function AccountCards({
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <AccountExpenseCard
         icon={CreditCard}
-        label="Tarjeta de crédito"
+        label={ACCOUNT_LABELS.credit_card}
         sublabel={accountRange(acctSpend.card)}
         stat={acctSpend.card}
         homeCurrency={homeCurrency}
@@ -128,7 +129,7 @@ export function AccountCards({
       />
       <AccountExpenseCard
         icon={DollarSign}
-        label="Cuenta USD"
+        label={ACCOUNT_LABELS.bank_account_usd}
         sublabel={accountRange(acctSpend.usd)}
         stat={acctSpend.usd}
         homeCurrency={homeCurrency}
@@ -144,7 +145,7 @@ export function AccountCards({
       />
       <AccountExpenseCard
         icon={Banknote}
-        label="Cuenta $U"
+        label={ACCOUNT_LABELS.bank_account_uyu}
         sublabel={accountRange(acctSpend.uyu)}
         stat={acctSpend.uyu}
         homeCurrency={homeCurrency}

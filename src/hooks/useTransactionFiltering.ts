@@ -12,7 +12,7 @@ import {
 } from '../services/spending/spending-rules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { sortCategoryIdsByLabel } from '../services/categories/category-registry'
-import { todayAsUtcDate } from '../utils/date-utils'
+import { newestDate, todayAsUtcDate } from '../utils/date-utils'
 import type { Transaction } from '../models'
 import {
   DEFAULT_URL_FILTERS,
@@ -42,11 +42,6 @@ function clearedFilters(): FilterState {
     accounts: [],
     period: { mode: 'all' },
   }
-}
-
-function newestOf(transactions: Transaction[]): Date | null {
-  if (transactions.length === 0) return null
-  return new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
 }
 
 // Structural equality over filter values: primitives, lists and the period
@@ -113,13 +108,13 @@ export function useTransactionFiltering({
   transactions: Transaction[]
   initial?: UrlFilterState
 }) {
-  const newestDate = useMemo(() => newestOf(transactions), [transactions])
+  const newestRowDate = useMemo(() => newestDate(transactions), [transactions])
   // The newest row as of the last commit, for the stable updaters below
   // (read when they are called, never written during render).
-  const newestRef = useRef(newestDate)
+  const newestRef = useRef(newestRowDate)
   useLayoutEffect(() => {
-    newestRef.current = newestDate
-  }, [newestDate])
+    newestRef.current = newestRowDate
+  }, [newestRowDate])
 
   // The filters, and the month "últimos n meses" counts back from: the
   // newest month with data at the moment it is chosen (or the page is
@@ -141,7 +136,7 @@ export function useTransactionFiltering({
         accounts: [...initial.accounts],
         period: initial.period ?? { mode: 'all' },
       },
-      recentAnchor: newestOf(transactions) ?? todayAsUtcDate(),
+      recentAnchor: newestRowDate ?? todayAsUtcDate(),
       sortField: 'date',
       sortDirection: 'desc',
       page: 1,
@@ -310,7 +305,7 @@ export function useTransactionFiltering({
     filteredTransactions,
     ignoredCount,
     availableCategories,
-    newestDate,
+    newestRowDate,
     currentPage,
     setCurrentPage,
     totalPages,

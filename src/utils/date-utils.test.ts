@@ -6,6 +6,8 @@ import {
   toCalendarDay,
   calendarDaysBetween,
   toMonthKey,
+  newestDataMonth,
+  newestDate,
 } from './date-utils'
 
 // #58: a transaction date is a calendar day stored at UTC midnight (rows
@@ -56,5 +58,41 @@ describe('UTC calendar dates', () => {
     expect(toMonthKey(day('2026-02-28T00:00:00.000Z'))).toBe('2026-02')
     expect(toMonthKey(day('2026-03-01T03:00:00.000Z'))).toBe('2026-03')
     expect(toMonthKey(day('2026-03-31T00:00:00.000Z'))).toBe('2026-03')
+  })
+})
+
+describe('newest row with data', () => {
+  const on = (iso: string) => ({ date: new Date(iso) })
+
+  it('is the newest date among the rows, in any order', () => {
+    expect(
+      newestDate([
+        on('2026-02-27T00:00:00.000Z'),
+        on('2026-03-02T00:00:00.000Z'),
+        on('2026-01-15T00:00:00.000Z'),
+      ])
+    ).toEqual(new Date('2026-03-02T00:00:00.000Z'))
+  })
+
+  it('is null without rows', () => {
+    expect(newestDate([])).toBeNull()
+    expect(newestDataMonth([])).toBeNull()
+  })
+
+  it("names the newest row's month (0-based), read as a UTC calendar day (#58)", () => {
+    // 1 March at UTC midnight is still 28 February in Uruguay's local time.
+    expect(
+      newestDataMonth([
+        on('2026-02-27T00:00:00.000Z'),
+        on('2026-03-01T00:00:00.000Z'),
+      ])
+    ).toEqual({ y: 2026, m: 2 })
+  })
+
+  it('handles a history too long to spread into Math.max', () => {
+    const rows = Array.from({ length: 200_000 }, (_, i) => ({
+      date: new Date(Date.UTC(2020, 0, 1) + i * 60_000),
+    }))
+    expect(newestDate(rows)).toEqual(rows[rows.length - 1].date)
   })
 })
