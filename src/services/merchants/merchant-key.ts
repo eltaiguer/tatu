@@ -16,8 +16,8 @@ import { getUserRename } from '../../utils/transaction-display'
 const DIACRITICS = /[̀-ͯ]/g
 
 // Lowercase, accent-free, `*` as a separator ("MERPAGO*FOO" = "Merpago Foo"),
-// single spaces.
-function fold(text: string): string {
+// single spaces. Also how Insights compares a merchant name the model echoes.
+export function fold(text: string): string {
   return text
     .normalize('NFD')
     .replace(DIACRITICS, '')
@@ -197,12 +197,66 @@ export function merchantKeyOf(tx: Transaction): string {
   return rawMerchantKey(tx.description)
 }
 
+// A transfer's merchant key opens with its bank concept, then the
+// counterparty: "transferencia enviada trf. plaza- federico gazzano". These
+// are the exact openings a label can name, longest first; the label is read
+// off the key, so two keys never get the same label.
+const TRANSFER_KEY_CONCEPTS: ReadonlyArray<readonly [string, string]> = [
+  [
+    'debito operacion en banca digital trf. plaza-',
+    'Transferencia Banca Digital',
+  ],
+  ['debito operacion en banca digital', 'Débito Banca Digital'],
+  ['debito operacion en supernet o sms trf. plaza-', 'Transferencia Supernet'],
+  ['debito operacion en supernet o sms', 'Débito Supernet'],
+  ['credito por operacion en supernet', 'Crédito Supernet'],
+  ['transf instantanea enviada', 'Transf. instantánea enviada'],
+  ['transf instantanea recibida', 'Transf. instantánea recibida'],
+  ['transferencia enviada trf. plaza-', 'Transferencia enviada'],
+  ['transferencia recibida recibida /', 'Transferencia recibida'],
+]
+
+// A transfer's label: its counterparty plus the bank concept, both read off
+// the merchant key ("TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO
+// GAZZANO" → "FEDERICO GAZZANO · Transferencia enviada"). The name keeps the
+// description's own spelling when its last words fold to it. A key that opens
+// otherwise, or whose rest is not a name (empty, one letter, a reference code
+// kept because nothing else was left), keeps the raw description. Display
+// only — the key is rawMerchantKey.
+function counterpartyLabel(description: string): string {
+  const key = rawMerchantKey(description)
+  const concept = TRANSFER_KEY_CONCEPTS.find(
+    ([opening]) =>
+      key.startsWith(opening) &&
+      (opening.endsWith('/') || key[opening.length] === ' ')
+  )
+  if (!concept) return description
+  const [opening, conceptLabel] = concept
+  const name = key.slice(opening.length).trim()
+  const isName =
+    /[a-z].*[a-z]/.test(name) && (!/\d/.test(name) || name.startsWith('nro '))
+  if (!isName) return description
+  return `${spelledAsInDescription(name, description)} · ${conceptLabel}`
+}
+
+// The description's last words if they fold to `folded` (accents and case
+// kept), else `folded` in capitals, as Santander writes names.
+function spelledAsInDescription(folded: string, description: string): string {
+  const words = description.trim().split(/\s+/)
+  for (let count = 1; count <= words.length; count += 1) {
+    const tail = words.slice(-count).join(' ')
+    if (fold(tail) === folded) return tail
+  }
+  return folded.toUpperCase()
+}
+
 function newestFirst(a: Transaction, b: Transaction): number {
   return b.date.getTime() - a.date.getTime() || a.id.localeCompare(b.id)
 }
 
 // The friendliest name for a group of rows sharing a key: the most recent
-// rename, else the most common raw description. Ties go to the most recent
+// rename, else the most common raw description (a transfer's reduced to its
+// counterparty). Ties go to the most recent
 // row, so the label does not depend on input order (it feeds InsightInput,
 // whose hash decides whether cached insights are stale).
 export function merchantLabelFor(rows: Transaction[]): string {
@@ -226,7 +280,7 @@ export function merchantLabelFor(rows: Transaction[]): string {
       best = count
     }
   }
-  return label
+  return counterpartyLabel(label)
 }
 
 export interface MerchantGroup {

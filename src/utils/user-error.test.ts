@@ -1,9 +1,78 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { UserFacingError, aiErrorMessage, userErrorMessage } from './user-error'
+import { captureError } from '../services/monitoring/error-reporting'
+import {
+  UserFacingError,
+  aiErrorMessage,
+  isUnexpectedAiError,
+  userErrorMessage,
+} from './user-error'
+
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
+  captureError: vi.fn(),
+}))
 
 describe('userErrorMessage', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('reports unexpected errors and hands explained ones over (dropped there)', () => {
+    vi.mocked(captureError).mockClear()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const unexpected = new Error('relation "x" does not exist')
+
+    userErrorMessage(unexpected, 'x')
+    const explained = new UserFacingError('Ya existe')
+    userErrorMessage(explained, 'x')
+
+    // captureError drops an explained error with no cause (sentry test).
+    expect(vi.mocked(captureError).mock.calls).toEqual([
+      [unexpected, undefined],
+      [explained, undefined],
+    ])
+  })
+
+  it('tells an offline user about the connection, whatever the error', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+
+    expect(userErrorMessage(new Error('boom'), 'x')).toMatch(/Sin conexión/)
+  })
+
+  it('does not report a network failure it tells the user about', () => {
+    vi.mocked(captureError).mockClear()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    userErrorMessage(new Error('network request failed'), 'x')
+
+    expect(captureError).not.toHaveBeenCalled()
+  })
+
+  it('hands an explained error to reporting, which sends its cause', () => {
+    vi.mocked(captureError).mockClear()
+    const shown = new UserFacingError(
+      'No se pudieron borrar todos los datos.',
+      {
+        cause: new Error('timeout'),
+      }
+    )
+
+    expect(userErrorMessage(shown, 'x', 'reset')).toBe(shown.message)
+    expect(captureError).toHaveBeenCalledWith(shown, 'reset')
+  })
+
+  it('tags the report with the area the caller names', () => {
+    vi.mocked(captureError).mockClear()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const unexpected = new TypeError('x is undefined')
+
+    userErrorMessage(unexpected, 'x', 'import-parse')
+
+    expect(captureError).toHaveBeenCalledTimes(1)
+    expect(captureError).toHaveBeenCalledWith(unexpected, 'import-parse')
   })
 
   it('passes user-facing messages through', () => {
@@ -67,5 +136,84 @@ describe('aiErrorMessage', () => {
     const msg =
       'La respuesta del modelo quedó truncada (límite de tokens alcanzado).'
     expect(aiErrorMessage(msg)).toBe(msg)
+  })
+})
+
+describe('isUnexpectedAiError', () => {
+  it('is false for problems with the key, quota, credit or service', () => {
+    expect(isUnexpectedAiError('401 invalid x-api-key')).toBe(false)
+    expect(isUnexpectedAiError('429 rate_limit_error')).toBe(false)
+    expect(isUnexpectedAiError('400 credit balance is too low')).toBe(false)
+    expect(isUnexpectedAiError('529 overloaded')).toBe(false)
+    expect(isUnexpectedAiError('Failed to fetch')).toBe(false)
+  })
+
+  it("is true for unknown failures and the app's own errors", () => {
+    expect(isUnexpectedAiError('Cannot read properties of undefined')).toBe(
+      true
+    )
+    expect(
+      isUnexpectedAiError('Respuesta inesperada del modelo (tipo: tool_use)')
+    ).toBe(true)
+  })
+
+  it('treats a timed-out or aborted request as a connection problem', () => {
+    expect(aiErrorMessage('Request timed out.')).toBe(
+      'sin conexión con Anthropic'
+    )
+    expect(isUnexpectedAiError(new Error('Request timed out.'))).toBe(false)
+    expect(isUnexpectedAiError(new Error('Request was aborted.'))).toBe(false)
+  })
+
+  it('does not read status codes inside ids or longer numbers', () => {
+    expect(
+      isUnexpectedAiError(
+        new Error('400 invalid_request_error {"request_id":"req_011C501abc"}')
+      )
+    ).toBe(true)
+  })
+
+  it('does not report a chunk that failed to load after a deploy', () => {
+    expect(
+      isUnexpectedAiError(
+        new TypeError(
+          'Failed to fetch dynamically imported module: https://tatu.app/assets/sdk.js'
+        )
+      )
+    ).toBe(false)
+  })
+
+  it('does not report a truncated response, which the user can act on', () => {
+    expect(
+      isUnexpectedAiError(
+        new Error(
+          'La respuesta del modelo quedó truncada (límite de tokens alcanzado). Probá importar menos transacciones.'
+        )
+      )
+    ).toBe(false)
+  })
+
+  it('shows and does not report a model refusal', () => {
+    const refusal = 'El modelo rechazó la solicitud (cyber).'
+    expect(aiErrorMessage(refusal)).toBe(refusal)
+    expect(isUnexpectedAiError(new Error(refusal))).toBe(false)
+  })
+
+  it('takes the error itself, not just its message', () => {
+    expect(isUnexpectedAiError(new Error('401 invalid x-api-key'))).toBe(false)
+    expect(isUnexpectedAiError(new Error('boom'))).toBe(true)
+  })
+
+  it('is true for a code bug even when its message looks like an outage', () => {
+    expect(
+      isUnexpectedAiError(
+        new TypeError(
+          "Cannot read properties of undefined (reading 'connection')"
+        )
+      )
+    ).toBe(true)
+    expect(
+      isUnexpectedAiError(new SyntaxError('Unexpected token at position 503'))
+    ).toBe(true)
   })
 })

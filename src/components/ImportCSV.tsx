@@ -268,7 +268,10 @@ export function ImportCSV({
           error,
           parsed
             ? 'No se pudo guardar la importación'
-            : 'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
+            : 'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.',
+          // Reported once, by userErrorMessage. A parse crash may mean
+          // Santander changed its export format.
+          parsed ? 'import' : 'import-parse'
         )
       )
     }

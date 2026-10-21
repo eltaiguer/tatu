@@ -11,6 +11,7 @@ import {
   updatePassword,
 } from '../services/supabase/auth'
 import type { SupabaseSession } from '../services/supabase/client'
+import { setErrorReportingUser } from '../services/monitoring/error-reporting'
 import { mapAuthError } from '../utils/auth-errors'
 
 function isPasswordResetMode(): boolean {
@@ -83,6 +84,10 @@ export function useAuthSession() {
   const [authMode, setAuthMode] = useState<'signin' | 'reset'>(() =>
     isPasswordResetMode() ? 'reset' : 'signin'
   )
+
+  useEffect(() => {
+    setErrorReportingUser(session?.user?.id ?? null)
+  }, [session?.user?.id])
 
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges(

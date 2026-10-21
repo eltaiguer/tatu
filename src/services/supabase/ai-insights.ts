@@ -1,5 +1,20 @@
 import { getSupabaseClient, type SupabaseSession } from './client'
 import type { InsightsResult } from '../insights/insight-generator'
+import { UserFacingError } from '../../utils/user-error'
+
+// The ai_insights table exists only once schema.sql is applied by hand
+// (supabase/README.md): Postgres says 42P01, PostgREST's schema cache
+// PGRST205. That is setup, not a bug, and the raw text is English.
+const MISSING_TABLE_CODES = new Set(['42P01', 'PGRST205'])
+
+function throwInsightsError(error: { code?: string; message: string }): never {
+  if (error.code && MISSING_TABLE_CODES.has(error.code)) {
+    throw new UserFacingError(
+      'Falta crear la tabla de insights en la base de datos (ver supabase/README.md).'
+    )
+  }
+  throw new Error(error.message)
+}
 
 export interface CachedInsightsRow {
   inputHash: string
@@ -34,7 +49,7 @@ export async function loadCachedInsights(
     if (error.code === 'PGRST116') {
       return null
     }
-    throw new Error(error.message)
+    throwInsightsError(error)
   }
   if (!data) {
     return null
@@ -70,7 +85,5 @@ export async function saveInsights(
     { onConflict: 'user_id' }
   )
 
-  if (error) {
-    throw new Error(error.message)
-  }
+  if (error) throwInsightsError(error)
 }

@@ -28,6 +28,7 @@ import {
   type ImportClassification,
 } from '../dedup/import-dedup'
 import { sha256Hex } from '../supabase/import-runs'
+import { captureError } from '../monitoring/error-reporting'
 import {
   countSimilarEditReach,
   findSimilarTransactions,
@@ -117,7 +118,8 @@ function settle<R>(
     saved.length,
     total,
     retry,
-    options.result
+    options.result,
+    failed.length > 0 ? error : undefined
   )
 }
 
@@ -276,7 +278,7 @@ export async function importTransactions(
     const toEnrich = added.filter((tx) => !hasUserOverride(tx))
     if (toEnrich.length > 0) {
       try {
-        const { results, partialFailure } = await enrichTransactionsWithAi(
+        const outcome = await enrichTransactionsWithAi(
           toEnrich.map((tx) => ({
             id: tx.id,
             description: tx.description,
@@ -288,8 +290,8 @@ export async function importTransactions(
           aiConfig,
           buildCorrectionContext()
         )
-        toStore = applyAiEnrichment(added, results)
-        aiPartial = partialFailure
+        toStore = applyAiEnrichment(added, outcome.results)
+        aiPartial = outcome.partialFailure
       } catch (error) {
         aiError =
           error instanceof Error ? error.message : 'Error desconocido de IA'
@@ -328,12 +330,15 @@ export async function importTransactions(
         )
       } catch (closeError) {
         console.error('Could not mark import run failed:', closeError)
+        // After an account change the new token is expected to refuse it.
+        if (owner) captureError(closeError, 'import')
       }
     }
     if (!owner) throw new WorkspaceChangedError()
     if (saved.length === 0) throw error
     throw new UserFacingError(
-      `Se guardaron ${saved.length} de ${toStore.length} transacciones nuevas. Importá el archivo de nuevo para completar el resto.`
+      `Se guardaron ${saved.length} de ${toStore.length} transacciones nuevas. Importá el archivo de nuevo para completar el resto.`,
+      { cause: error }
     )
   }
   if (!owner) throw new WorkspaceChangedError()
@@ -358,6 +363,8 @@ export async function importTransactions(
       })
     } catch (closeError) {
       console.error('Could not complete import run record:', closeError)
+      // After an account change the new token is expected to refuse it.
+      if (isWorkspaceOwner(repo.userId)) captureError(closeError, 'import')
     }
   }
 
@@ -400,12 +407,14 @@ async function repairRows(
   } catch (error) {
     if (error instanceof WorkspaceChangedError) throw error
     console.error('Could not repair garbled descriptions:', error)
+    captureError(error, 'import')
     return { saved: [], failed: repaired.length }
   }
   // A row gone from the server (deleted elsewhere) needs no repair.
   const failed = outcome.failed.length
   if (failed > 0) {
     console.error('Could not repair garbled descriptions:', outcome.error)
+    captureError(outcome.error, 'import')
   }
   const saved = new Set(outcome.saved)
   return { saved: repaired.filter((tx) => saved.has(tx.id)), failed }
@@ -570,7 +579,8 @@ async function writeOverrides(
         assertOwner(repo)
         applyDescLocally()
         throw new UserFacingError(
-          'Se guardó el nombre, pero no la categoría. Intentá de nuevo.'
+          'Se guardó el nombre, pero no la categoría. Intentá de nuevo.',
+          { cause: error }
         )
       }
       throw error
@@ -593,10 +603,11 @@ async function writeOverrides(
   if (legacyMerchantKey) {
     try {
       await repo.deleteCategoryOverride(legacyMerchantKey)
-    } catch {
+    } catch (error) {
       assertOwner(repo)
       throw new UserFacingError(
-        'Se guardó la categoría, pero no se pudo quitar la regla anterior. Intentá de nuevo.'
+        'Se guardó la categoría, pero no se pudo quitar la regla anterior. Intentá de nuevo.',
+        { cause: error }
       )
     }
     assertOwner(repo)
@@ -758,7 +769,8 @@ async function deleteRows(
       done,
       total,
       () => deleteTransactions(repo, leftover, { allowIrreversible: true }),
-      result
+      result,
+      soft.error ?? hard.error
     )
   }
   return result
@@ -866,7 +878,7 @@ export async function splitTransaction(
       // (both visible, the parts deletable), never a parent without parts.
       assertOwner(repo)
       store().addTransactions(children)
-      throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE)
+      throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE, { cause: error })
     }
     throw error
   }
@@ -890,7 +902,7 @@ export async function unsplitTransaction(
     if (error instanceof UnsplitIncompleteError) {
       assertOwner(repo)
       store().updateTransaction(parent.id, { isSplitParent: false })
-      throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE)
+      throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE, { cause: error })
     }
     throw error
   }

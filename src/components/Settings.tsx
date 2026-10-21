@@ -136,7 +136,9 @@ export function Settings({
       await onResetAllData()
       toast.success('Datos eliminados')
     } catch (error) {
-      toast.error(userErrorMessage(error, 'No se pudieron borrar los datos'))
+      toast.error(
+        userErrorMessage(error, 'No se pudieron borrar los datos', 'reset')
+      )
     }
   }
 
