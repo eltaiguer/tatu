@@ -229,7 +229,7 @@ describe('CategorizerEval — failures', () => {
     ).toBeInTheDocument()
   })
 
-  it('never shows the raw text of an unexpected Claude failure, but logs it', async () => {
+  it('shows and logs the text of a Claude-run failure that is not an AI error', async () => {
     const bug = new TypeError('x is undefined')
     claude.enrichTransactionsWithAi.mockRejectedValue(bug)
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -237,10 +237,7 @@ describe('CategorizerEval — failures', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Evaluar IA/ }))
 
-    expect(
-      await screen.findByText(/error inesperado del servicio de IA/)
-    ).toBeInTheDocument()
-    expect(screen.queryByText(/x is undefined/)).not.toBeInTheDocument()
+    expect(await screen.findByText(/x is undefined/)).toBeInTheDocument()
     expect(logged).toHaveBeenCalledWith('[Dev] evaluation failed:', bug)
     logged.mockRestore()
   })

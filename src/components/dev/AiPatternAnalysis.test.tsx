@@ -46,17 +46,14 @@ describe('AiPatternAnalysis — errors', () => {
     ).toBeInTheDocument()
   })
 
-  it('never shows the raw text of an unexpected failure, but logs it', async () => {
+  it('shows and logs the text of a failure that is not an AI error', async () => {
     const bug = new TypeError('x is undefined')
     ai.analyzeTransactionPatterns.mockRejectedValue(bug)
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     run()
 
-    expect(
-      await screen.findByText('error inesperado del servicio de IA')
-    ).toBeInTheDocument()
-    expect(screen.queryByText(/x is undefined/)).not.toBeInTheDocument()
+    expect(await screen.findByText('x is undefined')).toBeInTheDocument()
     expect(logged).toHaveBeenCalledWith('AI pattern analysis failed:', bug)
     logged.mockRestore()
   })

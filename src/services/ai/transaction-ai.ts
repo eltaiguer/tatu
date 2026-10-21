@@ -8,7 +8,6 @@ import {
   createClaudeClient,
   parseModelJson,
   type ClaudeClient,
-  type ClaudeRequest,
 } from './claude-client'
 import { resolveBuiltinAlias } from '../categories/category-aliases'
 import { captureError, errorMessage } from '../monitoring/error-reporting'
@@ -232,7 +231,7 @@ function parseBatchResponse(
   if (!Array.isArray(parsed)) {
     throw new AiError(
       'bad_response',
-      'Respuesta inesperada del modelo (no es una lista).'
+      'respuesta inesperada del modelo (no es una lista)'
     )
   }
 
@@ -262,24 +261,6 @@ function parseBatchResponse(
     })
   }
   return results
-}
-
-/** One batch's answer; a cut-off one says what the user can do about it. */
-async function completeBatch(
-  client: ClaudeClient,
-  request: ClaudeRequest
-): Promise<string> {
-  try {
-    return await client.complete(request)
-  } catch (error) {
-    if (error instanceof AiError && error.kind === 'truncated') {
-      throw new AiError(
-        'truncated',
-        `${error.message} Probá importar menos transacciones a la vez.`
-      )
-    }
-    throw error
-  }
 }
 
 export interface AiEnrichmentOutcome {
@@ -323,7 +304,7 @@ async function enrichInBatches(
       // The 5.5 models think by default and the thinking counts against
       // max_tokens; this is classification, so the lowest effort keeps the
       // output budget for the JSON.
-      const text = await completeBatch(client, {
+      const text = await client.complete({
         model: config.model,
         system: systemPrompt,
         cacheSystem: true,
@@ -355,7 +336,10 @@ async function enrichInBatches(
   }
 
   if (errors.length === 0) return { results }
-  const [first] = errors
+  // The failure that stopped the run explains it best (a bad key after a
+  // rate limit is the reason nothing more was sent); otherwise the first.
+  const first =
+    errors.find((e) => e instanceof AiError && !e.retryable) ?? errors[0]
   // Every batch failed: a hard failure, rethrown as thrown (its type and
   // stack intact). Already reported above if it was a bug.
   if (errors.length === batchCount) {

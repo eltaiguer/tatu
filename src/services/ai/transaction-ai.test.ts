@@ -370,7 +370,7 @@ describe('enrichTransactionsWithAi', () => {
     expect(error).toBeInstanceOf(AiError)
     expect((error as AiError).kind).toBe('bad_response')
     expect((error as AiError).message).toMatch(
-      /^No se pudo parsear la respuesta del modelo/
+      /^no se pudo parsear la respuesta del modelo/
     )
     expect(reporting.captureError).toHaveBeenCalledTimes(1)
     expect(reporting.captureError).toHaveBeenCalledWith(error, 'ai')
@@ -464,17 +464,11 @@ describe('enrichTransactionsWithAi', () => {
 })
 
 describe('enrichTransactionsWithAi — response truncation', () => {
-  it('says to import fewer rows when an answer is cut off', async () => {
-    answers({ throws: new AiError('truncated') })
+  it('passes a cut-off answer on as the client named it', async () => {
+    const truncated = new AiError('truncated')
+    answers({ throws: truncated })
 
-    const error = await enrich(makeInputs(1)).catch((e: unknown) => e)
-
-    expect(error).toBeInstanceOf(AiError)
-    expect((error as AiError).kind).toBe('truncated')
-    expect((error as AiError).message).toBe(
-      'La respuesta del modelo quedó truncada (límite de tokens alcanzado). ' +
-        'Probá importar menos transacciones a la vez.'
-    )
+    await expect(enrich(makeInputs(1))).rejects.toBe(truncated)
   })
 
   it('keeps every batch inside the output token budget, and sends them all', async () => {
@@ -644,6 +638,27 @@ describe('enrichTransactionsWithAi — failures every batch would repeat', () =>
     )
 
     expect(client.requests).toHaveLength(1)
+  })
+
+  it('names the failure that stopped the run, not an earlier transient one', async () => {
+    const auth = new AiError('auth')
+    answers({ throws: new AiError('rate_limit') }, { throws: auth })
+
+    await expect(enrich(makeInputs(600))).rejects.toBe(auth)
+  })
+
+  it('names the failure that stopped a partial run', async () => {
+    answers(
+      [],
+      { throws: new AiError('rate_limit') },
+      { throws: new AiError('auth') }
+    )
+
+    const { partialFailure } = await enrich(makeInputs(600))
+
+    expect(partialFailure).toBe(
+      '3 de 4 lotes fallaron (la clave API de Anthropic no es válida)'
+    )
   })
 
   it('stops immediately when the account has no credit', async () => {

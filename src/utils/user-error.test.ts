@@ -3,6 +3,7 @@ import { captureError } from '../services/monitoring/error-reporting'
 import { AiError } from '../services/ai/ai-error'
 import {
   UserFacingError,
+  aiDiagnosticMessage,
   aiErrorMessage,
   aiPartialFailureMessage,
   isUnexpectedAiError,
@@ -122,9 +123,9 @@ describe('aiErrorMessage', () => {
       'la app se actualizó; recargá la página'
     )
     expect(aiErrorMessage(new AiError('truncated'))).toBe(
-      'La respuesta del modelo quedó truncada (límite de tokens alcanzado).'
+      'la respuesta del modelo quedó truncada (límite de tokens alcanzado)'
     )
-    const refusal = 'El modelo rechazó la solicitud (cyber).'
+    const refusal = 'el modelo rechazó la solicitud (cyber)'
     expect(aiErrorMessage(new AiError('refused', refusal))).toBe(refusal)
   })
 
@@ -138,6 +139,57 @@ describe('aiErrorMessage', () => {
     )
     expect(aiErrorMessage('something odd')).toBe(
       'error inesperado del servicio de IA'
+    )
+  })
+})
+
+describe('AI messages compose into a sentence', () => {
+  const kinds = [
+    'auth',
+    'rate_limit',
+    'billing',
+    'unavailable',
+    'network',
+    'truncated',
+    'stale_chunk',
+    'refused',
+    'bad_response',
+  ] as const
+
+  it('is a fragment for every kind: no leading capital, no closing period', () => {
+    for (const kind of kinds) {
+      const message = aiErrorMessage(new AiError(kind))
+      expect(message, kind).toMatch(/^[a-záéíóúñ]/)
+      expect(message, kind).not.toMatch(/\.$/)
+      expect(
+        `Categorización con IA no disponible: ${message}. Se usaron las reglas.`,
+        kind
+      ).not.toContain('..')
+    }
+  })
+})
+
+describe('aiErrorMessage — failures that reached it without the client', () => {
+  it('says what a lost connection or a stale chunk is, as reporting does', () => {
+    const offline = new TypeError('Failed to fetch')
+    const stale = new TypeError(
+      'Failed to fetch dynamically imported module: https://tatu.app/assets/sdk.js'
+    )
+
+    expect(aiErrorMessage(offline)).toBe('sin conexión con Anthropic')
+    expect(isUnexpectedAiError(offline)).toBe(false)
+    expect(aiErrorMessage(stale)).toBe('la app se actualizó; recargá la página')
+    expect(isUnexpectedAiError(stale)).toBe(false)
+  })
+})
+
+describe('aiDiagnosticMessage', () => {
+  it('shows an AI error as the user would see it, and anything else as it is', () => {
+    expect(aiDiagnosticMessage(new AiError('auth'))).toBe(
+      'la clave API de Anthropic no es válida'
+    )
+    expect(aiDiagnosticMessage(new TypeError('x is undefined'))).toBe(
+      'x is undefined'
     )
   })
 })

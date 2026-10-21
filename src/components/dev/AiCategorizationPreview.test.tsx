@@ -142,9 +142,7 @@ describe('AiCategorizationPreview', () => {
 
     await renderPreview([at('mar-1', '2026-03-01T00:00:00.000Z')])
 
-    expect(
-      await screen.findByText('error inesperado del servicio de IA')
-    ).toBeInTheDocument()
+    expect(await screen.findByText(/x is undefined/)).toBeInTheDocument()
     expect(logged).toHaveBeenCalledWith('AI preview failed:', bug)
     logged.mockRestore()
   })

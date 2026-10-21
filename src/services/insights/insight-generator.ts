@@ -135,7 +135,7 @@ export function parseInsightsResponse(
   if (typeof parsed !== 'object' || parsed === null) {
     throw new AiError(
       'bad_response',
-      'Respuesta inesperada del modelo (no es un objeto).'
+      'respuesta inesperada del modelo (no es un objeto)'
     )
   }
   const { insights: rawList } = parsed as { insights?: unknown }

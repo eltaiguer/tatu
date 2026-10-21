@@ -9,8 +9,8 @@
  * type and stack and is reported. Callers depend on `ClaudeClient`, not the
  * SDK: tests hand them a fake (`src/test/fake-claude-client.ts`).
  */
-import { errorMessage, isChunkLoadError } from '../monitoring/error-reporting'
-import { AiError } from './ai-error'
+import { errorMessage } from '../monitoring/error-reporting'
+import { AiError, browserFailureAsAiError } from './ai-error'
 
 export type SdkModule = typeof import('@anthropic-ai/sdk')
 
@@ -47,9 +47,9 @@ export function createClaudeClient(
   // next run builds a new client and tries afresh.
   async function sdk(): Promise<SdkModule> {
     loaded ??= loadSdk().catch((error: unknown) => {
-      throw isChunkLoadError(error)
-        ? new AiError('stale_chunk', undefined, error)
-        : error
+      const offline =
+        typeof navigator !== 'undefined' && navigator.onLine === false
+      throw browserFailureAsAiError(error, { offline }) ?? error
     })
     return loaded
   }
@@ -156,7 +156,7 @@ function answerText(response: ClaudeResponse): string {
   if (!block || typeof block.text !== 'string') {
     throw new AiError(
       'bad_response',
-      'Respuesta inesperada del modelo (sin bloque de texto).'
+      'respuesta inesperada del modelo (sin bloque de texto)'
     )
   }
   return block.text
@@ -180,7 +180,7 @@ export function parseModelJson(
   } catch (e) {
     throw new AiError(
       'bad_response',
-      `No se pudo parsear la respuesta del modelo: ${errorMessage(e)}`
+      `no se pudo parsear la respuesta del modelo: ${errorMessage(e)}`
     )
   }
 }

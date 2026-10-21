@@ -17,6 +17,7 @@ import {
   UserFacingError,
   userErrorMessage,
 } from '../utils/user-error'
+import { AiError } from '../services/ai/ai-error'
 import { parseCSV } from '../services/parsers/csv-parser'
 import { decodeCsvBytes } from '../services/parsers/decode-csv'
 import { categorizeParsedData } from '../services/categorizer/import-categorization'
@@ -255,7 +256,11 @@ export function ImportCSV({
       // disponible" when 10 of 12 batches did enrich is simply wrong.
       if (aiError !== undefined) {
         toast.warning(
-          `Categorización con IA no disponible: ${aiErrorMessage(aiError)}. Se usaron las reglas de categorización.`
+          `Categorización con IA no disponible: ${aiErrorMessage(aiError)}. ${
+            aiError instanceof AiError && aiError.kind === 'truncated'
+              ? 'Probá importar menos transacciones a la vez. '
+              : ''
+          }Se usaron las reglas de categorización.`
         )
       } else if (aiPartial) {
         toast.warning(

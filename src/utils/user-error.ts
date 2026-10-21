@@ -1,9 +1,9 @@
 import {
   captureError,
-  isChunkLoadError,
+  errorMessage,
   isNetworkError,
 } from '../services/monitoring/error-reporting'
-import { AiError } from '../services/ai/ai-error'
+import { AiError, browserFailureAsAiError } from '../services/ai/ai-error'
 
 // Errors whose message is already written for the user (Spanish, no jargon).
 // Anything else — Supabase/PostgREST text, fetch failures — is translated by
@@ -98,7 +98,16 @@ const AI_UNEXPECTED = 'error inesperado del servicio de IA'
  * bug or a failure nobody explained, and its text never reaches the user.
  */
 export function aiErrorMessage(error: unknown): string {
-  return error instanceof AiError ? error.message : AI_UNEXPECTED
+  if (error instanceof AiError) return error.message
+  return browserFailureAsAiError(error)?.message ?? AI_UNEXPECTED
+}
+
+/**
+ * For the [Dev] panels, which are diagnostics: an AI failure as the user
+ * would read it, anything else (a bug in the panel's own code) as it is.
+ */
+export function aiDiagnosticMessage(error: unknown): string {
+  return error instanceof AiError ? error.message : errorMessage(error)
 }
 
 /**
@@ -124,7 +133,7 @@ export function aiPartialFailureMessage(
 export function isUnexpectedAiError(error: unknown): boolean {
   if (error instanceof AiError) return error.kind === 'bad_response'
   // Belt and braces for a failure that reached here without the client.
-  return !(isNetworkError(error) || isChunkLoadError(error))
+  return browserFailureAsAiError(error) === undefined
 }
 
 /** Reports an AI failure only when it is a bug (see isUnexpectedAiError). */

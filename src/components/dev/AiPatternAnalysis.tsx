@@ -3,7 +3,10 @@ import { Button } from '../ui/button'
 import type { Transaction } from '../../models'
 import type { AiConfig } from '../../services/ai/ai-config'
 import { analyzeTransactionPatterns } from '../../services/ai/prompt-analysis'
-import { aiErrorMessage, isUnexpectedAiError } from '../../utils/user-error'
+import {
+  aiDiagnosticMessage,
+  isUnexpectedAiError,
+} from '../../utils/user-error'
 
 interface Props {
   transactions: Transaction[]
@@ -43,7 +46,7 @@ export function AiPatternAnalysis({
       if (isUnexpectedAiError(err)) {
         console.error('AI pattern analysis failed:', err)
       }
-      setError(aiErrorMessage(err))
+      setError(aiDiagnosticMessage(err))
       setRunState('error')
     }
   }

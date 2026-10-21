@@ -114,9 +114,14 @@ export function isNetworkError(error: unknown): boolean {
 }
 
 // The browser's words for a lazy chunk that is gone after a deploy (#62):
-// Chrome/Firefox, then Safari.
-const CHUNK_LOAD_FAILED =
-  /dynamically imported module|importing a module script failed/i
+// Chrome, Firefox, Safari. `isChunkLoadError` and Sentry's `ignoreErrors`
+// both derive from this one list (plain text, no regex syntax).
+const CHUNK_LOAD_MESSAGES = [
+  'Failed to fetch dynamically imported module',
+  'error loading dynamically imported module',
+  'Importing a module script failed',
+]
+const CHUNK_LOAD_FAILED = new RegExp(CHUNK_LOAD_MESSAGES.join('|'), 'i')
 
 /** A lazy chunk that failed to load, by the browser's messages. */
 export function isChunkLoadError(error: unknown): boolean {
@@ -160,8 +165,9 @@ export function sentryOptions(dsn: string): Sentry.BrowserOptions {
     // message alone, and a loose /Load failed/ would also drop "Download
     // failed".
     ignoreErrors: [
-      /^(?:TypeError: )?Failed to fetch dynamically imported module\b/i,
-      /^(?:TypeError: )?Importing a module script failed\.?$/i,
+      ...CHUNK_LOAD_MESSAGES.map(
+        (message) => new RegExp(`^(?:TypeError: )?${message}`, 'i')
+      ),
       /^(?:TypeError: )?Failed to fetch$/i,
       /^(?:TypeError: )?NetworkError when attempting to fetch resource\.?$/i,
       /^(?:TypeError: )?Load failed$/i,

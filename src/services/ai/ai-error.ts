@@ -1,3 +1,5 @@
+import { isChunkLoadError, isNetworkError } from '../monitoring/error-reporting'
+
 /**
  * How a Claude call failed, in terms the user can act on. The Claude client
  * (claude-client.ts) turns every failure it recognises into one of these;
@@ -24,9 +26,10 @@ export type AiErrorKind =
   /** The model answered, but not in the shape asked for. */
   | 'bad_response'
 
-// What the user reads. The first six finish a sentence the screen starts
-// ("Categorización con IA no disponible: …"); the last three are whole
-// sentences, as they were before the client existed.
+// What the user reads. Every one is a fragment (no capital, no period): the
+// screen writes the sentence around it ("Categorización con IA no
+// disponible: …. Se usaron las reglas…", "No se pudieron generar los
+// insights: …"). Details (a refusal's category) go in parentheses.
 const MESSAGES: Record<AiErrorKind, string> = {
   auth: 'la clave API de Anthropic no es válida',
   rate_limit: 'se alcanzó el límite de uso de la API',
@@ -35,9 +38,9 @@ const MESSAGES: Record<AiErrorKind, string> = {
   network: 'sin conexión con Anthropic',
   stale_chunk: 'la app se actualizó; recargá la página',
   truncated:
-    'La respuesta del modelo quedó truncada (límite de tokens alcanzado).',
-  refused: 'El modelo rechazó la solicitud.',
-  bad_response: 'Respuesta inesperada del modelo.',
+    'la respuesta del modelo quedó truncada (límite de tokens alcanzado)',
+  refused: 'el modelo rechazó la solicitud',
+  bad_response: 'respuesta inesperada del modelo',
 }
 
 // Failures every later request would repeat: a batch loop stops on these
@@ -75,9 +78,27 @@ export class AiError extends Error {
   static refused(category?: string | null): AiError {
     return new AiError(
       'refused',
-      category
-        ? `${MESSAGES.refused.slice(0, -1)} (${category}).`
-        : MESSAGES.refused
+      category ? `${MESSAGES.refused} (${category})` : MESSAGES.refused
     )
   }
+}
+
+/**
+ * A browser failure that reached an AI call as a plain error — the SDK's
+ * chunk would not load, or the network is gone — as the `AiError` it means;
+ * undefined for anything else. `offline` (the browser says so) makes any
+ * such failure a lost connection: a missing chunk cannot be told apart
+ * from no network then.
+ */
+export function browserFailureAsAiError(
+  error: unknown,
+  { offline = false }: { offline?: boolean } = {}
+): AiError | undefined {
+  if (offline) return new AiError('network', undefined, error)
+  // Before the network check: Chrome's chunk message says "Failed to fetch".
+  if (isChunkLoadError(error)) {
+    return new AiError('stale_chunk', undefined, error)
+  }
+  if (isNetworkError(error)) return new AiError('network', undefined, error)
+  return undefined
 }

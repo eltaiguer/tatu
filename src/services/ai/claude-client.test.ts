@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import * as sdk from '@anthropic-ai/sdk'
 import { AiError, type AiErrorKind } from './ai-error'
 import {
@@ -150,7 +150,7 @@ describe('createClaudeClient — the response', () => {
     expect(error).toBeInstanceOf(AiError)
     expect((error as AiError).kind).toBe('refused')
     expect((error as AiError).message).toBe(
-      'El modelo rechazó la solicitud (general_harms).'
+      'el modelo rechazó la solicitud (general_harms)'
     )
   })
 
@@ -165,7 +165,7 @@ describe('createClaudeClient — the response', () => {
 
     expect((error as AiError).kind).toBe('truncated')
     expect((error as AiError).message).toBe(
-      'La respuesta del modelo quedó truncada (límite de tokens alcanzado).'
+      'la respuesta del modelo quedó truncada (límite de tokens alcanzado)'
     )
   })
 
@@ -178,7 +178,7 @@ describe('createClaudeClient — the response', () => {
 
     expect((error as AiError).kind).toBe('bad_response')
     expect((error as AiError).message).toBe(
-      'Respuesta inesperada del modelo (sin bloque de texto).'
+      'respuesta inesperada del modelo (sin bloque de texto)'
     )
   })
 })
@@ -281,6 +281,30 @@ describe('createClaudeClient — failures', () => {
     )
   })
 
+  it('says there is no connection when the SDK cannot load offline', async () => {
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+    const client = createClaudeClient('sk-test', async () => {
+      throw new TypeError(
+        'Failed to fetch dynamically imported module: https://x/assets/sdk.js'
+      )
+    })
+
+    const error = await client.complete(request).catch((e: unknown) => e)
+    online.mockRestore()
+
+    expect((error as AiError).kind).toBe('network')
+  })
+
+  it('says there is no connection when the SDK load fails on the network', async () => {
+    const client = createClaudeClient('sk-test', async () => {
+      throw new TypeError('Failed to fetch')
+    })
+
+    const error = await client.complete(request).catch((e: unknown) => e)
+
+    expect((error as AiError).kind).toBe('network')
+  })
+
   it('does not load the SDK again after a failed load (one per batch would follow)', async () => {
     const failure = new Error('module evaluation failed')
     let attempts = 0
@@ -299,13 +323,13 @@ describe('createClaudeClient — failures', () => {
 describe('AiError', () => {
   it('has a generic message for a bad response, and one refusal text', () => {
     expect(new AiError('bad_response').message).toBe(
-      'Respuesta inesperada del modelo.'
+      'respuesta inesperada del modelo'
     )
     expect(new AiError('refused').message).toBe(
-      'El modelo rechazó la solicitud.'
+      'el modelo rechazó la solicitud'
     )
     expect(AiError.refused('cyber').message).toBe(
-      'El modelo rechazó la solicitud (cyber).'
+      'el modelo rechazó la solicitud (cyber)'
     )
     expect(AiError.refused('cyber').kind).toBe('refused')
   })
@@ -349,7 +373,7 @@ describe('parseModelJson', () => {
     expect(error).toBeInstanceOf(AiError)
     expect((error as AiError).kind).toBe('bad_response')
     expect((error as AiError).message).toMatch(
-      /^No se pudo parsear la respuesta del modelo: /
+      /^no se pudo parsear la respuesta del modelo: /
     )
   })
 })

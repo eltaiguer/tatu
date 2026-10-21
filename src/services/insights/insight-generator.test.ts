@@ -234,7 +234,7 @@ describe('parseInsightsResponse', () => {
     }
     expect(error).toBeInstanceOf(AiError)
     expect((error as AiError).kind).toBe('bad_response')
-    expect((error as AiError).message).toMatch(/No se pudo parsear/)
+    expect((error as AiError).message).toMatch(/^no se pudo parsear/)
   })
 
   it('throws a bad response, not a crash, when the JSON is not an object', () => {

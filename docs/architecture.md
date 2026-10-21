@@ -596,7 +596,7 @@ and skip their rollback after a switch.
   loads the SDK on demand, returns the answer's first text block and turns
   every failure it understands into an `AiError` with a `kind` (`auth`,
   `rate_limit`, `billing`, `unavailable`, `network`, `truncated`,
-  `stale_chunk`, `refused`, `bad_response`) and a Spanish message. Anything
+  `stale_chunk`, `refused`, `bad_response`) and a Spanish message (a lowercase fragment the screen writes its sentence around). Anything
   else (a code bug, a 400/404 for a malformed request) is rethrown as it was.
   `aiErrorMessage` shows an `AiError`'s message and "error inesperado del
   servicio de IA" for anything else; a batch loop stops at the first failure
