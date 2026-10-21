@@ -445,9 +445,12 @@ rows. Never group by `description` or `getDisplayDescription` directly.
   kept instead.
 - `merchantLabelFor(rows)`: what the user sees and the Insights model echoes —
   the most recent rename, else the most common raw description (ties: most
-  recent row). A transfer's description is reduced to its counterparty
-  ("TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO GAZZANO" → "FEDERICO
-  GAZZANO"); if no name is left it keeps the raw text.
+  recent row). A transfer's description is reduced to its counterparty plus
+  its bank concept ("TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO
+  GAZZANO" → "FEDERICO GAZZANO · Transferencia enviada"). The concept stays
+  because it is part of the key: a Supernet debit and the TRANSFERENCIA
+  ENVIADA leg beside it name the same person but are different merchants. If
+  no name is left the label keeps the raw text.
 - `npx vite-node scripts/merchant-groups.ts [paths…]` prints, for Santander
   CSVs or Tatu's own CSV export, every key that merges several variants.
 

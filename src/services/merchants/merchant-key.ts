@@ -137,23 +137,33 @@ function stripTrailingPlace(
 
 const EDGE_PUNCTUATION = /^[\s,.;:/-]+|[\s,.;:/-]+$/g
 
+// A statement's `NRR:…` reference (any case).
+const NRR_REFERENCE = /\bnrr:\S*/gi
+
+// A stateful predicate over a description's tokens, in order: whether the
+// token is a reference code — it has a digit — except numbers after "NRO",
+// which tell payees apart ("NRO FAMILIA 5506").
+function codeTokenFilter(): (token: string) => boolean {
+  let afterNro = false
+  return (token) => {
+    if (/^nro$/i.test(token)) afterNro = true
+    return !afterNro && /\d/.test(token)
+  }
+}
+
 // Drops NRR references, the card mask and a trailing ", PLACE"; with
 // `dropDigits`, also every token containing a digit — except numbers after
 // "NRO", which tell payees apart ("NRO FAMILIA 5506").
 function denoise(folded: string, dropDigits: boolean): string {
   const cardPurchase = /\btarj:/.test(folded)
-  let afterNro = false
+  const isCode = codeTokenFilter()
   const tokens = folded
-    .replace(/\bnrr:\S*/g, ' ')
+    .replace(NRR_REFERENCE, ' ')
     .replace(/\btarj:\s*\S*/g, ' ')
     // Commas stand alone, so dropping "7SEVEN," keeps the ", CITY" boundary.
     .replace(/,/g, ' , ')
     .split(/\s+/)
-    .filter((token) => {
-      if (token === '') return false
-      if (token === 'nro') afterNro = true
-      return !dropDigits || afterNro || !/\d/.test(token)
-    })
+    .filter((token) => token !== '' && !(dropDigits && isCode(token)))
   return stripTrailingPlace(
     tokens.join(' ').replace(/ ,/g, ',').replace(EDGE_PUNCTUATION, ''),
     cardPurchase,
@@ -197,34 +207,51 @@ export function merchantKeyOf(tx: Transaction): string {
   return rawMerchantKey(tx.description)
 }
 
-// The bank concept a transfer description opens with; the counterparty's name
-// comes after it (and after any reference codes).
-const TRANSFER_LABEL_PREFIX =
-  /^(?:debito operacion en (?:banca digital|supernet o sms|supernet)|credito por operacion en supernet|transf instantanea (?:enviada|recibida)|transferencia (?:enviada|recibida))\b/i
+// The bank concepts a transfer description opens with (folded words), and
+// how a label names them. The concept stays in the label because it is part
+// of the key: a Supernet debit and the TRANSFERENCIA ENVIADA leg next to it
+// name the same person but are different merchants.
+const TRANSFER_CONCEPTS: ReadonlyArray<readonly [string[], string]> = [
+  [['debito', 'operacion', 'en', 'banca', 'digital'], 'Débito Banca Digital'],
+  [['debito', 'operacion', 'en', 'supernet', 'o', 'sms'], 'Débito Supernet'],
+  [['debito', 'operacion', 'en', 'supernet'], 'Débito Supernet'],
+  [['credito', 'por', 'operacion', 'en', 'supernet'], 'Crédito Supernet'],
+  [['transf', 'instantanea', 'enviada'], 'Transf. instantánea enviada'],
+  [['transf', 'instantanea', 'recibida'], 'Transf. instantánea recibida'],
+  [['transferencia', 'enviada'], 'Transferencia enviada'],
+  [['transferencia', 'recibida'], 'Transferencia recibida'],
+]
 
-// A transfer's label is its counterparty ("TRANSFERENCIA ENVIADA 7972TT55
-// TRF. PLAZA- FEDERICO GAZZANO" → "FEDERICO GAZZANO"): drops the bank
-// concept, reference codes, `NRR:…`, "TRF. PLAZA-", a repeated "RECIBIDA"
-// and anything before a "/". Keeps digits after "NRO" (they tell payees
-// apart). Other descriptions, or a transfer with no name left, keep their raw
-// text. Display only — the key is rawMerchantKey.
+// A transfer's label is its counterparty plus the bank concept
+// ("TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO GAZZANO" →
+// "FEDERICO GAZZANO · Transferencia enviada"): drops reference codes (but
+// not digits after "NRO"), `NRR:…`, "TRF. PLAZA-", a repeated
+// "RECIBIDA"/"ENVIADA" and a sender alias glued before a "/"
+// ("TAIRTAGS/NAME"). Other descriptions, or a transfer with no name left,
+// keep their raw text. Display only — the key is rawMerchantKey.
 function counterpartyLabel(description: string): string {
-  const prefix = TRANSFER_LABEL_PREFIX.exec(description)
-  if (!prefix) return description
-  let rest = description.slice(prefix[0].length)
-  rest = rest.slice(rest.lastIndexOf('/') + 1)
-  let afterNro = false
-  const label = rest
-    .replace(/\bnrr:\S*/gi, ' ')
+  const words = description.trim().split(/\s+/)
+  const folded = words.map(fold)
+  const concept = TRANSFER_CONCEPTS.find(([prefix]) =>
+    prefix.every((word, i) => folded[i] === word)
+  )
+  if (!concept) return description
+  const [prefix, conceptLabel] = concept
+  const isCode = codeTokenFilter()
+  const name = words
+    .slice(prefix.length)
+    .join(' ')
+    .replace(NRR_REFERENCE, ' ')
     .replace(/\btrf\. plaza-?/gi, ' ')
     .split(/\s+/)
-    .filter((token) => {
-      if (/^nro$/i.test(token)) afterNro = true
-      return afterNro || !/\d|^(?:recibida|enviada)$/i.test(token)
-    })
+    .filter(
+      (token) =>
+        token !== '' && !isCode(token) && !/^(?:recibida|enviada)$/i.test(token)
+    )
     .join(' ')
+    .replace(/^[^\s/]*\//, '')
     .replace(EDGE_PUNCTUATION, '')
-  return label.length < 2 ? description : label
+  return name.length < 2 ? description : `${name} · ${conceptLabel}`
 }
 
 function newestFirst(a: Transaction, b: Transaction): number {
@@ -233,7 +260,7 @@ function newestFirst(a: Transaction, b: Transaction): number {
 
 // The friendliest name for a group of rows sharing a key: the most recent
 // rename, else the most common raw description (a transfer's reduced to its
-// counterparty). Ties go to the most recent
+// counterparty and bank concept). Ties go to the most recent
 // row, so the label does not depend on input order (it feeds InsightInput,
 // whose hash decides whether cached insights are stale).
 export function merchantLabelFor(rows: Transaction[]): string {
