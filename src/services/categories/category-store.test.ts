@@ -107,6 +107,37 @@ describe('Custom category store', () => {
       expect(listCustomCategories()).toEqual([])
     })
 
+    it('edits and deletes a mixed-case stored category by its listed (lowercase) id', async () => {
+      // getCategoryDefinitions lists ids normalized; a row stored before slugs
+      // were lowercased must still be found, and saved under its stored id.
+      await repo.upsertCustomCategory({
+        id: 'Viajes-Familia',
+        label: 'Viajes',
+        color: '#123456',
+      })
+      replaceCustomCategories([
+        { id: 'Viajes-Familia', label: 'Viajes', color: '#123456' },
+      ])
+
+      await updateCustomCategoryWithSync(repo, 'viajes-familia', {
+        label: 'Viajes en familia',
+      })
+      expect(listCustomCategories()).toEqual([
+        expect.objectContaining({
+          id: 'Viajes-Familia',
+          label: 'Viajes en familia',
+        }),
+      ])
+      expect(repo.customCategories.get('Viajes-Familia')?.label).toBe(
+        'Viajes en familia'
+      )
+      expect(repo.customCategories.has('viajes-familia')).toBe(false)
+
+      await removeCustomCategoryWithSync(repo, 'viajes-familia')
+      expect(listCustomCategories()).toEqual([])
+      expect(repo.customCategories.get('Viajes-Familia')?.isArchived).toBe(true)
+    })
+
     it('saves the isIgnored flag on add and update', async () => {
       const created = await addCustomCategoryWithSync(repo, {
         label: 'Reembolsos',

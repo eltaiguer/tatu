@@ -177,15 +177,13 @@ export function Categories({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [transactions, homeCurrency, fxRate, categoriesVersion]
   )
-  const definedIds = new Set(
-    categoryDefinitions.map((cat) => normalizeCategoryId(cat.id))
-  )
   // Transactions can keep a category whose definition was deleted; Resumen
   // still counts them, so they get a card too (no edit/delete), drawn the
   // way every other surface draws that id.
   const orphanCards = Array.from(spending.keys())
-    .filter((id) => !definedIds.has(id))
-    .map((id) => ({ ...resolveCategory(id), isOrphan: true }))
+    .map((id) => resolveCategory(id))
+    .filter((category) => !category.known)
+    .map((category) => ({ ...category, isOrphan: true }))
   const categoryCards = [
     ...categoryDefinitions.map((cat) => ({ ...cat, isOrphan: false })),
     ...orphanCards,

@@ -24,7 +24,7 @@ and every predicate that decides which rows count.
   owns it, so a number the user clicks equals the sum of the rows it opens:
   `countsAsRow` (every row except a split parent — lists and row counts),
   `countsTowardTotals` (a row whose category isn't ignored per
-  `resolveCategory(id).isIgnored`, which includes the transfer categories),
+  `isCategoryIgnored` = `resolveCategory(id).isIgnored`, which includes the transfer categories),
   `isCountedExpense` / `isCountedIncome` (the same, by `type`) and
   `sumCountedTotals` (income, expense and net in the home currency). Callers
   never re-derive this from `isSplitParent` or `resolveCategory(id).isIgnored`; a new

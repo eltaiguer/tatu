@@ -417,15 +417,20 @@ is this category?" for every surface — badge, row icon, filter chips, donut,
 "Mayores comercios", "Qué cambió", Categorías cards, CSV export and totals
 (`isIgnored`). Its `id` always equals `normalizeCategoryId(id)`, the key rows
 are grouped and filtered under, so a label never disagrees with the group it
-labels.
+labels. `getCategoryDefinitions()` (the pickable list) is built from the same
+resolved rows and lists the same lowercase ids, so a custom category stored
+with mixed case is found case-insensitively by the category store and saved
+back under its stored id. The one ignore rule lives in the registry;
+`isCategoryIgnored(id)` is its allocation-free form for the per-row totals
+path. Empty icons fall back to the built-in (or 🏷️) icon.
 
-| Stored id                                   | Resolves to                                                                                                    |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| missing, `''`                               | Sin categoría (and follows its ignore flag, like a row stored as `uncategorized`)                              |
-| built-in, any casing, or a pre-rename alias | the current built-in, with the user's label / colour / icon / ignore override if any                           |
-| a loaded custom category                    | its stored name, colour, icon and ignore flag                                                                  |
-| `ignored` (written by "Ignorar")            | "Ignorada", always left out of totals (unless a custom row overrides it)                                       |
-| anything else (usually a deleted category)  | itself: label derived from the id, neutral colour, 🏷️, counted in totals, `known: false` — never Sin categoría |
+| Stored id                                   | Resolves to                                                                                                                 |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| missing, `''`                               | Sin categoría (and follows its ignore flag, like a row stored as `uncategorized`)                                           |
+| built-in, any casing, or a pre-rename alias | the current built-in, with the user's label / colour / icon / ignore override if any                                        |
+| a loaded custom category                    | its stored name, colour, icon and ignore flag                                                                               |
+| `ignored` (written by "Ignorar")            | "Ignorada", left out of totals; a legacy custom row keyed `ignored` supplies its label and can only un-ignore it explicitly |
+| anything else (usually a deleted category)  | itself: label derived from the id, neutral colour, 🏷️, counted in totals, `known: false` — never Sin categoría              |
 
 Deleting a custom category archives its row and stops loading it, so the
 stored name of a deleted category is not available; its rows keep the id and
@@ -437,12 +442,12 @@ take the last line of the table everywhere.
 clicks equals the sum of the rows it opens. Callers never re-derive it from
 `isSplitParent` or `resolveCategory(id).isIgnored`; a new exclusion is added there.
 
-| Predicate                              | True for                                                                                                                                     | Used by                                                                                                                                                         |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `countsAsRow`                          | Every row except a split parent (an inert container its parts stand for). Ignored-category rows still count as rows.                         | Lists and row counts: `filterTransactions`, Categorías counts and rule matches, the "Sin categoría" badge, `needsCategoryReview`, "Qué cambió" account coverage |
-| `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`resolveCategory(id).isIgnored`: transfers, the `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                        |
-| `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                               | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                            |
-| `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                           | The Transacciones totals strip, each month of `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`                                                         |
+| Predicate                              | True for                                                                                                                                                                            | Used by                                                                                                                                                         |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `countsAsRow`                          | Every row except a split parent (an inert container its parts stand for). Ignored-category rows still count as rows.                                                                | Lists and row counts: `filterTransactions`, Categorías counts and rule matches, the "Sin categoría" badge, `needsCategoryReview`, "Qué cambió" account coverage |
+| `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`isCategoryIgnored`, the cheap form of `resolveCategory(id).isIgnored`: transfers, the `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                        |
+| `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                                                                      | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                            |
+| `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                                                                  | The Transacciones totals strip, each month of `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`                                                         |
 
 ## Merchant key
 

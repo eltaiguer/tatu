@@ -4,7 +4,11 @@ import {
   replaceCustomCategories,
   type CustomCategory,
 } from './category-store'
-import { getCategoryDefinitions, resolveCategory } from './category-registry'
+import {
+  getCategoryDefinitions,
+  isCategoryIgnored,
+  resolveCategory,
+} from './category-registry'
 import { normalizeCategoryId } from './category-aliases'
 import { Category } from '../../models'
 
@@ -376,11 +380,93 @@ describe('resolveCategory', () => {
         isIgnored: false,
       },
       { id: 'cafe', label: 'Café', color: '#123456', isIgnored: true },
+      // Stored before slugs were lowercased.
+      { id: 'Viajes-Familia', label: 'Viajes', color: '#654321' },
     ])
 
-    for (const def of getCategoryDefinitions()) {
+    const defs = getCategoryDefinitions()
+    expect(defs.map((d) => d.id)).toContain('viajes-familia')
+    for (const def of defs) {
       expect(resolveCategory(def.id)).toEqual(def)
+      expect(resolveCategory(def.id.toUpperCase())).toEqual(def)
     }
+  })
+
+  it('falls back to the built-in icon when an override stores an empty one', () => {
+    loadCustom([
+      { id: Category.Groceries, label: 'Comida', color: '#f00', icon: '' },
+      { id: 'cafe', label: 'Café', color: '#123456', icon: '' },
+    ])
+
+    expect(resolveCategory(Category.Groceries).icon).toBe('🛒')
+    expect(resolveCategory('cafe').icon).toBe('🏷️')
+    for (const def of getCategoryDefinitions()) {
+      expect(def.icon).not.toBe('')
+    }
+  })
+})
+
+describe('isCategoryIgnored (the cheap form of resolveCategory(id).isIgnored)', () => {
+  it('agrees with resolveCategory for every kind of id', () => {
+    const ids = [
+      undefined,
+      null,
+      '',
+      'groceries',
+      'transfer',
+      'Internal_Transfer',
+      'ignored',
+      'IGNORED',
+      'cafe',
+      'reintegros',
+      'home_office',
+    ]
+    const stores: CustomCategory[][] = [
+      [],
+      [
+        { id: 'cafe', label: 'Café', color: '#123456' },
+        {
+          id: 'reintegros',
+          label: 'Reintegros',
+          color: '#f00',
+          isIgnored: true,
+        },
+        { id: 'transfer', label: 'Transf', color: '#f00', isIgnored: false },
+        { id: 'ignored', label: 'Ignorados', color: '#f00' },
+        {
+          id: Category.Uncategorized,
+          label: 'Sin categoría',
+          color: '#94a3b8',
+          isIgnored: true,
+        },
+      ],
+    ]
+    for (const rows of stores) {
+      loadCustom(rows)
+      for (const id of ids) {
+        expect(isCategoryIgnored(id)).toBe(resolveCategory(id).isIgnored)
+      }
+    }
+    expect(isCategoryIgnored('ignored')).toBe(true)
+    expect(isCategoryIgnored('reintegros')).toBe(true)
+    expect(isCategoryIgnored('transfer')).toBe(false)
+  })
+})
+
+describe("a legacy custom row keyed 'ignored'", () => {
+  it('keeps Ignorar rows out of totals unless the row says otherwise', () => {
+    // Rows written before 'ignored' was reserved: with no recorded flag they
+    // must not let "Ignorar" rows back into totals.
+    loadCustom([{ id: 'ignored', label: 'Ignorados', color: '#f00' }])
+    expect(resolveCategory('ignored')).toMatchObject({
+      label: 'Ignorados',
+      isIgnored: true,
+    })
+
+    loadCustom([
+      { id: 'ignored', label: 'Ignorados', color: '#f00', isIgnored: false },
+    ])
+    expect(resolveCategory('ignored').isIgnored).toBe(false)
   })
 })
 

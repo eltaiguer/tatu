@@ -75,8 +75,16 @@ function isBuiltinId(id: string): id is Category {
   return BUILTIN_IDS.has(id)
 }
 
-function isTransferCategoryId(id: string): boolean {
-  return id === Category.InternalTransfer || id === Category.ExternalTransfer
+// THE ignore rule, for every id: the user's choice if a row records one,
+// else ignored by default for the transfer categories and the 'ignored' id
+// that "Ignorar" writes. resolveCategory and isCategoryIgnored both use it.
+function ignoredFor(key: string, row: CustomCategory | undefined): boolean {
+  return (
+    row?.isIgnored ??
+    (key === Category.InternalTransfer ||
+      key === Category.ExternalTransfer ||
+      key === LEGACY_IGNORED_ID)
+  )
 }
 
 function builtinDefinition(
@@ -85,23 +93,23 @@ function builtinDefinition(
 ): CategoryDefinition {
   return {
     id: category,
-    label: override?.label ?? CATEGORY_LABELS[category],
-    color: override?.color ?? CATEGORY_COLORS[category],
-    icon: override?.icon ?? CATEGORY_ICONS[category],
+    label: override?.label || CATEGORY_LABELS[category],
+    color: override?.color || CATEGORY_COLORS[category],
+    icon: override?.icon || CATEGORY_ICONS[category],
     isCustom: false,
-    isIgnored: override?.isIgnored ?? isTransferCategoryId(category),
+    isIgnored: ignoredFor(category, override),
     known: true,
   }
 }
 
-function customDefinition(id: string, c: CustomCategory): CategoryDefinition {
+function customDefinition(key: string, c: CustomCategory): CategoryDefinition {
   return {
-    id,
+    id: key,
     label: c.label,
     color: c.color,
     icon: c.icon || DEFAULT_CUSTOM_ICON,
     isCustom: true,
-    isIgnored: c.isIgnored ?? false,
+    isIgnored: ignoredFor(key, c),
     known: true,
   }
 }
@@ -127,17 +135,17 @@ function humanizeCategoryId(categoryId: string): string {
 /**
  * What a stored category id means, for every surface (badges, rows, filters,
  * donut, export, totals). Missing or '' is Sin categoría; casing is ignored;
- * pre-rename ids resolve to their current built-in. The legacy 'ignored' id
+ * pre-rename ids resolve to their current built-in. The 'ignored' id
  * ("Ignorar") is "Ignorada", left out of totals. Any other id with no
  * definition — usually a deleted custom category — stays its own category,
  * labelled from its id, counted in totals, and is never Sin categoría.
  */
 export function resolveCategory(id?: string | null): CategoryDefinition {
   const key = normalizeCategoryId(id)
-  const override = resolvedOverrides(listCustomCategories()).get(key)
+  const row = resolvedOverrides(listCustomCategories()).get(key)
 
-  if (isBuiltinId(key)) return builtinDefinition(key, override)
-  if (override) return customDefinition(key, override)
+  if (isBuiltinId(key)) return builtinDefinition(key, row)
+  if (row) return customDefinition(key, row)
 
   if (key === LEGACY_IGNORED_ID) {
     return {
@@ -146,7 +154,7 @@ export function resolveCategory(id?: string | null): CategoryDefinition {
       color: CATEGORY_COLORS[Category.Uncategorized],
       icon: '🚫',
       isCustom: false,
-      isIgnored: true,
+      isIgnored: ignoredFor(key, undefined),
       known: true,
     }
   }
@@ -157,33 +165,46 @@ export function resolveCategory(id?: string | null): CategoryDefinition {
     color: CATEGORY_COLORS[Category.Uncategorized],
     icon: DEFAULT_CUSTOM_ICON,
     isCustom: false,
-    isIgnored: false,
+    isIgnored: ignoredFor(key, undefined),
     known: false,
   }
 }
 
-/** The categories a user can pick: every built-in, then their own. */
+/**
+ * `resolveCategory(id).isIgnored` without building the definition — for the
+ * per-row totals hot path (spending-rules). Same rule, same lookup.
+ */
+export function isCategoryIgnored(id?: string | null): boolean {
+  const key = normalizeCategoryId(id)
+  return ignoredFor(key, resolvedOverrides(listCustomCategories()).get(key))
+}
+
+/**
+ * The categories a user can pick: every built-in, then their own. Built from
+ * the same resolved rows as resolveCategory, so each entry equals
+ * resolveCategory(entry.id) — ids are normalized (lowercase) here too.
+ */
 export function getCategoryDefinitions(): CategoryDefinition[] {
-  const customList = listCustomCategories()
-  const overrideMap = resolvedOverrides(customList)
+  const overrideMap = resolvedOverrides(listCustomCategories())
 
   const builtin = Object.values(Category).map((category) =>
     builtinDefinition(category, overrideMap.get(category))
   )
-
-  const seenCustomIds = new Set<string>()
-  const custom = customList
-    .filter((c) => {
-      if (isBuiltinId(resolveBuiltinAlias(c.id.toLowerCase()))) return false
-      if (seenCustomIds.has(c.id)) return false
-      seenCustomIds.add(c.id)
-      return true
-    })
-    .map((c) => customDefinition(c.id, c))
+  const custom = Array.from(overrideMap)
+    .filter(([key]) => !isBuiltinId(key))
+    .map(([key, row]) => customDefinition(key, row))
 
   return [...builtin, ...custom].sort((a, b) => {
     if (a.id === Category.Uncategorized) return 1
     if (b.id === Category.Uncategorized) return -1
     return a.label.localeCompare(b.label, 'es')
   })
+}
+
+/** Category ids in Spanish label order, resolving each id once. */
+export function sortCategoryIdsByLabel(ids: string[]): string[] {
+  const labels = new Map(ids.map((id) => [id, resolveCategory(id).label]))
+  return [...ids].sort((a, b) =>
+    (labels.get(a) ?? a).localeCompare(labels.get(b) ?? b, 'es')
+  )
 }

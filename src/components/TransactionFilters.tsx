@@ -182,11 +182,10 @@ export function TransactionFilters({
   const minAmountId = useId()
   const maxAmountId = useId()
 
-  const categoryOptions = availableCategories.map((cat) => ({
-    value: cat,
-    label: resolveCategory(cat).label,
-    color: resolveCategory(cat).color,
-  }))
+  const categoryOptions = availableCategories.map((cat) => {
+    const { label, color } = resolveCategory(cat)
+    return { value: cat, label, color }
+  })
 
   const amountActive = Boolean(minAmount) || Boolean(maxAmount)
 

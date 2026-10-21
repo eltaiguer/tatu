@@ -146,10 +146,8 @@ export function AiCategorizationPreview({
 
       // Step 4: build rows
       const built: PreviewRow[] = sample.map((tx) => {
-        const ruleCat = resolveCategory(
-          ruleResults.get(tx.id)?.category ?? 'uncategorized'
-        ).id
-        const storedCat = resolveCategory(tx.category ?? 'uncategorized').id
+        const ruleCat = resolveCategory(ruleResults.get(tx.id)?.category).id
+        const storedCat = resolveCategory(tx.category).id
         const aiResult = aiResults.get(tx.id)
 
         let finalCategory: string

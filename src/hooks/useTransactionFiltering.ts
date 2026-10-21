@@ -4,7 +4,7 @@ import {
   countsAsRow,
 } from '../services/spending/spending-rules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
-import { resolveCategory } from '../services/categories/category-registry'
+import { sortCategoryIdsByLabel } from '../services/categories/category-registry'
 import { todayAsUtcDate } from '../utils/date-utils'
 import type { Transaction } from '../models'
 import {
@@ -169,14 +169,14 @@ export function useTransactionFiltering({
 
   const availableCategories = useMemo(
     () =>
-      Array.from(
-        new Set(
-          transactions
-            .filter(countsAsRow)
-            .map((tx) => normalizeCategoryId(tx.category))
+      sortCategoryIdsByLabel(
+        Array.from(
+          new Set(
+            transactions
+              .filter(countsAsRow)
+              .map((tx) => normalizeCategoryId(tx.category))
+          )
         )
-      ).sort((a, b) =>
-        resolveCategory(a).label.localeCompare(resolveCategory(b).label, 'es')
       ),
     [transactions]
   )

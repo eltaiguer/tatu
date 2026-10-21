@@ -3,7 +3,10 @@
 // the custom-category registry.
 import { Category } from '../../models'
 import { listCustomCategories } from '../categories/category-store'
-import { resolveCategory } from '../categories/category-registry'
+import {
+  resolveCategory,
+  sortCategoryIdsByLabel,
+} from '../categories/category-registry'
 
 function uniqueTrimmed(values: Iterable<string>): string[] {
   return Array.from(
@@ -18,12 +21,12 @@ function uniqueTrimmed(values: Iterable<string>): string[] {
 // Every built-in and custom category, plus `extra` ids (e.g. a row's
 // legacy category), sorted by Spanish label.
 export function buildCategorySuggestions(extra: string[] = []): string[] {
-  return uniqueTrimmed([
-    ...Object.values(Category),
-    ...listCustomCategories().map((category) => category.id),
-    ...extra,
-  ]).sort((a, b) =>
-    resolveCategory(a).label.localeCompare(resolveCategory(b).label, 'es')
+  return sortCategoryIdsByLabel(
+    uniqueTrimmed([
+      ...Object.values(Category),
+      ...listCustomCategories().map((category) => category.id),
+      ...extra,
+    ])
   )
 }
 

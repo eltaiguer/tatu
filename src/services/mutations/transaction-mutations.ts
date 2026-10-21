@@ -35,7 +35,7 @@ import {
 import { buildDescriptionOverrideKey } from '../descriptions/normalization'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { LOW_CONFIDENCE, effectiveConfidence } from '../categorizer/confidence'
-import { resolveCategory } from '../categories/category-registry'
+import { isCategoryIgnored } from '../categories/category-registry'
 import {
   clearDescriptionOverride,
   getDescriptionOverride,
@@ -999,7 +999,7 @@ export async function autoCategorize(
     })
   }
   for (const t of all) {
-    if (isUncategorized(t) || resolveCategory(t.category).isIgnored) continue
+    if (isUncategorized(t) || isCategoryIgnored(t.category)) continue
     const confidence = effectiveConfidence(t)
     if (confidence < LOW_CONFIDENCE) continue
     const key = normalizeMerchantName(t.description)

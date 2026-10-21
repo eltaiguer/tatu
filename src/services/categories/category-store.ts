@@ -46,6 +46,21 @@ function ensureUniqueId(base: string, existingIds: Set<string>): string {
   return `${base}-${suffix}`
 }
 
+// Category ids are case-insensitive everywhere (resolveCategory and
+// getCategoryDefinitions hand out lowercase ids), but rows stored before
+// slugs were lowercased keep their stored casing on the server: find them by
+// either, and always write back under the stored id.
+function sameId(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase()
+}
+
+function findCustomCategory(id: string): CustomCategory | undefined {
+  return (
+    _customCategories.find((c) => c.id === id) ??
+    _customCategories.find((c) => sameId(c.id, id))
+  )
+}
+
 export function listCustomCategories(): CustomCategory[] {
   return _customCategories
 }
@@ -85,13 +100,16 @@ export function updateCustomCategory(
     Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
   >
 ): void {
+  const target = findCustomCategory(id)
+  if (!target) return
   _customCategories = _customCategories.map((c) =>
-    c.id === id ? { ...c, ...updates } : c
+    c === target ? { ...c, ...updates } : c
   )
 }
 
 export function removeCustomCategory(id: string): void {
-  _customCategories = _customCategories.filter((c) => c.id !== id)
+  const target = findCustomCategory(id)
+  _customCategories = _customCategories.filter((c) => c !== target)
 }
 
 // The *WithSync functions save through the repository they are given (the
@@ -168,13 +186,13 @@ export async function updateCustomCategoryWithSync(
   >
 ): Promise<void> {
   requireOwner(repo)
-  const previous = _customCategories.find((c) => c.id === id)
+  const previous = findCustomCategory(id)
   if (!previous) return
-  updateCustomCategory(id, updates)
+  updateCustomCategory(previous.id, updates)
   try {
-    await pushCategory(repo, id)
+    await pushCategory(repo, previous.id)
   } catch (error) {
-    restoreCategory(repo, id, previous)
+    restoreCategory(repo, previous.id, previous)
     throw error
   }
 }
@@ -226,12 +244,13 @@ export async function removeCustomCategoryWithSync(
   id: string
 ): Promise<void> {
   requireOwner(repo)
-  const previous = _customCategories.find((c) => c.id === id)
-  removeCustomCategory(id)
+  const previous = findCustomCategory(id)
+  const storedId = previous?.id ?? id
+  removeCustomCategory(storedId)
   try {
-    await repo.archiveCustomCategory(id)
+    await repo.archiveCustomCategory(storedId)
   } catch (error) {
-    restoreCategory(repo, id, previous)
+    restoreCategory(repo, storedId, previous)
     throw error
   }
 }
