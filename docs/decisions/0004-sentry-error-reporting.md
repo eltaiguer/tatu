@@ -47,11 +47,15 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
 - **Report only bugs.** `UserFacingError` and `NeedsConfirmationError`, and
   their subclasses (`PartialWriteError`, `WorkspaceChangedError`), are
   dropped: they carry `explained: true`. So are chunk-load and network
-  failures, which the app already recovers from. An AI failure caused by the
-  user's key, quota or an Anthropic outage is not reported; a JavaScript
-  engine error (`TypeError`, `SyntaxError`, …) always is, whatever its
-  message says. A partial AI failure reports its first batch error the same
-  way.
+  failures, which the app already recovers from. AI failures are classified
+  once, by the Claude client (`services/ai/claude-client.ts`), from the SDK
+  error's class, `status` and `type` (the message only tells no credit from
+  other 400s): a bad key, rate limit, no credit, outage, lost connection,
+  truncated or refused answer and a stale SDK chunk become an `AiError` and
+  are not reported; a malformed answer (`bad_response`) and anything the
+  client did not explain — a JavaScript engine error (`TypeError`,
+  `SyntaxError`, …), a 400/404 for a malformed request — are. A partial AI
+  failure reports its first bug the same way.
 - **One report per failure.** `userErrorMessage` reports any error it did not
   write itself. Sites that log an error and do not pass it to
   `userErrorMessage` call `captureError(error, area)` with an `area` tag

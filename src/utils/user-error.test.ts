@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureError } from '../services/monitoring/error-reporting'
+import { AiError } from '../services/ai/ai-error'
 import {
   UserFacingError,
   aiErrorMessage,
+  aiPartialFailureMessage,
   isUnexpectedAiError,
   userErrorMessage,
 } from './user-error'
@@ -100,108 +102,90 @@ describe('userErrorMessage', () => {
 })
 
 describe('aiErrorMessage', () => {
-  it('turns SDK errors into Spanish the user can act on', () => {
-    expect(aiErrorMessage('401 invalid x-api-key')).toBe(
+  it('shows what the Claude client says about a failure it understands', () => {
+    expect(aiErrorMessage(new AiError('auth'))).toBe(
       'la clave API de Anthropic no es válida'
     )
-    expect(aiErrorMessage('429 rate_limit_error')).toMatch(/límite/)
-    expect(aiErrorMessage('529 Overloaded')).toMatch(/no está disponible/)
+    expect(aiErrorMessage(new AiError('rate_limit'))).toBe(
+      'se alcanzó el límite de uso de la API'
+    )
+    expect(aiErrorMessage(new AiError('billing'))).toBe(
+      'la cuenta de Anthropic no tiene saldo'
+    )
+    expect(aiErrorMessage(new AiError('unavailable'))).toBe(
+      'el servicio de IA no está disponible en este momento'
+    )
+    expect(aiErrorMessage(new AiError('network'))).toBe(
+      'sin conexión con Anthropic'
+    )
+    expect(aiErrorMessage(new AiError('stale_chunk'))).toBe(
+      'la app se actualizó; recargá la página'
+    )
+    expect(aiErrorMessage(new AiError('truncated'))).toBe(
+      'La respuesta del modelo quedó truncada (límite de tokens alcanzado).'
+    )
+    const refusal = 'El modelo rechazó la solicitud (cyber).'
+    expect(aiErrorMessage(new AiError('refused', refusal))).toBe(refusal)
+  })
+
+  it('never shows the text of a failure it does not understand', () => {
+    // A code bug, or an SDK error the client could not classify.
+    expect(aiErrorMessage(new TypeError('x is undefined'))).toBe(
+      'error inesperado del servicio de IA'
+    )
+    expect(aiErrorMessage(new Error('404 {"type":"not_found_error"}'))).toBe(
+      'error inesperado del servicio de IA'
+    )
     expect(aiErrorMessage('something odd')).toBe(
       'error inesperado del servicio de IA'
     )
   })
+})
 
-  it('asks for a reload when the on-demand SDK chunk is gone after a deploy', () => {
-    // Chrome / Firefox and Safari wordings
-    expect(
-      aiErrorMessage(
-        'Failed to fetch dynamically imported module: https://x/assets/index-abc.js'
-      )
-    ).toBe('la app se actualizó; recargá la página')
-    expect(aiErrorMessage('Importing a module script failed.')).toBe(
-      'la app se actualizó; recargá la página'
-    )
-    expect(aiErrorMessage('TypeError: Failed to fetch')).toBe(
-      'sin conexión con Anthropic'
-    )
-  })
-
+describe('aiPartialFailureMessage', () => {
   it('keeps how many batches failed, so partial never reads as total', () => {
-    expect(aiErrorMessage('1 de 12 lotes fallaron: 529 Overloaded')).toBe(
+    expect(aiPartialFailureMessage(1, 12, new AiError('unavailable'))).toBe(
       '1 de 12 lotes fallaron (el servicio de IA no está disponible en este momento)'
     )
   })
 
-  it("passes the app's own Spanish messages through", () => {
-    const msg =
-      'La respuesta del modelo quedó truncada (límite de tokens alcanzado).'
-    expect(aiErrorMessage(msg)).toBe(msg)
+  it('does not show the text of a bug behind a partial failure', () => {
+    expect(aiPartialFailureMessage(2, 3, new TypeError('x is undefined'))).toBe(
+      '2 de 3 lotes fallaron (error inesperado del servicio de IA)'
+    )
   })
 })
 
 describe('isUnexpectedAiError', () => {
-  it('is false for problems with the key, quota, credit or service', () => {
-    expect(isUnexpectedAiError('401 invalid x-api-key')).toBe(false)
-    expect(isUnexpectedAiError('429 rate_limit_error')).toBe(false)
-    expect(isUnexpectedAiError('400 credit balance is too low')).toBe(false)
-    expect(isUnexpectedAiError('529 overloaded')).toBe(false)
-    expect(isUnexpectedAiError('Failed to fetch')).toBe(false)
+  it('is false for the key, quota, credit, service, connection or a deploy', () => {
+    for (const kind of [
+      'auth',
+      'rate_limit',
+      'billing',
+      'unavailable',
+      'network',
+      'stale_chunk',
+    ] as const) {
+      expect(isUnexpectedAiError(new AiError(kind))).toBe(false)
+    }
   })
 
-  it("is true for unknown failures and the app's own errors", () => {
-    expect(isUnexpectedAiError('Cannot read properties of undefined')).toBe(
-      true
-    )
-    expect(
-      isUnexpectedAiError('Respuesta inesperada del modelo (tipo: tool_use)')
-    ).toBe(true)
+  it('is false for a truncated or refused answer, which depends on the data', () => {
+    expect(isUnexpectedAiError(new AiError('truncated'))).toBe(false)
+    expect(isUnexpectedAiError(new AiError('refused'))).toBe(false)
   })
 
-  it('treats a timed-out or aborted request as a connection problem', () => {
-    expect(aiErrorMessage('Request timed out.')).toBe(
-      'sin conexión con Anthropic'
-    )
-    expect(isUnexpectedAiError(new Error('Request timed out.'))).toBe(false)
-    expect(isUnexpectedAiError(new Error('Request was aborted.'))).toBe(false)
+  it('is true for an answer that is not in the shape asked for', () => {
+    expect(isUnexpectedAiError(new AiError('bad_response'))).toBe(true)
   })
 
-  it('does not read status codes inside ids or longer numbers', () => {
+  it('is true for anything the Claude client did not explain', () => {
+    expect(isUnexpectedAiError(new Error('boom'))).toBe(true)
     expect(
       isUnexpectedAiError(
         new Error('400 invalid_request_error {"request_id":"req_011C501abc"}')
       )
     ).toBe(true)
-  })
-
-  it('does not report a chunk that failed to load after a deploy', () => {
-    expect(
-      isUnexpectedAiError(
-        new TypeError(
-          'Failed to fetch dynamically imported module: https://tatu.app/assets/sdk.js'
-        )
-      )
-    ).toBe(false)
-  })
-
-  it('does not report a truncated response, which the user can act on', () => {
-    expect(
-      isUnexpectedAiError(
-        new Error(
-          'La respuesta del modelo quedó truncada (límite de tokens alcanzado). Probá importar menos transacciones.'
-        )
-      )
-    ).toBe(false)
-  })
-
-  it('shows and does not report a model refusal', () => {
-    const refusal = 'El modelo rechazó la solicitud (cyber).'
-    expect(aiErrorMessage(refusal)).toBe(refusal)
-    expect(isUnexpectedAiError(new Error(refusal))).toBe(false)
-  })
-
-  it('takes the error itself, not just its message', () => {
-    expect(isUnexpectedAiError(new Error('401 invalid x-api-key'))).toBe(false)
-    expect(isUnexpectedAiError(new Error('boom'))).toBe(true)
   })
 
   it('is true for a code bug even when its message looks like an outage', () => {
@@ -215,5 +199,16 @@ describe('isUnexpectedAiError', () => {
     expect(
       isUnexpectedAiError(new SyntaxError('Unexpected token at position 503'))
     ).toBe(true)
+  })
+
+  it('does not report a lost connection or a chunk gone after a deploy', () => {
+    expect(isUnexpectedAiError(new TypeError('Failed to fetch'))).toBe(false)
+    expect(
+      isUnexpectedAiError(
+        new TypeError(
+          'Failed to fetch dynamically imported module: https://tatu.app/assets/sdk.js'
+        )
+      )
+    ).toBe(false)
   })
 })

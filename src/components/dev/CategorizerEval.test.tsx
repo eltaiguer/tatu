@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CategorizerEval } from './CategorizerEval'
+import { AiError } from '../../services/ai/ai-error'
 import type { Transaction } from '../../models'
 import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
 
@@ -188,5 +189,59 @@ describe('CategorizerEval — Jev', () => {
     const row = await screen.findByTestId('eval-jev')
     expect(row.textContent).toContain('2 de 2')
     expect(row.textContent).toContain('100 %')
+  })
+})
+
+describe('CategorizerEval — failures', () => {
+  function renderEval() {
+    render(
+      <CategorizerEval
+        transactions={labelled()}
+        claudeApiKey="sk-test"
+        aiModel="claude-haiku"
+      />
+    )
+  }
+
+  it('says why a Claude run failed in Spanish', async () => {
+    claude.enrichTransactionsWithAi.mockRejectedValue(new AiError('billing'))
+    renderEval()
+
+    await userEvent.click(screen.getByRole('button', { name: /Evaluar IA/ }))
+
+    expect(
+      await screen.findByText(/la cuenta de Anthropic no tiene saldo/)
+    ).toBeInTheDocument()
+  })
+
+  it('never shows the raw text of an unexpected Claude failure', async () => {
+    claude.enrichTransactionsWithAi.mockRejectedValue(
+      new TypeError('x is undefined')
+    )
+    renderEval()
+
+    await userEvent.click(screen.getByRole('button', { name: /Evaluar IA/ }))
+
+    expect(
+      await screen.findByText(/error inesperado del servicio de IA/)
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/x is undefined/)).not.toBeInTheDocument()
+  })
+
+  it("keeps Jev's own explanation of an OpenRouter failure", async () => {
+    jev.classifyWithJev.mockRejectedValue(
+      new Error('Jev respondió 401: invalid key')
+    )
+    renderEval()
+
+    await userEvent.type(
+      screen.getByLabelText(/OpenRouter API key/),
+      'or-test-key'
+    )
+    await userEvent.click(screen.getByRole('button', { name: /Evaluar Jev/ }))
+
+    expect(
+      await screen.findByText(/Jev respondió 401: invalid key/)
+    ).toBeInTheDocument()
   })
 })

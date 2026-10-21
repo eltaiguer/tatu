@@ -14,6 +14,8 @@ import {
   classifyWithJev,
 } from '../../services/ai/jev-classifier'
 import { JEV_MODEL } from '../../services/ai/models'
+import { errorMessage } from '../../services/monitoring/error-reporting'
+import { aiErrorMessage } from '../../utils/user-error'
 import { getCategoryDefinition } from '../../services/categories/category-registry'
 import {
   labelledRows,
@@ -114,7 +116,13 @@ export function CategorizerEval({
   const [jevKey, setJevKey] = useState('')
   const [jev, setJev] = useState<EngineRun>(idle)
 
-  async function runEngine(set: (run: EngineRun) => void, classify: Classify) {
+  // Claude failures read as the rest of the app shows them; Jev's (an
+  // OpenRouter call, not Claude) are already written for this panel.
+  async function runEngine(
+    set: (run: EngineRun) => void,
+    classify: Classify,
+    describeError: (error: unknown) => string = aiErrorMessage
+  ) {
     set({ ...idle(), state: 'running' })
     try {
       const { predictions, partialFailure } = await classify(sample)
@@ -134,7 +142,7 @@ export function CategorizerEval({
       set({
         ...idle(),
         state: 'error',
-        error: e instanceof Error ? e.message : String(e),
+        error: describeError(e),
       })
     }
   }
@@ -168,17 +176,21 @@ export function CategorizerEval({
     })
 
   const handleJev = () =>
-    runEngine(setJev, async (s) => {
-      const { results, partialFailure } = await classifyWithJev(
-        toInputs(s),
-        { apiKey: jevKey, model: JEV_MODEL },
-        listCustomCategories()
-      )
-      return {
-        predictions: new Map([...results].map(([id, r]) => [id, r.category])),
-        partialFailure,
-      }
-    })
+    runEngine(
+      setJev,
+      async (s) => {
+        const { results, partialFailure } = await classifyWithJev(
+          toInputs(s),
+          { apiKey: jevKey, model: JEV_MODEL },
+          listCustomCategories()
+        )
+        return {
+          predictions: new Map([...results].map(([id, r]) => [id, r.category])),
+          partialFailure,
+        }
+      },
+      errorMessage
+    )
 
   const engines: Array<{ key: string; name: string; run: EngineRun }> = [
     { key: 'rules', name: 'Reglas', run: rules },

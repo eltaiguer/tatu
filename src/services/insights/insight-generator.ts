@@ -1,7 +1,12 @@
 import type { Currency } from '../../models'
 import type { InsightInput } from './insight-data'
 import { INSIGHTS_MODEL } from '../ai/models'
-import { firstTextBlock } from '../ai/text-block'
+import { AiError } from '../ai/ai-error'
+import {
+  createClaudeClient,
+  parseModelJson,
+  type ClaudeClient,
+} from '../ai/claude-client'
 import {
   buildInsightSystemPrompt,
   buildInsightUserMessage,
@@ -126,20 +131,16 @@ export function parseInsightsResponse(
   text: string,
   input: InsightInput
 ): InsightsResult {
-  let parsed: { insights?: unknown[] }
-  try {
-    const raw = text.trim()
-    const jsonText = raw.startsWith('{')
-      ? raw
-      : (raw.match(/\{[\s\S]*\}/)?.[0] ?? raw)
-    parsed = JSON.parse(jsonText) as typeof parsed
-  } catch (e) {
-    throw new Error(
-      `No se pudo parsear la respuesta del modelo: ${e instanceof Error ? e.message : String(e)}`
+  const parsed = parseModelJson(text, 'object')
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new AiError(
+      'bad_response',
+      'Respuesta inesperada del modelo (no es un objeto).'
     )
   }
+  const { insights: rawList } = parsed as { insights?: unknown }
 
-  const rawInsights = Array.isArray(parsed.insights) ? parsed.insights : []
+  const rawInsights = Array.isArray(rawList) ? rawList : []
   const insights = rawInsights
     .map((item) => sanitizeInsight(item, input))
     .filter((i): i is Insight => i !== null)
@@ -147,27 +148,22 @@ export function parseInsightsResponse(
   return { insights }
 }
 
+/** `client` is the real Claude client unless a test hands in a fake. */
 export async function generateInsights(
   input: InsightInput,
-  apiKey: string
+  apiKey: string,
+  client: ClaudeClient = createClaudeClient(apiKey)
 ): Promise<InsightsResult> {
-  // Loaded on demand so the SDK stays out of the startup bundle (#62).
-  const { default: Anthropic } = await import('@anthropic-ai/sdk')
-  const client = new Anthropic({
-    apiKey,
-    dangerouslyAllowBrowser: true,
-  })
-
   // Opus 5.5 thinks before answering and the thinking is billed against
   // max_tokens, so the cap leaves room for both; medium effort is the
   // model's default, set explicitly so a default change cannot move it.
-  const response = await client.messages.create({
+  const text = await client.complete({
     model: INSIGHTS_MODEL,
-    max_tokens: 16000,
-    output_config: { effort: 'medium' },
     system: buildInsightSystemPrompt(),
-    messages: [{ role: 'user', content: buildInsightUserMessage(input) }],
+    user: buildInsightUserMessage(input),
+    maxTokens: 16000,
+    effort: 'medium',
   })
 
-  return parseInsightsResponse(firstTextBlock(response), input)
+  return parseInsightsResponse(text, input)
 }

@@ -1,7 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { AiCategorizationPreview } from './AiCategorizationPreview'
+import { AiError } from '../../services/ai/ai-error'
 import type { Transaction } from '../../models'
+
+const ai = vi.hoisted(() => ({ enrichTransactionsWithAi: vi.fn() }))
+vi.mock('../../services/ai/transaction-ai', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../services/ai/transaction-ai')
+  >()),
+  enrichTransactionsWithAi: ai.enrichTransactionsWithAi,
+}))
 
 function at(id: string, iso: string): Transaction {
   return {
@@ -41,5 +50,26 @@ describe('AiCategorizationPreview', () => {
     )
 
     expect(screen.getByText(/^2 transacciones de marzo/)).toBeTruthy()
+  })
+
+  it('says why the preview failed in Spanish', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 3, 15, 12))
+    ai.enrichTransactionsWithAi.mockRejectedValue(new AiError('auth'))
+
+    render(
+      <AiCategorizationPreview
+        transactions={[at('mar-1', '2026-03-01T00:00:00.000Z')]}
+        claudeApiKey="sk-test"
+        aiModel="claude-haiku"
+      />
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ejecutar preview de IA' })
+    )
+
+    expect(
+      await screen.findByText('la clave API de Anthropic no es válida')
+    ).toBeInTheDocument()
   })
 })

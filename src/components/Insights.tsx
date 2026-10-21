@@ -34,7 +34,6 @@ import {
   reportAiError,
   userErrorMessage,
 } from '../utils/user-error'
-import { errorMessage } from '../services/monitoring/error-reporting'
 
 interface InsightsProps {
   transactions: Transaction[]
@@ -173,9 +172,7 @@ export function Insights({
     } catch (e) {
       if (step === 'generate') {
         reportAiError(e, 'insights')
-        setError(
-          `No se pudieron generar los insights: ${aiErrorMessage(errorMessage(e))}`
-        )
+        setError(`No se pudieron generar los insights: ${aiErrorMessage(e)}`)
       } else {
         setError(
           userErrorMessage(e, 'No se pudieron guardar los insights', 'insights')

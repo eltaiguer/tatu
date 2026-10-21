@@ -3,10 +3,19 @@ import type { Transaction } from '../../models'
 import type { CustomCategory } from '../categories/category-store'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { AiConfig } from './ai-config'
-import { firstTextBlock, type ClaudeResponseLike } from './text-block'
+import { AiError } from './ai-error'
+import {
+  createClaudeClient,
+  parseModelJson,
+  type ClaudeClient,
+  type ClaudeRequest,
+} from './claude-client'
 import { resolveBuiltinAlias } from '../categories/category-aliases'
 import { captureError, errorMessage } from '../monitoring/error-reporting'
-import { isUnexpectedAiError } from '../../utils/user-error'
+import {
+  aiPartialFailureMessage,
+  isUnexpectedAiError,
+} from '../../utils/user-error'
 
 export interface AiEnrichmentInput {
   id: string
@@ -213,47 +222,28 @@ export function applyAiEnrichment(
   })
 }
 
-type AiEnrichmentBatchResponse = ClaudeResponseLike
-
-/** Parses one batch response into results, or throws a diagnosable error. */
+/** Parses one batch's answer into results, or throws an `AiError`. */
 function parseBatchResponse(
-  response: AiEnrichmentBatchResponse,
+  text: string,
   inputs: AiEnrichmentInput[],
   context: AiCorrectionContext
 ): AiEnrichmentResult[] {
-  // A response cut off at max_tokens leaves invalid JSON behind. Saying so
-  // beats letting JSON.parse fail on the fragment with an opaque message.
-  if (response.stop_reason === 'max_tokens') {
-    throw new Error(
-      'La respuesta del modelo quedó truncada (límite de tokens alcanzado). ' +
-        'Probá importar menos transacciones a la vez.'
-    )
-  }
-
-  const text = firstTextBlock(response)
-
-  let parsed: Array<{
-    id: string
-    displayDescription: string
-    category: string
-    confidence?: number
-  }>
-  try {
-    // Claude occasionally wraps output in markdown fences despite instructions
-    const raw = text.trim()
-    const jsonText = raw.startsWith('[')
-      ? raw
-      : (raw.match(/\[[\s\S]*\]/)?.[0] ?? raw)
-    parsed = JSON.parse(jsonText) as typeof parsed
-  } catch (e) {
-    throw new Error(
-      `No se pudo parsear la respuesta del modelo: ${e instanceof Error ? e.message : String(e)}`
+  const parsed = parseModelJson(text, 'array')
+  if (!Array.isArray(parsed)) {
+    throw new AiError(
+      'bad_response',
+      'Respuesta inesperada del modelo (no es una lista).'
     )
   }
 
   const results: AiEnrichmentResult[] = []
-  for (const item of parsed) {
-    if (!item.id || typeof item.displayDescription !== 'string') continue
+  for (const item of parsed as Array<{
+    id?: string
+    displayDescription?: unknown
+    category?: string
+    confidence?: unknown
+  }>) {
+    if (!item?.id || typeof item.displayDescription !== 'string') continue
     const rawConfidence =
       typeof item.confidence === 'number' ? item.confidence : 0.7
     results.push({
@@ -268,18 +258,31 @@ function parseBatchResponse(
   return results
 }
 
-/** 401/403 mean the credential is wrong; retrying cannot help. */
-function isNonRetryable(error: unknown): boolean {
-  const status = (error as { status?: number })?.status
-  return status === 401 || status === 403
+/** One batch's answer; a cut-off one says what the user can do about it. */
+async function completeBatch(
+  client: ClaudeClient,
+  request: ClaudeRequest
+): Promise<string> {
+  try {
+    return await client.complete(request)
+  } catch (error) {
+    if (error instanceof AiError && error.kind === 'truncated') {
+      throw new AiError(
+        'truncated',
+        `${error.message} Probá importar menos transacciones a la vez.`
+      )
+    }
+    throw error
+  }
 }
 
 export interface AiEnrichmentOutcome {
   results: Map<string, AiEnrichmentResult>
   /**
-   * Set when some batches failed but others succeeded. The successful results
-   * are still returned — a single bad batch must not discard a whole import's
-   * worth of enrichment.
+   * Set when some batches failed but others succeeded, as the text to show
+   * ("2 de 12 lotes fallaron (…)", `aiPartialFailureMessage`). The
+   * successful results are still returned — a single bad batch must not
+   * discard a whole import's worth of enrichment.
    */
   partialFailure?: string
 }
@@ -287,15 +290,9 @@ export interface AiEnrichmentOutcome {
 async function enrichInBatches(
   inputs: AiEnrichmentInput[],
   config: AiConfig,
-  context: AiCorrectionContext
+  context: AiCorrectionContext,
+  client: ClaudeClient
 ): Promise<AiEnrichmentOutcome> {
-  // Loaded on demand so the SDK stays out of the startup bundle (#62).
-  const { default: Anthropic } = await import('@anthropic-ai/sdk')
-  const client = new Anthropic({
-    apiKey: config.apiKey,
-    dangerouslyAllowBrowser: true,
-  })
-
   // Identical across every batch (it depends only on customCategories), which
   // makes it a stable cache prefix. Volatile per-batch data lives in the user
   // message, after this breakpoint.
@@ -304,13 +301,7 @@ async function enrichInBatches(
   // 5.5 models (512 tokens); it was below Haiku 4.5's 4,096, where the
   // breakpoint was silently inert. Verify with usage.cache_read_input_tokens
   // before claiming a saving.
-  const systemPrompt = [
-    {
-      type: 'text' as const,
-      text: buildSystemPrompt(context.customCategories),
-      cache_control: { type: 'ephemeral' as const },
-    },
-  ]
+  const systemPrompt = buildSystemPrompt(context.customCategories)
 
   const results = new Map<string, AiEnrichmentResult>()
   const errors: unknown[] = []
@@ -326,15 +317,16 @@ async function enrichInBatches(
       // The 5.5 models think by default and the thinking counts against
       // max_tokens; this is classification, so the lowest effort keeps the
       // output budget for the JSON.
-      const response = (await client.messages.create({
+      const text = await completeBatch(client, {
         model: config.model,
-        max_tokens: MAX_OUTPUT_TOKENS,
-        output_config: { effort: 'low' },
         system: systemPrompt,
-        messages: [{ role: 'user', content: buildUserMessage(batch, context) }],
-      })) as AiEnrichmentBatchResponse
+        cacheSystem: true,
+        user: buildUserMessage(batch, context),
+        maxTokens: MAX_OUTPUT_TOKENS,
+        effort: 'low',
+      })
 
-      for (const result of parseBatchResponse(response, inputs, context)) {
+      for (const result of parseBatchResponse(text, inputs, context)) {
         results.set(result.id, result)
       }
     } catch (error) {
@@ -346,12 +338,11 @@ async function enrichInBatches(
         reportedBug = true
       }
 
-      // Batch isolation is for transient faults. A bad key or revoked
-      // permission fails identically for every remaining batch, so carrying
-      // on would fire one doomed request per batch — 20 of them on a
-      // 3,000-row import — before the user sees the same message. The SDK
-      // does not retry these either.
-      if (isNonRetryable(error)) {
+      // Batch isolation is for transient faults. A bad key or an empty
+      // account fails identically for every remaining batch, so carrying on
+      // would fire one doomed request per batch — 20 of them on a 3,000-row
+      // import — before the user sees the same message.
+      if (error instanceof AiError && !error.retryable) {
         break
       }
     }
@@ -369,20 +360,29 @@ async function enrichInBatches(
   return {
     results,
     // A bad key stops the loop: the batches never sent failed too.
-    partialFailure: `${errors.length + totalBatches - batchCount} de ${totalBatches} lotes fallaron: ${errorMessage(first)}`,
+    partialFailure: aiPartialFailureMessage(
+      errors.length + totalBatches - batchCount,
+      totalBatches,
+      first
+    ),
   }
 }
 
+/**
+ * Enriches the rows in batches of `BATCH_SIZE`. `client` is the real Claude
+ * client unless a test hands in a fake.
+ */
 export async function enrichTransactionsWithAi(
   inputs: AiEnrichmentInput[],
   config: AiConfig,
-  context: AiCorrectionContext
+  context: AiCorrectionContext,
+  client: ClaudeClient = createClaudeClient(config.apiKey)
 ): Promise<AiEnrichmentOutcome> {
   try {
-    return await enrichInBatches(inputs, config, context)
+    return await enrichInBatches(inputs, config, context, client)
   } catch (error) {
     // Batch errors were reported inside the loop; this catches the rest
-    // (loading the SDK, building the prompt).
+    // (building the prompt).
     if (!(error instanceof BatchFailure) && isUnexpectedAiError(error)) {
       captureError(error, 'ai')
     }
