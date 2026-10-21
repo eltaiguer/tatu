@@ -109,4 +109,13 @@ describe('error reporting through the Sentry SDK', () => {
       'Preload failed for the chart',
     ])
   })
+
+  it('does not send a network failure, whoever reports it', async () => {
+    const sent = initWithFakeTransport()
+
+    captureError(new Error('network request failed'), 'workspace')
+    await Sentry.flush()
+
+    expect(sent).toHaveLength(0)
+  })
 })

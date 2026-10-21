@@ -29,8 +29,9 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
 `src/services/monitoring/error-reporting.ts`:
 
 - **Off unless configured.** `initErrorReporting()` (called from `main.tsx`)
-  does nothing without `VITE_SENTRY_DSN`, so local dev and tests never send
-  anything. A build without the DSN drops `Sentry.init`
+  does nothing without `VITE_SENTRY_DSN` or outside a production build
+  (`import.meta.env.PROD`), so `npm run dev` and tests never send anything,
+  even with the DSN in `.env`. A build without the DSN drops `Sentry.init`
   and the integrations, leaving a stub chunk of about 4 KB gzipped.
 - **Collect as little as possible.** `dataCollection` disables user info,
   cookies, headers, bodies, query params, AI inputs/outputs and stack-frame
@@ -58,7 +59,8 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
   `workspace`, `write`, `reset`). Where a server failure is wrapped in an
   explained error ("Se actualizaron N de M", an incomplete split), the cause
   is reported at the wrap, because the explained error itself never is. A
-  network failure the user is told about is not reported, and a missing
+  network failure is never reported (`captureError` filters it for every
+  caller), nor is a model refusal, and a missing
   `ai_insights` table during reset is expected until `schema.sql` is applied.
 - **User identity is the Supabase user id only**, set from `useAuthSession`.
 - **Source maps** are uploaded by `@sentry/vite-plugin` only when

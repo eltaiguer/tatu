@@ -92,6 +92,18 @@ function groupAndSortInsights(
   }))
 }
 
+// The ai_insights table exists only once schema.sql was applied by hand
+// (supabase/README.md); until then its failures are expected, not bugs.
+function reportStorageFailure(error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  if (
+    /ai_insights.*does not exist|does not exist.*ai_insights/i.test(message)
+  ) {
+    return
+  }
+  captureError(error, 'insights')
+}
+
 export function Insights({
   transactions,
   homeCurrency,
@@ -133,7 +145,7 @@ export function Insights({
       })
       .catch((e) => {
         if (!cancelled) {
-          captureError(e, 'insights')
+          reportStorageFailure(e)
           setError(
             e instanceof Error
               ? e.message
@@ -154,8 +166,19 @@ export function Insights({
     setGenerating(true)
     setError('')
     try {
-      const result = await generateInsights(input, claudeApiKey)
-      await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
+      let result: Awaited<ReturnType<typeof generateInsights>>
+      try {
+        result = await generateInsights(input, claudeApiKey)
+      } catch (e) {
+        if (isUnexpectedAiError(e)) captureError(e, 'insights')
+        throw e
+      }
+      try {
+        await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
+      } catch (e) {
+        reportStorageFailure(e)
+        throw e
+      }
       setCached({
         result,
         model: INSIGHTS_MODEL,
@@ -163,7 +186,6 @@ export function Insights({
         isStale: false,
       })
     } catch (e) {
-      if (isUnexpectedAiError(e)) captureError(e, 'insights')
       setError(
         e instanceof Error ? e.message : 'No se pudieron generar los insights'
       )

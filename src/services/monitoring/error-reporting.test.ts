@@ -7,6 +7,7 @@ import {
   WorkspaceChangedError,
 } from '../../utils/user-error'
 import {
+  isReportingEnabled,
   redactMessage,
   scrubBreadcrumb,
   scrubEvent,
@@ -16,6 +17,18 @@ import {
 function errorEvent(overrides: Partial<ErrorEvent> = {}): ErrorEvent {
   return { type: undefined, ...overrides }
 }
+
+describe('isReportingEnabled', () => {
+  it('reports only from a production build with a DSN', () => {
+    expect(
+      isReportingEnabled({ PROD: true, VITE_SENTRY_DSN: 'https://x' })
+    ).toBe(true)
+    expect(
+      isReportingEnabled({ PROD: false, VITE_SENTRY_DSN: 'https://x' })
+    ).toBe(false)
+    expect(isReportingEnabled({ PROD: true, VITE_SENTRY_DSN: '' })).toBe(false)
+  })
+})
 
 describe('stripUrl', () => {
   it('drops the password-recovery hash with its access token', () => {
@@ -63,6 +76,14 @@ describe('redactMessage', () => {
     expect(redactMessage('Importe ilegible: "1.234,56 USD')).not.toContain(
       '1.234'
     )
+  })
+
+  it('hides a Postgres key value that contains parentheses', () => {
+    const message = redactMessage(
+      'Key (merchant_normalized, user_id)=((UY) DISCO POCITOS, 3f2a) already exists'
+    )
+    expect(message).not.toMatch(/DISCO|3f2a/)
+    expect(message).toContain('already exists')
   })
 
   it('leaves messages without values alone', () => {

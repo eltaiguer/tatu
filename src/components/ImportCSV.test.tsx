@@ -20,7 +20,10 @@ const { parseCSVMock, addTransactionsMock, toastMock } = vi.hoisted(() => ({
 
 vi.mock('sonner', () => ({ toast: toastMock }))
 const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
-vi.mock('../services/monitoring/error-reporting', () => ({
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
   captureError: reporting.captureError,
 }))
 

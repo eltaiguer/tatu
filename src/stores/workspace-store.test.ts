@@ -4,7 +4,10 @@ import type { UserPreferences } from '../services/supabase/user-preferences'
 import type { Transaction } from '../models'
 
 const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
-vi.mock('../services/monitoring/error-reporting', () => ({
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
   captureError: reporting.captureError,
 }))
 

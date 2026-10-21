@@ -29,7 +29,10 @@ vi.mock('../services/insights/insight-generator', async () => {
 })
 
 const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
-vi.mock('../services/monitoring/error-reporting', () => ({
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
   captureError: reporting.captureError,
 }))
 
@@ -244,8 +247,30 @@ describe('Insights', () => {
     expect(reporting.captureError).toHaveBeenCalledWith(bug, 'insights')
   })
 
+  it('does not report a missing insights table, which needs schema.sql', async () => {
+    getCachedInsightsMock.mockRejectedValue(
+      new Error('relation "public.ai_insights" does not exist')
+    )
+    renderInsights()
+
+    await screen.findByText(/does not exist/)
+    expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
+  it('reports a failure to save generated insights as a storage failure', async () => {
+    getCachedInsightsMock.mockResolvedValue(null)
+    generateInsightsMock.mockResolvedValue(sampleResult)
+    const failure = new Error('permission denied for table ai_insights')
+    saveCachedInsightsMock.mockRejectedValue(failure)
+    renderInsights()
+
+    fireEvent.click(await screen.findByText('Generar insights'))
+    await screen.findByText(failure.message)
+    expect(reporting.captureError).toHaveBeenCalledWith(failure, 'insights')
+  })
+
   it('reports a failure to load cached insights', async () => {
-    const failure = new Error('relation "ai_insights" does not exist')
+    const failure = new Error('permission denied for table ai_insights')
     getCachedInsightsMock.mockRejectedValue(failure)
     renderInsights()
 

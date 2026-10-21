@@ -20,7 +20,8 @@ const {
 }))
 
 const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
-vi.mock('../monitoring/error-reporting', () => ({
+vi.mock('../monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../monitoring/error-reporting')>()),
   captureError: reporting.captureError,
 }))
 vi.mock('./client', () => ({

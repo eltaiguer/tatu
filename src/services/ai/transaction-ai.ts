@@ -313,8 +313,7 @@ export async function enrichTransactionsWithAi(
   ]
 
   const results = new Map<string, AiEnrichmentResult>()
-  const failures: string[] = []
-  let firstError: unknown
+  const errors: unknown[] = []
   let batchCount = 0
 
   for (let i = 0; i < inputs.length; i += BATCH_SIZE) {
@@ -337,8 +336,7 @@ export async function enrichTransactionsWithAi(
         results.set(result.id, result)
       }
     } catch (error) {
-      if (failures.length === 0) firstError = error
-      failures.push(error instanceof Error ? error.message : String(error))
+      errors.push(error)
 
       // Batch isolation is for transient faults. A bad key or revoked
       // permission fails identically for every remaining batch, so carrying
@@ -351,18 +349,17 @@ export async function enrichTransactionsWithAi(
     }
   }
 
-  // Every batch failed — this is a hard failure, not a partial one.
-  // Rethrown as thrown, so its type and stack survive for error reporting.
-  if (failures.length > 0 && failures.length === batchCount) {
-    throw firstError instanceof Error ? firstError : new Error(failures[0])
+  if (errors.length === 0) return { results }
+  const [first] = errors
+  // Every batch failed: a hard failure, rethrown as thrown so its type and
+  // stack survive for error reporting.
+  if (errors.length === batchCount) {
+    throw first instanceof Error ? first : new Error(String(first))
   }
-
+  const firstMessage = first instanceof Error ? first.message : String(first)
   return {
     results,
-    partialFailure:
-      failures.length > 0
-        ? `${failures.length} de ${batchCount} lotes fallaron: ${failures[0]}`
-        : undefined,
-    ...(failures.length > 0 && { partialError: firstError }),
+    partialFailure: `${errors.length} de ${batchCount} lotes fallaron: ${firstMessage}`,
+    partialError: first,
   }
 }

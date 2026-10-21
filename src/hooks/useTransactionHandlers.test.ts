@@ -11,7 +11,10 @@ const ai = vi.hoisted(() => ({
 }))
 // Sentry is the other external service.
 const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
-vi.mock('../services/monitoring/error-reporting', () => ({
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
   captureError: reporting.captureError,
 }))
 

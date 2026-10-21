@@ -537,7 +537,8 @@ and skip their rollback after a switch.
 
 ## Error reporting
 
-Unexpected errors go to Sentry when `VITE_SENTRY_DSN` is set, and nowhere
+Unexpected errors go to Sentry from a production build with `VITE_SENTRY_DSN`
+set, and nowhere
 otherwise (ADR-0004, `src/services/monitoring/error-reporting.ts`).
 `userErrorMessage` reports every error it did not write itself. Code that
 catches an error without passing it there calls `captureError(error, area)`.

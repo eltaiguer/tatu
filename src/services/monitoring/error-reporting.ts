@@ -35,9 +35,12 @@ export function stripUrl(url: string): string {
 // can nest (a JSON parse error quotes the model's JSON), so everything from
 // the first quote to the last, or to the end when unclosed, goes.
 export function redactMessage(message: string): string {
-  return message
-    .replace(/"[\s\S]*"|"[\s\S]*$/, `"${REDACTED}"`)
-    .replace(/=\([^)]*\)/g, `=(${REDACTED})`)
+  return (
+    message
+      .replace(/"[\s\S]*"|"[\s\S]*$/, `"${REDACTED}"`)
+      // Greedy: a key value can hold parentheses itself ("(UY) DISCO").
+      .replace(/=\(.*\)/g, `=(${REDACTED})`)
+  )
 }
 
 export function scrubEvent(
@@ -85,10 +88,30 @@ export function scrubBreadcrumb(crumb: Breadcrumb): Breadcrumb | null {
   return null
 }
 
+// Production builds only: Vite loads the same `.env` for `npm run dev`, and
+// half-written local code must not reach the project's Sentry.
+export function isReportingEnabled(env: {
+  PROD: boolean
+  VITE_SENTRY_DSN?: string
+}): boolean {
+  return env.PROD && !!env.VITE_SENTRY_DSN
+}
+
 export function initErrorReporting(): void {
-  const dsn = import.meta.env.VITE_SENTRY_DSN
-  if (!dsn) return
-  Sentry.init(sentryOptions(dsn))
+  if (!isReportingEnabled(import.meta.env)) return
+  Sentry.init(sentryOptions(import.meta.env.VITE_SENTRY_DSN))
+}
+
+/** A lost connection: offline, or the browser's fetch failure messages. */
+export function isNetworkError(error: unknown): boolean {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return true
+  }
+  const message = error instanceof Error ? error.message : String(error)
+  // Safari's bare "Load failed" is anchored: "Preload failed" is not one.
+  return /\bfailed to fetch\b|\bnetworkerror\b|(?:^|: )load failed$|\bnetwork request failed\b/i.test(
+    message
+  )
 }
 
 export function sentryOptions(dsn: string): Sentry.BrowserOptions {
@@ -145,6 +168,8 @@ export function sentryOptions(dsn: string): Sentry.BrowserOptions {
  * event so Sentry can group by feature (import, ai, preferences, ...).
  */
 export function captureError(error: unknown, area?: string): void {
+  // The user is told about these; they are not bugs, whoever reports them.
+  if (isNetworkError(error)) return
   const exception =
     error instanceof Error ? error : new Error(describeNonError(error))
   Sentry.captureException(exception, area ? { tags: { area } } : undefined)

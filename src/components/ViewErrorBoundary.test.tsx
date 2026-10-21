@@ -3,7 +3,10 @@ import { render, screen } from '@testing-library/react'
 import { ViewErrorBoundary } from './ViewErrorBoundary'
 
 const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
-vi.mock('../services/monitoring/error-reporting', () => ({
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
   captureError: reporting.captureError,
 }))
 

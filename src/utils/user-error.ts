@@ -1,4 +1,7 @@
-import { captureError } from '../services/monitoring/error-reporting'
+import {
+  captureError,
+  isNetworkError,
+} from '../services/monitoring/error-reporting'
 
 // Errors whose message is already written for the user (Spanish, no jargon).
 // Anything else — Supabase/PostgREST text, fetch failures — is translated by
@@ -56,16 +59,6 @@ export class WorkspaceChangedError extends UserFacingError {
   }
 }
 
-function isNetworkError(error: unknown): boolean {
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return true
-  }
-  const message = error instanceof Error ? error.message : String(error)
-  return /failed to fetch|networkerror|load failed|network request failed/i.test(
-    message
-  )
-}
-
 /**
  * The text to show for a failure. Errors the app wrote are shown as they are;
  * anything else is logged, reported (tagged with `area` when given) and
@@ -99,20 +92,24 @@ export function aiErrorMessage(raw: string): string {
   if (partial) {
     return `${partial[1]} (${aiErrorMessage(partial[2])})`
   }
-  if (/^(La respuesta|Respuesta inesperada|No se pudo)/.test(raw)) {
+  if (
+    /^(La respuesta|Respuesta inesperada|No se pudo|El modelo rechazó)/.test(
+      raw
+    )
+  ) {
     return raw
   }
   const text = raw.toLowerCase()
-  if (/401|403|invalid x-api-key|authentication|api key/.test(text)) {
+  if (/\b40[13]\b|invalid x-api-key|authentication|api key/.test(text)) {
     return 'la clave API de Anthropic no es válida'
   }
-  if (/429|rate limit|rate_limit/.test(text)) {
+  if (/\b429\b|rate limit|rate_limit/.test(text)) {
     return 'se alcanzó el límite de uso de la API'
   }
   if (/credit|billing|insufficient/.test(text)) {
     return 'la cuenta de Anthropic no tiene saldo'
   }
-  if (/529|overloaded|50[0-9]|unavailable/.test(text)) {
+  if (/\b(?:529|50[0-9])\b|overloaded|unavailable/.test(text)) {
     return 'el servicio de IA no está disponible en este momento'
   }
   // The SDK loads on demand; after a deploy its old chunk is gone (#62).
@@ -129,6 +126,9 @@ export function aiErrorMessage(raw: string): string {
 
 // A JavaScript engine error is a bug in our code whatever its message says
 // ("reading 'connection'" is not a lost connection).
+const CHUNK_LOAD_FAILED =
+  /dynamically imported module|importing a module script failed/i
+
 const CODE_BUG_TYPES = [TypeError, ReferenceError, RangeError, SyntaxError]
 
 // Whether an AI failure is worth reporting as a bug: a code bug, an unknown
@@ -136,8 +136,12 @@ const CODE_BUG_TYPES = [TypeError, ReferenceError, RangeError, SyntaxError]
 // bad key, a rate limit, no credit or an outage is the user's setup or
 // Anthropic's, and the toast already explains it.
 export function isUnexpectedAiError(error: unknown): boolean {
-  if (CODE_BUG_TYPES.some((type) => error instanceof type)) return true
   const raw = error instanceof Error ? error.message : String(error)
+  // A lost connection or a chunk gone after a deploy (both TypeErrors), and
+  // a refusal that depends on the user's data, are not code bugs.
+  if (isNetworkError(error) || CHUNK_LOAD_FAILED.test(raw)) return false
+  if (raw.startsWith('El modelo rechazó')) return false
+  if (CODE_BUG_TYPES.some((type) => error instanceof type)) return true
   const message = aiErrorMessage(raw)
   return message === raw || message === AI_UNEXPECTED
 }

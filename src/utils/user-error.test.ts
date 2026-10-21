@@ -7,7 +7,10 @@ import {
   userErrorMessage,
 } from './user-error'
 
-vi.mock('../services/monitoring/error-reporting', () => ({
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
   captureError: vi.fn(),
 }))
 
@@ -136,6 +139,30 @@ describe('isUnexpectedAiError', () => {
     )
     expect(isUnexpectedAiError(new Error('Request timed out.'))).toBe(false)
     expect(isUnexpectedAiError(new Error('Request was aborted.'))).toBe(false)
+  })
+
+  it('does not read status codes inside ids or longer numbers', () => {
+    expect(
+      isUnexpectedAiError(
+        new Error('400 invalid_request_error {"request_id":"req_011C501abc"}')
+      )
+    ).toBe(true)
+  })
+
+  it('does not report a chunk that failed to load after a deploy', () => {
+    expect(
+      isUnexpectedAiError(
+        new TypeError(
+          'Failed to fetch dynamically imported module: https://tatu.app/assets/sdk.js'
+        )
+      )
+    ).toBe(false)
+  })
+
+  it('shows and does not report a model refusal', () => {
+    const refusal = 'El modelo rechazó la solicitud (cyber).'
+    expect(aiErrorMessage(refusal)).toBe(refusal)
+    expect(isUnexpectedAiError(new Error(refusal))).toBe(false)
   })
 
   it('takes the error itself, not just its message', () => {
