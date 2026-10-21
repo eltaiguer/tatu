@@ -7,10 +7,7 @@
  */
 import { Category } from '../../models'
 import { tokenize } from './tokenizer'
-import {
-  type CategoryOverrides,
-  listMerchantCategoryOverrides,
-} from './category-overrides'
+import type { CategoryOverrides } from './category-overrides'
 import type { PatternMatch } from './merchant-patterns'
 
 /** Minimum number of overrides a token must appear in to become a learned pattern */
@@ -19,16 +16,16 @@ const MIN_OCCURRENCES = 2
 /** Max confidence for learned patterns (below explicit patterns) */
 const MAX_CONFIDENCE = 0.75
 
-/** Cache for learned patterns */
-let cachedPatterns: Map<string, Category> | null = null
-let cachedHash: string | null = null
-
-function hashOverrides(overrides: CategoryOverrides): string {
-  const entries = Object.entries(overrides)
-    .map(([k, v]) => `${k}:${v.category}`)
-    .sort()
-  return entries.join('|')
-}
+/**
+ * Learned patterns per overrides object. The merchant-override store
+ * replaces its object on every write (copy-on-write), so an object never
+ * changes after its patterns are built: the same object — one `UserRules`
+ * value, however many rows it categorizes — builds them once.
+ */
+const learnedByOverrides = new WeakMap<
+  CategoryOverrides,
+  Map<string, Category>
+>()
 
 /**
  * Build learned patterns from all category overrides.
@@ -37,7 +34,7 @@ function hashOverrides(overrides: CategoryOverrides): string {
  * appear in overrides of other categories at similar frequency).
  */
 export function buildLearnedPatterns(
-  overrides: CategoryOverrides
+  overrides: Readonly<CategoryOverrides>
 ): Map<string, Category> {
   // Count token → category occurrences
   const tokenCategoryCounts = new Map<string, Map<string, number>>()
@@ -83,30 +80,16 @@ export function buildLearnedPatterns(
   return learned
 }
 
-/**
- * Get learned patterns with caching.
- * Cache is invalidated when overrides change.
- */
-export function getLearnedPatterns(): Map<string, Category> {
-  const overrides = listMerchantCategoryOverrides()
-  const hash = hashOverrides(overrides)
-
-  if (cachedPatterns && cachedHash === hash) {
-    return cachedPatterns
+/** The patterns learned from `overrides`, built once per object. */
+export function getLearnedPatterns(
+  overrides: Readonly<CategoryOverrides>
+): Map<string, Category> {
+  let learned = learnedByOverrides.get(overrides)
+  if (!learned) {
+    learned = buildLearnedPatterns(overrides)
+    learnedByOverrides.set(overrides, learned)
   }
-
-  cachedPatterns = buildLearnedPatterns(overrides)
-  cachedHash = hash
-  return cachedPatterns
-}
-
-/**
- * Invalidate the learned patterns cache.
- * Call this when overrides are added/removed.
- */
-export function invalidateLearnedPatternsCache(): void {
-  cachedPatterns = null
-  cachedHash = null
+  return learned
 }
 
 /**
@@ -114,8 +97,11 @@ export function invalidateLearnedPatternsCache(): void {
  * Uses token voting: if multiple tokens match, the category with
  * the most matching tokens wins.
  */
-export function matchLearnedPattern(description: string): PatternMatch | null {
-  const patterns = getLearnedPatterns()
+export function matchLearnedPattern(
+  description: string,
+  overrides: Readonly<CategoryOverrides>
+): PatternMatch | null {
+  const patterns = getLearnedPatterns(overrides)
   if (patterns.size === 0) return null
 
   const tokens = tokenize(description)

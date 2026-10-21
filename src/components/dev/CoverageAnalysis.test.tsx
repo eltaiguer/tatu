@@ -1,64 +1,48 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { Transaction } from '../../models'
 import { createInMemoryRepository } from '../../services/repository/in-memory-repository'
 import {
   clearAllCategoryOverrides,
-  replaceMerchantCategoryOverrides,
+  setMerchantCategoryOverride,
 } from '../../services/categorizer/category-overrides'
 import { CoverageAnalysis } from './CoverageAnalysis'
 
-function tx(id: string, description: string): Transaction {
-  return {
-    id,
-    date: new Date('2026-03-01T00:00:00.000Z'),
-    description,
-    amount: 100,
-    currency: 'UYU',
-    type: 'debit',
-    source: 'credit_card',
-    rawData: {},
-  }
+const KIOSCO: Transaction = {
+  id: 'tx-1',
+  date: new Date('2026-03-01T00:00:00.000Z'),
+  description: 'KIOSCO 25',
+  amount: 100,
+  currency: 'UYU',
+  type: 'debit',
+  source: 'bank_account',
+  rawData: {},
+  category: 'personal',
+  categoryConfidence: 1,
 }
 
-afterEach(() => clearAllCategoryOverrides())
+describe('CoverageAnalysis', () => {
+  afterEach(() => clearAllCategoryOverrides())
 
-describe('CoverageAnalysis (dev panel)', () => {
-  it("analyses the user's stored rows against their stored overrides, in two narrow reads", async () => {
-    const repository = createInMemoryRepository({
-      transactions: [tx('a', 'DISCO 12'), tx('b', 'TIENDA RARA')],
-      deleted: [tx('c', 'OTRA TIENDA')],
-      categoryOverrides: [
-        {
-          merchantNormalized: 'tienda rara',
-          category: 'groceries',
-          createdAt: '',
-          updatedAt: '',
-        },
-      ],
-    })
-    // Memory may lag behind the server; the panel reads the server's.
-    replaceMerchantCategoryOverrides({
-      stale: { category: 'food', updatedAt: '' },
-      other: { category: 'food', updatedAt: '' },
-    })
+  // The stored rows, categorized with the workspace's rules: the same
+  // overrides the Override column reports.
+  it('categorizes the stored rows with the workspace merchant overrides', async () => {
+    setMerchantCategoryOverride('KIOSCO 25', 'personal')
+    const repository = createInMemoryRepository({ transactions: [KIOSCO] })
     render(<CoverageAnalysis repository={repository} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Analizar cobertura' }))
-
-    expect(await screen.findByText('2 merchants únicos')).toBeInTheDocument()
-    expect(screen.getByText(/1 overrides de usuario confirmados/)).toBeVisible()
-    expect(repository.requests).toEqual({
-      loadTransactions: 1,
-      loadCategoryOverrides: 1,
-    })
-  })
-
-  it('cannot run without a signed-in user', () => {
-    render(<CoverageAnalysis repository={null} />)
-
-    expect(
+    await userEvent.click(
       screen.getByRole('button', { name: 'Analizar cobertura' })
-    ).toBeDisabled()
+    )
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Alta (1)' })
+    )
+
+    const row = within(
+      screen.getByTitle('KIOSCO 25').closest('tr') as HTMLElement
+    )
+    expect(row.getAllByText('personal')).toHaveLength(2)
+    expect(row.getByText('✓')).toBeTruthy()
   })
 })

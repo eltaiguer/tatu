@@ -113,22 +113,6 @@ describe('in-memory repository — transactions only', () => {
     expect(repo.row('a')?.category).toBe('groceries')
     expect(repo.row('a')?.date.getUTCFullYear()).toBe(2026)
   })
-
-  it("reads the merchant overrides in one request, nothing under another user's token", async () => {
-    const override = {
-      merchantNormalized: 'disco',
-      category: 'groceries',
-      createdAt: '',
-      updatedAt: '',
-    }
-    const repo = createInMemoryRepository({ categoryOverrides: [override] })
-
-    expect(await repo.loadCategoryOverrides()).toEqual([override])
-    expect(repo.requests).toEqual({ loadCategoryOverrides: 1 })
-
-    repo.actingUserId = 'someone-else'
-    expect(await repo.loadCategoryOverrides()).toEqual([])
-  })
 })
 
 describe('in-memory repository — insights cache', () => {

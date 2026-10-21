@@ -1,19 +1,15 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { Category } from '../../models'
-import {
-  buildLearnedPatterns,
-  matchLearnedPattern,
-  invalidateLearnedPatternsCache,
-} from './learned-patterns'
+import { buildLearnedPatterns, matchLearnedPattern } from './learned-patterns'
 import {
   clearAllCategoryOverrides,
+  listMerchantCategoryOverrides,
   setMerchantCategoryOverride,
 } from './category-overrides'
 
 describe('Learned Patterns', () => {
   beforeEach(() => {
     clearAllCategoryOverrides()
-    invalidateLearnedPatternsCache()
   })
 
   describe('buildLearnedPatterns', () => {
@@ -96,9 +92,11 @@ describe('Learned Patterns', () => {
     it('should match using learned patterns from overrides', () => {
       setMerchantCategoryOverride('Farmacia Central', Category.Healthcare)
       setMerchantCategoryOverride('Farmacia Nueva', Category.Healthcare)
-      invalidateLearnedPatternsCache()
 
-      const result = matchLearnedPattern('Farmacia del Sol')
+      const result = matchLearnedPattern(
+        'Farmacia del Sol',
+        listMerchantCategoryOverrides()
+      )
       expect(result).not.toBeNull()
       expect(result!.category).toBe(Category.Healthcare)
       expect(result!.confidence).toBeGreaterThan(0)
@@ -108,33 +106,40 @@ describe('Learned Patterns', () => {
     it('should return null when no learned patterns match', () => {
       setMerchantCategoryOverride('Farmacia Central', Category.Healthcare)
       setMerchantCategoryOverride('Farmacia Nueva', Category.Healthcare)
-      invalidateLearnedPatternsCache()
 
-      const result = matchLearnedPattern('Random Unknown Place')
+      const result = matchLearnedPattern(
+        'Random Unknown Place',
+        listMerchantCategoryOverrides()
+      )
       expect(result).toBeNull()
     })
 
     it('should return null when no overrides exist', () => {
-      const result = matchLearnedPattern('Farmacia del Sol')
+      const result = matchLearnedPattern(
+        'Farmacia del Sol',
+        listMerchantCategoryOverrides()
+      )
       expect(result).toBeNull()
     })
 
     it('should return null for empty description', () => {
-      const result = matchLearnedPattern('')
+      const result = matchLearnedPattern('', listMerchantCategoryOverrides())
       expect(result).toBeNull()
     })
 
-    it('should invalidate cache correctly', () => {
+    it('stops learning once the overrides are cleared', () => {
       setMerchantCategoryOverride('Farmacia Central', Category.Healthcare)
       setMerchantCategoryOverride('Farmacia Nueva', Category.Healthcare)
-      invalidateLearnedPatternsCache()
 
-      expect(matchLearnedPattern('Farmacia X')).not.toBeNull()
+      expect(
+        matchLearnedPattern('Farmacia X', listMerchantCategoryOverrides())
+      ).not.toBeNull()
 
       clearAllCategoryOverrides()
-      invalidateLearnedPatternsCache()
 
-      expect(matchLearnedPattern('Farmacia X')).toBeNull()
+      expect(
+        matchLearnedPattern('Farmacia X', listMerchantCategoryOverrides())
+      ).toBeNull()
     })
   })
 })
@@ -154,5 +159,27 @@ describe('learned patterns ignore bank wording (audit)', () => {
       },
     })
     expect([...learned.keys()]).toEqual(['farmacia'])
+  })
+})
+
+// Overrides are handed in as a value now: two values with the same keys and
+// categories but different merchants must not share one cached learned map.
+describe('learned patterns of overrides handed in', () => {
+  const override = (merchantName: string) => ({
+    merchantName,
+    category: Category.Healthcare,
+    updatedAt: '2026-03-01T00:00:00.000Z',
+  })
+
+  it('learns from the merchants of the overrides it is given', () => {
+    const botica = { a: override('Botica Central'), b: override('Botica Sur') }
+    const clinica = {
+      a: override('Clinica Central'),
+      b: override('Clinica Sur'),
+    }
+
+    expect(matchLearnedPattern('Botica Norte', botica)).not.toBeNull()
+    expect(matchLearnedPattern('Botica Norte', clinica)).toBeNull()
+    expect(matchLearnedPattern('Clinica Norte', clinica)).not.toBeNull()
   })
 })

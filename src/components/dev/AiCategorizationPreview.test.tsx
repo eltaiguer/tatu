@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import type { Transaction } from '../../models'
 import { AiError } from '../../services/ai/ai-error'
 import { fakeClaudeClient } from '../../test/fake-claude-client'
+import { replaceCustomPatterns } from '../../services/categorizer/custom-patterns'
 
 // The preview runs the real enrichTransactionsWithAi; only the Claude client
 // is a fake, handed in where the app would build the SDK one.
@@ -145,5 +146,46 @@ describe('AiCategorizationPreview', () => {
     expect(await screen.findByText(/x is undefined/)).toBeInTheDocument()
     expect(logged).toHaveBeenCalledWith('AI preview failed:', bug)
     logged.mockRestore()
+  })
+
+  // Same gate as an import (hasUserRule): a row a custom pattern matches
+  // keeps the user's rule and is never handed to the AI.
+  it('keeps a row a custom pattern matches out of the AI, like an import', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 3, 15, 12))
+    vi.spyOn(console, 'debug').mockImplementation(() => {})
+    replaceCustomPatterns([
+      {
+        id: 'cp',
+        pattern: 'kiosco 25',
+        matchType: 'contains',
+        category: 'personal',
+        createdAt: '2026-03-01T00:00:00.000Z',
+      },
+    ])
+    const sentToAi: string[] = []
+    ai.answer = () => {
+      sentToAi.push('called')
+      return JSON.stringify([
+        {
+          id: 'KIOSCO 25',
+          displayDescription: 'Kiosco',
+          category: 'groceries',
+          confidence: 0.9,
+        },
+      ])
+    }
+
+    try {
+      await renderPreview([at('KIOSCO 25', '2026-03-10T00:00:00.000Z')])
+
+      const row = within(
+        (await screen.findByText('Override')).closest('tr') as HTMLElement
+      )
+      expect(row.getByText('KIOSCO 25')).toBeTruthy()
+      expect(sentToAi).toEqual([])
+    } finally {
+      replaceCustomPatterns([])
+    }
   })
 })

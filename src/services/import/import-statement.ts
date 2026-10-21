@@ -6,6 +6,7 @@ import type { Repository } from '../repository/repository'
 import { decodeCsvBytes } from '../parsers/decode-csv'
 import { parseCSV } from '../parsers/csv-parser'
 import { categorizeParsedData } from '../categorizer/import-categorization'
+import { currentUserRules, type UserRules } from '../categorizer/user-rules'
 import {
   importTransactions,
   type ImportResult,
@@ -58,9 +59,11 @@ export async function importStatement(
   file: StatementFile,
   { onParsed }: ImportStatementOptions = {}
 ): Promise<StatementImportResult> {
-  const { csvContent, parsed } = readStatement(file)
+  const { csvContent, parsed } = readStatement(file, currentUserRules())
   onParsed?.()
 
+  // importTransactions reads the rules again once the server has answered,
+  // and recategorizes the new rows a rule saved meanwhile covers.
   const result = await importTransactions(repo, parsed.transactions, {
     parsedData: parsed,
     csvContent,
@@ -76,7 +79,7 @@ export async function importStatement(
   }
 }
 
-function readStatement(file: StatementFile) {
+function readStatement(file: StatementFile, rules: UserRules) {
   let csvContent: string
   let parsed: ParsedData
   try {
@@ -93,5 +96,5 @@ function readStatement(file: StatementFile) {
   // Parsers are pure and return uncategorized rows; categorize before
   // anything else sees them (dedup, AI enrichment, the store). Outside the
   // read: a categorizer crash is a bug in the app, not a bad file.
-  return { csvContent, parsed: categorizeParsedData(parsed) }
+  return { csvContent, parsed: categorizeParsedData(parsed, rules) }
 }

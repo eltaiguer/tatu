@@ -73,9 +73,11 @@ import {
 } from '../descriptions/description-overrides'
 import { getDisplayDescription } from '../../utils/transaction-display'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
+import { currentUserRules } from '../categorizer/user-rules'
 import {
   getMerchantCategoryOverride,
   listMerchantCategoryOverrides,
+  merchantOverrideKey,
   replaceMerchantCategoryOverrides,
 } from '../categorizer/category-overrides'
 
@@ -245,6 +247,53 @@ describe('transaction-mutations — import with AI enrichment', () => {
     expect(sent.map((t) => t.id)).toEqual(['free'])
     expect(repo.row('ruled')?.category).toBe('personal')
     expect(repo.row('ruled')?.displayDescription).toBe('Kiosco')
+  })
+
+  // The rules are read once the server answered, not when the file was
+  // picked: a rule saved meanwhile both categorizes its rows and keeps them
+  // from the AI.
+  it('honours a merchant override saved while the import waits for the server', async () => {
+    // The AI answers for every row it is sent
+    ai.enrichTransactionsWithAi.mockImplementation(
+      async (inputs: Array<{ id: string }>) => ({
+        results: new Map(
+          inputs.map((input) => [input.id, { category: 'restaurants' }])
+        ),
+      })
+    )
+    const repo = signedIn()
+    const gate = repo.hold('createImportRun')
+    const pending = importTransactions(
+      repo,
+      [
+        makeTransaction('kiosco', {
+          description: 'KIOSCO 25',
+          category: 'uncategorized',
+          categoryConfidence: 0,
+        }),
+        makeTransaction('free', { description: 'UBER TRIP' }),
+      ],
+      makeImportContext()
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    replaceMerchantCategoryOverrides({
+      [merchantOverrideKey('KIOSCO 25')!]: {
+        merchantName: 'KIOSCO 25',
+        category: 'personal',
+        updatedAt: '',
+      },
+    })
+    gate.release()
+    await pending
+
+    const sent = ai.enrichTransactionsWithAi.mock.calls[0][0] as Array<{
+      id: string
+    }>
+    expect(sent.map((t) => t.id)).toEqual(['free'])
+    expect(repo.row('kiosco')?.category).toBe('personal')
+    expect(repo.row('kiosco')?.categoryConfidence).toBe(1)
+    expect(stored('kiosco')?.category).toBe('personal')
   })
 
   it('skips the AI call entirely when every new row has an override', async () => {
@@ -1066,7 +1115,9 @@ describe('transaction-mutations — apply scope', () => {
           applyScope,
         })
 
-        expect(categorizeTransaction(LATER, 'debit')).toEqual({
+        expect(
+          categorizeTransaction(LATER, 'debit', { rules: currentUserRules() })
+        ).toEqual({
           category: 'healthcare',
           confidence: 1,
         })
@@ -1088,9 +1139,10 @@ describe('transaction-mutations — apply scope', () => {
         applyScope: 'future_matching_only',
       })
 
-      expect(categorizeTransaction(LATER, 'debit').category).not.toBe(
-        'healthcare'
-      )
+      expect(
+        categorizeTransaction(LATER, 'debit', { rules: currentUserRules() })
+          .category
+      ).not.toBe('healthcare')
       expect(repo.categoryOverrides.size).toBe(0)
     })
   })

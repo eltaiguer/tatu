@@ -47,13 +47,14 @@ import {
   deleteMerchantCategoryOverrideKey,
   getMerchantCategoryOverride,
   legacyMerchantOverrideKey,
-  listMerchantCategoryOverrides,
   merchantOverrideKey,
   putMerchantCategoryOverrideKey,
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
-import { matchCustomPattern } from '../categorizer/custom-patterns'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
+import { currentUserRules, hasUserRule } from '../categorizer/user-rules'
+import { categorizeImportedTransactions } from '../categorizer/import-categorization'
+import { listCustomCategories } from '../categories/category-store'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
 import { applyAiEnrichment, enrichTransactionsWithAi, getAiConfig } from '../ai'
@@ -234,25 +235,17 @@ function isUncategorized(tx: Transaction): boolean {
 }
 
 /**
- * True when the row has a user rule that the AI must not override: a
- * description override, a merchant override, or a custom pattern. A rule
- * the user wrote is enforced here, not handed to the model as advice.
- */
-function hasUserOverride(tx: Transaction): boolean {
-  return (
-    !!getDescriptionOverride(tx.description) ||
-    !!getMerchantCategoryOverride(tx.description) ||
-    !!matchCustomPattern(tx.description)
-  )
-}
-
-/**
  * Imports a parsed statement. Classified against the server by content
  * (#57), optionally enriched by the AI (best-effort: its failure is returned
  * as `aiError`, never fails the import), then inserted in sequential chunks
  * (#61): if one fails, the chunks before it stay saved, exactly those rows
  * reach the store, the run is marked failed with "N de M guardadas", and the
  * error says to import the file again (dedup skips what was saved).
+ *
+ * The user's rules are read once the server has answered (a rule saved
+ * while the import waited counts): the new rows a rule covers are
+ * categorized again with that snapshot, and the same snapshot keeps them
+ * from the AI (hasUserRule) and builds the AI's correction context.
  */
 export async function importTransactions(
   repo: Repository,
@@ -275,13 +268,26 @@ export async function importTransactions(
   }
 
   // Read only while this user still owns the workspace: the AI config and
-  // the correction context are the signed-in user's.
+  // the rules are the signed-in user's. A rule the user wrote is enforced
+  // here, not handed to the model as advice: a row it covers gets the rule's
+  // result and is not sent to the AI.
   const aiConfig = getAiConfig()
-  let toStore = added
+  const rules = currentUserRules()
+  const ruled = new Set(
+    added.filter((tx) => hasUserRule(rules, tx.description)).map((tx) => tx.id)
+  )
+  const recategorized = new Map(
+    categorizeImportedTransactions(
+      added.filter((tx) => ruled.has(tx.id)),
+      rules
+    ).map((tx) => [tx.id, tx])
+  )
+  const categorized = added.map((tx) => recategorized.get(tx.id) ?? tx)
+  let toStore = categorized
   let aiError: unknown
   let aiPartial: string | undefined
   if (aiConfig?.enabled && aiConfig.apiKey && added.length > 0) {
-    const toEnrich = added.filter((tx) => !hasUserOverride(tx))
+    const toEnrich = categorized.filter((tx) => !ruled.has(tx.id))
     if (toEnrich.length > 0) {
       try {
         const outcome = await enrichTransactionsWithAi(
@@ -294,9 +300,9 @@ export async function importTransactions(
             source: tx.source,
           })),
           aiConfig,
-          buildCorrectionContext()
+          buildCorrectionContext(rules, listCustomCategories())
         )
-        toStore = applyAiEnrichment(added, outcome.results)
+        toStore = applyAiEnrichment(categorized, outcome.results)
         aiPartial = outcome.partialFailure
       } catch (error) {
         aiError = error
@@ -1001,12 +1007,13 @@ export async function autoCategorize(
   assertOwner(repo)
   const all = store().transactions
   const targetIds = new Set(transactionIds)
+  const rules = currentUserRules()
 
   const pool = new Map<
     string,
     { name: string; category: string; confidence: number }
   >()
-  for (const [key, o] of Object.entries(listMerchantCategoryOverrides())) {
+  for (const [key, o] of Object.entries(rules.merchantOverrides)) {
     // The description, not the key: a key can be "raw:…" or stripped
     const name = o.merchantName ?? key
     pool.set(normalizeMerchantName(name), {
@@ -1043,6 +1050,7 @@ export async function autoCategorize(
   for (const tx of all) {
     if (!targetIds.has(tx.id)) continue
     const result = categorizeTransaction(tx.description, tx.type, {
+      rules,
       categorizedMerchants: poolWithout(normalizeMerchantName(tx.description)),
       temporalPatterns,
       amount: tx.amount,

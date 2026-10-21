@@ -11,15 +11,7 @@
  */
 import type { Transaction } from '../../../models'
 import { categorizeTransaction } from '../transaction-categorizer'
-import {
-  listMerchantCategoryOverrides,
-  replaceMerchantCategoryOverrides,
-} from '../category-overrides'
-import {
-  listDescriptionOverrides,
-  replaceDescriptionOverrides,
-} from '../../descriptions/description-overrides'
-import { listCustomPatterns, replaceCustomPatterns } from '../custom-patterns'
+import { emptyUserRules } from '../user-rules'
 import {
   LEGACY_IGNORED_ID,
   normalizeCategoryId,
@@ -83,39 +75,16 @@ export function labelledRows(transactions: Transaction[]): LabelledRow[] {
     }))
 }
 
-/**
- * Runs `fn` with the user's overrides and custom patterns withheld, then
- * puts them back (also when `fn` throws). Synchronous on purpose: nothing
- * else can observe the empty rule stores in between.
- */
-export function withoutUserRules<T>(fn: () => T): T {
-  const merchantOverrides = listMerchantCategoryOverrides()
-  const descriptionOverrides = listDescriptionOverrides()
-  const customPatterns = listCustomPatterns()
-  replaceMerchantCategoryOverrides({})
-  replaceDescriptionOverrides({})
-  replaceCustomPatterns([])
-  try {
-    return fn()
-  } finally {
-    replaceMerchantCategoryOverrides(merchantOverrides)
-    replaceDescriptionOverrides(descriptionOverrides)
-    replaceCustomPatterns(customPatterns)
-  }
-}
-
 /** What the rule categorizer says at import (no context), user rules withheld. */
 export function rulePredictions(rows: LabelledRow[]): Map<string, string> {
-  return withoutUserRules(
-    () =>
-      new Map(
-        rows.map((row) => [
-          row.id,
-          normalizeCategoryId(
-            categorizeTransaction(row.description, row.type).category
-          ),
-        ])
-      )
+  const rules = emptyUserRules()
+  return new Map(
+    rows.map((row) => [
+      row.id,
+      normalizeCategoryId(
+        categorizeTransaction(row.description, row.type, { rules }).category
+      ),
+    ])
   )
 }
 

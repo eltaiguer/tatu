@@ -49,7 +49,7 @@ flowchart TD
     A2 --> B["detectFileType: credit_card, bank_account_usd or bank_account_uyu"]
     B --> C["parseCreditCardCSV or parseBankAccountCSV"]
     C --> E["Per row: generateTransactionId(date, description, amount text, row index)"]
-    E --> D["categorizeParsedData, per row: categorizeTransaction(description, type), no context"]
+    E --> D["categorizeParsedData, per row: categorizeTransaction(description, type, { rules }), no other context"]
     D --> F["findImportCandidates on Supabase: rows in the file's date window (live and deleted) + rows holding an incoming id"]
     F --> G{"classifyImport: same content (fingerprint) already stored, as many times?"}
     G -- "yes, live" --> H["Skipped as duplicate"]
@@ -57,7 +57,7 @@ flowchart TD
     G -- "matches a live row stored garbled (U+FFFD)" --> R["Repaired in place after the insert: description + raw_data patched, same id"]
     G -- "no" --> S["New row; id salted to id_cN if taken"]
     S --> J{"AI enabled with an API key?"}
-    J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a user rule (description override, merchant override, custom pattern)"]
+    J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a user rule (description override, merchant override, custom pattern; rules read after the server answered)"]
     J -- "no" --> L["insertTransactions: sequential 500-row INSERT chunks, tagged with the import run; stops at the first failed chunk"]
     K --> L
     L --> M["store.addTransactions(exactly the saved rows), which runs inferInternalTransfers"]
@@ -70,8 +70,14 @@ Details that matter:
 
 - **Categorization at import uses only the first 8 sources** in the
   [precedence table](#categorizer-precedence). `categorizeParsedData` calls
-  `categorizeTransaction` without a `CategorizationContext`, so temporal,
-  similar-merchant and amount hints never run at import. Passing context there
+  `categorizeTransaction` with the user's rules and no other
+  `CategorizationContext`, so temporal, similar-merchant and amount hints
+  never run at import. `importStatement` categorizes the parsed rows with
+  `currentUserRules()`; `importTransactions` takes a fresh snapshot once the
+  server has answered (after classification and `createImportRun`),
+  categorizes again the new rows a rule in it covers, and gates the AI and
+  builds its correction context with that same snapshot — so a rule saved
+  while the import waited is honoured. Passing context there
   would change future imports' categories — a separate decision (#64 step 2).
   The golden fixture in `import-categorization.equivalence.test.ts` pins the
   sample CSVs' import categories.
@@ -79,7 +85,10 @@ Details that matter:
   display name) for every new row that has no user rule: no description
   override, no merchant override and no matching custom pattern (steps 1–3
   of the precedence table are enforced in code, not handed to the model as
-  advice). Rows the built-in keywords or merchant list matched are still
+  advice). `hasUserRule` in `src/services/categorizer/user-rules.ts` is that
+  gate, the only one (the dev AI preview uses it too). A description override
+  that only renames the row counts as a user rule here — the AI must not
+  rename it again — although step 1 gives it no category. Rows the built-in keywords or merchant list matched are still
   sent and overwritten. If the AI call fails, the rule-based result stays
   and the error is returned as `aiError` so the UI can say so.
 - **Dedup is by content, not by ID** (#57, `src/services/dedup/import-dedup.ts`).
@@ -326,16 +335,30 @@ never reclassifies them afterwards.
 
 ## Categorizer precedence
 
-`categorizeTransaction(description, type, context?)` in
+`categorizeTransaction(description, type, { rules, ...context })` in
 `src/services/categorizer/transaction-categorizer.ts` tries these sources in
 order and returns the first match. A different order changes which category
 real money lands in, so keep this table and the function in sync.
 
+The user's rules come in as a value, `UserRules`
+(`src/services/categorizer/user-rules.ts`: description overrides, merchant
+overrides, custom patterns); steps 1–3 and 8 read only that value, never the
+stores. Call sites read it with `currentUserRules()` after their last
+await (import, Auto-categorizar, the dev panels), so each rule type keeps its
+one owner store. The value is an immutable snapshot (read-only types; the
+three stores replace their objects on every write, never mutate them), so
+learned patterns are built once per merchant-overrides object: one
+`UserRules` value builds them once however many rows it categorizes. An empty value (`emptyUserRules()`) withholds the rules —
+learned patterns included, since they are built from the merchant overrides —
+which is how the categorizer eval
+(`src/services/categorizer/eval/agreement.ts`) scores the built-in
+sources.
+
 | #   | Source               | Confidence                                                                                                                                                                                                                                               | Function                                       | Notes                                                                                                                                                                                                                                                                                                                                                                                 |
 | --- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0   | Empty description    | 0                                                                                                                                                                                                                                                        | (inline)                                       | Returns `uncategorized` before anything else when the normalized description is empty.                                                                                                                                                                                                                                                                                                |
-| 1   | Description override | 1.0                                                                                                                                                                                                                                                      | `getDescriptionOverride`                       | Only when the override has a category.                                                                                                                                                                                                                                                                                                                                                |
-| 2   | Merchant override    | 1.0                                                                                                                                                                                                                                                      | `getMerchantCategoryOverride`                  | Keyed on the code-stripped normalized description (`merchantOverrideKey`: POS prefix, dates, times, auth codes and long numbers removed, the same key "Todas las similares" uses), so a category set on one row reaches the merchant's later rows; an override stored before that, under the exact normalized description, is still read and is deleted when the row is edited again. |
+| 1   | Description override | 1.0                                                                                                                                                                                                                                                      | `findDescriptionOverride`                      | Only when the override has a category.                                                                                                                                                                                                                                                                                                                                                |
+| 2   | Merchant override    | 1.0                                                                                                                                                                                                                                                      | `findMerchantCategoryOverride`                 | Keyed on the code-stripped normalized description (`merchantOverrideKey`: POS prefix, dates, times, auth codes and long numbers removed, the same key "Todas las similares" uses), so a category set on one row reaches the merchant's later rows; an override stored before that, under the exact normalized description, is still read and is deleted when the row is edited again. |
 | 3   | Custom pattern       | 0.95                                                                                                                                                                                                                                                     | `matchCustomPattern`                           | First matching user rule (`contains`, `starts_with`, `exact`). Can also set a display name.                                                                                                                                                                                                                                                                                           |
 | 4   | Fee keywords         | 0.95                                                                                                                                                                                                                                                     | `FEE_KEYWORDS`                                 | Whole-word match (`comision`, `cargo`, `interes`, …) → `fees`. Skipped for an own-account sweep (`traspaso`), which step 5 then catches.                                                                                                                                                                                                                                              |
 | 5   | Transfer keywords    | 0.9                                                                                                                                                                                                                                                      | `TRANSFER_KEYWORDS`                            | → `internal_transfer`. Skipped when a named external beneficiary matches `EXTERNAL_BENEFICIARY_RE`, or for a credit containing `recibida`.                                                                                                                                                                                                                                            |
@@ -373,7 +396,7 @@ holding a category, 6 before 7, and 7 before 8 come from the code order only.
 
 | Step                        | Where                               | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | --------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AI enrichment (import only) | `applyAiEnrichment`                 | Replaces category, confidence (model value, clamped 0–1, default 0.7) and display name on new rows without a description or merchant override.                                                                                                                                                                                                                                                                                                                                                    |
+| AI enrichment (import only) | `applyAiEnrichment`                 | Replaces category, confidence (model value, clamped 0–1, default 0.7) and display name on new rows without a user rule (`hasUserRule`).                                                                                                                                                                                                                                                                                                                                                           |
 | Internal-transfer inference | `inferInternalTransfers` (store)    | Bank rows only. Debits with transfer wording become `internal_transfer` (or `external_transfer` with a named beneficiary) at 0.9. A debit paired with a matching credit within 2 days gets 0.92, 0.95 or 0.98, depending on the match score. Skips rows at confidence 1, split rows, and rows already in a transfer category.                                                                                                                                                                     |
 | User edit / bulk categorize | `editTransaction`, `bulkCategorize` | Sets the category at confidence 1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Rule applied to past rows   | `applyPatternToPast`                | Sets the rule's category at 0.95 on matching rows, except split parts.                                                                                                                                                                                                                                                                                                                                                                                                                            |

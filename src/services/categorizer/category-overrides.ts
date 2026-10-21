@@ -1,6 +1,6 @@
 import { normalizeMerchantName } from './merchant-patterns'
-import { invalidateLearnedPatternsCache } from './learned-patterns'
 import { buildDescriptionOverrideKey } from '../descriptions/normalization'
+import type { CategoryOverrideRecord } from '../supabase/category-overrides'
 
 export interface CategoryOverride {
   merchantName?: string
@@ -10,7 +10,26 @@ export interface CategoryOverride {
 
 export type CategoryOverrides = Record<string, CategoryOverride>
 
-let overrides: CategoryOverrides = {}
+/** Stored override rows as the in-memory map, keyed as they were stored. */
+function categoryOverridesFrom(
+  records: CategoryOverrideRecord[]
+): CategoryOverrides {
+  return Object.fromEntries(
+    records.map((record) => [
+      record.merchantNormalized,
+      {
+        merchantName: record.merchantOriginal,
+        category: record.category,
+        updatedAt: record.updatedAt,
+      },
+    ])
+  )
+}
+
+// Replaced, never mutated, on every write: a reader holding the previous
+// object (a UserRules value) keeps a consistent view, and the patterns
+// learned from an object (learned-patterns.ts) never go stale.
+let overrides: Readonly<CategoryOverrides> = {}
 
 /**
  * The key a merchant override is stored under: the normalized description
@@ -41,14 +60,22 @@ function keysFor(merchantName: string): string[] {
   return keys
 }
 
-export function getMerchantCategoryOverride(
+/** The category an override in `from` gives this merchant, if any. */
+export function findMerchantCategoryOverride(
+  from: Readonly<CategoryOverrides>,
   merchantName: string
 ): string | null {
   for (const key of keysFor(merchantName)) {
-    const category = overrides[key]?.category
+    const category = from[key]?.category
     if (category) return category
   }
   return null
+}
+
+export function getMerchantCategoryOverride(
+  merchantName: string
+): string | null {
+  return findMerchantCategoryOverride(overrides, merchantName)
 }
 
 // The two primitives mirror one server row each, so a write can apply to
@@ -59,18 +86,17 @@ export function putMerchantCategoryOverrideKey(
   merchantName: string,
   category: string
 ): void {
-  overrides[key] = {
-    category,
-    merchantName,
-    updatedAt: new Date().toISOString(),
+  overrides = {
+    ...overrides,
+    [key]: { category, merchantName, updatedAt: new Date().toISOString() },
   }
-  invalidateLearnedPatternsCache()
 }
 
 export function deleteMerchantCategoryOverrideKey(key: string): void {
   if (overrides[key]) {
-    delete overrides[key]
-    invalidateLearnedPatternsCache()
+    const next = { ...overrides }
+    delete next[key]
+    overrides = next
   }
 }
 
@@ -94,7 +120,7 @@ export function clearMerchantCategoryOverride(merchantName: string): void {
   }
 }
 
-export function listMerchantCategoryOverrides(): CategoryOverrides {
+export function listMerchantCategoryOverrides(): Readonly<CategoryOverrides> {
   return overrides
 }
 
@@ -102,8 +128,15 @@ export function clearAllCategoryOverrides(): void {
   overrides = {}
 }
 
+/** Loads a user's stored override rows (the workspace load). */
+export function loadMerchantCategoryOverrides(
+  records: CategoryOverrideRecord[]
+): void {
+  overrides = categoryOverridesFrom(records)
+}
+
 export function replaceMerchantCategoryOverrides(
-  nextOverrides: CategoryOverrides
+  nextOverrides: Readonly<CategoryOverrides>
 ): void {
   overrides = { ...nextOverrides }
 }

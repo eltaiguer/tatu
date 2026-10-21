@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { parseCSV } from '../parsers/csv-parser'
 import { categorizeParsedData } from './import-categorization'
+import { emptyUserRules } from './user-rules'
 
 /**
  * Golden fixture: the category, confidence and display description every row
@@ -35,15 +36,18 @@ function importSample(fileName: string) {
     join(process.cwd(), 'samples', fileName),
     'utf-8'
   )
-  return categorizeParsedData(parseCSV(csvContent, fileName)).transactions.map(
-    (tx) => ({
-      description: tx.description,
-      type: tx.type,
-      category: tx.category ?? null,
-      categoryConfidence: tx.categoryConfidence ?? null,
-      displayDescription: tx.displayDescription ?? null,
-    })
+  // A user without rules: the built-in sources only.
+  const parsed = categorizeParsedData(
+    parseCSV(csvContent, fileName),
+    emptyUserRules()
   )
+  return parsed.transactions.map((tx) => ({
+    description: tx.description,
+    type: tx.type,
+    category: tx.category ?? null,
+    categoryConfidence: tx.categoryConfidence ?? null,
+    displayDescription: tx.displayDescription ?? null,
+  }))
 }
 
 describe('import categorization of the Santander samples', () => {

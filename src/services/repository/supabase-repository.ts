@@ -86,7 +86,6 @@ export function createSupabaseRepository(userId: string): Repository {
       }
     },
     loadTransactions: () => loadUserTransactions(userId),
-    loadCategoryOverrides: () => listCategoryOverrides(userId),
     savePreferences: (preferences) => saveUserPreferences(userId, preferences),
 
     findImportCandidates: (incoming) => findImportCandidates(userId, incoming),

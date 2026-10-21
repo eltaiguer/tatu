@@ -4,6 +4,7 @@ import type { Repository } from '../../services/repository/repository'
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
 import { merchantOverrideKey } from '../../services/categorizer/category-overrides'
+import { currentUserRules } from '../../services/categorizer/user-rules'
 import type { Transaction } from '../../models'
 
 interface MerchantStat {
@@ -32,14 +33,12 @@ function tier(confidence: number): 'high' | 'medium' | 'low' {
 }
 
 // Reads the stored rows, not the store's (these are the categories as
-// saved, before transfer inference rewrites them in memory), and the stored
-// overrides with them, so both come from the same place.
+// saved, before transfer inference rewrites them in memory), and categorizes
+// them with the workspace's rules, which the Override column reports too.
 async function runAnalysis(repository: Repository): Promise<AnalysisResult> {
-  const [transactions, overrides] = await Promise.all([
-    repository.loadTransactions(),
-    repository.loadCategoryOverrides(),
-  ])
-  const overrideKeys = new Set(overrides.map((o) => o.merchantNormalized))
+  const transactions = await repository.loadTransactions()
+  const rules = currentUserRules()
+  const overrideKeys = new Set(Object.keys(rules.merchantOverrides))
 
   // Group by normalized description
   const byKey = new Map<
@@ -58,6 +57,7 @@ async function runAnalysis(repository: Repository): Promise<AnalysisResult> {
   for (const [key, { description, transactions: txs }] of byKey) {
     const sample = txs[0]
     const result = categorizeTransaction(description, sample.type, {
+      rules,
       amount: sample.amount,
       currency: sample.currency,
     })
@@ -102,7 +102,7 @@ async function runAnalysis(repository: Repository): Promise<AnalysisResult> {
     high,
     medium,
     low,
-    overrideCount: overrides.length,
+    overrideCount: overrideKeys.size,
     lowInOverrides: low.filter((s) => s.isInOverrides).length,
   }
 }
