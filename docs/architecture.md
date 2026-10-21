@@ -488,7 +488,9 @@ Every write goes through a `Repository` bound to one signed-in user
 App builds `createSupabaseRepository(session)` and hands it to
 `useTransactionHandlers` and to the views that save rules; tests use
 `createInMemoryRepository` (same chunking, plus fault injection and `hold`
-for races). `hydrateWorkspace` loads, and preferences save, through the
+for races). The mutations are tested at their own interface, in
+`src/services/mutations/transaction-mutations.test.ts`; the hook's test covers
+only the binding (signed out, current repository, error clearing). `hydrateWorkspace` loads, and preferences save, through the
 same port.
 
 Transaction writes live in `src/services/mutations/transaction-mutations.ts`.
