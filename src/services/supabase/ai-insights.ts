@@ -1,4 +1,4 @@
-import { getSupabaseClient, type SupabaseSession } from './client'
+import { getSupabaseClient } from './client'
 import type { InsightsResult } from '../insights/insight-generator'
 import { UserFacingError } from '../../utils/user-error'
 
@@ -32,13 +32,13 @@ interface AiInsightsRow {
 }
 
 export async function loadCachedInsights(
-  session: SupabaseSession
+  userId: string
 ): Promise<CachedInsightsRow | null> {
   const client = getSupabaseClient()
   const { data, error } = await client
     .from('ai_insights')
     .select('*')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     // maybeSingle: no cached row is the normal first-run state, not an
     // error (.single() answered it with a 406).
     .maybeSingle()
@@ -71,13 +71,13 @@ export interface SaveInsightsParams {
 }
 
 export async function saveInsights(
-  session: SupabaseSession,
+  userId: string,
   params: SaveInsightsParams
 ): Promise<void> {
   const client = getSupabaseClient()
   const { error } = await client.from('ai_insights').upsert(
     {
-      user_id: session.user.id,
+      user_id: userId,
       input_hash: params.inputHash,
       model: params.model,
       insights: params.insights,

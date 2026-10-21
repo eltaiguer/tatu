@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from './client'
 
 const {
   selectMock,
@@ -25,21 +24,7 @@ vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
 }))
 
-const session: SupabaseSession = {
-  access_token: 'access-token',
-  refresh_token: 'refresh-token',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999999999,
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-  },
-}
+const userId = 'user-1'
 
 const sampleRow = {
   user_id: 'user-1',
@@ -79,7 +64,7 @@ describe('supabase custom-patterns service', () => {
   describe('listCustomPatterns', () => {
     it('queries for the current user and orders by created_at', async () => {
       const { listCustomPatterns } = await import('./custom-patterns')
-      const patterns = await listCustomPatterns(session)
+      const patterns = await listCustomPatterns(userId)
 
       expect(selectMock).toHaveBeenCalledWith('*')
       expect(eqSelectMock).toHaveBeenCalledWith('user_id', 'user-1')
@@ -89,7 +74,7 @@ describe('supabase custom-patterns service', () => {
 
     it('maps snake_case row fields to camelCase CustomPattern', async () => {
       const { listCustomPatterns } = await import('./custom-patterns')
-      const [pattern] = await listCustomPatterns(session)
+      const [pattern] = await listCustomPatterns(userId)
 
       expect(pattern).toEqual({
         id: 'cp-1',
@@ -104,7 +89,7 @@ describe('supabase custom-patterns service', () => {
       orderMock.mockResolvedValue({ data: null, error: null })
 
       const { listCustomPatterns } = await import('./custom-patterns')
-      const patterns = await listCustomPatterns(session)
+      const patterns = await listCustomPatterns(userId)
 
       expect(patterns).toEqual([])
     })
@@ -116,7 +101,7 @@ describe('supabase custom-patterns service', () => {
       })
 
       const { listCustomPatterns } = await import('./custom-patterns')
-      await expect(listCustomPatterns(session)).rejects.toThrow(
+      await expect(listCustomPatterns(userId)).rejects.toThrow(
         'connection refused'
       )
     })
@@ -125,7 +110,7 @@ describe('supabase custom-patterns service', () => {
   describe('upsertCustomPattern', () => {
     it('maps camelCase fields to snake_case row and includes user_id', async () => {
       const { upsertCustomPattern } = await import('./custom-patterns')
-      await upsertCustomPattern(session, {
+      await upsertCustomPattern(userId, {
         id: 'cp-1',
         pattern: 'devoto',
         matchType: 'contains',
@@ -150,7 +135,7 @@ describe('supabase custom-patterns service', () => {
 
       const { upsertCustomPattern } = await import('./custom-patterns')
       await expect(
-        upsertCustomPattern(session, {
+        upsertCustomPattern(userId, {
           id: 'cp-1',
           pattern: 'devoto',
           matchType: 'contains',
@@ -164,7 +149,7 @@ describe('supabase custom-patterns service', () => {
   describe('deleteCustomPattern', () => {
     it('deletes by user_id and pattern id', async () => {
       const { deleteCustomPattern } = await import('./custom-patterns')
-      await deleteCustomPattern(session, 'cp-1')
+      await deleteCustomPattern(userId, 'cp-1')
 
       expect(deleteMock).toHaveBeenCalledTimes(1)
       expect(eqDeleteUserMock).toHaveBeenCalledWith('user_id', 'user-1')
@@ -175,7 +160,7 @@ describe('supabase custom-patterns service', () => {
       eqDeleteIdMock.mockResolvedValue({ error: { message: 'delete failed' } })
 
       const { deleteCustomPattern } = await import('./custom-patterns')
-      await expect(deleteCustomPattern(session, 'cp-1')).rejects.toThrow(
+      await expect(deleteCustomPattern(userId, 'cp-1')).rejects.toThrow(
         'delete failed'
       )
     })
@@ -186,7 +171,7 @@ describe('supabase custom-patterns service', () => {
       eqDeleteUserMock.mockResolvedValue({ error: null })
 
       const { deleteAllCustomPatterns } = await import('./custom-patterns')
-      await deleteAllCustomPatterns(session)
+      await deleteAllCustomPatterns(userId)
 
       expect(deleteMock).toHaveBeenCalledTimes(1)
       expect(eqDeleteUserMock).toHaveBeenCalledWith('user_id', 'user-1')
@@ -198,7 +183,7 @@ describe('supabase custom-patterns service', () => {
       })
 
       const { deleteAllCustomPatterns } = await import('./custom-patterns')
-      await expect(deleteAllCustomPatterns(session)).rejects.toThrow(
+      await expect(deleteAllCustomPatterns(userId)).rejects.toThrow(
         'bulk delete failed'
       )
     })

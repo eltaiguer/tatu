@@ -116,7 +116,7 @@ src/
     preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
     insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
     monitoring/            # error-reporting.ts: Sentry init, captureError, scrubbers (ADR-0004)
-    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapters compose. Only `supabase-repository.ts` and `supabase-auth.ts` import them at runtime (`services/supabase-boundary.test.ts` enforces it); everything else imports only their types
+    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapters compose; they take the user id, not a session. Only `supabase-repository.ts` and `supabase-auth.ts` import them at runtime (`services/supabase-boundary.test.ts` enforces it, and keeps the `@supabase/*` SDK in here); everything else imports only their types
     firebase.ts            # Firebase config
   App.tsx / main.tsx       # Shell (auth, sync, view switch; takes `auth` + `createRepository` props) / BrowserRouter mount, wires the Supabase adapters into App
   routes.ts                # View <-> URL path + document title

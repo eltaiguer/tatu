@@ -275,6 +275,64 @@ describe('App with supabase enabled', () => {
     expect(backend.auth.getSession()).toBeNull()
   })
 
+  it('when going back to sign-in cannot end the session (offline), says so — and the message survives the reload', async () => {
+    signedInAsUser1()
+    backend.auth.failOn('signOut', new TypeError('Failed to fetch'))
+    backend.auth.failOn('signOutLocal', new TypeError('Failed to fetch'))
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+    act(() => backend.auth.recover(USER_1))
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Volver a iniciar sesión' })
+    )
+
+    // Still signed in: back in the app, which loads again.
+    await waitFor(() => expect(backend.repo().requests.load).toBe(2))
+    await screen.findAllByText('Configuración')
+    expect(
+      screen.getByText(
+        'No se pudo cerrar sesión. Revisá tu conexión e intentá de nuevo.'
+      )
+    ).toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(TypeError),
+      'auth'
+    )
+  })
+
+  it('after a password update that cannot end the session, “Contraseña actualizada.” survives the reload', async () => {
+    signedInAsUser1()
+    backend.auth.failOn('signOut', new TypeError('Failed to fetch'))
+    backend.auth.failOn('signOutLocal', new TypeError('Failed to fetch'))
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+    act(() => backend.auth.recover(USER_1))
+
+    fireEvent.change(await screen.findByPlaceholderText('Nueva contraseña'), {
+      target: { value: 'new-secret123' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar contraseña' }))
+
+    await waitFor(() => expect(backend.repo().requests.load).toBe(2))
+    await screen.findAllByText('Configuración')
+    expect(screen.getByText('Contraseña actualizada.')).toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(TypeError),
+      'auth'
+    )
+  })
+
   it('signs out through an auth adapter whose methods need their object (a class)', async () => {
     signedInAsUser1()
     const inner = backend.auth

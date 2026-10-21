@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   endSession,
@@ -81,6 +81,21 @@ export function useAuthSession(auth: AuthPort) {
     isPasswordResetMode() ? 'reset' : 'signin'
   )
 
+  // A load clears the auth messages (they belong to the screen before it),
+  // except a message set by the very transition that triggers the load.
+  const keepMessagesRef = useRef(false)
+  const keepMessagesThroughNextLoad = useCallback(() => {
+    keepMessagesRef.current = true
+  }, [])
+  const clearMessagesForLoad = useCallback(() => {
+    if (keepMessagesRef.current) {
+      keepMessagesRef.current = false
+      return
+    }
+    setAuthError('')
+    setAuthNotice('')
+  }, [])
+
   useEffect(() => {
     setErrorReportingUser(session?.user?.id ?? null)
   }, [session?.user?.id])
@@ -151,10 +166,11 @@ export function useAuthSession(auth: AuthPort) {
       await auth.updatePassword(password)
       // A failed sign-out is not an error here: the password did change. If
       // the session could not even be removed from this device, the user
-      // simply stays signed in (with the new password).
-      await endSession(auth).catch(() => {})
-      const stillSignedIn = auth.getSession()
-      setSession(stillSignedIn)
+      // simply stays signed in (with the new password) and the app loads.
+      const ended = await endSession(auth)
+      const stillSignedIn = ended === 'still-signed-in'
+      if (stillSignedIn) keepMessagesThroughNextLoad()
+      setSession(auth.getSession())
       setPassword('')
       setAuthMode('signin')
       clearPasswordResetModeFromUrl()
@@ -189,5 +205,7 @@ export function useAuthSession(auth: AuthPort) {
     handlePasswordReset,
     handlePasswordUpdate,
     clearPasswordResetModeFromUrl,
+    keepMessagesThroughNextLoad,
+    clearMessagesForLoad,
   }
 }

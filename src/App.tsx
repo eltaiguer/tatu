@@ -61,7 +61,6 @@ import { useTransactionHandlers } from './hooks/useTransactionHandlers'
 import type { AuthPort } from './services/auth/auth-port'
 import type { Repository } from './services/repository/repository'
 import { getFriendlyName } from './utils/user-display'
-import { captureError } from './services/monitoring/error-reporting'
 
 // Shown as is, not through userErrorMessage: there is nothing to retry on
 // the sign-in screen, and a network failure is the likely cause.
@@ -143,6 +142,8 @@ function App({ auth, createRepository }: AppProps) {
     handlePasswordReset,
     handlePasswordUpdate,
     clearPasswordResetModeFromUrl,
+    keepMessagesThroughNextLoad,
+    clearMessagesForLoad,
   } = useAuthSession(auth)
 
   // The signed-in user's repository (#119): every read and write goes
@@ -197,10 +198,7 @@ function App({ auth, createRepository }: AppProps) {
     repository,
     // Nothing loads while the auth screen is shown over a live session.
     paused: authMode === 'reset' || leaving,
-    onHydrateStart: () => {
-      setAuthError('')
-      setAuthNotice('')
-    },
+    onHydrateStart: clearMessagesForLoad,
   })
 
   // Signs out and goes back to the sign-in screen. If the request fails but
@@ -209,14 +207,8 @@ function App({ auth, createRepository }: AppProps) {
   // user is still signed in: stay, and let them retry.
   async function handleSignOut() {
     setAuthSubmitting(true)
-    let failure: unknown = null
-    try {
-      await endSession(auth)
-    } catch (error) {
-      failure = error
-      captureError(error, 'auth')
-    }
-    if (failure && auth.getSession()) {
+    const ended = await endSession(auth)
+    if (ended === 'still-signed-in') {
       setAuthError(SIGN_OUT_RETRY_MESSAGE)
       setAuthSubmitting(false)
       return
@@ -227,7 +219,7 @@ function App({ auth, createRepository }: AppProps) {
     navigate('/', { replace: true })
     setImportOpen(false)
     setAuthNotice('')
-    if (failure) {
+    if (ended === 'local-only') {
       setAuthError(SIGN_OUT_FAILED_MESSAGE)
     } else {
       setAuthError('')
@@ -254,16 +246,20 @@ function App({ auth, createRepository }: AppProps) {
     setAuthError('')
     setAuthNotice('')
     clearPasswordResetModeFromUrl()
+    // The sign-in form stays disabled until the session has ended: a sign-in
+    // submitted meanwhile would be ended by the pending sign-out.
     setLeaving(true)
-    endSession(auth)
-      .catch((error: unknown) => {
-        captureError(error, 'auth')
-        if (auth.getSession()) setAuthError(SIGN_OUT_RETRY_MESSAGE)
-      })
-      .finally(() => {
-        setSession(auth.getSession())
-        setLeaving(false)
-      })
+    setAuthSubmitting(true)
+    void endSession(auth).then((ended) => {
+      if (ended === 'still-signed-in') {
+        // Back in the app, which loads again: keep the message through it.
+        keepMessagesThroughNextLoad()
+        setAuthError(SIGN_OUT_RETRY_MESSAGE)
+      }
+      setSession(auth.getSession())
+      setLeaving(false)
+      setAuthSubmitting(false)
+    })
   }
 
   function navigateToTransactions(
@@ -317,13 +313,13 @@ function App({ auth, createRepository }: AppProps) {
             onEmailChange={setEmail}
             onPasswordChange={setPassword}
             onSignIn={() => {
-              void handleAuth('signin')
+              if (!leaving) void handleAuth('signin')
             }}
             onSignUp={() => {
-              void handleAuth('signup')
+              if (!leaving) void handleAuth('signup')
             }}
             onResetPassword={() => {
-              void handlePasswordReset()
+              if (!leaving) void handlePasswordReset()
             }}
             onUpdatePassword={() => {
               void handlePasswordUpdate()

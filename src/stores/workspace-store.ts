@@ -89,17 +89,26 @@ export function teardownWorkspace(): void {
 }
 
 /**
+ * How ending a session went:
+ * - `ok`: signed out.
+ * - `local-only`: the sign-out request failed but the session is gone from
+ *   this device (the server may not know).
+ * - `still-signed-in`: even the local sign-out failed (e.g. offline); the
+ *   user is still signed in and the workspace was kept.
+ */
+export type SessionEnd = 'ok' | 'local-only' | 'still-signed-in'
+
+/**
  * Ends the signed-in user's session: lets a pending preference save reach
  * the server while the token is still valid (bounded by
  * PREFERENCE_FLUSH_TIMEOUT_MS), signs out, then tears the workspace down —
  * only for the user who was leaving (one who signed in meanwhile is kept).
- * If signing out rejects, the error is rethrown; the workspace is torn down
- * only if the session is gone from this device anyway (`getSession()` is
- * null, see AuthPort.signOut), and kept if the user is still signed in.
+ * A failed sign-out is reported (`captureError(error, 'auth')`) and decided
+ * here, once, for every caller: see `SessionEnd`. Never rejects.
  */
 export async function endSession(
   auth: Pick<AuthPort, 'signOut' | 'getSession'>
-): Promise<void> {
+): Promise<SessionEnd> {
   const leaving = workspaceStore.getState().userId
   const teardownIfStillLeaving = () => {
     if (workspaceStore.getState().userId === leaving) teardownWorkspace()
@@ -108,10 +117,13 @@ export async function endSession(
   try {
     await auth.signOut()
   } catch (error) {
-    if (auth.getSession() === null) teardownIfStillLeaving()
-    throw error
+    captureError(error, 'auth')
+    if (auth.getSession() !== null) return 'still-signed-in'
+    teardownIfStillLeaving()
+    return 'local-only'
   }
   teardownIfStillLeaving()
+  return 'ok'
 }
 
 export const RESET_FAILED_MESSAGE =
@@ -133,6 +145,14 @@ export async function resetWorkspace(
   // No preference edit is accepted from here to the end: a save landing
   // after the delete would recreate the row, API key included.
   resettingUserId = repository.userId
+  // A save still in flight when the bounded flush gives up (a hung request
+  // must not block the reset) could land after the delete and recreate the
+  // row, API key included: once it settles, the row is overwritten below.
+  const inFlight = saving
+  let settled = !inFlight
+  void inFlight?.finally(() => {
+    settled = true
+  })
   try {
     await flushPreferenceSaves()
     await repository.resetAll()
@@ -148,6 +168,14 @@ export async function resetWorkspace(
   teardownWorkspace()
   preferenceRepository = repository
   workspaceStore.setState({ userId: repository.userId, status: 'ready' })
+  if (inFlight && !settled) {
+    void inFlight.finally(() => {
+      // Whatever that late save wrote is replaced by what this user has now
+      // (the defaults, or edits made since the reset) — never the old key.
+      if (preferenceRepository !== repository) return
+      enqueueSave(repository, workspaceStore.getState().preferences)
+    })
+  }
 }
 
 export interface Hydration {

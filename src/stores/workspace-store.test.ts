@@ -399,7 +399,7 @@ describe('workspace store', () => {
 
       const ended = endSession(auth)
       save.release()
-      await ended
+      expect(await ended).toBe('ok')
 
       expect(order).toEqual(['signOut (saved fxRate 43)'])
       expect(snapshot()).toEqual(EMPTY)
@@ -410,9 +410,13 @@ describe('workspace store', () => {
       const auth = signedInAuth()
       auth.failOn('signOut', new Error('Internal Server Error'))
 
-      await expect(endSession(auth)).rejects.toThrow('Internal Server Error')
+      await expect(endSession(auth)).resolves.toBe('local-only')
 
       expect(snapshot()).toEqual(EMPTY)
+      expect(reporting.captureError).toHaveBeenCalledWith(
+        new Error('Internal Server Error'),
+        'auth'
+      )
     })
 
     it('keeps the workspace when the session could not be removed at all, and rethrows', async () => {
@@ -421,9 +425,13 @@ describe('workspace store', () => {
       auth.failOn('signOut', new Error('Failed to fetch'))
       auth.failOn('signOutLocal', new Error('Failed to fetch'))
 
-      await expect(endSession(auth)).rejects.toThrow('Failed to fetch')
+      await expect(endSession(auth)).resolves.toBe('still-signed-in')
 
       expect(snapshot()).toMatchObject({ userId: 'a', transactions: ['tx-a'] })
+      expect(reporting.captureError).toHaveBeenCalledWith(
+        new Error('Failed to fetch'),
+        'auth'
+      )
     })
 
     it('leaves alone a user who signed in while the sign-out was in flight', async () => {
@@ -528,6 +536,31 @@ describe('workspace store', () => {
       await reset
 
       expect(a.preferences).toBeNull()
+    })
+
+    it('does not wait for a hung save, but overwrites whatever it wrote once it lands late', async () => {
+      vi.useFakeTimers()
+      try {
+        const a = repoOf('a', A_PREFS)
+        await signIn(a)
+        const save = heldSave(a)
+        setPreference('a', 'claudeApiKey', 'sk-ant-new')
+
+        const reset = resetWorkspace(a, reload)
+        await vi.advanceTimersByTimeAsync(PREFERENCE_FLUSH_TIMEOUT_MS)
+        await reset
+        expect(a.preferences).toBeNull()
+
+        // The hung save finally lands after the delete, with the old key...
+        save.release()
+        await vi.advanceTimersByTimeAsync(0)
+        await flushPreferenceSaves()
+
+        // ...and is overwritten with what the user has now.
+        expect(a.preferences).toEqual(DEFAULT_PREFERENCES)
+      } finally {
+        vi.useRealTimers()
+      }
     })
 
     it('on a partial failure, reloads what remains and explains it, carrying the cause', async () => {

@@ -38,7 +38,45 @@ function runtimeSupabaseImports(source: string): string[] {
   return found
 }
 
+/**
+ * The Supabase SDK packages `source` imports, type-only or not: only
+ * `services/supabase/client.ts` builds the client and names its types.
+ */
+function supabaseSdkImports(source: string): string[] {
+  return Array.from(source.matchAll(SPECIFIER), ([, , , from]) => from).filter(
+    (from) => from.startsWith('@supabase/')
+  )
+}
+
 describe('Supabase boundary', () => {
+  it('finds every import of the Supabase SDK, type-only ones too', () => {
+    const source = [
+      "import { createClient } from '@supabase/supabase-js'",
+      "import type { Session } from '@supabase/supabase-js'",
+      "const auth = await import('@supabase/auth-js')",
+      "import { signOut } from '../supabase/auth'",
+    ].join('\n')
+
+    expect(supabaseSdkImports(source)).toEqual([
+      '@supabase/supabase-js',
+      '@supabase/supabase-js',
+      '@supabase/auth-js',
+    ])
+  })
+
+  it('nothing outside services/supabase imports the Supabase SDK', () => {
+    const offenders: string[] = []
+    for (const path of sourceFiles(SRC)) {
+      const file = relative(SRC, path).split(sep).join('/')
+      if (file.startsWith('services/supabase/')) continue
+      for (const from of supabaseSdkImports(readFileSync(path, 'utf8'))) {
+        offenders.push(`${file} -> ${from}`)
+      }
+    }
+
+    expect(offenders).toEqual([])
+  })
+
   it('finds static, side-effect and dynamic imports, but not type-only ones', () => {
     const source = [
       "import { signOut } from '../supabase/auth'",

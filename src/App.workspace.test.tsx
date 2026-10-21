@@ -285,6 +285,42 @@ describe('switching users on the same tab (#117, #123)', () => {
     await expectUserBIsClean()
   })
 
+  it('cannot sign in while going back to sign-in is still ending A’s session (the pending sign-out would end it)', async () => {
+    await userASetsKey()
+    const inFlight = backend.repo('user-a').hold('savePreferences')
+    fireEvent.change(screen.getByPlaceholderText('sk-ant-...'), {
+      target: { value: `${A_KEY}-2` },
+    })
+    act(() => backend.auth.recover(userA))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Volver a iniciar sesión' })
+    )
+
+    // The flush is waiting on A's save: B tries to sign in meanwhile.
+    fireEvent.change(screen.getByPlaceholderText('email@ejemplo.com'), {
+      target: { value: userB.user.email },
+    })
+    fireEvent.change(screen.getByPlaceholderText('Contraseña'), {
+      target: { value: 'secret123' },
+    })
+    expect(screen.getByRole('button', { name: 'Procesando...' })).toBeDisabled()
+    fireEvent.submit(
+      screen.getByPlaceholderText('email@ejemplo.com').closest('form')!
+    )
+
+    inFlight.release()
+    await waitFor(() => expect(backend.auth.signOuts).toBe(1))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Iniciar sesión' })
+      ).toBeEnabled()
+    )
+    // B's attempt never reached the server, so nothing of it was ended.
+    expect(backend.auth.getSession()).toBeNull()
+
+    await expectUserBIsClean()
+  })
+
   it('resetting all data clears A’s key, and B then signs in clean', async () => {
     await userASetsKey()
 

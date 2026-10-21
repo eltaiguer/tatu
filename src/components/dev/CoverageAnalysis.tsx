@@ -102,7 +102,7 @@ async function runAnalysis(repository: Repository): Promise<AnalysisResult> {
     high,
     medium,
     low,
-    overrideCount: overrideKeys.size,
+    overrideCount: overrides.length,
     lowInOverrides: low.filter((s) => s.isInOverrides).length,
   }
 }

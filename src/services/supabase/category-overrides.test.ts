@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SupabaseSession } from './client'
 
 const {
   selectMock,
@@ -23,21 +22,7 @@ vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
 }))
 
-const session: SupabaseSession = {
-  access_token: 'access-token',
-  refresh_token: 'refresh-token',
-  token_type: 'bearer',
-  expires_in: 3600,
-  expires_at: 9999999999,
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: '',
-  },
-}
+const userId = 'user-1'
 
 describe('supabase category overrides service', () => {
   beforeEach(() => {
@@ -78,7 +63,7 @@ describe('supabase category overrides service', () => {
 
   it('lists overrides for current user', async () => {
     const { listCategoryOverrides } = await import('./category-overrides')
-    const overrides = await listCategoryOverrides(session)
+    const overrides = await listCategoryOverrides(userId)
 
     expect(selectMock).toHaveBeenCalledWith('*')
     expect(eqMock).toHaveBeenCalledWith('user_id', 'user-1')
@@ -87,7 +72,7 @@ describe('supabase category overrides service', () => {
 
   it('upserts an override', async () => {
     const { upsertCategoryOverride } = await import('./category-overrides')
-    await upsertCategoryOverride(session, {
+    await upsertCategoryOverride(userId, {
       merchantNormalized: 'devoto',
       merchantOriginal: 'Devoto',
       category: 'groceries',
@@ -101,7 +86,7 @@ describe('supabase category overrides service', () => {
 
   it('deletes an override', async () => {
     const { deleteCategoryOverride } = await import('./category-overrides')
-    await deleteCategoryOverride(session, 'devoto')
+    await deleteCategoryOverride(userId, 'devoto')
 
     expect(deleteMock).toHaveBeenCalledTimes(1)
     expect(eqDeleteUserMock).toHaveBeenCalledWith('user_id', 'user-1')

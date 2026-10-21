@@ -239,30 +239,39 @@ Ordering guarantees:
   session everywhere; if that request fails, supabase-js would keep its
   session and sign the user back in on the next refresh, so the adapter
   falls back to the local scope (this device's token only) and still
-  rejects. `endSession` then tears down only if `getSession()` is null.
-  "Cerrar sesión": session gone → sign-in screen with "No se pudo cerrar la
-  sesión en el servidor; en este dispositivo ya está cerrada."; still
-  signed in (even the local sign-out failed, e.g. offline) → stays, with
-  "Revisá tu conexión e intentá de nuevo." Both report the failure
-  (`captureError(error, 'auth')`, which drops network errors). Password
-  update ignores the failure (the user stays signed in if the session
-  could not be removed). Back-to-sign-in shows the sign-in screen at once
-  (App's `leaving` state, which also pauses the workspace hook) and runs
-  `endSession` in the background in the same order; the auth event then
-  clears the session. Supabase's `SIGNED_OUT` event and a session that
-  switches to another user (`setSession` in `useAuthSession`) call
-  `teardownWorkspace` directly.
+  rejects. `endSession` decides the outcome once for every caller and never
+  rejects: it reports a failure (`captureError(error, 'auth')`, which drops
+  network errors) and returns `ok`, `local-only` (torn down; the server may
+  not know) or `still-signed-in` (even the local sign-out failed, e.g.
+  offline; workspace kept). "Cerrar sesión": `local-only` → sign-in screen
+  with "No se pudo cerrar la sesión en el servidor; en este dispositivo ya
+  está cerrada."; `still-signed-in` → stays, with "Revisá tu conexión e
+  intentá de nuevo." Password update: `still-signed-in` → the app loads
+  with "Contraseña actualizada.". Back-to-sign-in shows the sign-in screen
+  at once (App's `leaving` state, which also pauses the workspace hook)
+  with the form disabled until the session has ended — a sign-in submitted
+  meanwhile would be ended by the pending sign-out — and runs `endSession`
+  in the background in the same order; `still-signed-in` → back in the
+  app with the retry message. A load clears the auth messages
+  (`clearMessagesForLoad`), except one set by the transition that triggers
+  it (`keepMessagesThroughNextLoad`). Supabase's `SIGNED_OUT` event and a
+  session that switches to another user (`setSession` in `useAuthSession`)
+  call `teardownWorkspace` directly.
 - **Reset all data.** `resetWorkspace(repository, reload)` refuses that
   user's preference edits until it ends (a save landing after the delete
   would recreate `user_preferences`, API key included), waits for pending
-  saves, then `repository.resetAll()` (one table at a time, stopping at the
+  saves (bounded, so a hung request can't block it), then
+  `repository.resetAll()` (one table at a time, stopping at the
   first failure; the insights cache last and best-effort). On success the
   same user is marked ready with nothing and default preferences. On a
   failure it calls `reload` — App passes `useUserWorkspace`'s `refetch`, so
   the reload clears stale messages and is abandoned with the hook — and
   throws a `UserFacingError` with the failure as `cause` (reported,
   ADR-0004). If another user signed in meanwhile, their workspace is left
-  alone and nothing is reloaded.
+  alone and nothing is reloaded. A save still in flight when the bounded
+  wait gave up may land after the delete; once it settles, the row is
+  overwritten with the user's current (post-reset) preferences, so the old
+  key never survives.
 - **Late loads are discarded.** Each hydrate takes a generation number; a
   teardown, a newer hydrate or an abandoned effect invalidates it, and a load
   that resolves late applies nothing.
@@ -596,7 +605,7 @@ Auth is a port too (`src/services/auth/auth-port.ts`): `App` receives
 `auth: AuthPort` (`supabaseAuth` in `main.tsx`, `createInMemoryAuth` in
 tests) and `useAuthSession(auth)` is its only user. Only the two Supabase
 adapters import `services/supabase/*` at runtime;
-`src/services/supabase-boundary.test.ts` fails the build otherwise. The mutations are tested at their own interface, in
+`src/services/supabase-boundary.test.ts` fails the build otherwise (it also keeps the `@supabase/*` SDK inside `services/supabase/`). The mutations are tested at their own interface, in
 `src/services/mutations/transaction-mutations.test.ts`; the hook's test
 covers only the binding (signed out, current repository, argument
 pass-through, error clearing). `hydrateWorkspace` loads, and preferences

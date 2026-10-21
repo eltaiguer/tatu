@@ -1,5 +1,5 @@
 import { resolveCategorizationModel } from '../ai/models'
-import { getSupabaseClient, type SupabaseSession } from './client'
+import { getSupabaseClient } from './client'
 import { DEFAULT_PREFERENCES } from '../preferences/defaults'
 
 export interface UserPreferences {
@@ -23,13 +23,13 @@ interface UserPreferencesRow {
 }
 
 export async function loadUserPreferences(
-  session: SupabaseSession
+  userId: string
 ): Promise<UserPreferences | null> {
   const client = getSupabaseClient()
   const { data, error } = await client
     .from('user_preferences')
     .select('*')
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .single()
 
   if (error) {
@@ -52,13 +52,13 @@ export async function loadUserPreferences(
 }
 
 export async function saveUserPreferences(
-  session: SupabaseSession,
+  userId: string,
   prefs: UserPreferences
 ): Promise<void> {
   const client = getSupabaseClient()
   const { error } = await client.from('user_preferences').upsert(
     {
-      user_id: session.user.id,
+      user_id: userId,
       theme: prefs.theme,
       currency: prefs.currency,
       fx_rate: prefs.fxRate,

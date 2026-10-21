@@ -1,4 +1,4 @@
-import { getSupabaseClient, type SupabaseSession } from './client'
+import { getSupabaseClient } from './client'
 import { UserFacingError } from '../../utils/user-error'
 
 const IMPORT_RUN_FAILED = 'No se pudo iniciar la importación. Intentá de nuevo.'
@@ -18,14 +18,14 @@ interface CompleteImportRunInput {
 }
 
 export async function createImportRun(
-  session: SupabaseSession,
+  userId: string,
   input: CreateImportRunInput
 ): Promise<string> {
   const client = getSupabaseClient()
   const { data, error } = await client
     .from('import_runs')
     .insert({
-      user_id: session.user.id,
+      user_id: userId,
       file_name: input.fileName,
       file_type: input.fileType,
       file_checksum: input.fileChecksum,
@@ -49,7 +49,7 @@ export async function createImportRun(
 }
 
 export async function completeImportRun(
-  session: SupabaseSession,
+  userId: string,
   importId: string,
   stats: CompleteImportRunInput
 ): Promise<void> {
@@ -63,7 +63,7 @@ export async function completeImportRun(
       duplicate_rows: stats.duplicateRows,
       finished_at: new Date().toISOString(),
     })
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('id', importId)
 
   if (error) {
@@ -72,7 +72,7 @@ export async function completeImportRun(
 }
 
 export async function failImportRun(
-  session: SupabaseSession,
+  userId: string,
   importId: string,
   errorMessage: string
 ): Promise<void> {
@@ -84,7 +84,7 @@ export async function failImportRun(
       error_message: errorMessage,
       finished_at: new Date().toISOString(),
     })
-    .eq('user_id', session.user.id)
+    .eq('user_id', userId)
     .eq('id', importId)
 
   if (error) {
