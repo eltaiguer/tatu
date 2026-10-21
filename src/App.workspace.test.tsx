@@ -38,8 +38,8 @@ let backend: FakeBackend
 type SaveCall = [userId: string, preferences: UserPreferences]
 let saveLog: SaveCall[]
 const logged = new WeakSet<Repository>()
-function createRepository(session: AuthSession) {
-  const repo = backend.createRepository(session)
+function createRepository(userId: string) {
+  const repo = backend.createRepository(userId)
   if (!logged.has(repo)) {
     logged.add(repo)
     const save = repo.savePreferences
@@ -255,6 +255,32 @@ describe('switching users on the same tab (#117, #123)', () => {
       screen.getByRole('button', { name: 'Volver a iniciar sesión' })
     )
     await showSignInScreen()
+
+    await expectUserBIsClean()
+  })
+
+  it('going back to sign-in lets A’s queued preference save land before signing out', async () => {
+    await userASetsKey()
+    // One save in flight (held), the next queued behind it.
+    const inFlight = backend.repo('user-a').hold('savePreferences')
+    const keyInput = screen.getByPlaceholderText('sk-ant-...')
+    fireEvent.change(keyInput, { target: { value: `${A_KEY}-2` } })
+    fireEvent.change(keyInput, { target: { value: `${A_KEY}-3` } })
+    act(() => backend.auth.recover(userA))
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Volver a iniciar sesión' })
+    )
+
+    // The screen switches at once; the session ends after the saves.
+    expect(
+      screen.getByRole('heading', { name: 'Ingresar a Tatú' })
+    ).toBeInTheDocument()
+    expect(backend.auth.signOuts).toBe(0)
+    inFlight.release()
+    await waitFor(() => expect(backend.auth.signOuts).toBe(1))
+    expect(backend.repo('user-a').preferences?.claudeApiKey).toBe(`${A_KEY}-3`)
+    expect(getAiConfig()).toBeNull()
 
     await expectUserBIsClean()
   })

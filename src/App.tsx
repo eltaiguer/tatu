@@ -58,22 +58,26 @@ import {
 import { useUserWorkspace } from './hooks/useUserWorkspace'
 import { useAuthSession } from './hooks/useAuthSession'
 import { useTransactionHandlers } from './hooks/useTransactionHandlers'
-import type { AuthPort, AuthSession } from './services/auth/auth-port'
+import type { AuthPort } from './services/auth/auth-port'
 import type { Repository } from './services/repository/repository'
 import { getFriendlyName } from './utils/user-display'
-import { userErrorMessage } from './utils/user-error'
+import { captureError } from './services/monitoring/error-reporting'
 
+// Shown as is, not through userErrorMessage: there is nothing to retry on
+// the sign-in screen, and a network failure is the likely cause.
 const SIGN_OUT_FAILED_MESSAGE =
   'No se pudo cerrar la sesión en el servidor; en este dispositivo ya está cerrada.'
+const SIGN_OUT_RETRY_MESSAGE =
+  'No se pudo cerrar sesión. Revisá tu conexión e intentá de nuevo.'
 
 export interface AppProps {
   /** Who is signed in (Supabase Auth in `main.tsx`, in-memory in tests). */
   auth: AuthPort
   /**
-   * The persistence port for a signed-in session (Supabase in `main.tsx`,
+   * The persistence port for the signed-in user (Supabase in `main.tsx`,
    * in-memory in tests). Every read and write of user data goes through it.
    */
-  createRepository: (session: AuthSession) => Repository
+  createRepository: (userId: string) => Repository
 }
 
 function App({ auth, createRepository }: AppProps) {
@@ -84,6 +88,8 @@ function App({ auth, createRepository }: AppProps) {
   // links all work).
   const currentView = viewFromPath(location.pathname)
   const [importOpen, setImportOpen] = useState(false)
+  // Back-to-sign-in is ending the session in the background.
+  const [leaving, setLeaving] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Navigates unless already there, so re-clicking the current view doesn't
@@ -145,13 +151,8 @@ function App({ auth, createRepository }: AppProps) {
   // cache). The repository is bound to the user, not to the token: the
   // Supabase client sends the current token itself.
   const userId = session?.user.id ?? null
-  const sessionRef = useRef(session)
-  sessionRef.current = session
   const repository = useMemo(
-    () =>
-      userId && sessionRef.current
-        ? createRepository(sessionRef.current)
-        : null,
+    () => (userId ? createRepository(userId) : null),
     [userId, createRepository]
   )
 
@@ -194,23 +195,31 @@ function App({ auth, createRepository }: AppProps) {
     setAiModel,
   } = useUserWorkspace({
     repository,
-    authMode,
+    // Nothing loads while the auth screen is shown over a live session.
+    paused: authMode === 'reset' || leaving,
     onHydrateStart: () => {
       setAuthError('')
       setAuthNotice('')
     },
   })
 
-  // Signs out and goes back to the sign-in screen. If the sign-out request
-  // fails the session is gone anyway (the stored one is cleared and the
-  // workspace torn down): leave, and say the server may not know.
+  // Signs out and goes back to the sign-in screen. If the request fails but
+  // the session is gone from this device, leave anyway and say the server
+  // may not know; if the session could not be removed at all (offline), the
+  // user is still signed in: stay, and let them retry.
   async function handleSignOut() {
     setAuthSubmitting(true)
     let failure: unknown = null
     try {
-      await endSession(() => auth.signOut())
+      await endSession(auth)
     } catch (error) {
       failure = error
+      captureError(error, 'auth')
+    }
+    if (failure && auth.getSession()) {
+      setAuthError(SIGN_OUT_RETRY_MESSAGE)
+      setAuthSubmitting(false)
+      return
     }
     clearPasswordResetModeFromUrl()
     setSession(null)
@@ -219,7 +228,7 @@ function App({ auth, createRepository }: AppProps) {
     setImportOpen(false)
     setAuthNotice('')
     if (failure) {
-      setAuthError(userErrorMessage(failure, SIGN_OUT_FAILED_MESSAGE, 'auth'))
+      setAuthError(SIGN_OUT_FAILED_MESSAGE)
     } else {
       setAuthError('')
       toast('Sesión cerrada')
@@ -234,18 +243,27 @@ function App({ auth, createRepository }: AppProps) {
     else teardownWorkspace()
   }
 
-  // Leaves the new-password screen: the same end of session as signing out
-  // (pending preference saves first), except a failed sign-out still leaves.
+  // Leaves the new-password screen. The sign-in screen shows at once
+  // (`leaving` keeps it up while the session still exists); the session
+  // ends in the background, in the usual order — pending preference saves,
+  // sign-out, teardown — and the auth event clears the session. If it could
+  // not be removed at all, the user is still signed in and is told so.
   function handleBackToSignIn() {
     setAuthMode('signin')
     setPassword('')
     setAuthError('')
     setAuthNotice('')
     clearPasswordResetModeFromUrl()
-    setSession(null)
-    // In the background: the screen has already changed, and a failed
-    // sign-out changes nothing for the user (the stored session is cleared).
-    void endSession(() => auth.signOut()).catch(() => {})
+    setLeaving(true)
+    endSession(auth)
+      .catch((error: unknown) => {
+        captureError(error, 'auth')
+        if (auth.getSession()) setAuthError(SIGN_OUT_RETRY_MESSAGE)
+      })
+      .finally(() => {
+        setSession(auth.getSession())
+        setLeaving(false)
+      })
   }
 
   function navigateToTransactions(
@@ -271,7 +289,7 @@ function App({ auth, createRepository }: AppProps) {
     setError: setAuthError,
   })
 
-  if (!session || authMode === 'reset') {
+  if (!session || authMode === 'reset' || leaving) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 space-y-4">

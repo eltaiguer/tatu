@@ -144,6 +144,8 @@ export interface Repository {
   loadWorkspace(): Promise<WorkspaceSnapshot>
   /** Just the live rows, as stored (one table: for the dev panels). */
   loadTransactions(): Promise<Transaction[]>
+  /** Just the merchant (category) overrides (one table: for the dev panels). */
+  loadCategoryOverrides(): Promise<CategoryOverrideRecord[]>
   savePreferences(preferences: UserPreferences): Promise<void>
 
   // Transactions --------------------------------------------------------

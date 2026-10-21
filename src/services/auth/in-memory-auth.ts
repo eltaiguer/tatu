@@ -10,7 +10,10 @@ export type InMemoryAuthOp =
   | 'signUp'
   | 'requestPasswordReset'
   | 'updatePassword'
+  /** The global sign-out request. */
   | 'signOut'
+  /** The local-scope fallback a failed global sign-out tries. */
+  | 'signOutLocal'
 
 export interface InMemoryAuth extends AuthPort {
   /** Registers an account; signing in with it returns `session`. */
@@ -25,6 +28,8 @@ export interface InMemoryAuth extends AuthPort {
   recover(session: AuthSession): void
   /** Makes every later call of `op` reject with `error`. */
   failOn(op: InMemoryAuthOp, error?: Error): void
+  /** Removes every failure set with `failOn`. */
+  heal(): void
   resetRequests: string[]
   passwordUpdates: string[]
   signOuts: number
@@ -101,16 +106,18 @@ export function createInMemoryAuth(
       check('updatePassword')
       auth.passwordUpdates.push(password)
     },
+    // As the Supabase adapter: a failed global sign-out falls back to the
+    // local scope (session removed, SIGNED_OUT reported) and still rejects;
+    // if that fails too, the session is kept and nothing is reported.
     async signOut() {
       auth.signOuts += 1
-      // As the Supabase adapter: a failed request reports no event, but the
-      // stored session is cleared anyway.
       const failure = faults.get('signOut')
-      if (failure) {
-        current = null
-        throw failure
+      if (!failure) {
+        emit(null)
+        return
       }
-      emit(null)
+      if (!faults.has('signOutLocal')) emit(null)
+      throw failure
     },
 
     addAccount(email, password, session = makeSession(email, email)) {
@@ -124,6 +131,9 @@ export function createInMemoryAuth(
     },
     failOn(op, error = new Error(`${op} failed`)) {
       faults.set(op, error)
+    },
+    heal() {
+      faults.clear()
     },
   }
   return auth

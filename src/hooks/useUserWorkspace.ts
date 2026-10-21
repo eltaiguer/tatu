@@ -18,7 +18,7 @@ export type SyncStatus = 'loading' | 'ready' | 'error'
  */
 export function useUserWorkspace({
   repository,
-  authMode,
+  paused,
   onHydrateStart,
 }: {
   /**
@@ -26,7 +26,11 @@ export function useUserWorkspace({
    * through it, and its user is the signed-in user.
    */
   repository: Repository | null
-  authMode: 'signin' | 'reset'
+  /**
+   * True while the auth screen is shown (choosing a new password, leaving):
+   * nothing loads.
+   */
+  paused: boolean
   /** Runs when a load starts (App clears stale auth messages). */
   onHydrateStart?: () => void
 }) {
@@ -38,8 +42,6 @@ export function useUserWorkspace({
   // reload.
   const repositoryRef = useRef(repository)
   repositoryRef.current = repository
-  const userIdRef = useRef(userId)
-  userIdRef.current = userId
   const onHydrateStartRef = useRef(onHydrateStart)
   onHydrateStartRef.current = onHydrateStart
 
@@ -51,12 +53,12 @@ export function useUserWorkspace({
     if (loadedFor !== null && loadedFor !== userId) teardownWorkspace()
 
     const current = repositoryRef.current
-    if (!current || current.userId !== userId || authMode === 'reset') return
+    if (!current || paused) return
 
     onHydrateStartRef.current?.()
     const hydration = hydrateWorkspace(current)
     return hydration.abandon
-  }, [userId, authMode, syncKey])
+  }, [userId, paused, syncKey])
 
   const workspace = useStore(workspaceStore)
   const { preferences } = workspace
@@ -73,7 +75,7 @@ export function useUserWorkspace({
 
   const save = useCallback(
     <K extends keyof UserPreferences>(key: K, value: UserPreferences[K]) => {
-      setPreference(userIdRef.current, key, value)
+      setPreference(repositoryRef.current?.userId ?? null, key, value)
     },
     []
   )

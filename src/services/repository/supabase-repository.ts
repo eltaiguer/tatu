@@ -57,9 +57,12 @@ import {
   type Repository,
 } from './repository'
 
-export function createSupabaseRepository(session: SupabaseSession): Repository {
+export function createSupabaseRepository(userId: string): Repository {
+  // The primitives scope every request with `session.user.id` and nothing
+  // else of the session (the client sends the current token itself).
+  const session = { user: { id: userId } } as SupabaseSession
   return {
-    userId: session.user.id,
+    userId,
 
     async loadWorkspace() {
       const [
@@ -87,6 +90,7 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
       }
     },
     loadTransactions: () => loadUserTransactions(session),
+    loadCategoryOverrides: () => listCategoryOverrides(session),
     savePreferences: (preferences) => saveUserPreferences(session, preferences),
 
     findImportCandidates: (incoming) => findImportCandidates(session, incoming),

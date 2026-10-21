@@ -149,13 +149,20 @@ export function useAuthSession(auth: AuthPort) {
 
     try {
       await auth.updatePassword(password)
-      // Sign-out errors are ignored after a successful password change.
-      await endSession(() => auth.signOut().catch(() => {}))
-      setSession(null)
+      // A failed sign-out is not an error here: the password did change. If
+      // the session could not even be removed from this device, the user
+      // simply stays signed in (with the new password).
+      await endSession(auth).catch(() => {})
+      const stillSignedIn = auth.getSession()
+      setSession(stillSignedIn)
       setPassword('')
       setAuthMode('signin')
       clearPasswordResetModeFromUrl()
-      setAuthNotice('Contraseña actualizada. Iniciá sesión nuevamente')
+      setAuthNotice(
+        stillSignedIn
+          ? 'Contraseña actualizada.'
+          : 'Contraseña actualizada. Iniciá sesión nuevamente'
+      )
     } catch (error) {
       setAuthError(mapAuthError(error))
     } finally {

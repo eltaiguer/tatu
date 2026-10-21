@@ -28,8 +28,8 @@ export interface FakeBackend {
    * leave App or the test holding a stale instance.
    */
   seed(seed: Seed, userId?: string): InMemoryRepository
-  /** A new view per call onto `session`'s user's repository. */
-  createRepository: (session: AuthSession) => InMemoryRepository
+  /** A new view per call onto `userId`'s repository. */
+  createRepository: (userId: string) => InMemoryRepository
 }
 
 export function createFakeBackend(
@@ -59,11 +59,11 @@ export function createFakeBackend(
       repos.set(userId, repo)
       return repo
     },
-    // A new object per call, as the Supabase adapter builds one per session
-    // object (a token refresh): a caller that keys anything on the object's
-    // identity is caught. It reads and writes the user's one store.
-    createRepository: (session) =>
-      Object.create(backend.repo(session.user.id)) as InMemoryRepository,
+    // A new object per call, as the Supabase adapter builds one per call: a
+    // caller that rebuilds it needlessly, or keys anything on its identity,
+    // is caught. It reads and writes the user's one store.
+    createRepository: (userId) =>
+      Object.create(backend.repo(userId)) as InMemoryRepository,
   }
   return backend
 }

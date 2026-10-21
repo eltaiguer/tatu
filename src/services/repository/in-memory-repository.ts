@@ -30,6 +30,7 @@ const CANDIDATE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
 export type InMemoryOp =
   | 'load'
   | 'loadTransactions'
+  | 'loadCategoryOverrides'
   | 'findImportCandidates'
   | 'findExistingIds'
   | 'insert'
@@ -239,7 +240,13 @@ export function createInMemoryRepository(
     },
     async loadTransactions() {
       await request('loadTransactions')
-      return authorized() ? repo.rows() : []
+      return authorized() ? repo.rows().map(clone) : []
+    },
+    async loadCategoryOverrides() {
+      await request('loadCategoryOverrides')
+      return authorized()
+        ? Array.from(repo.categoryOverrides.values(), (o) => ({ ...o }))
+        : []
     },
     async savePreferences(preferences) {
       await request('savePreferences')

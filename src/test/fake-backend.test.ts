@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { makeSession } from '../services/auth/in-memory-auth'
 import { createFakeBackend } from './fake-backend'
 
 describe('fake backend', () => {
@@ -7,7 +6,7 @@ describe('fake backend', () => {
     const backend = createFakeBackend()
     const seeded = backend.seed({ preferences: null })
 
-    const forApp = backend.createRepository(makeSession('user-1'))
+    const forApp = backend.createRepository('user-1')
 
     expect(forApp).not.toBe(seeded)
     expect(backend.repo()).toBe(seeded)
@@ -16,7 +15,7 @@ describe('fake backend', () => {
 
   it('refuses to seed a user whose repository is already in use, instead of silently replacing it', () => {
     const backend = createFakeBackend()
-    backend.createRepository(makeSession('user-1'))
+    backend.createRepository('user-1')
 
     expect(() => backend.seed({ transactions: [] })).toThrow(/already in use/)
   })

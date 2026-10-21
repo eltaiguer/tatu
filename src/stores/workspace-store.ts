@@ -44,6 +44,7 @@ import { DEFAULT_PREFERENCES } from '../services/preferences/defaults'
 import { transactionStore } from './transaction-store'
 import { captureError } from '../services/monitoring/error-reporting'
 import { UserFacingError } from '../utils/user-error'
+import type { AuthPort } from '../services/auth/auth-port'
 
 export type { UserPreferences }
 export { DEFAULT_PREFERENCES }
@@ -90,22 +91,27 @@ export function teardownWorkspace(): void {
 /**
  * Ends the signed-in user's session: lets a pending preference save reach
  * the server while the token is still valid (bounded by
- * PREFERENCE_FLUSH_TIMEOUT_MS), signs out, then tears the workspace down.
- * The teardown happens even if signing out rejects (the stored session is
- * cleared either way; the error is rethrown for the caller to explain), but
- * only for the user who was leaving: one who signed in meanwhile is kept.
+ * PREFERENCE_FLUSH_TIMEOUT_MS), signs out, then tears the workspace down —
+ * only for the user who was leaving (one who signed in meanwhile is kept).
+ * If signing out rejects, the error is rethrown; the workspace is torn down
+ * only if the session is gone from this device anyway (`getSession()` is
+ * null, see AuthPort.signOut), and kept if the user is still signed in.
  */
-export async function endSession(signOut: () => Promise<void>): Promise<void> {
+export async function endSession(
+  auth: Pick<AuthPort, 'signOut' | 'getSession'>
+): Promise<void> {
   const leaving = workspaceStore.getState().userId
   const teardownIfStillLeaving = () => {
     if (workspaceStore.getState().userId === leaving) teardownWorkspace()
   }
   await flushPreferenceSaves()
   try {
-    await signOut()
-  } finally {
-    teardownIfStillLeaving()
+    await auth.signOut()
+  } catch (error) {
+    if (auth.getSession() === null) teardownIfStillLeaving()
+    throw error
   }
+  teardownIfStillLeaving()
 }
 
 export const RESET_FAILED_MESSAGE =
@@ -124,13 +130,18 @@ export async function resetWorkspace(
   repository: Repository,
   reload: () => void
 ): Promise<void> {
-  await flushPreferenceSaves()
+  // No preference edit is accepted from here to the end: a save landing
+  // after the delete would recreate the row, API key included.
+  resettingUserId = repository.userId
   try {
+    await flushPreferenceSaves()
     await repository.resetAll()
   } catch (error) {
     console.error('reset failed:', error)
     if (isWorkspaceOwner(repository.userId)) reload()
     throw new UserFacingError(RESET_FAILED_MESSAGE, { cause: error })
+  } finally {
+    resettingUserId = null
   }
   if (!isWorkspaceOwner(repository.userId)) return
   // The server now holds nothing for this user: nothing to load.
@@ -248,6 +259,7 @@ export function setPreference<K extends keyof UserPreferences>(
   const repository = preferenceRepository
   if (
     forUserId === null ||
+    forUserId === resettingUserId ||
     status !== 'ready' ||
     forUserId !== userId ||
     repository?.userId !== forUserId
@@ -267,6 +279,8 @@ export function setPreference<K extends keyof UserPreferences>(
 // The repository the current workspace was loaded through; preference saves
 // go to the same place.
 let preferenceRepository: Repository | null = null
+// The user whose data is being deleted: their preference edits are refused.
+let resettingUserId: string | null = null
 let queuedSave: {
   repository: Repository
   preferences: UserPreferences

@@ -193,6 +193,22 @@ describe('useAuthSession', () => {
       expect(result.current.authError).toBe('')
     })
 
+    it('stays signed in after a password change when the session cannot be removed at all', async () => {
+      const current = makeSession()
+      serverWith(current)
+      auth.failOn('signOut', new Error('Failed to fetch'))
+      auth.failOn('signOutLocal', new Error('Failed to fetch'))
+      window.history.replaceState({}, '', '/?mode=reset-password')
+
+      const { result } = renderAuth()
+      await act(() => result.current.handlePasswordUpdate())
+
+      // Supabase still holds the session: showing sign-in would be a lie.
+      expect(result.current.session).toBe(current)
+      expect(result.current.authMode).toBe('signin')
+      expect(result.current.authNotice).toBe('Contraseña actualizada.')
+    })
+
     it('keeps the session when the password change itself fails', async () => {
       const current = makeSession()
       serverWith(current)

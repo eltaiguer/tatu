@@ -17,6 +17,14 @@ import { transactionStore } from './stores/transaction-store'
 import { listCustomCategories } from './services/categories/category-store'
 import { createFakeBackend, type FakeBackend } from './test/fake-backend'
 
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('./services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('./services/monitoring/error-reporting')
+  >()),
+  captureError: reporting.captureError,
+}))
+
 // The backend: nobody signed in and nothing stored, unless a test says so.
 let backend: FakeBackend
 const USER_1 = makeSession('user-1', 'test@example.com')
@@ -37,6 +45,7 @@ describe('App with supabase enabled', () => {
     // The workspace is module state: start every test signed out of it.
     teardownWorkspace()
     backend = createFakeBackend()
+    reporting.captureError.mockClear()
   })
 
   it('renders authentication form when no session exists', async () => {
@@ -311,8 +320,7 @@ describe('App with supabase enabled', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
-  it('a failed sign-out still leaves (the session is gone) and says so in Spanish', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  it('a failed sign-out whose session is gone here still leaves, says so in Spanish and reports it', async () => {
     signedInAsUser1()
     backend.seed({
       transactions: [
@@ -328,7 +336,8 @@ describe('App with supabase enabled', () => {
         },
       ],
     })
-    const failure = new Error('Internal Server Error')
+    // A network failure of the global sign-out; the local one worked.
+    const failure = new TypeError('Failed to fetch')
     backend.auth.failOn('signOut', failure)
     const { default: App } = await import('./App')
     render(
@@ -346,9 +355,40 @@ describe('App with supabase enabled', () => {
         'No se pudo cerrar la sesión en el servidor; en este dispositivo ya está cerrada.'
       )
     ).toBeInTheDocument()
-    expect(screen.queryByText('Internal Server Error')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Sin conexión/)).not.toBeInTheDocument()
     expect(transactionStore.getState().transactions).toEqual([])
-    expect(errorSpy).toHaveBeenCalledWith(failure)
+    expect(reporting.captureError).toHaveBeenCalledWith(failure, 'auth')
+  })
+
+  it('when the session cannot be removed at all (offline), stays signed in, says so, and a retry signs out', async () => {
+    signedInAsUser1()
+    backend.auth.failOn('signOut', new TypeError('Failed to fetch'))
+    backend.auth.failOn('signOutLocal', new TypeError('Failed to fetch'))
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cerrar sesión' })[0])
+
+    expect(
+      await screen.findByText(
+        'No se pudo cerrar sesión. Revisá tu conexión e intentá de nuevo.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Ingresar a Tatú' })
+    ).not.toBeInTheDocument()
+    expect(backend.auth.getSession()).toBe(USER_1)
+
+    backend.auth.heal()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cerrar sesión' })[0])
+
+    await screen.findByRole('heading', { name: 'Ingresar a Tatú' })
+    expect(backend.auth.signOuts).toBe(2)
   })
 
   it('when reset all data fails part-way, reloads what remains and explains it', async () => {

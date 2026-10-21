@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Transaction } from '../../models'
-import type { SupabaseSession } from '../supabase/client'
 import { createFakePostgrest } from '../../test/fake-postgrest'
 import { SplitIncompleteError, UnsplitIncompleteError } from './repository'
 
@@ -15,8 +14,6 @@ vi.mock('../supabase/client', () => ({
 }))
 
 import { createSupabaseRepository } from './supabase-repository'
-
-const session = { user: { id: 'user-1' } } as SupabaseSession
 
 function row(id: string, extra: Record<string, unknown> = {}) {
   return {
@@ -76,7 +73,7 @@ describe('Supabase repository — bulk updates (#60)', () => {
       'transactions',
       ids(250).map((id) => row(id))
     )
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     const outcome = await repo.updateTransactions(
       new Map(
@@ -104,7 +101,7 @@ describe('Supabase repository — bulk updates (#60)', () => {
     db.failWhen(
       (r) => r.op === 'update' && (r.in.transaction_id ?? []).includes('tx-150')
     )
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     const outcome = await repo.updateTransactions(
       new Map(ids(300).map((id) => [id, { category: 'food' }]))
@@ -118,7 +115,7 @@ describe('Supabase repository — bulk updates (#60)', () => {
 
   it('reports a row deleted elsewhere as missing, not failed', async () => {
     db.seed('transactions', [row('tx-1')])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     const outcome = await repo.updateTransactions(
       new Map([
@@ -138,7 +135,7 @@ describe('Supabase repository — bulk updates (#60)', () => {
     db.seed('transactions', [
       row('tx-1', { display_description: 'Disco', category: 'groceries' }),
     ])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await repo.updateTransactions(
       new Map([['tx-1', { displayDescription: null, tags: ['x'] }]])
@@ -159,7 +156,7 @@ describe('Supabase repository — bulk updates (#60)', () => {
         display_description: 'Club',
       }),
     ])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     const outcome = await repo.updateTransactions(
       new Map([
@@ -181,7 +178,7 @@ describe('Supabase repository — bulk updates (#60)', () => {
       'transactions',
       ids(4).map((id) => row(id))
     )
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await repo.updateTransactions(
       new Map([
@@ -200,7 +197,7 @@ describe('Supabase repository — bulk updates (#60)', () => {
       'transactions',
       ids(120).map((id) => row(id))
     )
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     const deleted = await repo.softDeleteTransactions(ids(120))
     expect(deleted.saved).toHaveLength(120)
@@ -221,7 +218,7 @@ describe('Supabase repository — imports (#61)', () => {
     db.failWhen(
       (r) => r.table === 'transactions' && r.op === 'insert' && ++inserts === 2
     )
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     const { saved, error } = await repo.insertTransactions(
       ids(1200).map((id) => tx(id)),
@@ -240,7 +237,7 @@ describe('Supabase repository — imports (#61)', () => {
 
   it('never overwrites a stored row: a taken id fails its chunk', async () => {
     db.seed('transactions', [row('tx-1', { category: 'travel' })])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     const { saved, error } = await repo.insertTransactions([tx('tx-1')])
 
@@ -258,7 +255,7 @@ describe('Supabase repository — split and unsplit (#60)', () => {
 
   it('saves the parts, then marks the parent split', async () => {
     db.seed('transactions', [row('p', { category: 'travel' })])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await repo.splitTransaction(tx('p'), parts)
 
@@ -280,7 +277,7 @@ describe('Supabase repository — split and unsplit (#60)', () => {
         r.eq.transaction_id === 'p' &&
         (r.payload as { is_split_parent?: boolean }).is_split_parent === true
     )
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await expect(repo.splitTransaction(tx('p'), parts)).rejects.toThrow()
 
@@ -291,7 +288,7 @@ describe('Supabase repository — split and unsplit (#60)', () => {
   it('reports a split it could not undo instead of failing silently', async () => {
     db.seed('transactions', [row('p')])
     db.failWhen((r) => r.op === 'update' || r.op === 'delete')
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await expect(repo.splitTransaction(tx('p'), parts)).rejects.toBeInstanceOf(
       SplitIncompleteError
@@ -307,7 +304,7 @@ describe('Supabase repository — split and unsplit (#60)', () => {
       row('p_split_0', { split_parent_id: 'p', amount: 1000 }),
       row('p_split_1', { split_parent_id: 'p', amount: 200 }),
     ])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await expect(repo.splitTransaction(tx('p'), parts)).rejects.toThrow(
       /Recargá/
@@ -329,7 +326,7 @@ describe('Supabase repository — split and unsplit (#60)', () => {
         r.op === 'update' &&
         (r.payload as { is_split_parent?: boolean }).is_split_parent === true
     )
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await expect(repo.splitTransaction(tx('p'), parts)).rejects.toThrow()
 
@@ -343,7 +340,7 @@ describe('Supabase repository — split and unsplit (#60)', () => {
       row('p_split_0', { split_parent_id: 'p' }),
       row('p_split_9', { split_parent_id: 'p' }), // not in this device's store
     ])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await repo.unsplitTransaction(tx('p', { isSplitParent: true }))
 
@@ -357,7 +354,7 @@ describe('Supabase repository — split and unsplit (#60)', () => {
       row('p_split_0', { split_parent_id: 'p' }),
     ])
     db.failWhen((r) => r.op === 'delete')
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await expect(
       repo.unsplitTransaction(tx('p', { isSplitParent: true }))
@@ -374,7 +371,7 @@ describe('Supabase repository — split and unsplit (#60)', () => {
     db.failWhen(
       (r) => r.op === 'delete' || (r.op === 'update' && ++updates > 1)
     )
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await expect(
       repo.unsplitTransaction(tx('p', { isSplitParent: true }))
@@ -399,7 +396,7 @@ describe('Supabase repository — workspace', () => {
         updated_at: '',
       },
     ])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     const snapshot = await repo.loadWorkspace()
 
@@ -416,7 +413,7 @@ describe('Supabase repository — transactions only', () => {
       row('tx-2', { is_deleted: true }),
       row('tx-3', { user_id: 'user-2' }),
     ])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     const rows = await repo.loadTransactions()
 
@@ -427,9 +424,38 @@ describe('Supabase repository — transactions only', () => {
   })
 })
 
+describe('Supabase repository — merchant overrides only', () => {
+  it("reads only the user's category overrides", async () => {
+    db.seed('category_overrides', [
+      {
+        user_id: 'user-1',
+        merchant_normalized: 'disco',
+        merchant_original: 'DISCO',
+        category: 'groceries',
+        created_at: '',
+        updated_at: '',
+      },
+      {
+        user_id: 'user-2',
+        merchant_normalized: 'tienda',
+        merchant_original: 'TIENDA',
+        category: 'groceries',
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    const repo = createSupabaseRepository('user-1')
+
+    const overrides = await repo.loadCategoryOverrides()
+
+    expect(overrides.map((o) => o.merchantNormalized)).toEqual(['disco'])
+    expect(db.requests.map((r) => r.table)).toEqual(['category_overrides'])
+  })
+})
+
 describe('Supabase repository — insights cache', () => {
   it('reads no cache as null, and reads back what it saved', async () => {
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
     expect(await repo.loadInsights()).toBeNull()
 
     await repo.saveInsights({
@@ -464,7 +490,7 @@ describe('Supabase repository — reset all data', () => {
   it("deletes the user's rows from every table, and nobody else's", async () => {
     db.seed('transactions', [row('tx-1'), row('tx-2', { user_id: 'user-2' })])
     db.seed('user_preferences', [{ user_id: 'user-1' }, { user_id: 'user-2' }])
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await repo.resetAll()
 
@@ -477,7 +503,7 @@ describe('Supabase repository — reset all data', () => {
 
   it('stops at the first table that fails', async () => {
     db.failWhen((r) => r.op === 'delete' && r.table === 'custom_categories')
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await expect(repo.resetAll()).rejects.toThrow('request failed')
 
@@ -488,7 +514,7 @@ describe('Supabase repository — reset all data', () => {
   it('still succeeds when the insights table is missing', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     db.failWhen((r) => r.table === 'ai_insights', { code: '42P01' })
-    const repo = createSupabaseRepository(session)
+    const repo = createSupabaseRepository('user-1')
 
     await expect(repo.resetAll()).resolves.toBeUndefined()
     expect(warn).toHaveBeenCalled()

@@ -32,6 +32,10 @@ import { listDescriptionOverrides } from '../services/descriptions/description-o
 import { listCustomPatterns } from '../services/categorizer/custom-patterns'
 import { listCustomCategories } from '../services/categories/category-store'
 import { UserFacingError } from '../utils/user-error'
+import {
+  createInMemoryAuth,
+  makeSession,
+} from '../services/auth/in-memory-auth'
 
 function tx(id: string): Transaction {
   return {
@@ -377,16 +381,23 @@ describe('workspace store', () => {
   })
 
   describe('ending a session', () => {
+    // A's session on the auth server; `signOut` is the port's.
+    const signedInAuth = () => createInMemoryAuth({ session: makeSession('a') })
+
     it('lets the last preference edit land, then signs out, then tears down', async () => {
       const a = repoOf('a', A_PREFS)
       await signIn(a)
       const save = heldSave(a)
       setPreference('a', 'fxRate', 43)
+      const auth = signedInAuth()
       const order: string[] = []
-
-      const ended = endSession(async () => {
+      const signOut = auth.signOut.bind(auth)
+      auth.signOut = async () => {
         order.push(`signOut (saved fxRate ${a.preferences?.fxRate})`)
-      })
+        await signOut()
+      }
+
+      const ended = endSession(auth)
       save.release()
       await ended
 
@@ -394,24 +405,38 @@ describe('workspace store', () => {
       expect(snapshot()).toEqual(EMPTY)
     })
 
-    it('still tears down when signing out fails (the stored session is gone), and rethrows', async () => {
+    it('tears down when the global sign-out fails but the session was removed here, and rethrows', async () => {
       await signIn(repoOf('a', A_PREFS))
+      const auth = signedInAuth()
+      auth.failOn('signOut', new Error('Internal Server Error'))
 
-      await expect(
-        endSession(() => Promise.reject(new Error('offline')))
-      ).rejects.toThrow('offline')
+      await expect(endSession(auth)).rejects.toThrow('Internal Server Error')
 
       expect(snapshot()).toEqual(EMPTY)
+    })
+
+    it('keeps the workspace when the session could not be removed at all, and rethrows', async () => {
+      await signIn(repoOf('a', A_PREFS))
+      const auth = signedInAuth()
+      auth.failOn('signOut', new Error('Failed to fetch'))
+      auth.failOn('signOutLocal', new Error('Failed to fetch'))
+
+      await expect(endSession(auth)).rejects.toThrow('Failed to fetch')
+
+      expect(snapshot()).toMatchObject({ userId: 'a', transactions: ['tx-a'] })
     })
 
     it('leaves alone a user who signed in while the sign-out was in flight', async () => {
       await signIn(repoOf('a', A_PREFS))
       let finishSignOut: () => void = () => {}
+      const auth = {
+        getSession: () => null,
+        signOut: () =>
+          new Promise<void>((resolve) => (finishSignOut = resolve)),
+      }
 
-      const ended = endSession(
-        () => new Promise<void>((resolve) => (finishSignOut = resolve))
-      )
-      await vi.waitFor(() => expect(finishSignOut).not.toBe(undefined))
+      const ended = endSession(auth)
+      await Promise.resolve()
       await Promise.resolve()
       teardownWorkspace()
       await signIn(repoOf('b'))
@@ -428,13 +453,13 @@ describe('workspace store', () => {
         await signIn(a)
         heldSave(a)
         setPreference('a', 'fxRate', 43)
-        const signOut = vi.fn(async () => {})
+        const auth = signedInAuth()
 
-        const ended = endSession(signOut)
+        const ended = endSession(auth)
         await vi.advanceTimersByTimeAsync(PREFERENCE_FLUSH_TIMEOUT_MS)
         await ended
 
-        expect(signOut).toHaveBeenCalled()
+        expect(auth.signOuts).toBe(1)
         expect(snapshot()).toEqual(EMPTY)
       } finally {
         vi.useRealTimers()
@@ -458,6 +483,38 @@ describe('workspace store', () => {
       expect(setPreference('a', 'theme', 'dark')).toBe(true)
       await flushPreferenceSaves()
       expect(a.preferences).toEqual({ ...DEFAULT_PREFERENCES, theme: 'dark' })
+    })
+
+    it('refuses preference edits while the delete runs, so none can recreate the deleted row (and its API key)', async () => {
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      const deleting = a.hold('resetAll')
+
+      const reset = resetWorkspace(a, reload)
+      await vi.waitFor(() => expect(a.requests.resetAll).toBe(1))
+      expect(
+        setPreference('a', 'claudeApiKey', 'sk-ant-typed-during-reset')
+      ).toBe(false)
+      deleting.release()
+      await reset
+      await flushPreferenceSaves()
+
+      expect(a.preferences).toBeNull()
+      expect(a.requests.savePreferences).toBeUndefined()
+      expect(workspaceStore.getState().preferences).toEqual(DEFAULT_PREFERENCES)
+    })
+
+    it('accepts edits again once a failed reset is over', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      a.failOn('resetAll', { times: 1 })
+
+      await expect(resetWorkspace(a, reload)).rejects.toBeInstanceOf(
+        UserFacingError
+      )
+
+      expect(setPreference('a', 'theme', 'light')).toBe(true)
     })
 
     it('waits for a pending preference save, so it cannot recreate the deleted row', async () => {

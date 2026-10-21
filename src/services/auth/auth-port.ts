@@ -29,6 +29,13 @@ export interface AuthPort {
   requestPasswordReset(email: string): Promise<void>
   /** Sets the signed-in (recovery) session's password. */
   updatePassword(password: string): Promise<void>
-  /** Ends the session; the stored session is cleared even if this rejects. */
+  /**
+   * Ends the session everywhere. If that fails, falls back to ending it on
+   * this device only, and still rejects with the first failure (for
+   * reporting). After a rejection `getSession()` says which happened: null
+   * — the session is gone here (SIGNED_OUT was reported), only the server
+   * may not know; a session — even the local sign-out failed (e.g.
+   * offline), the user is still signed in and can retry.
+   */
   signOut(): Promise<void>
 }

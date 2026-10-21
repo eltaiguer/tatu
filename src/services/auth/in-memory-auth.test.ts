@@ -86,11 +86,41 @@ describe('in-memory auth', () => {
     expect(auth.passwordUpdates).toEqual(['new-secret'])
   })
 
-  it('makes an operation fail on demand; sign-out still clears the session', async () => {
+  it('when the global sign-out fails, still removes the session here (local scope), reports it, and rejects', async () => {
     const auth = createInMemoryAuth({ session: makeSession('user-1') })
-    auth.failOn('signOut', new Error('network down'))
+    const onSession = vi.fn()
+    auth.onAuthChange(onSession)
+    auth.failOn('signOut', new Error('Internal Server Error'))
 
-    await expect(auth.signOut()).rejects.toThrow('network down')
+    await expect(auth.signOut()).rejects.toThrow('Internal Server Error')
+
+    expect(auth.getSession()).toBeNull()
+    expect(onSession).toHaveBeenCalledWith(null)
+  })
+
+  it('when even the local sign-out fails, keeps the session and reports no change', async () => {
+    const session = makeSession('user-1')
+    const auth = createInMemoryAuth({ session })
+    const onSession = vi.fn()
+    auth.onAuthChange(onSession)
+    auth.failOn('signOut', new Error('Failed to fetch'))
+    auth.failOn('signOutLocal', new Error('Failed to fetch'))
+
+    await expect(auth.signOut()).rejects.toThrow('Failed to fetch')
+
+    expect(auth.getSession()).toBe(session)
+    expect(onSession).not.toHaveBeenCalled()
+  })
+
+  it('lets a failure be healed, so a retry can succeed', async () => {
+    const auth = createInMemoryAuth({ session: makeSession('user-1') })
+    auth.failOn('signOut')
+    auth.failOn('signOutLocal')
+    await expect(auth.signOut()).rejects.toThrow()
+
+    auth.heal()
+    await auth.signOut()
+
     expect(auth.getSession()).toBeNull()
   })
 })

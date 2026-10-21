@@ -27,7 +27,7 @@ const loads = (userId = 'user-1') => stored.get(userId)?.requests.load ?? 0
 const saves = (userId = 'user-1') =>
   stored.get(userId)?.requests.savePreferences ?? 0
 
-type Props = { session: SupabaseSession | null; authMode: 'signin' | 'reset' }
+type Props = { session: SupabaseSession | null; paused: boolean }
 
 const onHydrateStart = vi.fn()
 
@@ -36,7 +36,7 @@ function renderWorkspace(initial: Props) {
     (p: Props) =>
       useUserWorkspace({
         repository: repositoryFor(p.session),
-        authMode: p.authMode,
+        paused: p.paused,
         onHydrateStart,
       }),
     { initialProps: initial }
@@ -53,7 +53,7 @@ describe('useUserWorkspace', () => {
   it('loads the signed-in user and reports ready', async () => {
     const { result } = renderWorkspace({
       session: makeSession('user-1'),
-      authMode: 'signin',
+      paused: false,
     })
 
     expect(result.current.status).toBe('loading')
@@ -64,11 +64,11 @@ describe('useUserWorkspace', () => {
   it('does not reload or re-save when a new session object arrives with the same user id (token refresh / tab refocus)', async () => {
     const { result, rerender } = renderWorkspace({
       session: makeSession('user-1'),
-      authMode: 'signin',
+      paused: false,
     })
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
-    rerender({ session: makeSession('user-1'), authMode: 'signin' })
+    rerender({ session: makeSession('user-1'), paused: false })
     await Promise.resolve()
     await Promise.resolve()
 
@@ -79,11 +79,11 @@ describe('useUserWorkspace', () => {
   it('reloads when the user id changes (real user switch)', async () => {
     const { result, rerender } = renderWorkspace({
       session: makeSession('user-1'),
-      authMode: 'signin',
+      paused: false,
     })
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
-    rerender({ session: makeSession('user-2'), authMode: 'signin' })
+    rerender({ session: makeSession('user-2'), paused: false })
 
     await waitFor(() => expect(loads('user-2')).toBe(1))
   })
@@ -91,7 +91,7 @@ describe('useUserWorkspace', () => {
   it('reloads on refetch', async () => {
     const { result } = renderWorkspace({
       session: makeSession('user-1'),
-      authMode: 'signin',
+      paused: false,
     })
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
@@ -105,7 +105,7 @@ describe('useUserWorkspace', () => {
   it('discards a refetch that has not landed when the hook unmounts', async () => {
     const { result, unmount } = renderWorkspace({
       session: makeSession('user-1'),
-      authMode: 'signin',
+      paused: false,
     })
     await waitFor(() => expect(result.current.status).toBe('ready'))
     const load = stored.get('user-1')!.hold('load')
@@ -120,7 +120,7 @@ describe('useUserWorkspace', () => {
   })
 
   it('does not load anything while choosing a new password', async () => {
-    renderWorkspace({ session: makeSession('user-1'), authMode: 'reset' })
+    renderWorkspace({ session: makeSession('user-1'), paused: true })
     await Promise.resolve()
 
     expect(loads()).toBe(0)
@@ -129,7 +129,7 @@ describe('useUserWorkspace', () => {
   it('saves when a preference value actually changes', async () => {
     const { result } = renderWorkspace({
       session: makeSession('user-1'),
-      authMode: 'signin',
+      paused: false,
     })
     await waitFor(() => expect(result.current.status).toBe('ready'))
 
@@ -143,7 +143,7 @@ describe('useUserWorkspace', () => {
   })
 
   it('starts with the shared default categorization model before preferences load', () => {
-    const { result } = renderWorkspace({ session: null, authMode: 'signin' })
+    const { result } = renderWorkspace({ session: null, paused: false })
 
     expect(result.current.aiModel).toBe('claude-haiku-5-5')
   })

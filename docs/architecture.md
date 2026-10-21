@@ -222,15 +222,27 @@ Ordering guarantees:
   `DEFAULT_PREFERENCES`, including the Claude key) and the AI config. Sign
   out, back-to-sign-in and password update end the session through
   `endSession` (wait for pending preference saves, at most
-  `PREFERENCE_FLUSH_TIMEOUT_MS`; sign out; tear down). The teardown happens
-  even when the sign-out request fails — the stored session is cleared
-  either way — but only for the user who was leaving. "Cerrar sesión" then
-  shows a Spanish message on the sign-in screen; password update ignores
-  the failure; back-to-sign-in switches screens at once and runs
-  `endSession` in the background with its failure caught. Supabase's
-  `SIGNED_OUT` event and a session that switches to another user
-  (`setSession` in `useAuthSession`) call `teardownWorkspace` directly.
-- **Reset all data.** `resetWorkspace(repository, reload)` waits for pending
+  `PREFERENCE_FLUSH_TIMEOUT_MS`; sign out; tear down — only for the user
+  who was leaving). Sign-out (`AuthPort.signOut`, `supabaseAuth`) ends the
+  session everywhere; if that request fails, supabase-js would keep its
+  session and sign the user back in on the next refresh, so the adapter
+  falls back to the local scope (this device's token only) and still
+  rejects. `endSession` then tears down only if `getSession()` is null.
+  "Cerrar sesión": session gone → sign-in screen with "No se pudo cerrar la
+  sesión en el servidor; en este dispositivo ya está cerrada."; still
+  signed in (even the local sign-out failed, e.g. offline) → stays, with
+  "Revisá tu conexión e intentá de nuevo." Both report the failure
+  (`captureError(error, 'auth')`, which drops network errors). Password
+  update ignores the failure (the user stays signed in if the session
+  could not be removed). Back-to-sign-in shows the sign-in screen at once
+  (App's `leaving` state, which also pauses the workspace hook) and runs
+  `endSession` in the background in the same order; the auth event then
+  clears the session. Supabase's `SIGNED_OUT` event and a session that
+  switches to another user (`setSession` in `useAuthSession`) call
+  `teardownWorkspace` directly.
+- **Reset all data.** `resetWorkspace(repository, reload)` refuses that
+  user's preference edits until it ends (a save landing after the delete
+  would recreate `user_preferences`, API key included), waits for pending
   saves, then `repository.resetAll()` (one table at a time, stopping at the
   first failure; the insights cache last and best-effort). On success the
   same user is marked ready with nothing and default preferences. On a
@@ -557,9 +569,10 @@ and Configuración shows it instead of a success toast.
 
 Every write goes through a `Repository` bound to one signed-in user
 (`src/services/repository/repository.ts`, #119). There is no ambient session:
-`App` receives `createRepository: (session) => Repository` as a prop, builds
+`App` receives `createRepository: (userId) => Repository` as a prop, builds
 the signed-in user's repository once per user id (a token refresh's new
-session object does not rebuild it) and hands it to
+session object does not rebuild it; the Supabase client sends the current
+token itself) and hands it to
 `useUserWorkspace`, `useTransactionHandlers`, the views that save rules,
 Insights (its cache: `loadInsights` / `saveInsights`) and Configuración
 ("reset all data": `resetAll`, through `resetWorkspace`). `main.tsx` passes
