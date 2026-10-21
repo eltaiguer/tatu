@@ -11,17 +11,19 @@ import {
   bulkTag,
   deleteTransactions,
   editTransaction,
-  importTransactions,
   restoreDeleted,
   splitTransaction,
   unsplitTransaction,
   type DeleteResult,
-  type ImportContext,
-  type ImportResult,
   type SplitPart,
   type TransactionEdit,
 } from '../services/mutations/transaction-mutations'
 import type { CustomPattern } from '../services/categorizer/custom-patterns'
+import {
+  importStatement,
+  type ImportStatementOptions,
+  type StatementFile,
+} from '../services/import/import-statement'
 
 export type { DeleteResult }
 
@@ -56,13 +58,10 @@ export function useTransactionHandlers({
   }
 
   return {
+    // A statement file in, its rows saved (services/import/import-statement.ts).
     handleTransactionsImported: run(
-      (
-        repo,
-        transactions: Transaction[],
-        context?: ImportContext
-      ): Promise<ImportResult> =>
-        importTransactions(repo, transactions, context)
+      (repo, file: StatementFile, options?: ImportStatementOptions) =>
+        importStatement(repo, file, options)
     ),
     handleUpdateTransaction: run(
       (repo, transactionId: string, edit: TransactionEdit) =>
