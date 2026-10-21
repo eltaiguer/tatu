@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_URL_FILTERS,
   filterToSearch,
+  hasActiveFilters,
   parseFilterParams,
   serializeFilterParams,
   type UrlFilterState,
@@ -87,5 +88,45 @@ describe('url filters', () => {
       filterToSearch({ category: 'restaurants', accountType: 'all' })
     ).toBe('categoria=restaurants&periodo=todo')
     expect(filterToSearch({})).toBe('')
+  })
+})
+
+function filters(overrides: Partial<UrlFilterState> = {}): UrlFilterState {
+  return { ...DEFAULT_URL_FILTERS, ...overrides }
+}
+
+describe('hasActiveFilters', () => {
+  it('is false for the defaults', () => {
+    expect(hasActiveFilters(filters())).toBe(false)
+  })
+
+  it.each<[string, Partial<UrlFilterState>]>([
+    ['a search', { search: 'disco' }],
+    ['a merchant', { merchant: 'uber' }],
+    ['a category', { categories: ['groceries'] }],
+    ['an account', { accounts: ['credit_card'] }],
+    ['a currency', { currency: 'UYU' }],
+    ['a type', { type: 'debit' }],
+    ['a minimum amount', { min: '10' }],
+    ['a maximum amount', { max: '10' }],
+  ])('is true with %s', (_, overrides) => {
+    expect(hasActiveFilters(filters(overrides))).toBe(true)
+  })
+
+  it('ignores a search of only spaces', () => {
+    expect(hasActiveFilters(filters({ search: '   ' }))).toBe(false)
+  })
+
+  // The period is shown by the month navigator and "show ignored" is a
+  // table toggle: neither makes the view "filtrado".
+  it('does not count the period or showing ignored rows', () => {
+    expect(
+      hasActiveFilters(
+        filters({
+          period: { mode: 'month', y: 2026, m: 2 },
+          showIgnored: true,
+        })
+      )
+    ).toBe(false)
   })
 })

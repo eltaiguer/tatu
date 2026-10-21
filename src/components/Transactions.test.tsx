@@ -13,6 +13,7 @@ import { ITEMS_PER_PAGE } from '../hooks/useTransactionFiltering'
 import type { Transaction } from '../models'
 import { NeedsConfirmationError, PartialWriteError } from '../utils/user-error'
 import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
+import { merchantKeyOf } from '../services/merchants/merchant-key'
 import { captureCsvDownload } from '../test/csv-download'
 import { parseSantanderDate } from '../services/parsers/utils'
 import { toMonthKey } from '../utils/date-utils'
@@ -1354,6 +1355,44 @@ describe('Transactions', () => {
         within(bar).getByRole('button', { name: 'Deseleccionar' })
       ).toBeInTheDocument()
     })
+  })
+})
+
+// A link that filters but names no period means all time, whatever filter
+// it carries (Resumen's "Mayores comercios" links by merchant).
+describe('Transactions deep links without a period', () => {
+  const rows: Transaction[] = [
+    {
+      ...makeTransaction(0, 'UBER'),
+      date: new Date('2026-02-10T00:00:00.000Z'),
+    },
+    {
+      ...makeTransaction(1, 'DISCO'),
+      date: new Date('2026-03-10T00:00:00.000Z'),
+    },
+  ]
+
+  it('shows every month for a merchant link', () => {
+    render(
+      <Transactions
+        transactions={rows}
+        initialFilters={{
+          ...DEFAULT_URL_FILTERS,
+          merchant: merchantKeyOf(rows[0]),
+        }}
+      />
+    )
+
+    expect(
+      screen.getByText(/1 movimiento · filtrado · Todo el período/)
+    ).toBeInTheDocument()
+  })
+
+  it('opens a plain visit on the newest month', () => {
+    render(<Transactions transactions={rows} />)
+
+    expect(screen.queryAllByText('UBER')).toHaveLength(0)
+    expect(screen.getAllByText('DISCO').length).toBeGreaterThan(0)
   })
 })
 
