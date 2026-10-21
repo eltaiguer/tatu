@@ -65,7 +65,7 @@ src/
     categories/            # Categorías sub-components: CategoryForm, CategoryCard, PatternRulesCard (rules form + list, owns its state)
     settings/              # Configuración sub-components: DuplicatesReview ("Buscar posibles duplicados" row + review dialog, #167)
     Settings.tsx           # Configuración view — theme, currency, account, data management
-    ImportCSV.tsx          # CSV import flow (wrapped in Radix Dialog, not a view); stays open on a summary of counts after an import (#202)
+    ImportCSV.tsx          # CSV import dialog (Radix Dialog, not a view): picks the file, hands its bytes to importStatement via a required handler, stays open on a summary of counts (#202)
     CategoryBreakdownList.tsx  # Ranked category list with progress bars
     FxChip.tsx             # Editable FX rate chip (click to edit inline)
     CurrencyToggle.tsx     # Home-currency switch
@@ -99,6 +99,7 @@ src/
     categorizer/           # Merchant pattern matching + auto-categorization; import-categorization.ts categorizes parsed rows (parsers are pure); eval/agreement.ts scores any engine against the user's confidence-1 rows (user rules withheld)
     dedup/                 # import-dedup.ts: content fingerprint + multiset import classification (#57); duplicate-review.ts: groups stored rows from different import runs for the one-off cleanup (#167)
     repository/            # The persistence port (#119): repository.ts (Repository, TransactionPatch: absent = untouched, null = clear), supabase-repository.ts (prod), in-memory-repository.ts (tests: fault injection, hold), batching.ts (≤100-id .in() chunks settled independently, sequential 500-row import inserts)
+    import/                # import-statement.ts: importStatement = THE import pipeline, one function (decode → parse → categorize → importTransactions: classify, AI enrich, insert, import run, repair); onParsed marks the read/save boundary
     mutations/             # bulk-steps.ts: runs a bulk edit's steps in order (retry resumes the chain); transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
     categories/            # category-registry.ts: resolveCategory = THE answer to "what is this category id?" (label, colour, icon, isIgnored, known) for every surface — never re-derive it; isCategoryIgnored is its cheap form for totals; getCategoryDefinitions lists the pickable ones. category-store.ts: custom categories (ids normalized once, on load); category-counts.ts: rows per category
     filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; also periodWithDateBound, groupSplitRows (split parts under their parent); url-filters.ts: that state <-> URL query + hasActiveFilters (THE "filtrado" rule: the view, its default period for links, filterToSearch); period-label.ts: a period's Spanish label
@@ -128,7 +129,7 @@ src/
     tailwind.css           # Tailwind 4 import + sources
     theme.css              # CSS custom properties — light + dark tokens
                            # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
-  utils/                   # date-utils, formatting, memo, transaction-display, user-display, user-error, auth-errors
+  utils/                   # date-utils (newestDate / newestDataMonth = the newest month with data; pass only the rows that count where that matters), formatting, memo, transaction-display, user-display, user-error, auth-errors
   test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-claude-client.ts records Claude requests and scripts answers
 supabase/
   schema.sql               # PostgreSQL schema (tables, RLS policies)
@@ -255,7 +256,7 @@ Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip
 
 **Known shape of the code:** #140 moved the large views' inline sub-components out, one view per PR, into `src/components/<view>/`: Categorías (`components/categories/`), Resumen (`components/dashboard/`) and Transacciones (`components/transactions/`, which also holds the view's state hooks and `TransactionTable`'s row/card) are done. No view file is over ~600 lines. Put new sub-components in the view's folder, not inline.
 
-**AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, `importTransactions` (`services/mutations/transaction-mutations.ts`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
+**AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, an import (`importStatement` → `importTransactions` in `services/mutations/transaction-mutations.ts`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
 
 **AI Insights (shipped**, ADR-0001 + ADR-0002, `docs/decisions/000{1,2}-*.md`): Claude-generated spending insights over the user's **entire transaction history** (no period navigation — ADR-0002), using the stronger `INSIGHTS_MODEL`, cached in Supabase (`ai_insights`, one row per user — requires a manual `schema.sql` apply, see `supabase/README.md`).
 

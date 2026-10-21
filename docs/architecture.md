@@ -8,15 +8,21 @@ terms are defined in [`CONTEXT.md`](CONTEXT.md).
 
 ## Import
 
-A statement goes from file to screen in one pass in the browser.
-`ImportCSV.tsx` reads the file's bytes and decodes them with `decodeCsvBytes`
+A statement goes from file to screen in one pass in the browser, behind one
+function: `importStatement` (`src/services/import/import-statement.ts`, bound
+to the signed-in user's repository by `useTransactionHandlers`). `ImportCSV.tsx`
+only reads the picked file's bytes, shows progress and reports the outcome.
+`importStatement` decodes the bytes with `decodeCsvBytes`
 (`src/services/parsers/decode-csv.ts`, #192): strict UTF-8 first, falling back
 to windows-1252, because Santander exports are Latin-1 (a UTF-8 BOM is
 dropped). It then parses, categorizes the parsed rows
 (`categorizeParsedData` in `src/services/categorizer/import-categorization.ts`),
-then hands them to `importTransactions`
-(`src/services/mutations/transaction-mutations.ts`, through
-`useTransactionHandlers`).
+calls `onParsed`, and hands the rows to `importTransactions`
+(`src/services/mutations/transaction-mutations.ts`) for everything after.
+`onParsed` is the read/save boundary: a rejection before it is a file that
+could not be read ("Error al validar archivo", reported to Sentry as
+`import-parse`), after it a failure to save ("No se pudo importar", `import`).
+The result is `ImportResult` plus the file type and the month to show.
 The parsers are pure: they map columns, dates, amounts, currency and IDs and
 never call the categorizer.
 
@@ -27,13 +33,14 @@ corregidas when the import repaired descriptions; one entry per count in
 nuevos" state instead of success, adding "Se corrigieron N descripciones" when
 it repaired some. Nothing navigates on
 its own: "Ver transacciones" closes the dialog and opens Transacciones on the
-month of the newest new row (the file's newest row when nothing was new),
+month of the newest new row (the file's newest row when nothing was new;
+`newestDataMonth` in `src/utils/date-utils.ts`),
 through the same `navigateToTransactions` link Resumen uses; "Importar otro
 archivo" resets the dialog to the file picker. Errors stay in the dialog.
 
 ```mermaid
 flowchart TD
-    A["CSV file dropped in ImportCSV"] --> A2["decodeCsvBytes: UTF-8 (fatal) else windows-1252"]
+    A["CSV file dropped in ImportCSV: bytes to importStatement"] --> A2["decodeCsvBytes: UTF-8 (fatal) else windows-1252"]
     A2 --> B["detectFileType: credit_card, bank_account_usd or bank_account_uyu"]
     B --> C["parseCreditCardCSV or parseBankAccountCSV"]
     C --> E["Per row: generateTransactionId(date, description, amount text, row index)"]
