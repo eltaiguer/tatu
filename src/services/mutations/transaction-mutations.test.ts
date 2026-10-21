@@ -115,7 +115,7 @@ function signedIn(
   const repo = createInMemoryRepository({ transactions: rows, ...seed })
   transactionStore.getState().setTransactions(rows)
   workspaceStore.setState({ userId: repo.userId, status: 'ready' })
-  return { repo }
+  return repo
 }
 
 function stored(id: string) {
@@ -162,7 +162,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
   })
 
   it('imports transactions and reports no AI failure on the happy path', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     const outcome = await importTransactions(
       repo,
@@ -184,7 +184,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     ai.enrichTransactionsWithAi.mockResolvedValue({
       results: new Map([['tx-1', { category: 'restaurants' }]]),
     })
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     await importTransactions(repo, [makeTransaction('tx-1')])
 
@@ -202,7 +202,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     replaceMerchantCategoryOverrides({
       'devoto express': { category: 'groceries', updatedAt: '' },
     })
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     await importTransactions(repo, [
       makeTransaction('desc', { description: 'FARMACIA SAN ROQUE' }),
@@ -227,7 +227,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
       },
     ])
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     await importTransactions(repo, [
       makeTransaction('ruled', {
@@ -251,7 +251,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     replaceMerchantCategoryOverrides({
       'supermercado disco': { category: 'groceries', updatedAt: '' },
     })
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     const outcome = await importTransactions(repo, [makeTransaction('tx-1')])
 
@@ -264,7 +264,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
       new Error('401 invalid x-api-key')
     )
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     const outcome = await importTransactions(
       repo,
@@ -287,7 +287,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
     ai.enrichTransactionsWithAi.mockRejectedValueOnce(
       new Error('401 invalid x-api-key')
     )
-    const { repo } = signedIn()
+    const repo = signedIn()
     reporting.captureError.mockClear()
 
     await importTransactions(
@@ -301,7 +301,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
 
   it('does not call the AI when it is disabled', async () => {
     ai.getAiConfig.mockReturnValue({ ...AI_ON, enabled: false, apiKey: '' })
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     const outcome = await importTransactions(repo, [makeTransaction('tx-1')])
 
@@ -314,7 +314,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
       results: new Map(),
       partialFailure: '1 de 3 lotes fallaron: 529 overloaded',
     })
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     const outcome = await importTransactions(repo, [makeTransaction('tx-1')])
 
@@ -325,7 +325,7 @@ describe('transaction-mutations — import with AI enrichment', () => {
 
 describe('transaction-mutations — import persistence (#61)', () => {
   it('fails the import and stores nothing when the first chunk fails', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
     repo.failOn('insert', { error: new Error('network down') })
 
     await expect(
@@ -340,7 +340,7 @@ describe('transaction-mutations — import persistence (#61)', () => {
   })
 
   it('keeps the chunks that saved, stores exactly those rows and says how many', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
     const rows = many(1200).map((tx, i) => ({
       ...tx,
       description: `COMPRA ${i}`,
@@ -366,7 +366,7 @@ describe('transaction-mutations — import persistence (#61)', () => {
   })
 
   it('finishes the job when the same file is imported again', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
     const rows = many(700).map((tx, i) => ({ ...tx, description: `C ${i}` }))
     repo.failOn('insert', {
       when: (chunk) => chunk.includes(rows[600].id),
@@ -384,7 +384,7 @@ describe('transaction-mutations — import persistence (#61)', () => {
 
   it('does not report a saved import as failed when closing its audit record fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { repo } = signedIn()
+    const repo = signedIn()
     repo.failOn('completeImportRun')
 
     const result = await importTransactions(
@@ -403,7 +403,7 @@ describe('transaction-mutations — import persistence (#61)', () => {
 
   it('reports to Sentry when a failed import cannot be marked failed', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { repo } = signedIn()
+    const repo = signedIn()
     repo.failOn('insert', { error: new Error('network down') })
     repo.failOn('failImportRun')
 
@@ -418,7 +418,7 @@ describe('transaction-mutations — import persistence (#61)', () => {
   })
 
   it('fails before recording the import when the lookup fails', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
     repo.failOn('findImportCandidates', { error: new Error('timeout') })
 
     await expect(
@@ -453,7 +453,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
   }
 
   it('shows imported rows tagged with their import run, as a reload would (#167)', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     await importTransactions(repo, file(A), makeImportContext())
 
@@ -463,7 +463,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
   })
 
   it('imports only the new row from an overlapping export whose rows shifted', async () => {
-    const { repo } = signedIn(file(A, B))
+    const repo = signedIn(file(A, B))
     const shifted = file(NEW, A, B)
 
     const result = await importTransactions(repo, shifted, makeImportContext())
@@ -479,7 +479,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
   })
 
   it('imports nothing when the exact same file is imported again', async () => {
-    const { repo } = signedIn(file(A, B))
+    const repo = signedIn(file(A, B))
 
     const result = await importTransactions(repo, file(A, B))
 
@@ -488,7 +488,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
   })
 
   it('imports both rows of a genuine identical same-day pair', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
 
     const result = await importTransactions(repo, file(A, A))
 
@@ -498,7 +498,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
 
   it('keeps a deleted row deleted after a shifted re-import', async () => {
     const [deletedA] = file(A)
-    const { repo } = signedIn(file(A, B).slice(1), {
+    const repo = signedIn(file(A, B).slice(1), {
       deleted: [deletedA],
     })
     const shifted = file(NEW, A, B)
@@ -514,7 +514,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
   it('saves a row whose id is taken by a different row under a salted id', async () => {
     const [incoming] = file(A)
     const other = { ...file(B)[0], id: incoming.id }
-    const { repo } = signedIn([other])
+    const repo = signedIn([other])
 
     const result = await importTransactions(repo, [incoming])
 
@@ -527,7 +527,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
 
   it('salts further when the salted id is taken on the server outside the window', async () => {
     const [incoming] = file(A)
-    const { repo } = signedIn([
+    const repo = signedIn([
       { ...file(B)[0], id: incoming.id },
       makeTransaction(`${incoming.id}_c1`, {
         date: new Date('2024-01-01T00:00:00Z'),
@@ -547,7 +547,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       model: 'claude-haiku-4-5',
     })
     const [incoming] = file(A)
-    const { repo } = signedIn([{ ...file(B)[0], id: incoming.id }])
+    const repo = signedIn([{ ...file(B)[0], id: incoming.id }])
 
     await importTransactions(repo, [incoming])
 
@@ -574,7 +574,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
 
     it('moves a merchant override to the repaired text (review of #222)', async () => {
       const [garbled] = garbledFile(PENAROL)
-      const { repo } = signedIn([garbled])
+      const repo = signedIn([garbled])
       replaceMerchantCategoryOverrides({
         [garbled.description.toLowerCase()]: {
           merchantName: garbled.description,
@@ -599,7 +599,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
         category: 'entertainment',
         displayDescription: 'Club',
       }
-      const { repo } = signedIn([edited])
+      const repo = signedIn([edited])
 
       const result = await importTransactions(
         repo,
@@ -631,7 +631,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
     })
 
     it('then treats the repaired row as a plain duplicate', async () => {
-      const { repo } = signedIn(garbledFile(PENAROL))
+      const repo = signedIn(garbledFile(PENAROL))
       await importTransactions(repo, file(PENAROL))
 
       const again = await importTransactions(repo, file(PENAROL))
@@ -643,7 +643,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
 
     it('still saves the new rows when a repair fails, and reports it', async () => {
       const [garbled] = garbledFile(PENAROL)
-      const { repo } = signedIn([garbled])
+      const repo = signedIn([garbled])
       failChunksWith(repo, 'update', garbled.id)
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -659,7 +659,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
 
     it('reports a failed repair to Sentry', async () => {
       const [garbled] = garbledFile(PENAROL)
-      const { repo } = signedIn([garbled])
+      const repo = signedIn([garbled])
       failChunksWith(repo, 'update', garbled.id)
       vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -676,14 +676,14 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
 
       async function renameEverywhere() {
         const [garbled] = garbledFile(PENAROL)
-        const ctx = signedIn([garbled])
-        await editTransaction(ctx.repo, garbled.id, {
+        const repo = signedIn([garbled])
+        await editTransaction(repo, garbled.id, {
           displayDescription: 'Club Peñarol',
           category: 'entertainment',
           applyScope: 'matching_past_and_future',
         })
         expect(getDisplayDescription(stored(garbled.id)!)).toBe('Club Peñarol')
-        return { ...ctx, garbled }
+        return { repo, garbled }
       }
 
       it('keeps a name and category set for all matching rows', async () => {
@@ -748,7 +748,7 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
   })
 
   it('is not blocked by a row still in memory that the server no longer has', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
     transactionStore.getState().setTransactions(file(A))
     const shifted = file(NEW, A)
 
@@ -772,7 +772,7 @@ describe('transaction-mutations — apply scope', () => {
 
   describe("scope 'single'", () => {
     it('changes only the target transaction, on both sides', async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
 
       await editTransaction(repo, 'same-1', {
         category: 'restaurants',
@@ -790,7 +790,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('does not write any override', async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
 
       await editTransaction(repo, 'same-1', {
         category: 'restaurants',
@@ -802,7 +802,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it("clears the category on both sides for 'Sin categoría'", async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
 
       await editTransaction(repo, 'same-1', {
         category: null,
@@ -815,7 +815,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('leaves the category alone when none is given', async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
 
       await editTransaction(repo, 'same-1', {
         tags: ['x'],
@@ -833,7 +833,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('reports a row deleted on another device instead of a fake success', async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
       // Gone from the server (a reset on another device), still on screen.
       await repo.hardDeleteTransactions(['same-1'])
       await expect(
@@ -848,7 +848,7 @@ describe('transaction-mutations — apply scope', () => {
 
   describe("scope 'matching_past_and_future'", () => {
     it('changes every transaction sharing the description, on both sides', async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
 
       const result = await editTransaction(repo, 'same-1', {
         category: 'restaurants',
@@ -864,7 +864,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('records the overrides on both sides so future imports match too', async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
 
       await editTransaction(repo, 'same-1', {
         displayDescription: 'Disco',
@@ -883,7 +883,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('clears per-row names on both sides when the user renames', async () => {
-      const { repo } = signedIn([
+      const repo = signedIn([
         makeTransaction('same-1', { description: MERCHANT }),
         makeTransaction('same-2', {
           description: MERCHANT,
@@ -902,7 +902,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('does not touch per-row names when only the category changed', async () => {
-      const { repo } = signedIn([
+      const repo = signedIn([
         makeTransaction('enriched', {
           description: MERCHANT,
           displayDescription: 'Tienda Inglesa',
@@ -924,7 +924,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('fails the edit and changes nothing when the rule could not be saved', async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
       repo.failOn('upsertCategoryOverride', { error: new Error('timeout') })
 
       await expect(
@@ -944,7 +944,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('puts the previous description override back when the category one fails', async () => {
-      const { repo } = signedIn(seed(), {
+      const repo = signedIn(seed(), {
         descriptionOverrides: [
           {
             descriptionNormalized: 'supermercado disco',
@@ -979,7 +979,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('shows the name the server kept when taking it back fails too', async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
       repo.failOn('upsertCategoryOverride')
       repo.failOn('deleteDescriptionOverride')
 
@@ -1002,7 +1002,7 @@ describe('transaction-mutations — apply scope', () => {
 
     it('applies the rows that saved, says the rule was kept, and retries only the rest', async () => {
       const rows = many(250, { description: MERCHANT })
-      const { repo } = signedIn(rows)
+      const repo = signedIn(rows)
       repo.failOn('update', {
         when: (chunk) => chunk.includes('tx-150'),
         times: 1,
@@ -1034,7 +1034,7 @@ describe('transaction-mutations — apply scope', () => {
 
   describe("scope 'future_matching_only'", () => {
     it('records the override but leaves other existing rows untouched', async () => {
-      const { repo } = signedIn(seed())
+      const repo = signedIn(seed())
 
       await editTransaction(repo, 'same-1', {
         category: 'restaurants',
@@ -1057,7 +1057,7 @@ describe('transaction-mutations — apply scope', () => {
     it.each(['future_matching_only', 'matching_past_and_future'] as const)(
       "scope '%s' without a rename reaches a future row with other codes",
       async (applyScope) => {
-        const { repo } = signedIn([
+        const repo = signedIn([
           makeTransaction('tx', { description: CORRECTED }),
         ])
 
@@ -1077,9 +1077,7 @@ describe('transaction-mutations — apply scope', () => {
     )
 
     it('clearing the category stops it reaching future rows', async () => {
-      const { repo } = signedIn([
-        makeTransaction('tx', { description: CORRECTED }),
-      ])
+      const repo = signedIn([makeTransaction('tx', { description: CORRECTED })])
       await editTransaction(repo, 'tx', {
         category: 'healthcare',
         applyScope: 'future_matching_only',
@@ -1111,7 +1109,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('clearing the category removes the legacy row on both sides', async () => {
-      const { repo } = signedIn(
+      const repo = signedIn(
         [makeTransaction('tx', { description: CORRECTED })],
         { categoryOverrides: [legacyRow()] }
       )
@@ -1133,7 +1131,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('setting a category replaces the legacy row instead of keeping both', async () => {
-      const { repo } = signedIn(
+      const repo = signedIn(
         [makeTransaction('tx', { description: CORRECTED })],
         { categoryOverrides: [legacyRow()] }
       )
@@ -1159,7 +1157,7 @@ describe('transaction-mutations — apply scope', () => {
     })
 
     it('mirrors exactly what the server holds when only the legacy delete fails', async () => {
-      const { repo } = signedIn(
+      const repo = signedIn(
         [makeTransaction('tx', { description: CORRECTED })],
         { categoryOverrides: [legacyRow()] }
       )
@@ -1199,7 +1197,7 @@ describe('transaction-mutations — apply scope', () => {
         enabled: true,
         model: 'claude-haiku-4-5',
       })
-      const { repo } = signedIn([
+      const repo = signedIn([
         makeTransaction('tx', {
           description:
             'COMPRA CON TARJETA DEBITO KIOSCO X 12/03 15:22 AUT 123456',
@@ -1234,7 +1232,7 @@ describe('transaction-mutations — apply scope', () => {
     it.each(['single', 'future_matching_only'] as const)(
       "scope '%s': clearing the name reaches the server, not just the store",
       async (applyScope) => {
-        const { repo } = signedIn(named())
+        const repo = signedIn(named())
 
         await editTransaction(repo, 'tx', {
           displayDescription: MERCHANT,
@@ -1247,7 +1245,7 @@ describe('transaction-mutations — apply scope', () => {
     )
 
     it("scope 'single': a real rename is persisted as the new name", async () => {
-      const { repo } = signedIn(named())
+      const repo = signedIn(named())
 
       await editTransaction(repo, 'tx', {
         displayDescription: 'Tienda Inglesa',
@@ -1268,7 +1266,7 @@ describe('transaction-mutations — bulk operations (#60)', () => {
   ]
 
   it('categorizes only the selected transactions and reports how many', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
 
     const result = await bulkCategorize(repo, ['a', 'b'], 'restaurants')
 
@@ -1283,7 +1281,7 @@ describe('transaction-mutations — bulk operations (#60)', () => {
   })
 
   it('does nothing when the selection is empty', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
 
     const result = await bulkCategorize(repo, [], 'restaurants')
 
@@ -1292,7 +1290,7 @@ describe('transaction-mutations — bulk operations (#60)', () => {
   })
 
   it('rejects and leaves the store alone when every write fails', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
     repo.failOn('update', { error: new Error('timeout') })
 
     await expect(bulkCategorize(repo, ['a'], 'restaurants')).rejects.toThrow(
@@ -1302,7 +1300,7 @@ describe('transaction-mutations — bulk operations (#60)', () => {
   })
 
   it('applies exactly the chunks that saved and retries only the rest', async () => {
-    const { repo } = signedIn(many(300))
+    const repo = signedIn(many(300))
     repo.failOn('update', {
       when: (chunk) => chunk.includes('tx-150'),
       times: 1,
@@ -1334,7 +1332,7 @@ describe('transaction-mutations — bulk operations (#60)', () => {
   })
 
   it('counts only rows that actually gained the tag', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
 
     await bulkTag(repo, ['a'], 'viaje')
     const second = await bulkTag(repo, ['a', 'b'], 'viaje')
@@ -1343,7 +1341,7 @@ describe('transaction-mutations — bulk operations (#60)', () => {
   })
 
   it('adds a tag on both sides without duplicating one already present', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('a'),
       makeTransaction('b', { tags: ['fijo'] }),
     ])
@@ -1357,7 +1355,7 @@ describe('transaction-mutations — bulk operations (#60)', () => {
   })
 
   it('does not lose a row restored while a bulk write was in flight', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
     const gate = repo.hold('update')
     const pending = bulkCategorize(repo, ['a'], 'food')
     await Promise.resolve()
@@ -1371,7 +1369,7 @@ describe('transaction-mutations — bulk operations (#60)', () => {
   })
 
   it('auto-categorizes in one request per (category, confidence)', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('fee', {
         description: 'COMISION MANTENIMIENTO',
         category: undefined,
@@ -1404,7 +1402,7 @@ describe('transaction-mutations — Auto-categorizar pool and write rule (audit)
   const quiet = { amount: 5000, currency: 'UYU' as const }
 
   it('does not lower a row by matching it against itself', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('self', {
         ...quiet,
         description: 'MISTERIOSO BAR 77',
@@ -1421,7 +1419,7 @@ describe('transaction-mutations — Auto-categorizar pool and write rule (audit)
   })
 
   it('does not seed similar-merchant hints from review-band guesses', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('guess', {
         ...quiet,
         description: 'ZZZ UNKNOWN FOO',
@@ -1443,7 +1441,7 @@ describe('transaction-mutations — Auto-categorizar pool and write rule (audit)
   })
 
   it('still seeds hints from rows categorized with confidence', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('known', {
         ...quiet,
         description: 'ZZZ UNKNOWN FOO',
@@ -1465,7 +1463,7 @@ describe('transaction-mutations — Auto-categorizar pool and write rule (audit)
   })
 
   it('never replaces a category with a less confident one', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('locked', {
         description: 'MISTERIOSO BAR 77',
         amount: 300,
@@ -1484,7 +1482,7 @@ describe('transaction-mutations — Auto-categorizar pool and write rule (audit)
   })
 
   it('leaves a user-locked row (confidence 1) alone', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('user', {
         ...quiet,
         description: 'DEBITO OPERACION EN SUPERNET O SMS 111111TT55 MISTERIOSO',
@@ -1511,7 +1509,7 @@ describe('transaction-mutations — override names in the Auto-categorizar pool 
         updatedAt: '',
       },
     })
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('target', {
         description: 'RAW FOOD BAR',
         amount: 5000,
@@ -1542,7 +1540,7 @@ describe('transaction-mutations — Auto-categorizar, review of #221', () => {
         createdAt: '',
       },
     ])
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('ruled', {
         ...quiet,
         description: 'MISTERIOSO BAR 77',
@@ -1558,7 +1556,7 @@ describe('transaction-mutations — Auto-categorizar, review of #221', () => {
   })
 
   it('does not replace a legacy category without a recorded confidence by a guess', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('legacy', {
         description: 'XYZZY QWERTY',
         amount: 300,
@@ -1576,7 +1574,7 @@ describe('transaction-mutations — Auto-categorizar, review of #221', () => {
   })
 
   it('still seeds hints from legacy rows without a recorded confidence', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('legacy', {
         ...quiet,
         description: 'ZZZ UNKNOWN FOO',
@@ -1598,7 +1596,7 @@ describe('transaction-mutations — Auto-categorizar, review of #221', () => {
   })
 
   it('lets a selected, confident row seed its uncategorized sibling (select all)', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('known', {
         ...quiet,
         description: 'MISTERIOSO BAR 77',
@@ -1628,7 +1626,7 @@ describe('transaction-mutations — Auto-categorizar, review of #221', () => {
         updatedAt: '',
       },
     })
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('stale', {
         ...quiet,
         description: 'TST CAFE BRASILERO',
@@ -1649,7 +1647,7 @@ describe('transaction-mutations — Auto-categorizar, review of #221', () => {
   })
 
   it('does not spread an ignored pseudo-category by similarity', async () => {
-    const { repo } = signedIn([
+    const repo = signedIn([
       makeTransaction('ignored', {
         ...quiet,
         description: 'ZZZ FOO 1',
@@ -1679,7 +1677,7 @@ describe('transaction-mutations — delete and undo', () => {
   ]
 
   it('soft-deletes the selected rows, reversibly', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
 
     const result = await deleteTransactions(repo, ['a', 'b'])
 
@@ -1691,7 +1689,7 @@ describe('transaction-mutations — delete and undo', () => {
   })
 
   it('undo restores the rows on both sides', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
     const { removed } = await deleteTransactions(repo, ['a', 'b'])
 
     const result = await restoreDeleted(removed)
@@ -1703,7 +1701,7 @@ describe('transaction-mutations — delete and undo', () => {
   })
 
   it('does not put rows back locally when the restore fails', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
     const { removed } = await deleteTransactions(repo, ['a'])
     repo.failOn('restore', { error: new Error('timeout') })
 
@@ -1712,7 +1710,7 @@ describe('transaction-mutations — delete and undo', () => {
   })
 
   it('refuses an undo it did not hand out', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
 
     await expect(restoreDeleted([makeTransaction('a')])).rejects.toThrow(
       'Ya no se puede deshacer'
@@ -1721,7 +1719,7 @@ describe('transaction-mutations — delete and undo', () => {
   })
 
   it('rejects a delete whose write fails and keeps the row', async () => {
-    const { repo } = signedIn(abc())
+    const repo = signedIn(abc())
     repo.failOn('softDelete', { error: new Error('timeout') })
 
     await expect(deleteTransactions(repo, ['a'])).rejects.toThrow('timeout')
@@ -1730,7 +1728,7 @@ describe('transaction-mutations — delete and undo', () => {
   })
 
   it('removes exactly the chunks that were deleted, keeps undo for them and retries the rest', async () => {
-    const { repo } = signedIn(many(150))
+    const repo = signedIn(many(150))
     repo.failOn('softDelete', {
       when: (chunk) => chunk.includes('tx-120'),
       times: 1,
@@ -1769,7 +1767,7 @@ describe('transaction-mutations — split and unsplit', () => {
   const parent = () => [makeTransaction('parent', { amount: 1000 })]
 
   it('marks the parent and adds the parts on both sides', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
 
     const result = await splitTransaction(repo, 'parent', parts)
 
@@ -1787,7 +1785,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('rejects a failed split without changing either side', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     repo.failOn('splitParts', { error: new Error('no se pudo') })
 
     await expect(splitTransaction(repo, 'parent', parts)).rejects.toThrow(
@@ -1800,7 +1798,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('takes the parts back when the parent cannot be marked (#60)', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     repo.failOn('splitMark', { error: new Error('timeout') })
 
     await expect(splitTransaction(repo, 'parent', parts)).rejects.toThrow(
@@ -1812,7 +1810,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('shows parent and parts as the server has them when taking the parts back fails (#60)', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     repo.failOn('splitMark')
     repo.failOn('splitUndo')
 
@@ -1830,7 +1828,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('refuses a split another device already made, and leaves its parts alone', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     // Device 1 splits 1000 into 600 + 400.
     await splitTransaction(repo, 'parent', parts)
     // Device 2 still shows the parent unsplit and splits it 900 + 100.
@@ -1851,7 +1849,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it("does not clear another device's split when its own mark fails", async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     await splitTransaction(repo, 'parent', parts)
     transactionStore.getState().setTransactions(parent())
     repo.failOn('splitMark')
@@ -1863,7 +1861,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('unsplits on both sides, removing every part', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     await splitTransaction(repo, 'parent', parts)
 
     await unsplitTransaction(repo, 'parent')
@@ -1875,7 +1873,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('leaves both sides split when the parts cannot be deleted', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     await splitTransaction(repo, 'parent', parts)
     repo.failOn('unsplitParts', { error: new Error('timeout') })
 
@@ -1886,7 +1884,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('shows the parent unmarked with its parts when the unsplit cannot be undone', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     await splitTransaction(repo, 'parent', parts)
     repo.failOn('unsplitParts')
     repo.failOn('unsplitRemark')
@@ -1897,7 +1895,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('needs confirmation, then soft-deletes the parent and hard-deletes its parts', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     await splitTransaction(repo, 'parent', parts)
 
     await expect(deleteTransactions(repo, ['parent'])).rejects.toThrow(
@@ -1916,7 +1914,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('keeps leftover parts visible and retries them when their delete fails', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     await splitTransaction(repo, 'parent', parts)
     repo.failOn('hardDelete', { times: 1 })
 
@@ -1935,7 +1933,7 @@ describe('transaction-mutations — split and unsplit', () => {
   })
 
   it('needs confirmation, then hard-deletes a single part', async () => {
-    const { repo } = signedIn(parent())
+    const repo = signedIn(parent())
     await splitTransaction(repo, 'parent', parts)
 
     await expect(deleteTransactions(repo, ['parent_split_1'])).rejects.toThrow(
@@ -1971,7 +1969,7 @@ describe('transaction-mutations — applying a new rule to past rows', () => {
   ]
 
   it('applies to matching rows but leaves split parts their own category', async () => {
-    const { repo } = signedIn(rows())
+    const repo = signedIn(rows())
 
     const result = await applyPatternToPast(repo, rule)
 
@@ -1985,7 +1983,7 @@ describe('transaction-mutations — applying a new rule to past rows', () => {
   })
 
   it('keeps and counts only the rows that saved when a chunk fails', async () => {
-    const { repo } = signedIn(rows())
+    const repo = signedIn(rows())
     repo.failOn('update')
 
     const result = await applyPatternToPast(repo, rule)
@@ -1997,7 +1995,7 @@ describe('transaction-mutations — applying a new rule to past rows', () => {
 
 describe('transaction-mutations — switching accounts mid-write', () => {
   it("never lets user A's write land in user B's store", async () => {
-    const { repo } = signedIn([makeTransaction('a')])
+    const repo = signedIn([makeTransaction('a')])
     const gate = repo.hold('update')
     const pending = bulkCategorize(repo, ['a'], 'food').catch((e: unknown) => e)
     await Promise.resolve()
@@ -2018,7 +2016,7 @@ describe('transaction-mutations — switching accounts mid-write', () => {
   })
 
   it("drops an import's rows when the account changed while it was saving", async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
     const gate = repo.hold('insert')
     const pending = importTransactions(repo, [makeTransaction('a')]).catch(
       (e: unknown) => e
@@ -2034,7 +2032,7 @@ describe('transaction-mutations — switching accounts mid-write', () => {
   })
 
   it('does not report the refused close of a run when the account changed mid-import', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
     repo.failOn('insert', {
       when: () => {
         workspaceStore.setState({ userId: 'user-b', status: 'ready' })
@@ -2054,7 +2052,7 @@ describe('transaction-mutations — switching accounts mid-write', () => {
   })
 
   it('does not report the refused completion of a run when the account changed', async () => {
-    const { repo } = signedIn()
+    const repo = signedIn()
     repo.failOn('completeImportRun', {
       when: () => {
         workspaceStore.setState({ userId: 'user-b', status: 'ready' })
@@ -2073,7 +2071,7 @@ describe('transaction-mutations — switching accounts mid-write', () => {
   })
 
   it("refuses A's undo once B is signed in, before sending anything", async () => {
-    const { repo } = signedIn([makeTransaction('a')])
+    const repo = signedIn([makeTransaction('a')])
     const { removed } = await deleteTransactions(repo, ['a'])
 
     workspaceStore.setState({ userId: 'user-b', status: 'ready' })
