@@ -258,14 +258,41 @@ describe('useTransactionFiltering — pagination', () => {
   })
 
   // #231: a later page would hide the first matches of the new filter.
-  it('goes back to the first page when a filter changes', () => {
+  it('goes back to the first page when a filter narrows the rows', () => {
+    // 3 pages; the filter leaves 2, so clamping alone would stay on page 2.
+    const rows = Array.from({ length: 3 * P }, (_, i) =>
+      makeTransaction(`r-${String(i).padStart(2, '0')}`, {
+        category: i % 3 === 0 ? 'restaurants' : 'groceries',
+        date: new Date(Date.UTC(2026, 2, 1) + i * 3_600_000),
+      })
+    )
+    const { result } = setup(rows)
+    act(() => result.current.setCurrentPage(3))
+
+    act(() => result.current.update({ categories: ['groceries'] }))
+
+    expect(result.current.totalPages).toBe(2)
+    expect(result.current.currentPage).toBe(1)
+  })
+
+  it('goes back to the first page when the sort changes', () => {
     const { result } = setup(transactions)
     act(() => result.current.setCurrentPage(3))
 
-    act(() => result.current.update({ search: 'tx-' }))
+    act(() => result.current.handleSort('amount'))
 
-    expect(result.current.totalPages).toBe(3)
     expect(result.current.currentPage).toBe(1)
+  })
+
+  it('keeps a page asked for within 1..last', () => {
+    const { result } = setup(transactions)
+    act(() => result.current.setCurrentPage(0))
+    expect(result.current.currentPage).toBe(1)
+    act(() => result.current.setCurrentPage(Number.NaN))
+    expect(result.current.currentPage).toBe(1)
+    act(() => result.current.setCurrentPage(99))
+    expect(result.current.currentPage).toBe(3)
+    expect(result.current.paginatedTransactions).toHaveLength(6)
   })
 
   it('keeps the page when a patch changes nothing', () => {
@@ -296,6 +323,31 @@ describe('useTransactionFiltering — pagination', () => {
     act(() => result.current.setDateBound('from', '2026-03-01'))
 
     expect(result.current.currentPage).toBe(1)
+  })
+
+  it('keeps the page when "últimos n meses" is chosen again within the same month', () => {
+    const recent = {
+      ...DEFAULT_URL_FILTERS,
+      period: { mode: 'recent' as const, n: 1 },
+    }
+    const { result, rerender } = renderHook(
+      ({ rows }) =>
+        useTransactionFiltering({ transactions: rows, initial: recent }),
+      { initialProps: { rows: transactions } }
+    )
+    rerender({
+      rows: [
+        ...transactions,
+        makeTransaction('later', {
+          date: new Date(Date.UTC(2026, 2, 20)),
+        }),
+      ],
+    })
+    act(() => result.current.setCurrentPage(2))
+
+    act(() => result.current.update({ period: { mode: 'recent', n: 1 } }))
+
+    expect(result.current.currentPage).toBe(2)
   })
 
   it('goes back to the first page when "últimos n meses" moves to newer rows', () => {
