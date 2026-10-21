@@ -1,5 +1,4 @@
 import { getSupabaseClient, type SupabaseSession } from './client'
-import { captureError } from '../monitoring/error-reporting'
 
 async function deleteByUser(
   session: SupabaseSession,
@@ -33,6 +32,5 @@ export async function resetUserSupabaseData(
     await deleteByUser(session, 'ai_insights')
   } catch (error) {
     console.warn('Could not clear cached insights during reset:', error)
-    captureError(error, 'reset')
   }
 }

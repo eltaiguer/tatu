@@ -19,6 +19,10 @@ const {
   fromMock: vi.fn(),
 }))
 
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../monitoring/error-reporting', () => ({
+  captureError: reporting.captureError,
+}))
 vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
 }))
@@ -69,6 +73,23 @@ describe('supabase import runs service', () => {
 
     expect(id).toBe('run-1')
     expect(insertMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports why an import run could not start, and tells the user', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const failure = { message: 'new row violates row-level security policy' }
+    singleMock.mockResolvedValue({ data: null, error: failure })
+    const { createImportRun } = await import('./import-runs')
+    const { UserFacingError } = await import('../../utils/user-error')
+
+    const error = await createImportRun(session, {
+      fileName: 'movements.csv',
+      fileType: 'bank_account_uyu',
+      fileChecksum: 'abc123',
+    }).catch((e: unknown) => e)
+
+    expect(error).toBeInstanceOf(UserFacingError)
+    expect(reporting.captureError).toHaveBeenCalledWith(failure, 'import')
   })
 
   it('completes an import run with counters', async () => {

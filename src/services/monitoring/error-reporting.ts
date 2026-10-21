@@ -51,6 +51,8 @@ export function scrubEvent(
     delete event.request.query_string
     delete event.request.cookies
     delete event.request.data
+    // The Referer is the full URL of the page that linked here.
+    delete event.request.headers
   }
   if (event.message) event.message = redactMessage(event.message)
   for (const exception of event.exception?.values ?? []) {
@@ -122,12 +124,15 @@ export function sentryOptions(dsn: string): Sentry.BrowserOptions {
     ],
     // A deploy replaces hashed chunks; main.tsx reloads the tab and
     // ViewErrorBoundary offers a reload button, so these are not bugs.
+    // Anchored: Sentry matches these against "Type: message" and the
+    // message alone, and a loose /Load failed/ would also drop "Download
+    // failed".
     ignoreErrors: [
-      /dynamically imported module/i,
-      /importing a module script failed/i,
-      /Failed to fetch/i,
-      /NetworkError/i,
-      /Load failed/i,
+      /^(?:TypeError: )?Failed to fetch dynamically imported module\b/i,
+      /^(?:TypeError: )?Importing a module script failed\.?$/i,
+      /^(?:TypeError: )?Failed to fetch$/i,
+      /^(?:TypeError: )?NetworkError when attempting to fetch resource\.?$/i,
+      /^(?:TypeError: )?Load failed$/i,
     ],
     beforeSend: scrubEvent,
     beforeBreadcrumb: scrubBreadcrumb,

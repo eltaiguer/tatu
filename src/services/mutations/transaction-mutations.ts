@@ -114,6 +114,8 @@ function settle<R>(
       : undefined
   const suffix =
     missing.length > 0 && !retry ? '. Recargá para ver el estado actual.' : ''
+  // The user is told how many saved; the cause would otherwise be lost.
+  if (failed.length > 0) captureError(error, 'write')
   throw new PartialWriteError(
     options.message(saved.length, total) + suffix,
     saved.length,
@@ -342,6 +344,7 @@ export async function importTransactions(
     }
     if (!owner) throw new WorkspaceChangedError()
     if (saved.length === 0) throw error
+    captureError(error, 'import')
     throw new UserFacingError(
       `Se guardaron ${saved.length} de ${toStore.length} transacciones nuevas. Importá el archivo de nuevo para completar el resto.`
     )
@@ -582,6 +585,7 @@ async function writeOverrides(
       } catch {
         assertOwner(repo)
         applyDescLocally()
+        captureError(error, 'write')
         throw new UserFacingError(
           'Se guardó el nombre, pero no la categoría. Intentá de nuevo.'
         )
@@ -606,8 +610,9 @@ async function writeOverrides(
   if (legacyMerchantKey) {
     try {
       await repo.deleteCategoryOverride(legacyMerchantKey)
-    } catch {
+    } catch (error) {
       assertOwner(repo)
+      captureError(error, 'write')
       throw new UserFacingError(
         'Se guardó la categoría, pero no se pudo quitar la regla anterior. Intentá de nuevo.'
       )
@@ -766,6 +771,7 @@ async function deleteRows(
     const done = softDone.size + hardDone.size
     const total = done + leftover.length
     if (done === 0) throw soft.error ?? hard.error
+    captureError(soft.error ?? hard.error, 'write')
     throw new PartialWriteError(
       deletedMessage(done, total),
       done,
@@ -879,6 +885,7 @@ export async function splitTransaction(
       // (both visible, the parts deletable), never a parent without parts.
       assertOwner(repo)
       store().addTransactions(children)
+      captureError(error, 'write')
       throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE)
     }
     throw error
@@ -903,6 +910,7 @@ export async function unsplitTransaction(
     if (error instanceof UnsplitIncompleteError) {
       assertOwner(repo)
       store().updateTransaction(parent.id, { isSplitParent: false })
+      captureError(error, 'write')
       throw new UserFacingError(INCOMPLETE_SPLIT_MESSAGE)
     }
     throw error

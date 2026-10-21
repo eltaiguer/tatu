@@ -139,6 +139,18 @@ describe('scrubEvent', () => {
     ])
   })
 
+  it('drops request headers (the referrer carries a full URL)', () => {
+    const event = scrubEvent(
+      errorEvent({
+        request: {
+          url: 'https://tatu.app/',
+          headers: { Referer: 'https://mail.example/?q=tatu' },
+        },
+      })
+    )
+    expect(event?.request?.headers).toBeUndefined()
+  })
+
   it('keeps unexpected errors', () => {
     const event = scrubEvent(
       errorEvent({ exception: { values: [{ value: 'boom' }] } }),

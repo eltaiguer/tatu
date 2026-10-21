@@ -133,8 +133,9 @@ export function hydrateWorkspace(
         applyLoaded(loaded)
         workspaceStore.setState({ status: 'ready' })
       },
-      () => {
+      (error: unknown) => {
         if (!isCurrent()) return
+        captureError(error, 'workspace')
         workspaceStore.setState({ status: 'error' })
       }
     )

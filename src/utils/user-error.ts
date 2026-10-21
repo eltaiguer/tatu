@@ -80,11 +80,11 @@ export function userErrorMessage(
     return error.message
   }
   console.error(error)
-  if (area) captureError(error, area)
-  else captureError(error)
+  // A lost connection is the user's network, and the text says so.
   if (isNetworkError(error)) {
     return 'Sin conexión con el servidor. Revisá tu conexión e intentá de nuevo.'
   }
+  captureError(error, area)
   return fallback
 }
 
@@ -121,7 +121,7 @@ export function aiErrorMessage(raw: string): string {
   ) {
     return 'la app se actualizó; recargá la página'
   }
-  if (/failed to fetch|network|connection/.test(text)) {
+  if (/failed to fetch|network|connection|timed out|aborted/.test(text)) {
     return 'sin conexión con Anthropic'
   }
   return AI_UNEXPECTED

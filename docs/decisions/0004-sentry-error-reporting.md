@@ -54,7 +54,12 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
 - **One report per failure.** `userErrorMessage` reports any error it did not
   write itself. Sites that log an error and do not pass it to
   `userErrorMessage` call `captureError(error, area)` with an `area` tag
-  (`view`, `import-parse`, `import`, `ai`, `preferences`, `reset`).
+  (`view`, `import-parse`, `import`, `ai`, `insights`, `preferences`,
+  `workspace`, `write`, `reset`). Where a server failure is wrapped in an
+  explained error ("Se actualizaron N de M", an incomplete split), the cause
+  is reported at the wrap, because the explained error itself never is. A
+  network failure the user is told about is not reported, and a missing
+  `ai_insights` table during reset is expected until `schema.sql` is applied.
 - **User identity is the Supabase user id only**, set from `useAuthSession`.
 - **Source maps** are uploaded by `@sentry/vite-plugin` only when
   `SENTRY_AUTH_TOKEN` (plus `SENTRY_ORG`, `SENTRY_PROJECT`) is set at build

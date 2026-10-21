@@ -29,6 +29,8 @@ import {
   type CachedInsightsLookup,
 } from '../services/insights/insight-cache'
 import { INSIGHTS_MODEL } from '../services/ai/models'
+import { captureError } from '../services/monitoring/error-reporting'
+import { isUnexpectedAiError } from '../utils/user-error'
 
 interface InsightsProps {
   transactions: Transaction[]
@@ -131,6 +133,7 @@ export function Insights({
       })
       .catch((e) => {
         if (!cancelled) {
+          captureError(e, 'insights')
           setError(
             e instanceof Error
               ? e.message
@@ -160,6 +163,7 @@ export function Insights({
         isStale: false,
       })
     } catch (e) {
+      if (isUnexpectedAiError(e)) captureError(e, 'insights')
       setError(
         e instanceof Error ? e.message : 'No se pudieron generar los insights'
       )

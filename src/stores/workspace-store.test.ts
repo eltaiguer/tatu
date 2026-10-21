@@ -292,6 +292,10 @@ describe('workspace store', () => {
     await hydration.done
 
     expect(snapshot()).toEqual({ ...EMPTY, userId: 'a', status: 'error' })
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      'workspace'
+    )
   })
 
   describe('saving preferences', () => {

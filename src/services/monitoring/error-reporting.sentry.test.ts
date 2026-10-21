@@ -89,4 +89,24 @@ describe('error reporting through the Sentry SDK', () => {
 
     expect(sent).toHaveLength(0)
   })
+
+  it('ignores only the exact network and chunk-load failures', async () => {
+    const sent = initWithFakeTransport()
+
+    captureError(new TypeError('Failed to fetch'))
+    captureError(new TypeError('Load failed'))
+    captureError(
+      new TypeError(
+        'Failed to fetch dynamically imported module: https://tatu.app/assets/x.js'
+      )
+    )
+    captureError(new Error('Export download failed'))
+    captureError(new Error('Preload failed for the chart'))
+    await Sentry.flush()
+
+    expect(sent.map((e) => e.exception?.values?.[0].value)).toEqual([
+      'Export download failed',
+      'Preload failed for the chart',
+    ])
+  })
 })

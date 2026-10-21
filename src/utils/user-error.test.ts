@@ -25,7 +25,16 @@ describe('userErrorMessage', () => {
     userErrorMessage(new UserFacingError('Ya existe'), 'x')
 
     expect(captureError).toHaveBeenCalledTimes(1)
-    expect(captureError).toHaveBeenCalledWith(unexpected)
+    expect(captureError).toHaveBeenCalledWith(unexpected, undefined)
+  })
+
+  it('does not report a network failure it tells the user about', () => {
+    vi.mocked(captureError).mockClear()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    userErrorMessage(new Error('network request failed'), 'x')
+
+    expect(captureError).not.toHaveBeenCalled()
   })
 
   it('tags the report with the area the caller names', () => {
@@ -119,6 +128,14 @@ describe('isUnexpectedAiError', () => {
     expect(
       isUnexpectedAiError('Respuesta inesperada del modelo (tipo: tool_use)')
     ).toBe(true)
+  })
+
+  it('treats a timed-out or aborted request as a connection problem', () => {
+    expect(aiErrorMessage('Request timed out.')).toBe(
+      'sin conexión con Anthropic'
+    )
+    expect(isUnexpectedAiError(new Error('Request timed out.'))).toBe(false)
+    expect(isUnexpectedAiError(new Error('Request was aborted.'))).toBe(false)
   })
 
   it('takes the error itself, not just its message', () => {

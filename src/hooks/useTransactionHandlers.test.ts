@@ -428,6 +428,10 @@ describe('useTransactionHandlers — import persistence (#61)', () => {
     expect(storedIds()).toEqual(rows.slice(0, 500).map((t) => t.id))
     expect(repo.importRuns[0]).toMatchObject({ status: 'failed' })
     expect(repo.importRuns[0].errorMessage).toMatch(/^500 de 1200 guardadas/)
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.anything(),
+      'import'
+    )
   })
 
   it('finishes the job when the same file is imported again', async () => {
@@ -1069,6 +1073,10 @@ describe('useTransactionHandlers — apply scope', () => {
           applyScope: 'matching_past_and_future',
         })
       ).rejects.toThrow('Se guardó el nombre, pero no la categoría')
+      expect(reporting.captureError).toHaveBeenCalledWith(
+        expect.anything(),
+        'write'
+      )
 
       // Screen mirrors database: the name override is on the server, so it
       // is shown; the category override is not.
@@ -1102,6 +1110,10 @@ describe('useTransactionHandlers — apply scope', () => {
       expect(stored('tx-150')?.category).toBe('groceries')
       expect(repo.row('tx-150')?.category).toBe('groceries')
       expect(getMerchantCategoryOverride(MERCHANT)).toBe('restaurants')
+      expect(reporting.captureError).toHaveBeenCalledWith(
+        expect.anything(),
+        'write'
+      )
 
       const upserts = repo.requests.upsertCategoryOverride
       await error.retry!()
@@ -1403,6 +1415,10 @@ describe('useTransactionHandlers — bulk operations (#60)', () => {
     expect(error.message).toBe('Se actualizaron 200 de 300')
     expect(error.done).toBe(200)
     expect(error.total).toBe(300)
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.anything(),
+      'write'
+    )
     // Screen mirrors database, row by row.
     for (const tx of transactionStore.getState().transactions) {
       expect(tx.category).toBe(repo.row(tx.id)?.category)
@@ -1841,6 +1857,10 @@ describe('useTransactionHandlers — delete and undo', () => {
     expect(transactionStore.getState().transactions).toHaveLength(50)
     expect(repo.rows()).toHaveLength(50)
     expect(error.result?.removed).toHaveLength(100)
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.anything(),
+      'write'
+    )
 
     const retried = (await error.retry!()) as DeleteResult
     expect(transactionStore.getState().transactions).toHaveLength(0)
@@ -1914,6 +1934,10 @@ describe('useTransactionHandlers — split and unsplit', () => {
     await expect(
       handlers.handleSplitTransaction('parent', parts)
     ).rejects.toThrow(/partes/)
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.anything(),
+      'write'
+    )
 
     // Never a split parent without parts: both visible, parts deletable.
     expect(stored('parent')?.isSplitParent).toBeFalsy()

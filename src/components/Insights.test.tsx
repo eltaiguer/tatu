@@ -28,6 +28,11 @@ vi.mock('../services/insights/insight-generator', async () => {
   }
 })
 
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../services/monitoring/error-reporting', () => ({
+  captureError: reporting.captureError,
+}))
+
 const session = { user: { id: 'user-1' } } as unknown as SupabaseSession
 
 function makeTransaction(
@@ -220,5 +225,31 @@ describe('Insights', () => {
       sampleResult,
       'claude-opus-5-5'
     )
+  })
+
+  it('reports an unexpected failure to generate insights, not a bad key', async () => {
+    getCachedInsightsMock.mockResolvedValue(null)
+    const bug = new TypeError('x is undefined')
+    generateInsightsMock
+      .mockRejectedValueOnce(new Error('401 invalid x-api-key'))
+      .mockRejectedValueOnce(bug)
+    renderInsights()
+
+    fireEvent.click(await screen.findByText('Generar insights'))
+    await screen.findByText('401 invalid x-api-key')
+    expect(reporting.captureError).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByText('Generar insights'))
+    await screen.findByText('x is undefined')
+    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'insights')
+  })
+
+  it('reports a failure to load cached insights', async () => {
+    const failure = new Error('relation "ai_insights" does not exist')
+    getCachedInsightsMock.mockRejectedValue(failure)
+    renderInsights()
+
+    await screen.findByText(failure.message)
+    expect(reporting.captureError).toHaveBeenCalledWith(failure, 'insights')
   })
 })
