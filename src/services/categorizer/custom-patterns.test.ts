@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { Category } from '../../models'
 import {
   addCustomPattern,
@@ -12,29 +12,15 @@ import {
   testPattern,
 } from './custom-patterns'
 
-const {
-  getActiveSupabaseSessionMock,
-  upsertCustomPatternMock,
-  deleteCustomPatternMock,
-} = vi.hoisted(() => ({
-  getActiveSupabaseSessionMock: vi.fn(),
-  upsertCustomPatternMock: vi.fn(),
-  deleteCustomPatternMock: vi.fn(),
-}))
-
-vi.mock('../supabase/runtime', () => ({
-  getActiveSupabaseSession: getActiveSupabaseSessionMock,
-}))
-
-vi.mock('../supabase/custom-patterns', () => ({
-  upsertCustomPattern: upsertCustomPatternMock,
-  deleteCustomPattern: deleteCustomPatternMock,
-}))
+import {
+  createInMemoryRepository,
+  type InMemoryRepository,
+} from '../repository/in-memory-repository'
+import { workspaceStore } from '../../stores/workspace-state'
 
 describe('Custom Patterns', () => {
   beforeEach(() => {
     clearAllCustomPatterns()
-    vi.clearAllMocks()
   })
 
   describe('CRUD', () => {
@@ -107,59 +93,47 @@ describe('Custom Patterns', () => {
     })
   })
 
-  describe('Supabase sync', () => {
-    it('syncs add when session exists', async () => {
-      getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
-      upsertCustomPatternMock.mockResolvedValue(undefined)
+  describe('saved through the repository it is given (#119)', () => {
+    let repo: InMemoryRepository
 
-      await addCustomPatternWithSync({
+    beforeEach(() => {
+      repo = createInMemoryRepository()
+      workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+    })
+
+    it('saves an added rule and deletes a removed one on the server', async () => {
+      const added = await addCustomPatternWithSync(repo, {
         pattern: 'farmacia',
         matchType: 'contains',
         category: Category.Healthcare,
       })
+      expect(repo.customPatterns.get(added.id)?.pattern).toBe('farmacia')
 
-      expect(upsertCustomPatternMock).toHaveBeenCalledTimes(1)
+      await removeCustomPatternWithSync(repo, added.id)
+      expect(repo.customPatterns.size).toBe(0)
+      expect(listCustomPatterns()).toEqual([])
     })
 
-    it('syncs remove when session exists', async () => {
-      getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
-      upsertCustomPatternMock.mockResolvedValue(undefined)
-      deleteCustomPatternMock.mockResolvedValue(undefined)
-
-      const added = await addCustomPatternWithSync({
-        pattern: 'farmacia',
-        matchType: 'contains',
-        category: Category.Healthcare,
-      })
-
-      await removeCustomPatternWithSync(added.id)
-      expect(deleteCustomPatternMock).toHaveBeenCalledWith(
-        expect.anything(),
-        added.id
-      )
-    })
-
-    it('refuses to save a rule without a session instead of keeping it local', async () => {
-      getActiveSupabaseSessionMock.mockReturnValue(null)
+    it("refuses to save a rule for a user whose workspace isn't loaded", async () => {
+      workspaceStore.setState({ userId: null, status: 'idle' })
 
       await expect(
-        addCustomPatternWithSync({
+        addCustomPatternWithSync(repo, {
           pattern: 'farmacia',
           matchType: 'contains',
           category: Category.Healthcare,
         })
       ).rejects.toThrow(/sesión/)
 
-      expect(upsertCustomPatternMock).not.toHaveBeenCalled()
+      expect(repo.customPatterns.size).toBe(0)
       expect(listCustomPatterns()).toEqual([])
     })
 
     it('drops a new rule whose remote save failed', async () => {
-      getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'u' } })
-      upsertCustomPatternMock.mockRejectedValue(new Error('timeout'))
+      repo.failOn('upsertCustomPattern', { error: new Error('timeout') })
 
       await expect(
-        addCustomPatternWithSync({
+        addCustomPatternWithSync(repo, {
           pattern: 'farmacia',
           matchType: 'contains',
           category: Category.Healthcare,
@@ -169,7 +143,6 @@ describe('Custom Patterns', () => {
     })
 
     it('puts back a rule whose remote delete failed, in place', async () => {
-      getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'u' } })
       const a = addCustomPattern({
         pattern: 'a',
         matchType: 'contains',
@@ -180,9 +153,11 @@ describe('Custom Patterns', () => {
         matchType: 'contains',
         category: Category.Healthcare,
       })
-      deleteCustomPatternMock.mockRejectedValue(new Error('timeout'))
+      repo.failOn('deleteCustomPattern', { error: new Error('timeout') })
 
-      await expect(removeCustomPatternWithSync(a.id)).rejects.toThrow('timeout')
+      await expect(removeCustomPatternWithSync(repo, a.id)).rejects.toThrow(
+        'timeout'
+      )
       expect(listCustomPatterns().map((p) => p.id)).toEqual([a.id, b.id])
     })
   })

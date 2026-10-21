@@ -297,8 +297,8 @@
     {
       "description": "La Pantera",
       "type": "debit",
-      "category": "utilities",
-      "categoryConfidence": 0.43605,
+      "category": "uncategorized",
+      "categoryConfidence": 0,
       "displayDescription": null
     },
     {
@@ -325,8 +325,8 @@
     {
       "description": "Merpago Cobrabits",
       "type": "debit",
-      "category": "insurance",
-      "categoryConfidence": 0.405,
+      "category": "uncategorized",
+      "categoryConfidence": 0,
       "displayDescription": null
     },
     {

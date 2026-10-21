@@ -9,8 +9,8 @@
   --border: oklch(0.905 0.008 75);
   --border-strong: oklch(0.84 0.01 75);
   --text: oklch(0.24 0.012 60);
-  --text-muted: oklch(0.52 0.012 65);
-  --text-faint: oklch(0.66 0.01 70);
+  --text-muted: oklch(0.46 0.012 65);
+  --text-faint: oklch(0.54 0.01 70);
 
   --brand: oklch(0.5 0.085 197);
   --brand-hover: oklch(0.44 0.085 197);
@@ -213,7 +213,7 @@
   --border-strong: oklch(0.38 0.014 66);
   --text: oklch(0.95 0.006 80);
   --text-muted: oklch(0.69 0.012 72);
-  --text-faint: oklch(0.54 0.01 70);
+  --text-faint: oklch(0.625 0.01 70);
 
   --brand: oklch(0.74 0.09 196);
   --brand-hover: oklch(0.8 0.09 196);
@@ -436,14 +436,17 @@
   }
 }
 
+/* Animates `translate`, not `transform`, so it composes with whatever
+   transform the element has (the selection bar centres itself with
+   translateX(-50%) on desktop only — #194). */
 @keyframes fadeUp {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(12px);
+    translate: 0 12px;
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    translate: 0 0;
   }
 }
 

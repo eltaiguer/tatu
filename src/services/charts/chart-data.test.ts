@@ -7,9 +7,12 @@ import {
   spendByAccount,
   summarizeSavings,
   niceTicks,
+  buildMerchantSpendingConverted,
 } from './chart-data'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
+import { parseSantanderDate } from '../parsers/utils'
+import { toMonthKey } from '../../utils/date-utils'
 
 function makeTransaction(
   id: string,
@@ -613,5 +616,156 @@ describe('niceTicks', () => {
 
   it('returns just zero when there is no range', () => {
     expect(niceTicks(0, 0)).toEqual([0])
+  })
+})
+
+describe('buildMerchantSpendingConverted', () => {
+  function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
+    return {
+      id,
+      date: new Date('2025-01-15T00:00:00.000Z'),
+      description: `tx-${id}`,
+      amount: 10,
+      currency: 'USD',
+      type: 'debit',
+      source: 'credit_card',
+      category: Category.Entertainment,
+      rawData: {},
+      ...overrides,
+    }
+  }
+
+  it('merges the noisy variants of one merchant and sums them in the home currency', () => {
+    const result = buildMerchantSpendingConverted(
+      [
+        tx('1', { description: 'NETFLIX.COM 1234TT56', amount: 10 }),
+        tx('2', {
+          description: 'NETFLIX.COM 7890TT12',
+          amount: 400,
+          currency: 'UYU',
+        }),
+        tx('3', {
+          description: 'NETFLIX.COM, MONTEVIDEO',
+          amount: 10,
+          date: new Date('2025-03-15T00:00:00.000Z'),
+          category: Category.Shopping,
+        }),
+        tx('4', { description: 'SPOTIFY P3D110F721', amount: 5 }),
+      ],
+      'USD',
+      40
+    )
+
+    expect(result).toEqual([
+      {
+        key: 'netflix.com',
+        label: 'NETFLIX.COM, MONTEVIDEO',
+        total: 30,
+        count: 3,
+        // The most recent row's category.
+        categoryId: Category.Shopping,
+      },
+      {
+        key: 'spotify',
+        label: 'SPOTIFY P3D110F721',
+        total: 5,
+        count: 1,
+        categoryId: Category.Entertainment,
+      },
+    ])
+  })
+
+  it('counts only expenses that count toward totals', () => {
+    const result = buildMerchantSpendingConverted(
+      [
+        tx('1', { description: 'SHOP', amount: 10 }),
+        tx('2', { description: 'SHOP', amount: 99, type: 'credit' }),
+        tx('3', { description: 'SHOP', amount: 99, category: 'transfer' }),
+        tx('4', { description: 'SHOP', amount: 99, isSplitParent: true }),
+      ],
+      'USD',
+      40
+    )
+
+    expect(result).toEqual([
+      expect.objectContaining({ key: 'shop', total: 10, count: 1 }),
+    ])
+  })
+
+  it('orders equal totals the same whatever the input order', () => {
+    const a = tx('1', { description: 'ZETA' })
+    const b = tx('2', { description: 'ALFA' })
+    const keys = (rows: Transaction[]) =>
+      buildMerchantSpendingConverted(rows, 'USD', 40).map((m) => m.key)
+
+    expect(keys([a, b])).toEqual(['alfa', 'zeta'])
+    expect(keys([b, a])).toEqual(['alfa', 'zeta'])
+  })
+
+  it('groups renamed rows under the rename', () => {
+    const result = buildMerchantSpendingConverted(
+      [
+        tx('1', { description: 'UBER *TRIP 1', displayDescription: 'Uber' }),
+        tx('2', { description: 'UBER BV 2', displayDescription: 'Uber' }),
+      ],
+      'USD',
+      40
+    )
+
+    expect(result).toEqual([
+      expect.objectContaining({ key: 'uber', label: 'Uber', count: 2 }),
+    ])
+  })
+})
+
+// #58: Resumen buckets by calendar month. A row dated the 1st in the CSV is in
+// that month in any browser zone, and so is a row stored before #58 by a
+// UTC-3 browser (03:00Z on its own day).
+describe('calendar-month bucketing of imported rows', () => {
+  const RATE = 40
+  function row(id: string, date: Date): Transaction {
+    return {
+      id,
+      date,
+      description: id,
+      amount: 10,
+      currency: 'USD',
+      type: 'debit',
+      source: 'bank_account',
+      rawData: {},
+    }
+  }
+
+  it('puts a Mar 1 CSV row in March', () => {
+    const mar1 = row('mar1', parseSantanderDate('01/03/2026'))
+    const feb28 = row('feb28', parseSantanderDate('28/02/2026'))
+
+    expect(toMonthKey(mar1.date)).toBe('2026-03')
+    const summary = buildCurrentMonthSummary(
+      [feb28, mar1],
+      'USD',
+      RATE,
+      new Date(2026, 2, 15, 12)
+    )
+    expect(summary.m).toBe(2)
+    expect(summary.count).toBe(1)
+    expect(summary.isCurrentMonth).toBe(true)
+    expect(
+      buildMonthlyTrendsConverted([feb28, mar1], 'USD', RATE).map((m) => [
+        m.month,
+        m.expense,
+      ])
+    ).toEqual([
+      ['2026-02', 10],
+      ['2026-03', 10],
+    ])
+  })
+
+  it('keeps pre-#58 rows (03:00Z) in their own month', () => {
+    const mar1 = row('mar1', new Date('2026-03-01T03:00:00.000Z'))
+    const feb28 = row('feb28', new Date('2026-02-28T03:00:00.000Z'))
+    const summary = buildCurrentMonthSummary([feb28, mar1], 'USD', RATE)
+    expect([summary.y, summary.m, summary.count]).toEqual([2026, 2, 1])
+    expect(summary.monthLabel).toMatch(/marzo/i)
   })
 })

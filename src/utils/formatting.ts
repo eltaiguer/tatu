@@ -27,12 +27,25 @@ export function formatCurrencyShort(
   return `${sign}${sym} ${Math.round(abs)}`
 }
 
+// Transaction dates are calendar days at UTC midnight (#58): always format
+// them in UTC, never in the browser's zone.
 export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('es-UY', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    timeZone: 'UTC',
   }).format(date)
+}
+
+// A real instant (when a row was imported, a timestamp) is not a calendar
+// day: show it on the user's local day (#58).
+export function formatLocalDate(instant: Date): string {
+  return new Intl.DateTimeFormat('es-UY', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(instant)
 }
 
 export function formatDateCompact(date: Date): string {

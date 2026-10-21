@@ -3,9 +3,15 @@ import { isCountedExpense } from '../spending/spending-rules'
 import { convert } from '../currency/convert'
 import {
   buildCategorySpendingConverted,
+  buildMerchantSpendingConverted,
   buildMonthlyTrendsConverted,
 } from '../charts/chart-data'
-import { toDateKey, toMonthKey } from '../../utils/date-utils'
+import { groupByMerchant } from '../merchants/merchant-key'
+import {
+  calendarDaysBetween,
+  toDateKey,
+  toMonthKey,
+} from '../../utils/date-utils'
 
 export interface CategoryInsightTotal {
   category: string
@@ -26,7 +32,10 @@ export interface RecurringCharge {
   approxAmount: number
   cadence: RecurringCadence
   monthsSeen: number
-  /** Month key ('YYYY-MM') of this merchant's most recent transaction. */
+  /**
+   * Month key ('YYYY-MM') of this merchant's most recent charge, in band or
+   * not, so a price rise doesn't read as a lapse.
+   */
   lastSeenMonth: string
   /**
    * Whole months between lastSeenMonth and the month of historyEnd — lets
@@ -57,6 +66,9 @@ export interface InsightInput {
 const TOP_MERCHANTS_LIMIT = 8
 const RECURRING_MIN_MONTHS_SEEN = 3
 const RECURRING_AMOUNT_VARIANCE = 0.15
+const RECURRING_MIN_IN_BAND_SHARE = 0.75
+// Santander's installment counter, "Cuota 09 10" (instalment 9 of 10).
+const INSTALLMENT_PATTERN = /\bcuota\s+\d{1,2}\s*[/ ]\s*\d{1,2}\b/i
 
 /**
  * Rounds to cents. Every number handed to the model goes through this: the
@@ -67,10 +79,6 @@ const RECURRING_AMOUNT_VARIANCE = 0.15
  */
 function round2(value: number): number {
   return Math.round(value * 100) / 100
-}
-
-function merchantOf(tx: Transaction): string {
-  return (tx.displayDescription ?? tx.description).trim()
 }
 
 function monthKeyDiff(fromMonthKey: string, toMonthKeyStr: string): number {
@@ -98,27 +106,20 @@ function buildCategoryTotals(
   }))
 }
 
+// Same aggregation and merchant key as Resumen's "Mayores comercios"; the
+// label is what the model may echo back as `merchant`.
 function buildTopMerchants(
   transactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number
 ): MerchantTotal[] {
-  const byMerchant = new Map<string, MerchantTotal>()
-
-  transactions.forEach((tx) => {
-    if (!isCountedExpense(tx)) return
-    const merchant = merchantOf(tx)
-    const converted = convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    const entry = byMerchant.get(merchant) ?? { merchant, amount: 0, count: 0 }
-    entry.amount += converted
-    entry.count += 1
-    byMerchant.set(merchant, entry)
-  })
-
-  return Array.from(byMerchant.values())
-    .sort((a, b) => b.amount - a.amount)
+  return buildMerchantSpendingConverted(transactions, homeCurrency, fxRate)
     .slice(0, TOP_MERCHANTS_LIMIT)
-    .map((m) => ({ ...m, amount: round2(m.amount) }))
+    .map((m) => ({
+      merchant: m.label,
+      amount: round2(m.total),
+      count: m.count,
+    }))
 }
 
 function median(values: number[]): number {
@@ -133,10 +134,8 @@ function averageGapDays(sortedDates: Date[]): number {
   if (sortedDates.length < 2) return Infinity
   const gaps: number[] = []
   for (let i = 1; i < sortedDates.length; i++) {
-    const days =
-      (sortedDates[i].getTime() - sortedDates[i - 1].getTime()) /
-      (1000 * 60 * 60 * 24)
-    gaps.push(days)
+    // Whole calendar days, whatever shape each date is stored in (#58)
+    gaps.push(calendarDaysBetween(sortedDates[i], sortedDates[i - 1]))
   }
   return gaps.reduce((sum, g) => sum + g, 0) / gaps.length
 }
@@ -147,53 +146,82 @@ function cadenceFromGap(avgGapDays: number): RecurringCadence {
   return 'irregular'
 }
 
+/** An installment of a purchase ("Cuota 09 10"), never a recurring charge. */
+export function isInstallment(tx: Transaction): boolean {
+  return INSTALLMENT_PATTERN.test(tx.description)
+}
+
+function isWithinBand(amount: number, reference: number): boolean {
+  return reference === 0
+    ? amount === 0
+    : Math.abs(amount - reference) / reference <= RECURRING_AMOUNT_VARIANCE
+}
+
+/**
+ * Recurring-charge rule (#59). Per merchant key, over all counted expenses
+ * except installment purchases:
+ * - a charge is "in band" when it is within ±15% of the median of all the
+ *   merchant's charges;
+ * - the merchant is recurring when ≥ 75% of its charges are in band AND the
+ *   in-band charges fall in ≥ 3 distinct months (several charges in one month
+ *   count once).
+ * approxAmount (median of the in-band charges), monthsSeen and cadence
+ * describe the in-band charges only, so a one-off annual fee or a price spike
+ * neither blocks detection nor skews the amount. lastSeenMonth is the latest
+ * charge of any amount: the merchant is still charging after a price rise.
+ *
+ * Installments ("Cuota N M") are excluded: a fixed monthly payment of a
+ * purchase already made is not a subscription the user can cancel.
+ */
 function detectRecurringCharges(
   allTransactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number,
   historyEndMonthKey: string
 ): RecurringCharge[] {
-  const relevant = allTransactions.filter(isCountedExpense)
-
-  const byMerchant = new Map<string, Transaction[]>()
-  relevant.forEach((tx) => {
-    const merchant = merchantOf(tx)
-    const list = byMerchant.get(merchant) ?? []
-    list.push(tx)
-    byMerchant.set(merchant, list)
-  })
+  const relevant = allTransactions.filter(
+    (tx) => isCountedExpense(tx) && !isInstallment(tx)
+  )
 
   const charges: RecurringCharge[] = []
 
-  byMerchant.forEach((txs, merchant) => {
-    const monthsSeen = new Set(txs.map((tx) => toMonthKey(tx.date))).size
-    if (monthsSeen < RECURRING_MIN_MONTHS_SEEN) return
+  // Grouped by the merchant key, reported by its label (#120).
+  groupByMerchant(relevant).forEach(
+    ({ label: merchant, transactions: txs }) => {
+      const converted = txs.map((tx) => ({
+        date: tx.date,
+        amount: convert(tx.amount, tx.currency, homeCurrency, fxRate),
+      }))
+      const groupMedian = median(converted.map((c) => c.amount))
+      const inBand = converted.filter((c) =>
+        isWithinBand(c.amount, groupMedian)
+      )
+      if (inBand.length / converted.length < RECURRING_MIN_IN_BAND_SHARE) {
+        return
+      }
 
-    const amounts = txs.map((tx) =>
-      convert(tx.amount, tx.currency, homeCurrency, fxRate)
-    )
-    const approxAmount = median(amounts)
-    const withinVariance = amounts.every((a) =>
-      approxAmount === 0
-        ? a === 0
-        : Math.abs(a - approxAmount) / approxAmount <= RECURRING_AMOUNT_VARIANCE
-    )
-    if (!withinVariance) return
+      const monthsSeen = new Set(inBand.map((c) => toMonthKey(c.date))).size
+      if (monthsSeen < RECURRING_MIN_MONTHS_SEEN) return
 
-    const sortedDates = txs
-      .map((tx) => tx.date)
-      .sort((a, b) => a.getTime() - b.getTime())
-    const lastSeenMonth = toMonthKey(sortedDates[sortedDates.length - 1])
+      const sortedDates = inBand
+        .map((c) => c.date)
+        .sort((a, b) => a.getTime() - b.getTime())
+      let lastSeenMs = -Infinity
+      for (const c of converted) {
+        lastSeenMs = Math.max(lastSeenMs, c.date.getTime())
+      }
+      const lastSeenMonth = toMonthKey(new Date(lastSeenMs))
 
-    charges.push({
-      merchant,
-      approxAmount: round2(approxAmount),
-      cadence: cadenceFromGap(averageGapDays(sortedDates)),
-      monthsSeen,
-      lastSeenMonth,
-      monthsSinceLastSeen: monthKeyDiff(lastSeenMonth, historyEndMonthKey),
-    })
-  })
+      charges.push({
+        merchant,
+        approxAmount: round2(median(inBand.map((c) => c.amount))),
+        cadence: cadenceFromGap(averageGapDays(sortedDates)),
+        monthsSeen,
+        lastSeenMonth,
+        monthsSinceLastSeen: monthKeyDiff(lastSeenMonth, historyEndMonthKey),
+      })
+    }
+  )
 
   return charges.sort((a, b) => b.approxAmount - a.approxAmount)
 }

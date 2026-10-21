@@ -9,15 +9,32 @@ terms are defined in [`CONTEXT.md`](CONTEXT.md).
 ## Import
 
 A statement goes from file to screen in one pass in the browser.
-`ImportCSV.tsx` parses, categorizes the parsed rows
+`ImportCSV.tsx` reads the file's bytes and decodes them with `decodeCsvBytes`
+(`src/services/parsers/decode-csv.ts`, #192): strict UTF-8 first, falling back
+to windows-1252, because Santander exports are Latin-1 (a UTF-8 BOM is
+dropped). It then parses, categorizes the parsed rows
 (`categorizeParsedData` in `src/services/categorizer/import-categorization.ts`),
-then hands them to `handleTransactionsImported` (`useTransactionHandlers.ts`).
+then hands them to `importTransactions`
+(`src/services/mutations/transaction-mutations.ts`, through
+`useTransactionHandlers`).
 The parsers are pure: they map columns, dates, amounts, currency and IDs and
 never call the categorizer.
 
+When the import finishes, the dialog stays open on a summary of the
+`ImportResult` counts (nuevas · duplicadas omitidas · eliminadas antes, plus
+corregidas when the import repaired descriptions; one entry per count in
+`summaryLines`). A file with nothing new shows a neutral "No había movimientos
+nuevos" state instead of success, adding "Se corrigieron N descripciones" when
+it repaired some. Nothing navigates on
+its own: "Ver transacciones" closes the dialog and opens Transacciones on the
+month of the newest new row (the file's newest row when nothing was new),
+through the same `navigateToTransactions` link Resumen uses; "Importar otro
+archivo" resets the dialog to the file picker. Errors stay in the dialog.
+
 ```mermaid
 flowchart TD
-    A["CSV file dropped in ImportCSV"] --> B["detectFileType: credit_card, bank_account_usd or bank_account_uyu"]
+    A["CSV file dropped in ImportCSV"] --> A2["decodeCsvBytes: UTF-8 (fatal) else windows-1252"]
+    A2 --> B["detectFileType: credit_card, bank_account_usd or bank_account_uyu"]
     B --> C["parseCreditCardCSV or parseBankAccountCSV"]
     C --> E["Per row: generateTransactionId(date, description, amount text, row index)"]
     E --> D["categorizeParsedData, per row: categorizeTransaction(description, type), no context"]
@@ -25,13 +42,16 @@ flowchart TD
     F --> G{"classifyImport: same content (fingerprint) already stored, as many times?"}
     G -- "yes, live" --> H["Skipped as duplicate"]
     G -- "yes, soft-deleted" --> I["Skipped so it stays deleted"]
+    G -- "matches a live row stored garbled (U+FFFD)" --> R["Repaired in place after the insert: description + raw_data patched, same id"]
     G -- "no" --> S["New row; id salted to id_cN if taken"]
     S --> J{"AI enabled with an API key?"}
-    J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a description or merchant override"]
-    J -- "no" --> L["persistTransactions: insert into transactions, tagged with the import run"]
+    J -- "yes" --> K["enrichTransactionsWithAi + applyAiEnrichment on rows without a user rule (description override, merchant override, custom pattern)"]
+    J -- "no" --> L["insertTransactions: sequential 500-row INSERT chunks, tagged with the import run; stops at the first failed chunk"]
     K --> L
-    L --> M["store.addTransactions, which runs inferInternalTransfers"]
-    M --> N["completeImportRun with row counts"]
+    L --> M["store.addTransactions(exactly the saved rows), which runs inferInternalTransfers"]
+    M --> N{"every chunk saved?"}
+    N -- "yes" --> O["completeImportRun with row counts"]
+    N -- "no" --> P["failImportRun: N de M guardadas; error tells the user to import the file again"]
 ```
 
 Details that matter:
@@ -44,10 +64,12 @@ Details that matter:
   The golden fixture in `import-categorization.equivalence.test.ts` pins the
   sample CSVs' import categories.
 - **AI enrichment replaces the rule-based result** (category, confidence and
-  display name) for every new row that has no description override and no
-  merchant override. That includes rows a custom pattern or merchant pattern
-  already matched. If the AI call fails, the rule-based result stays and the
-  error is returned as `aiError` so the UI can say so.
+  display name) for every new row that has no user rule: no description
+  override, no merchant override and no matching custom pattern (steps 1–3
+  of the precedence table are enforced in code, not handed to the model as
+  advice). Rows the built-in keywords or merchant list matched are still
+  sent and overwritten. If the AI call fails, the rule-based result stays
+  and the error is returned as `aiError` so the UI can say so.
 - **Dedup is by content, not by ID** (#57, `src/services/dedup/import-dedup.ts`).
   `generateTransactionId` hashes the date, description, amount text and row
   _position_, so an overlapping export that shifts rows gives the same bank
@@ -78,34 +100,106 @@ Details that matter:
     changing how dates are parsed (#58) doesn't change it. A stored row without
     `raw_data.fecha` (not expected — it has always been written) falls back to
     its stored date rounded to the nearest UTC midnight.
-  - **Known blind spots:** two cards, or two same-currency accounts, with an
-    identical row on the same day share a fingerprint; credit card
+  - **A different card is a different charge** (owner decision 2026-10-05).
+    Each card's statement is its own file, so the same charge on two cards
+    arrives from two imports. `cardNumber` reads `rawData.numeroTarjeta` (the
+    masked number, e.g. `XXXXX-4362`, whitespace removed); every pass — same
+    ID, fingerprint, and the #192 repair — skips a stored row on another card
+    and prefers one on the same card over one whose card is unknown. It isn't
+    part of the fingerprint string because a row stored without it (legacy)
+    must still match either card: when either side lacks it, matching falls
+    back to the fingerprint alone. The authorization number is not used:
+    Santander repeats it on every row of an account.
+  - **Known blind spots:** two same-currency accounts with an identical row on
+    the same day share a fingerprint; credit card
     installments are told apart only by the "Cuota N M" counter Santander puts
-    in the description. Duplicates imported before #57 are not cleaned up
-    (#167 reuses `transactionFingerprint` for that).
+    in the description. Duplicates imported before #57 are cleaned up by hand
+    with the review below.
+  - **Cleaning up older duplicates** (#167, `services/dedup/duplicate-review.ts`
+    → `components/settings/DuplicatesReview.tsx`, Configuración → Datos →
+    "Buscar posibles duplicados"). `findPossibleDuplicates` groups the live
+    rows in the store by `transactionFingerprint`, then splits each group by
+    the statement's per-movement reference, which the fingerprint leaves out
+    (card number + authorization number on card rows, `referencia` on bank
+    rows): rows whose references differ are different movements, e.g. the
+    same charge on the same day on two cards. The card number is read through
+    the import's `cardNumber`, so the review never groups what the import
+    keeps apart. Each loaded row carries
+    `importId` (`transactions.import_id`) and `createdAt` (when its run
+    inserted it); an import also tags the rows it adds with its run, so the
+    store matches a reload. Identical rows from one import run are a genuine
+    pair, never shown. A group with a split copy, or with a copy lacking its
+    reference, goes to "Revisar a mano"; a group with a row whose run is
+    unknown (stored before import runs) is listed apart; both with nothing
+    pre-selected. Any other group from two or more runs is flagged: it keeps
+    as many copies as the largest single run stored, oldest first, and
+    pre-selects the rest. A split parent is never selectable (deleting it
+    hard-deletes its parts, so there is no undo). Deleting goes through
+    `deleteTransactions` (soft delete + "Deshacer"), so a later re-import
+    matches the deleted copies and skips them. The total shown is
+    `sumCountedTotals(selected).expense` in the home currency.
+  - **Repair of rows stored garbled (#192).** Before #192 the file was read
+    as UTF-8, so every accented letter of a Latin-1 export was stored as one
+    U+FFFD, in `description` and `raw_data`. After the exact passes,
+    `classifyImport` runs a third pass over the leftovers: a stored row whose
+    normalized description contains U+FFFD matches an incoming row with the
+    same source, raw date, signed cents and currency when the descriptions
+    agree with each U+FFFD standing for exactly one non-ASCII character (never
+    an ASCII one, never another U+FFFD). Same claiming rules (each stored row
+    once, live before deleted). A live match is returned in `repaired` — the
+    stored row with the incoming `description` and `rawData` — and
+    `importTransactions` patches those two columns through the repository
+    after the insert, keeping the row's id, category, display name and tags;
+    a deleted match is skipped like any deleted row (not repaired). Repairs are
+    best-effort: one that fails doesn't fail the import (`repairsFailed`; the
+    toast says to import again, which retries it). Rules keyed on the garbled
+    text — the description override (friendly name from a
+    `matching_past_and_future` rename) and the merchant category override —
+    are first copied to the corrected text's keys (server, then memory),
+    unless a rule already exists there; the garbled keys are kept for rows not
+    repaired yet. If copying fails, no row is repaired (the next re-import
+    retries both), so a name is never lost. Custom patterns written against
+    garbled text are not migrated.
+    Misses, which import as new next to the garbled row: an accented letter
+    directly followed by a 0x80–0xBF byte (NBSP, º, ª, «, », cp1252 quotes),
+    which UTF-8 decoded as one U+FFFD for two characters or as a wrong valid
+    character, and NBSPs (whitespace only on the correct side). The seed
+    script decodes and repairs the same way.
   - The import result and `completeImportRun` report new / duplicate /
-    previously-deleted counts (total = inserted + duplicates + deleted).
+    previously-deleted / repaired counts. The import run has no column for
+    deleted or repaired rows; neither was inserted, so both count in
+    `duplicate_rows` (total = inserted + duplicates). The import
+    dialog's summary adds "N corregidas".
 
   The import run's SHA-256 (`sha256Hex`) is a file checksum for the audit
   record, not part of the ID.
 
 - **Internal-transfer inference is not persisted at import.**
-  `persistTransactions` writes the rows before the store adds them, and the
+  The rows are inserted before the store adds them, and the
   store runs `inferInternalTransfers` on every write (`addTransactions`,
   `updateTransaction`, `mapTransactions`, `removeTransactions`,
   `setTransactions`). Inferred transfer categories are therefore recomputed on
-  every load and not written back by the import. Only operations that upsert a
-  whole row from the store (splitting) can carry one to the database.
+  every load and not written back. No write sends a whole row from the store
+  any more: edits send only the patched columns, and a split sends only its
+  new parts and the parent's `is_split_parent` flag.
 - An import run row (`createImportRun`) is opened before writing and closed
   with `completeImportRun` or `failImportRun`. A failure to close it doesn't
   fail the import.
+- **Partial imports (#61).** An import is written in sequential 500-row
+  INSERT chunks (`insertTransactions`, `batching.ts`) and stops at the first
+  chunk that fails. Chunks already written stay, the store receives exactly
+  those rows, the run is marked `failed` with "N de M guardadas: <reason>"
+  (there is no `partial` status), and the user is told to import the file
+  again: content dedup skips what was saved and inserts the rest. If the
+  account changes mid-import, it stops before the next chunk.
 
 ## Sync on sign-in
 
 There is no local copy of user data. `src/stores/workspace-store.ts` owns
 everything a signed-in user has in memory. On sign-in (and on refetch),
-`useUserWorkspace` calls `hydrateWorkspace`, which loads everything from
-Supabase and replaces the in-memory state in one synchronous step.
+`useUserWorkspace` calls `hydrateWorkspace`, which loads everything through
+the repository port (`repository.loadWorkspace()`, Supabase in production)
+and replaces the in-memory state in one synchronous step.
 
 ```mermaid
 flowchart LR
@@ -141,7 +235,7 @@ Ordering guarantees:
 
 ## Editing a category: apply-scope
 
-`handleUpdateTransaction` takes one of three scopes from the edit dialog
+`editTransaction` (`transaction-mutations.ts`) takes one of three scopes from the edit dialog
 ("Aplicar nombre y categoría a"). The two override kinds are keyed
 differently: the description override uses `buildDescriptionOverrideKey`
 (dates, references and long numbers removed), the merchant override uses
@@ -149,7 +243,7 @@ differently: the description override uses `buildDescriptionOverrideKey`
 
 ```mermaid
 flowchart TD
-    E["handleUpdateTransaction"] --> S{"applyScope"}
+    E["editTransaction"] --> S{"applyScope"}
     S -- "single" --> S1["Update this row only: name, category, confidence 1, tags"]
     S -- "future_matching_only" --> W1["writeOverrides"]
     W1 --> F1["Update this row only"]
@@ -161,8 +255,22 @@ flowchart TD
 `writeOverrides` saves a description override (friendly name plus category)
 when the name changed and clears it otherwise. It then saves a merchant
 override for the category, or clears it when no category was chosen. `single`
-writes no overrides, so future imports are not affected. Each write goes to
-Supabase first and then to the store, keyed by the same row IDs.
+writes no overrides, so future imports are not affected.
+
+The two overrides are one unit (rollback policy): both go to the server
+first, and the in-memory overrides change only once both saved. If the
+merchant override fails, the description override is taken back on the
+server (the previous one re-saved, or deleted if there was none) and nothing
+changed anywhere. If taking it back fails too, the in-memory overrides show
+what the server now holds (the new name) and the error says the category was
+not saved. Rows are written after the overrides; if some row chunks fail, the
+error says the rule was saved and how many rows were updated, and its retry
+re-sends only those rows (never the overrides).
+
+The category in an edit: a category sets it at confidence 1; "Sin categoría"
+(`null`) clears category and confidence on this row (`single`,
+`future_matching_only`); with `matching_past_and_future`, no category leaves
+the similar rows' categories alone.
 
 Rows given a category by hand get confidence 1, so `inferInternalTransfers`
 never reclassifies them afterwards.
@@ -174,24 +282,24 @@ never reclassifies them afterwards.
 order and returns the first match. A different order changes which category
 real money lands in, so keep this table and the function in sync.
 
-| #   | Source               | Confidence                                                                                                                  | Function                                       | Notes                                                                                                                                      |
-| --- | -------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0   | Empty description    | 0                                                                                                                           | (inline)                                       | Returns `uncategorized` before anything else when the normalized description is empty.                                                     |
-| 1   | Description override | 1.0                                                                                                                         | `getDescriptionOverride`                       | Only when the override has a category.                                                                                                     |
-| 2   | Merchant override    | 1.0                                                                                                                         | `getMerchantCategoryOverride`                  | Exact match on the normalized description.                                                                                                 |
-| 3   | Custom pattern       | 0.95                                                                                                                        | `matchCustomPattern`                           | First matching user rule (`contains`, `starts_with`, `exact`). Can also set a display name.                                                |
-| 4   | Fee keywords         | 0.95                                                                                                                        | `FEE_KEYWORDS`                                 | Whole-word match (`comision`, `cargo`, `interes`, …) → `fees`.                                                                             |
-| 5   | Transfer keywords    | 0.9                                                                                                                         | `TRANSFER_KEYWORDS`                            | → `internal_transfer`. Skipped when a named external beneficiary matches `EXTERNAL_BENEFICIARY_RE`, or for a credit containing `recibida`. |
-| 6   | Income keywords      | 0.9                                                                                                                         | `INCOME_KEYWORDS`                              | Credits only (`sueldo`, `salario`, `deposito`, …) → `income`.                                                                              |
-| 7   | Merchant patterns    | Pattern base (0.75–0.95); × 0.95 if the match is partial; fuzzy fallback = base × similarity × 0.9, similarity at least 0.5 | `getMerchantCategory` → `matchMerchantPattern` | Built-in Uruguayan merchant list; the highest-confidence match wins.                                                                       |
-| 8   | Learned patterns     | ≤ 0.75 (share of tokens matched × 0.75)                                                                                     | `matchLearnedPattern`                          | Tokens shared by at least 2 merchant overrides, more than 60% of them for one category (`buildLearnedPatterns`).                           |
-| 9   | Temporal patterns    | 0.65 monthly → `utilities`; 0.4 weekly → `groceries`                                                                        | `getTemporalSuggestion`                        | Needs `context.temporalPatterns`.                                                                                                          |
-| 10  | Similar merchant     | ≤ 0.6 (similarity × 0.6, similarity at least 0.5)                                                                           | `findSimilarMerchant`                          | Needs `context.categorizedMerchants`.                                                                                                      |
-| 11  | Amount heuristics    | 0.15–0.25                                                                                                                   | `categorizeByAmount`                           | Debits only. Needs `context.amount` and `context.currency`.                                                                                |
-| 12  | Fallback             | 0                                                                                                                           | (inline)                                       | `uncategorized`.                                                                                                                           |
+| #   | Source               | Confidence                                                                                                                                                                                                                                               | Function                                       | Notes                                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | Empty description    | 0                                                                                                                                                                                                                                                        | (inline)                                       | Returns `uncategorized` before anything else when the normalized description is empty.                                                                                                                                                                                                                                                                                                |
+| 1   | Description override | 1.0                                                                                                                                                                                                                                                      | `getDescriptionOverride`                       | Only when the override has a category.                                                                                                                                                                                                                                                                                                                                                |
+| 2   | Merchant override    | 1.0                                                                                                                                                                                                                                                      | `getMerchantCategoryOverride`                  | Keyed on the code-stripped normalized description (`merchantOverrideKey`: POS prefix, dates, times, auth codes and long numbers removed, the same key "Todas las similares" uses), so a category set on one row reaches the merchant's later rows; an override stored before that, under the exact normalized description, is still read and is deleted when the row is edited again. |
+| 3   | Custom pattern       | 0.95                                                                                                                                                                                                                                                     | `matchCustomPattern`                           | First matching user rule (`contains`, `starts_with`, `exact`). Can also set a display name.                                                                                                                                                                                                                                                                                           |
+| 4   | Fee keywords         | 0.95                                                                                                                                                                                                                                                     | `FEE_KEYWORDS`                                 | Whole-word match (`comision`, `cargo`, `interes`, …) → `fees`. Skipped for an own-account sweep (`traspaso`), which step 5 then catches.                                                                                                                                                                                                                                              |
+| 5   | Transfer keywords    | 0.9                                                                                                                                                                                                                                                      | `TRANSFER_KEYWORDS`                            | → `internal_transfer`. Skipped when a named external beneficiary matches `EXTERNAL_BENEFICIARY_RE`, or for a credit containing `recibida`.                                                                                                                                                                                                                                            |
+| 6   | Income keywords      | 0.9                                                                                                                                                                                                                                                      | `INCOME_KEYWORDS`                              | Credits only (`sueldo`, `salario`, `deposito`, …) → `income`.                                                                                                                                                                                                                                                                                                                         |
+| 7   | Merchant patterns    | Pattern base (0.75–0.95); × 0.95 if the match is partial; fuzzy fallback = base × similarity × 0.9, similarity at least 0.5 and more than half of the pattern's tokens anchored by an input token (equal, a 4+ character prefix, or a close misspelling) | `getMerchantCategory` → `matchMerchantPattern` | Built-in Uruguayan merchant list; the highest-confidence match wins.                                                                                                                                                                                                                                                                                                                  |
+| 8   | Learned patterns     | ≤ 0.75 (share of tokens matched × 0.75)                                                                                                                                                                                                                  | `matchLearnedPattern`                          | Tokens shared by at least 2 merchant overrides, more than 60% of them for one category (`buildLearnedPatterns`). Bank wording and payment processors are tokenizer stopwords, never learned.                                                                                                                                                                                          |
+| 9   | Temporal patterns    | 0.5 monthly → `utilities`; 0.4 weekly → `groceries` (review band)                                                                                                                                                                                        | `getTemporalSuggestion`                        | Debits only. Needs `context.temporalPatterns`.                                                                                                                                                                                                                                                                                                                                        |
+| 10  | Similar merchant     | ≤ 0.6 (similarity × 0.6, similarity at least 0.5)                                                                                                                                                                                                        | `findSimilarMerchant`                          | Needs `context.categorizedMerchants`.                                                                                                                                                                                                                                                                                                                                                 |
+| 11  | Amount heuristics    | 0.15–0.25                                                                                                                                                                                                                                                | `categorizeByAmount`                           | Debits only. Needs `context.amount` and `context.currency`.                                                                                                                                                                                                                                                                                                                           |
+| 12  | Fallback             | 0                                                                                                                                                                                                                                                        | (inline)                                       | `uncategorized`.                                                                                                                                                                                                                                                                                                                                                                      |
 
 Steps 9–11 only run when a `CategorizationContext` is passed. In the app that
-happens only in `handleAutoCategorizeTransactions` (the "Auto-categorizar"
+happens only in `autoCategorize` (the "Auto-categorizar"
 bulk action in Transacciones) and in the developer `CoverageAnalysis` tool.
 
 Tests in `transaction-categorizer.test.ts` that pin the order:
@@ -214,13 +322,72 @@ holding a category, 6 before 7, and 7 before 8 come from the code order only.
 
 ### What can change a category after the categorizer
 
-| Step                        | Where                                                         | Effect                                                                                                                                                                                                                                                                                                                        |
-| --------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AI enrichment (import only) | `applyAiEnrichment`                                           | Replaces category, confidence (model value, clamped 0–1, default 0.7) and display name on new rows without a description or merchant override.                                                                                                                                                                                |
-| Internal-transfer inference | `inferInternalTransfers` (store)                              | Bank rows only. Debits with transfer wording become `internal_transfer` (or `external_transfer` with a named beneficiary) at 0.9. A debit paired with a matching credit within 2 days gets 0.92, 0.95 or 0.98, depending on the match score. Skips rows at confidence 1, split rows, and rows already in a transfer category. |
-| User edit / bulk categorize | `handleUpdateTransaction`, `handleBulkCategorizeTransactions` | Sets the category at confidence 1.                                                                                                                                                                                                                                                                                            |
-| Rule applied to past rows   | `handleApplyPatternToPast`                                    | Sets the rule's category at 0.95 on matching rows, except split parts.                                                                                                                                                                                                                                                        |
-| Auto-categorizar            | `handleAutoCategorizeTransactions`                            | Re-runs the categorizer with context on the selected rows; writes only results that are not `uncategorized`.                                                                                                                                                                                                                  |
+| Step                        | Where                               | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI enrichment (import only) | `applyAiEnrichment`                 | Replaces category, confidence (model value, clamped 0–1, default 0.7) and display name on new rows without a description or merchant override.                                                                                                                                                                                                                                                                                                                                                    |
+| Internal-transfer inference | `inferInternalTransfers` (store)    | Bank rows only. Debits with transfer wording become `internal_transfer` (or `external_transfer` with a named beneficiary) at 0.9. A debit paired with a matching credit within 2 days gets 0.92, 0.95 or 0.98, depending on the match score. Skips rows at confidence 1, split rows, and rows already in a transfer category.                                                                                                                                                                     |
+| User edit / bulk categorize | `editTransaction`, `bulkCategorize` | Sets the category at confidence 1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Rule applied to past rows   | `applyPatternToPast`                | Sets the rule's category at 0.95 on matching rows, except split parts.                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Auto-categorizar            | `autoCategorize`                    | Re-runs the categorizer with context on the selected rows; writes a result only when it is not `uncategorized`, at least as confident as the row's current category (a row without a recorded confidence counts as 0.55; a confidence-1 row is beaten only by a user rule at 1) and changes something. The similar-merchant pool is the merchant overrides, then rows categorized at 0.55 or more that are not in an ignored category, one entry per merchant; a row never sees its own merchant. |
+
+## Dates
+
+A transaction's `date` is a **calendar day, held as that day's UTC midnight**
+(#58). The convention lives in `src/utils/date-utils.ts`:
+
+- **Write:** `parseSantanderDate` returns `Date.UTC(y, m, d)`, so a row is the
+  same instant whatever zone the importing browser is in. The transaction ID
+  hashes the raw `DD/MM/YYYY` text, not the `Date`, so the convention does not
+  change IDs.
+- **Load:** rows stored before #58 sit at the importing browser's local
+  midnight (`T03:00Z` from Uruguay). `loadUserTransactions` snaps every date to
+  its calendar day with `toCalendarDay` (rounds to the nearest UTC midnight,
+  right for any writer from UTC-11 to UTC+12). There is no backfill: a stored
+  `T03:00Z` row is rewritten as `T00:00Z` only if something upserts the whole
+  row again (splitting).
+- **Read:** only UTC accessors (`getUTC*`, `toDateKey`, `toMonthKey`,
+  `toISOString().slice(0, 10)`) or `Intl.DateTimeFormat`/`toLocaleDateString`
+  with `timeZone: 'UTC'` (`formatDate`, `formatDateCompact`). Never
+  `getDate()`/`getMonth()`/`getFullYear()` or a formatter without `timeZone` on
+  a transaction date — in Uruguay that shows `T00:00Z` as the previous day.
+- **Ranges:** month/period bounds are UTC (`periodDateRange` and the
+  `T00:00:00.000Z`…`T23:59:59.999Z` bounds in `filterTransactions`,
+  `services/filters/transaction-filter.ts`; `getDateRangeForPeriod`), so a
+  Transacciones drill-through holds exactly the rows Resumen summed
+  (`toMonthKey`) for that month.
+
+## Transacciones filtering
+
+One pure function decides which rows match (#121):
+`filterTransactions(rows, filters: UrlFilterState, { recentAnchor })` in
+`services/filters/transaction-filter.ts`. Its input is the same state the URL
+holds (`url-filters.ts`), period included, so the filtered table, the URL and
+a reload all agree. Split parents never match; rows that don't count toward
+totals match only with `showIgnored`; categories are compared through
+`normalizeCategoryId`, the merchant by its exact merchant key (`merchantKeyOf`,
+see Merchant key below), amounts by absolute value, search over display name +
+raw description + tags. `sortTransactions` orders the result.
+
+`useTransactionFiltering` only holds that state in React (seeded once from the
+URL; the view fills in its default period first), sorts, groups split parts
+under their parent, and paginates. It freezes the "últimos n meses" anchor
+(the newest row) when that period is chosen, so an import does not shift the
+window. Export writes the rows it is handed; if it ever has to filter, it calls
+`filterTransactions`.
+
+- **Day distances** (transfer pairing's ±2 days, recurring cadences) count
+  whole calendar days with `calendarDaysBetween` / `utcDayNumber`.
+- **Today** is the user's local calendar day: `todayAsUtcDate()` builds it from
+  local `getFullYear/getMonth/getDate` and expresses it as a UTC calendar date,
+  so "este mes" compares like with like. Real instants (`generatedAt`,
+  `updated_at`, `createdAt`, the PDF "Generated" line) are timestamps, not
+  calendar days, and are shown in local time (`formatLocalDate`).
+
+Tests run with `TZ` pinned to `America/Montevideo` (`vite.config.ts`);
+`npm run test:tz` reruns the suite in `Europe/Madrid` (east of UTC) and
+`America/Los_Angeles` (west of Uruguay, where a `T03:00Z` row read in local
+time falls on the previous day). `TZ` can't be switched inside a test: test
+workers inherit it from the main process.
 
 ## Money conversion
 
@@ -229,14 +396,14 @@ All conversion happens in the browser, at render or aggregation time, with
 `rate` means 1 USD = `rate` UYU. Stored amounts are always native: positive
 `amount` plus `currency`. Nothing converted is persisted.
 
-| Caller                                                                                                                                                | What it converts                                               |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `buildCurrencySplit`, `spendByAccount`) | Resumen totals, charts and account cards, in the home currency |
-| `category-changes.ts` (`categoryChanges`)                                                                                                             | "Qué cambió" month comparisons and its US$ 10 noise floor      |
-| `insight-data.ts` (`buildInsightInput`)                                                                                                               | Every number handed to the Insights model, rounded to cents    |
-| `Dashboard.tsx`                                                                                                                                       | Merchant totals and recent rows                                |
-| `Transactions.tsx`                                                                                                                                    | Filtered-set totals                                            |
-| `TransactionTable.tsx`                                                                                                                                | The faint `≈` converted amount next to a native one            |
+| Caller                                                                                                                                                                                  | What it converts                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `buildCurrencySplit`, `spendByAccount`, `buildMerchantSpendingConverted`) | Resumen totals, charts, account cards and "Mayores comercios" (also Insights' `topMerchants`), in the home currency |
+| `category-changes.ts` (`categoryChanges`)                                                                                                                                               | "Qué cambió" month comparisons and its US$ 10 noise floor                                                           |
+| `insight-data.ts` (`buildInsightInput`)                                                                                                                                                 | Every number handed to the Insights model, rounded to cents                                                         |
+| `Dashboard.tsx`                                                                                                                                                                         | Recent rows                                                                                                         |
+| `Transactions.tsx`                                                                                                                                                                      | Filtered-set totals                                                                                                 |
+| `TransactionTable.tsx`                                                                                                                                                                  | The faint `≈` converted amount next to a native one                                                                 |
 
 The home currency (`preferredCurrency` from `useUserWorkspace`, passed down as
 `homeCurrency`) and `fxRate` (default 40.5) come from `user_preferences`.
@@ -248,12 +415,52 @@ Which rows the totals add up is decided in one place, described next.
 clicks equals the sum of the rows it opens. Callers never re-derive it from
 `isSplitParent` or `isCategoryIgnored`; a new exclusion is added there.
 
-| Predicate                              | True for                                                                                                                                | Used by                                                                                                                                                              |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `countsAsRow`                          | Every row except a split parent (an inert container its parts stand for). Ignored-category rows still count as rows.                    | Lists and row counts: `useTransactionFiltering`, Categorías counts and rule matches, the "Sin categoría" badge, `needsCategoryReview`, "Qué cambió" account coverage |
-| `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`isCategoryIgnored`: transfers, the legacy `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                             |
-| `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                          | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                                 |
-| `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                      | The Transacciones totals strip                                                                                                                                       |
+| Predicate                              | True for                                                                                                                                | Used by                                                                                                                                                         |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `countsAsRow`                          | Every row except a split parent (an inert container its parts stand for). Ignored-category rows still count as rows.                    | Lists and row counts: `filterTransactions`, Categorías counts and rule matches, the "Sin categoría" badge, `needsCategoryReview`, "Qué cambió" account coverage |
+| `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`isCategoryIgnored`: transfers, the legacy `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                        |
+| `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                          | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                            |
+| `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                      | The Transacciones totals strip, each month of `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`                                                         |
+
+## Merchant key
+
+`src/services/merchants/merchant-key.ts` (#120) decides which rows are "the
+same merchant", so Resumen's "Mayores comercios", its drill-through to
+Transacciones (`?comercio=<key>`, matched by `filterTransactions`),
+Insights' `topMerchants` and recurring-charge detection all group the same
+rows. Never group by `description` or `getDisplayDescription` directly.
+
+- `merchantKeyOf(tx)`: the user's rename (`displayDescription`, else a live
+  description override) folded (lowercase, no accents, `*` as a space, single
+  spaces); otherwise `rawMerchantKey(description)` — split parts too, since
+  they are prefilled with the parent's bank description.
+- `rawMerchantKey`: drops tokens with digits (auth/reference codes, "Cuota 09
+  10", branch numbers) except after `NRO`, `NRR:…`, the `TARJ: ####1234` card
+  mask, and a trailing `, PLACE` (any short place in the debit-card shape that
+  has a `TARJ:` mask; otherwise only a known Uruguayan place that is not also
+  a common name, and never on transfer/Supernet rows, which end in a person's
+  name); then folds. If that leaves nothing, a bare processor/bank prefix
+  (`GENERIC_KEYS`) or one word under 4 letters that is not a known short
+  merchant (`KNOWN_SHORT_MERCHANTS`: UTE, OSE, BPS, DGI, KFC…), the digits are
+  kept instead.
+- `merchantLabelFor(rows)`: what the user sees and the Insights model echoes —
+  the most recent rename, else the most common raw description (ties: most
+  recent row).
+- `npx vite-node scripts/merchant-groups.ts [paths…]` prints, for Santander
+  CSVs or Tatu's own CSV export, every key that merges several variants.
+
+**Recurring charges** (Insights' `recurringCharges`, `detectRecurringCharges`
+in `insight-data.ts`, #59): per merchant key, over counted expenses minus
+installment rows (`Cuota N M` — a purchase being paid off, not a cancellable
+subscription), a charge is _in band_ when it is within ±15% of the median of
+all the merchant's charges. The merchant is recurring when ≥ 75% of its
+charges are in band and the in-band charges fall in ≥ 3 distinct months.
+`approxAmount` is the median of the in-band charges and `monthsSeen`/`cadence`
+come from them; `lastSeenMonth` is the latest charge of any amount, so a price
+rise doesn't read as a lapse. `npx vite-node scripts/recurring-diff.ts
+[--home UYU|USD] [--fx 40.5] [paths…]` prints, per merchant key, what the old
+rules (main; #120) and the current one detect on a Santander CSV or Tatu export
+(`scripts/fixtures/recurring-12mo.csv` is a synthetic 12-month example).
 
 **Export** (`services/export/export.ts`) writes exactly the rows it is given
 and returns how many it wrote. Configuración exports every row (a full
@@ -266,6 +473,45 @@ report (every interpolated string HTML-escaped) from a hidden same-origin
 iframe, not a popup — `window.open` with `noopener` returns `null` (#179). If
 the frame can't be written or printed, the export throws a `UserFacingError`
 and Configuración shows it instead of a success toast.
+
+## Writes: the repository port
+
+Every write goes through a `Repository` bound to one signed-in user
+(`src/services/repository/repository.ts`, #119). There is no ambient session:
+App builds `createSupabaseRepository(session)` and hands it to
+`useTransactionHandlers` and to the views that save rules; tests use
+`createInMemoryRepository` (same chunking, plus fault injection and `hold`
+for races). `hydrateWorkspace` loads, and preferences save, through the
+same port.
+
+Transaction writes live in `src/services/mutations/transaction-mutations.ts`.
+Each one works out one `TransactionPatch` per row — a key that is absent
+leaves the column alone, `null` clears it — sends it through the repository,
+then applies the same patch to the store for exactly the rows the server
+confirmed. The rule is **screen mirrors database**:
+
+| Write                                                                                      | Requests                                                                                                                                                                       | When some fail                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Edits, bulk categorize / tag, apply-scope rows, auto-categorize, rule applied to past rows | Rows with identical patches grouped; one `update(...).in('transaction_id', ≤100 ids)` each (atomic)                                                                            | Chunks settle independently (at most 4 in flight). Saved chunks are applied; `PartialWriteError` "Se actualizaron N de M — reintentar"; retry re-sends only the rest.                                                                |
+| Delete                                                                                     | Soft delete (chunked as above), then hard delete of split parts                                                                                                                | Same; "Se eliminaron N de M". The removed rows keep their undo; leftover parts stay visible and the retry deletes them.                                                                                                              |
+| Undo delete                                                                                | Restore, chunked                                                                                                                                                               | Same; "Se restauraron N de M". Bound to the user who deleted.                                                                                                                                                                        |
+| Import                                                                                     | Sequential 500-row INSERT chunks                                                                                                                                               | Stops at the first failure — see [Import](#import).                                                                                                                                                                                  |
+| Split                                                                                      | Insert the parts (never upsert: another device's parts with the same ids fail the insert, untouched), then set only the parent's `is_split_parent` (if live and not split yet) | Insert conflict: refused, nothing written. Mark fails: this split's parts deleted, flag cleared only if no parts remain. That fails too: parent and parts both shown (never a split parent without parts, which no list could show). |
+| Unsplit                                                                                    | Clear the parent's flag, then delete every part pointing at it (not just the ones this device knows)                                                                           | Delete fails: parent marked again (if parts remain). That fails too: parent and parts both shown.                                                                                                                                    |
+
+A row a successful chunk did not return (gone from the server) is
+`missing`, not `failed`: it is never retried, and the message says to
+reload.
+
+**Account switches.** After every await, before touching anything in
+memory, a write checks `isWorkspaceOwner(repository.userId)`
+(`stores/workspace-state.ts`). If another user signed in meanwhile, nothing
+lands in their store and the write ends with a `WorkspaceChangedError`; the
+server change stays with the user who made it. Undo and retry closures keep
+the repository that did the write and refuse before sending anything once
+it is no longer the signed-in user's. The rule stores (custom patterns,
+custom categories) refuse to start for a repository whose user isn't loaded
+and skip their rollback after a switch.
 
 ## Persistence boundaries
 
@@ -292,7 +538,7 @@ and Configuración shows it instead of a success toast.
 ## Error reporting
 
 Unexpected errors go to Sentry when `VITE_SENTRY_DSN` is set, and nowhere
-otherwise (ADR-0003, `src/services/monitoring/error-reporting.ts`).
+otherwise (ADR-0004, `src/services/monitoring/error-reporting.ts`).
 `userErrorMessage` reports every error it did not write itself. Code that
 catches an error without passing it there calls `captureError(error, area)`.
 Before anything is sent, the browser strips URLs down to their path, redacts

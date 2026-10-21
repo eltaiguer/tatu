@@ -410,19 +410,21 @@ describe('useTransactionFiltering — drill-through links add up', () => {
     expect(result.current.displayedRowCount).toBe(2)
   })
 
-  it('filters a merchant by exact name, not substring', () => {
+  it('filters a merchant by its exact merchant key, not substring', () => {
     const transactions = [
       makeTransaction('a', { description: 'UBER' }),
+      // Same merchant, another auth code: same key as Resumen groups by.
+      makeTransaction('a2', { description: 'UBER 4455TT12' }),
       makeTransaction('b', { description: 'UBER EATS' }),
       makeTransaction('c', { description: 'Taxi', tags: ['uber'] }),
     ]
     const { result } = renderHook(() =>
       useTransactionFiltering({
         transactions,
-        initial: { ...DEFAULT_URL_FILTERS, merchant: 'UBER' },
+        initial: { ...DEFAULT_URL_FILTERS, merchant: 'uber' },
       })
     )
-    expect(ids(result.current.filteredTransactions)).toEqual(['a'])
+    expect(ids(result.current.filteredTransactions).sort()).toEqual(['a', 'a2'])
   })
 })
 
@@ -436,12 +438,84 @@ describe('useTransactionFiltering — initial date range', () => {
     renderHook(() => {
       const state = useTransactionFiltering({
         transactions,
-        initialDateRange: { from: '2026-03-01', to: '2026-03-31' },
+        initial: {
+          ...DEFAULT_URL_FILTERS,
+          period: { mode: 'month', y: 2026, m: 2 },
+        },
       })
       renders.push(state.filteredTransactions.map((tx) => tx.id))
       return state
     })
 
     expect(renders[0]).toEqual(['march'])
+  })
+})
+
+describe('useTransactionFiltering — period', () => {
+  const ids = (txs: Transaction[]) => txs.map((t) => t.id)
+  const transactions = [
+    makeTransaction('feb', { date: new Date('2026-02-20T00:00:00.000Z') }),
+    makeTransaction('mar-10', { date: new Date('2026-03-10T00:00:00.000Z') }),
+    makeTransaction('mar-31', { date: new Date('2026-03-31T00:00:00.000Z') }),
+    makeTransaction('apr', { date: new Date('2026-04-02T00:00:00.000Z') }),
+  ]
+  const march = {
+    ...DEFAULT_URL_FILTERS,
+    period: { mode: 'month' as const, y: 2026, m: 2 },
+  }
+
+  it('keeps the month end when only the start date is edited', () => {
+    const { result } = renderHook(() =>
+      useTransactionFiltering({ transactions, initial: march })
+    )
+    act(() => result.current.setDateFromFilter('2026-03-05'))
+
+    expect(result.current.period).toEqual({
+      mode: 'range',
+      from: '2026-03-05',
+      to: '2026-03-31',
+    })
+    expect(ids(result.current.filteredTransactions)).toEqual([
+      'mar-31',
+      'mar-10',
+    ])
+  })
+
+  it('does not move "últimos n meses" when a newer row arrives', () => {
+    const { result, rerender } = renderHook(
+      ({ rows }) =>
+        useTransactionFiltering({
+          transactions: rows,
+          initial: { ...DEFAULT_URL_FILTERS, period: { mode: 'recent', n: 2 } },
+        }),
+      { initialProps: { rows: transactions } }
+    )
+    expect(ids(result.current.filteredTransactions)).toEqual([
+      'apr',
+      'mar-31',
+      'mar-10',
+    ])
+
+    rerender({
+      rows: [
+        ...transactions,
+        makeTransaction('may', { date: new Date('2026-05-05T00:00:00.000Z') }),
+      ],
+    })
+    expect(ids(result.current.filteredTransactions)).toEqual([
+      'apr',
+      'mar-31',
+      'mar-10',
+    ])
+  })
+
+  it('clears the period with the other filters', () => {
+    const { result } = renderHook(() =>
+      useTransactionFiltering({ transactions, initial: march })
+    )
+    act(() => result.current.clearAllFilters())
+
+    expect(result.current.filters.period).toEqual({ mode: 'all' })
+    expect(result.current.filteredTransactions).toHaveLength(4)
   })
 })

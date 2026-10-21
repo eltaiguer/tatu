@@ -71,9 +71,9 @@ describe('Settings', () => {
       screen.getByRole('heading', { name: 'Configuración' })
     ).toBeInTheDocument()
     expect(screen.getByText('Apariencia')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Claro' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Auto' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Oscuro' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Claro' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Auto' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Oscuro' })).toBeInTheDocument()
   })
 
   it('calls onSetTheme with the selected value when clicking a theme button', () => {
@@ -92,10 +92,10 @@ describe('Settings', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Oscuro' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Oscuro' }))
     expect(onSetTheme).toHaveBeenCalledWith('dark')
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Auto' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Auto' }))
     expect(onSetTheme).toHaveBeenCalledWith('auto')
   })
 
@@ -115,7 +115,7 @@ describe('Settings', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Dólares US$' }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Dólares US$' }))
     expect(onSetCurrency).toHaveBeenCalledWith('USD')
   })
 
@@ -273,8 +273,8 @@ describe('Settings', () => {
       />
     )
 
-    const picker = screen.getByRole('tablist', { name: 'Modelo de IA' })
-    const tabs = within(picker).getAllByRole('tab')
+    const picker = screen.getByRole('radiogroup', { name: 'Modelo de IA' })
+    const tabs = within(picker).getAllByRole('radio')
     expect(tabs.map((t) => t.textContent)).toEqual(
       CATEGORIZATION_MODELS.map((m) => m.label)
     )
@@ -283,11 +283,48 @@ describe('Settings', () => {
     expect(onSetAiModel.mock.calls.map(([id]) => id)).toEqual(
       CATEGORIZATION_MODELS.map((m) => m.id)
     )
-    // Behavior unchanged: same two models as before.
     expect(CATEGORIZATION_MODELS.map((m) => m.id)).toEqual([
-      'claude-haiku-4-5',
-      'claude-sonnet-4-6',
+      'claude-haiku-5-5',
+      'claude-sonnet-5-5',
     ])
+  })
+
+  it('gives every Configuración control a Spanish accessible name', () => {
+    render(
+      <Settings
+        theme="light"
+        onSetTheme={() => {}}
+        preferredCurrency="UYU"
+        onSetCurrency={() => {}}
+        session={null}
+        supabaseEnabled={false}
+        onSignOut={() => {}}
+        transactions={[]}
+        {...defaultAiProps}
+        aiEnabled
+      />
+    )
+
+    expect(
+      screen.getByRole('switch', { name: 'Categorización con IA' })
+    ).toBeChecked()
+    expect(
+      screen.getByRole('spinbutton', { name: 'Tipo de cambio' })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Clave API de Anthropic')).toHaveAttribute(
+      'type',
+      'password'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar clave' }))
+
+    expect(screen.getByLabelText('Clave API de Anthropic')).toHaveAttribute(
+      'type',
+      'text'
+    )
+    expect(
+      screen.getByRole('button', { name: 'Ocultar clave' })
+    ).toBeInTheDocument()
   })
 
   function renderForPdfExport() {
@@ -315,7 +352,12 @@ describe('Settings', () => {
     try {
       renderForPdfExport()
 
-      expect(await screen.findByText('Reporte PDF generado')).toBeVisible()
+      // In the document, not toBeVisible: sonner fades a toast in (opacity 0
+      // until its mount frame runs), so visibility right after it appears
+      // depends on timing and flaked.
+      expect(
+        await screen.findByText('Reporte PDF generado')
+      ).toBeInTheDocument()
       expect(frame.printed()).toHaveLength(1)
       expect(frame.printed()[0]).toContain('Devoto Pocitos')
     } finally {
@@ -332,7 +374,7 @@ describe('Settings', () => {
         await screen.findByText(
           'No se pudo abrir el reporte PDF. Recargá la página e intentá de nuevo.'
         )
-      ).toBeVisible()
+      ).toBeInTheDocument()
       expect(screen.queryByText('Reporte PDF generado')).not.toBeInTheDocument()
     } finally {
       frame.restore()

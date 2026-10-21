@@ -39,7 +39,7 @@ export function SegmentedToggle<T extends string>({
   return (
     <div
       ref={containerRef}
-      role="tablist"
+      role="radiogroup"
       aria-label={ariaLabel}
       style={{
         display: 'flex',
@@ -55,9 +55,8 @@ export function SegmentedToggle<T extends string>({
           <button
             key={opt.value}
             type="button"
-            role="tab"
-            aria-selected={isActive}
-            aria-pressed={isActive}
+            role="radio"
+            aria-checked={isActive}
             tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(opt.value)}
             onKeyDown={(e) => handleKeyDown(e, index)}

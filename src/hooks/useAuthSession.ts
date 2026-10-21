@@ -11,7 +11,6 @@ import {
   updatePassword,
 } from '../services/supabase/auth'
 import type { SupabaseSession } from '../services/supabase/client'
-import { setActiveSupabaseSession } from '../services/supabase/runtime'
 import { setErrorReportingUser } from '../services/monitoring/error-reporting'
 import { mapAuthError } from '../utils/auth-errors'
 
@@ -87,7 +86,6 @@ export function useAuthSession() {
   )
 
   useEffect(() => {
-    setActiveSupabaseSession(session)
     setErrorReportingUser(session?.user?.id ?? null)
   }, [session])
 
@@ -130,8 +128,12 @@ export function useAuthSession() {
   }
 
   async function handlePasswordReset() {
-    setAuthSubmitting(true)
     setAuthError('')
+    if (!email.trim()) {
+      setAuthNotice('Ingresá tu email para restablecer la contraseña')
+      return
+    }
+    setAuthSubmitting(true)
     setAuthNotice('')
 
     try {

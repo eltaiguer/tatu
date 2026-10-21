@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import {
   addCustomCategory,
   addCustomCategoryWithSync,
@@ -9,30 +9,15 @@ import {
   updateCustomCategory,
   updateCustomCategoryWithSync,
 } from './category-store'
-
-const {
-  getActiveSupabaseSessionMock,
-  upsertCustomCategoryMock,
-  archiveCustomCategoryMock,
-} = vi.hoisted(() => ({
-  getActiveSupabaseSessionMock: vi.fn(),
-  upsertCustomCategoryMock: vi.fn(),
-  archiveCustomCategoryMock: vi.fn(),
-}))
-
-vi.mock('../supabase/runtime', () => ({
-  getActiveSupabaseSession: getActiveSupabaseSessionMock,
-}))
-
-vi.mock('../supabase/custom-categories', () => ({
-  upsertCustomCategory: upsertCustomCategoryMock,
-  archiveCustomCategory: archiveCustomCategoryMock,
-}))
+import {
+  createInMemoryRepository,
+  type InMemoryRepository,
+} from '../repository/in-memory-repository'
+import { workspaceStore } from '../../stores/workspace-state'
 
 describe('Custom category store', () => {
   beforeEach(() => {
     replaceCustomCategories([])
-    vi.clearAllMocks()
   })
 
   it('adds and lists custom categories', () => {
@@ -93,83 +78,117 @@ describe('Custom category store', () => {
     expect(listCustomCategories()).toEqual([])
   })
 
-  it('syncs add/update/remove when session exists', async () => {
-    getActiveSupabaseSessionMock.mockReturnValue({
-      user: { id: 'user-1' },
-    })
-    upsertCustomCategoryMock.mockResolvedValue(undefined)
-    archiveCustomCategoryMock.mockResolvedValue(undefined)
+  describe('saved through the repository it is given (#119)', () => {
+    let repo: InMemoryRepository
 
-    const created = await addCustomCategoryWithSync({
-      label: 'Cloud Category',
-      color: '#112233',
+    beforeEach(() => {
+      repo = createInMemoryRepository()
+      workspaceStore.setState({ userId: repo.userId, status: 'ready' })
     })
 
-    await updateCustomCategoryWithSync(created.id, {
-      label: 'Cloud Category 2',
+    it('saves add/update/remove on the server', async () => {
+      const created = await addCustomCategoryWithSync(repo, {
+        label: 'Cloud Category',
+        color: '#112233',
+      })
+      expect(repo.customCategories.get(created.id)?.label).toBe(
+        'Cloud Category'
+      )
+
+      await updateCustomCategoryWithSync(repo, created.id, {
+        label: 'Cloud Category 2',
+      })
+      expect(repo.customCategories.get(created.id)?.label).toBe(
+        'Cloud Category 2'
+      )
+
+      await removeCustomCategoryWithSync(repo, created.id)
+      expect(repo.customCategories.get(created.id)?.isArchived).toBe(true)
+      expect(listCustomCategories()).toEqual([])
     })
-    await removeCustomCategoryWithSync(created.id)
 
-    expect(upsertCustomCategoryMock).toHaveBeenCalledTimes(2)
-    expect(archiveCustomCategoryMock).toHaveBeenCalledTimes(1)
-  })
+    it('saves the isIgnored flag on add and update', async () => {
+      const created = await addCustomCategoryWithSync(repo, {
+        label: 'Reembolsos',
+        color: '#112233',
+        isIgnored: true,
+      })
+      expect(repo.customCategories.get(created.id)?.isIgnored).toBe(true)
 
-  it('syncs the isIgnored flag to the cloud on add and update', async () => {
-    getActiveSupabaseSessionMock.mockReturnValue({
-      user: { id: 'user-1' },
-    })
-    upsertCustomCategoryMock.mockResolvedValue(undefined)
-
-    const created = await addCustomCategoryWithSync({
-      label: 'Reembolsos',
-      color: '#112233',
-      isIgnored: true,
+      await updateCustomCategoryWithSync(repo, created.id, {
+        isIgnored: false,
+      })
+      expect(repo.customCategories.get(created.id)?.isIgnored).toBe(false)
     })
 
-    expect(upsertCustomCategoryMock).toHaveBeenLastCalledWith(
-      expect.anything(),
-      expect.objectContaining({ id: created.id, isIgnored: true })
-    )
+    it('removes a new category whose remote save failed', async () => {
+      repo.failOn('upsertCustomCategory', { error: new Error('timeout') })
 
-    await updateCustomCategoryWithSync(created.id, { isIgnored: false })
+      await expect(
+        addCustomCategoryWithSync(repo, { label: 'Viajes', color: '#112233' })
+      ).rejects.toThrow('timeout')
+      expect(listCustomCategories()).toEqual([])
+    })
 
-    expect(upsertCustomCategoryMock).toHaveBeenLastCalledWith(
-      expect.anything(),
-      expect.objectContaining({ id: created.id, isIgnored: false })
-    )
-  })
+    it('restores only the edited category when its save fails', async () => {
+      const a = await addCustomCategoryWithSync(repo, {
+        label: 'A',
+        color: '#111111',
+      })
+      const b = await addCustomCategoryWithSync(repo, {
+        label: 'B',
+        color: '#222222',
+      })
+      repo.failOn('upsertCustomCategory', {
+        times: 1,
+        error: new Error('timeout'),
+      })
 
-  it('removes a new category whose remote save failed', async () => {
-    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
-    upsertCustomCategoryMock.mockRejectedValue(new Error('timeout'))
+      await expect(
+        updateCustomCategoryWithSync(repo, a.id, { label: 'A2' })
+      ).rejects.toThrow('timeout')
+      expect(listCustomCategories().map((c) => c.label)).toEqual(['A', 'B'])
+      expect(listCustomCategories().find((c) => c.id === b.id)).toBeDefined()
+    })
 
-    await expect(
-      addCustomCategoryWithSync({ label: 'Viajes', color: '#112233' })
-    ).rejects.toThrow('timeout')
-    expect(listCustomCategories()).toEqual([])
-  })
+    it('puts back a category whose remote archive failed', async () => {
+      const a = await addCustomCategoryWithSync(repo, {
+        label: 'A',
+        color: '#111111',
+      })
+      repo.failOn('archiveCustomCategory', { error: new Error('timeout') })
 
-  it('restores only the edited category when its save fails', async () => {
-    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
-    upsertCustomCategoryMock.mockResolvedValue(undefined)
-    const a = await addCustomCategoryWithSync({ label: 'A', color: '#111111' })
-    const b = await addCustomCategoryWithSync({ label: 'B', color: '#222222' })
-    upsertCustomCategoryMock.mockRejectedValueOnce(new Error('timeout'))
+      await expect(removeCustomCategoryWithSync(repo, a.id)).rejects.toThrow(
+        'timeout'
+      )
+      expect(listCustomCategories().map((c) => c.id)).toEqual([a.id])
+    })
 
-    await expect(
-      updateCustomCategoryWithSync(a.id, { label: 'A2' })
-    ).rejects.toThrow('timeout')
-    expect(listCustomCategories().map((c) => c.label)).toEqual(['A', 'B'])
-    expect(listCustomCategories().find((c) => c.id === b.id)).toBeDefined()
-  })
+    it("refuses a write for a user whose workspace isn't loaded", async () => {
+      workspaceStore.setState({ userId: 'someone-else', status: 'ready' })
 
-  it('puts back a category whose remote archive failed', async () => {
-    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
-    upsertCustomCategoryMock.mockResolvedValue(undefined)
-    archiveCustomCategoryMock.mockRejectedValue(new Error('timeout'))
-    const a = await addCustomCategoryWithSync({ label: 'A', color: '#111111' })
+      await expect(
+        addCustomCategoryWithSync(repo, { label: 'A', color: '#111111' })
+      ).rejects.toThrow(/sesión/)
+      expect(listCustomCategories()).toEqual([])
+      expect(repo.customCategories.size).toBe(0)
+    })
 
-    await expect(removeCustomCategoryWithSync(a.id)).rejects.toThrow('timeout')
-    expect(listCustomCategories().map((c) => c.id)).toEqual([a.id])
+    it("does not roll back into another user's categories after a switch", async () => {
+      const gate = repo.hold('upsertCustomCategory')
+      repo.failOn('upsertCustomCategory', { error: new Error('timeout') })
+      const pending = addCustomCategoryWithSync(repo, {
+        label: 'A',
+        color: '#111111',
+      }).catch((e: unknown) => e)
+
+      // Another user signs in and loads a category with the same id.
+      workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+      replaceCustomCategories([{ id: 'a', label: 'A de B', color: '#000' }])
+      gate.release()
+      await pending
+
+      expect(listCustomCategories().map((c) => c.label)).toEqual(['A de B'])
+    })
   })
 })

@@ -1,10 +1,6 @@
 import { normalizeMerchantName } from './merchant-patterns'
 import { invalidateLearnedPatternsCache } from './learned-patterns'
-import {
-  deleteCategoryOverride,
-  upsertCategoryOverride,
-} from '../supabase/category-overrides'
-import { getActiveSupabaseSession } from '../supabase/runtime'
+import { buildDescriptionOverrideKey } from '../descriptions/normalization'
 
 export interface CategoryOverride {
   merchantName?: string
@@ -16,27 +12,54 @@ export type CategoryOverrides = Record<string, CategoryOverride>
 
 let overrides: CategoryOverrides = {}
 
+/**
+ * The key a merchant override is stored under: the normalized description
+ * (lowercase, POS prefix dropped) with its per-transaction noise (dates,
+ * times, auth codes, long numbers) stripped — the same key "Todas las
+ * similares" selects past rows by, so a category set on one row reaches
+ * the merchant's later rows too. Overrides stored before this, under the
+ * exact normalized description, are still read (`merchant_original` is
+ * nullable, so a one-time re-key on load could not reach every row).
+ */
+export function merchantOverrideKey(merchantName: string): string | null {
+  const normalized = normalizeMerchantName(merchantName)
+  return normalized ? buildDescriptionOverrideKey(normalized) : null
+}
+
+/** The exact-normalized key an older override of this row would sit under. */
+export function legacyMerchantOverrideKey(merchantName: string): string | null {
+  const exact = normalizeMerchantName(merchantName)
+  return exact && exact !== merchantOverrideKey(merchantName) ? exact : null
+}
+
+function keysFor(merchantName: string): string[] {
+  const keys: string[] = []
+  const stripped = merchantOverrideKey(merchantName)
+  if (stripped) keys.push(stripped)
+  const legacy = legacyMerchantOverrideKey(merchantName)
+  if (legacy) keys.push(legacy)
+  return keys
+}
+
 export function getMerchantCategoryOverride(
   merchantName: string
 ): string | null {
-  const normalized = normalizeMerchantName(merchantName)
-  if (!normalized) {
-    return null
+  for (const key of keysFor(merchantName)) {
+    const category = overrides[key]?.category
+    if (category) return category
   }
-
-  return overrides[normalized]?.category ?? null
+  return null
 }
 
-export function setMerchantCategoryOverride(
+// The two primitives mirror one server row each, so a write can apply to
+// memory exactly what the server confirmed (transaction-mutations.ts).
+
+export function putMerchantCategoryOverrideKey(
+  key: string,
   merchantName: string,
   category: string
 ): void {
-  const normalized = normalizeMerchantName(merchantName)
-  if (!normalized) {
-    return
-  }
-
-  overrides[normalized] = {
+  overrides[key] = {
     category,
     merchantName,
     updatedAt: new Date().toISOString(),
@@ -44,75 +67,30 @@ export function setMerchantCategoryOverride(
   invalidateLearnedPatternsCache()
 }
 
-// Puts a local entry back as it was when the remote write fails, so the
-// screen never shows a rule the server didn't get.
-function restoreOverride(
-  key: string,
-  previous: CategoryOverride | undefined
-): void {
-  if (previous) overrides[key] = previous
-  else delete overrides[key]
-  invalidateLearnedPatternsCache()
-}
-
-export async function setMerchantCategoryOverrideWithSync(
-  merchantName: string,
-  category: string
-): Promise<void> {
-  const normalized = normalizeMerchantName(merchantName)
-  const previous = normalized ? overrides[normalized] : undefined
-  setMerchantCategoryOverride(merchantName, category)
-  if (!normalized) {
-    return
-  }
-
-  // Remote failures propagate (after rolling back the local entry) so the
-  // caller can tell the user the rule wasn't saved.
-  try {
-    const session = getActiveSupabaseSession()
-    if (session) {
-      await upsertCategoryOverride(session, {
-        merchantNormalized: normalized,
-        merchantOriginal: merchantName,
-        category,
-      })
-    }
-  } catch (error) {
-    restoreOverride(normalized, previous)
-    throw error
-  }
-}
-
-export function clearMerchantCategoryOverride(merchantName: string): void {
-  const normalized = normalizeMerchantName(merchantName)
-  if (!normalized) {
-    return
-  }
-
-  if (overrides[normalized]) {
-    delete overrides[normalized]
+export function deleteMerchantCategoryOverrideKey(key: string): void {
+  if (overrides[key]) {
+    delete overrides[key]
     invalidateLearnedPatternsCache()
   }
 }
 
-export async function clearMerchantCategoryOverrideWithSync(
-  merchantName: string
-): Promise<void> {
-  const normalized = normalizeMerchantName(merchantName)
-  const previous = normalized ? overrides[normalized] : undefined
-  clearMerchantCategoryOverride(merchantName)
-  if (!normalized) {
+/** Stores under the stripped key and drops the row's exact-key override. */
+export function setMerchantCategoryOverride(
+  merchantName: string,
+  category: string
+): void {
+  const key = merchantOverrideKey(merchantName)
+  if (!key) {
     return
   }
+  putMerchantCategoryOverrideKey(key, merchantName, category)
+  const legacy = legacyMerchantOverrideKey(merchantName)
+  if (legacy) deleteMerchantCategoryOverrideKey(legacy)
+}
 
-  try {
-    const session = getActiveSupabaseSession()
-    if (session) {
-      await deleteCategoryOverride(session, normalized)
-    }
-  } catch (error) {
-    restoreOverride(normalized, previous)
-    throw error
+export function clearMerchantCategoryOverride(merchantName: string): void {
+  for (const key of keysFor(merchantName)) {
+    deleteMerchantCategoryOverrideKey(key)
   }
 }
 

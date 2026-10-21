@@ -1,7 +1,7 @@
 import * as Sentry from '@sentry/react'
 import type { Breadcrumb, ErrorEvent, EventHint } from '@sentry/react'
 
-// Error reporting to Sentry (ADR-0003). This is a finance app: transaction
+// Error reporting to Sentry (ADR-0004). This is a finance app: transaction
 // descriptions, amounts and auth tokens must never leave the browser, so
 // everything sent goes through the scrubbers below. Without VITE_SENTRY_DSN
 // (local dev, tests) Sentry is never initialised and every call is a no-op.

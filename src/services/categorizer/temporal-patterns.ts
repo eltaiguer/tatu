@@ -1,10 +1,12 @@
 /**
  * Detect recurring temporal patterns in transaction history.
- * Monthly recurring transactions suggest utilities/subscriptions.
+ * Monthly recurring transactions suggest utilities/subscriptions (as a
+ * review-band hint, since rent, gyms and loans recur monthly too).
  * Weekly patterns suggest groceries. One-time large amounts suggest shopping.
  */
 import { Category } from '../../models'
 import { normalizeMerchantName, type PatternMatch } from './merchant-patterns'
+import { calendarDaysBetween } from '../../utils/date-utils'
 
 export interface TemporalTransaction {
   description: string
@@ -71,10 +73,8 @@ export function analyzeTemporalPatterns(
     // Compute intervals between consecutive transactions
     const intervals: number[] = []
     for (let i = 1; i < sorted.length; i++) {
-      const days =
-        (sorted[i].date.getTime() - sorted[i - 1].date.getTime()) /
-        (1000 * 60 * 60 * 24)
-      intervals.push(days)
+      // Whole calendar days, whatever shape each date is stored in (#58)
+      intervals.push(calendarDaysBetween(sorted[i].date, sorted[i - 1].date))
     }
 
     if (intervals.length === 0) continue
@@ -119,7 +119,9 @@ function detectFrequency(
       averageAmount: avgAmount,
       currency,
       suggestedCategory: Category.Utilities,
-      confidence: 0.65,
+      // A review-band hint (< 0.55): rent, a gym or a loan recur monthly
+      // too, so the cadence suggests but does not identify a utility.
+      confidence: 0.5,
       occurrences: count,
     }
   }

@@ -179,6 +179,49 @@ describe('supabase transactions service', () => {
     expect(transactions[0].id).toBe('tx-1')
   })
 
+  // #58: dates are calendar days at UTC midnight. Rows stored before #58 sit
+  // at the importing browser's local midnight (03:00Z from Uruguay); they
+  // load as their own calendar day.
+  it('loads each date as its calendar day at UTC midnight', async () => {
+    table.rows = [
+      { ...makeRow(1), date: '2026-03-01T03:00:00+00:00' },
+      { ...makeRow(2), date: '2026-03-01T00:00:00+00:00' },
+      { ...makeRow(3), date: '2026-02-28T23:00:00+00:00' },
+    ]
+    const { loadUserTransactions } = await import('./transactions')
+    const transactions = await loadUserTransactions(session)
+
+    expect(transactions.map((tx) => tx.date.toISOString())).toEqual([
+      '2026-03-01T00:00:00.000Z',
+      '2026-03-01T00:00:00.000Z',
+      '2026-03-01T00:00:00.000Z',
+    ])
+  })
+
+  it('loads which import run stored each row and when (#167)', async () => {
+    table.rows = [
+      {
+        ...makeRow(1),
+        import_id: 'run-a',
+        created_at: '2026-02-05T12:00:00+00:00',
+      },
+      { ...makeRow(2), import_id: null, created_at: '2025-11-01T09:00:00Z' },
+    ]
+
+    const { loadUserTransactions } = await import('./transactions')
+    const transactions = await loadUserTransactions(session)
+    const byId = new Map(transactions.map((tx) => [tx.id, tx]))
+
+    expect(byId.get('tx-0001')?.importId).toBe('run-a')
+    expect(byId.get('tx-0001')?.createdAt).toEqual(
+      new Date('2026-02-05T12:00:00Z')
+    )
+    expect(byId.get('tx-0002')?.importId).toBeUndefined()
+    expect(byId.get('tx-0002')?.createdAt).toEqual(
+      new Date('2025-11-01T09:00:00Z')
+    )
+  })
+
   it('loads every transaction when the account exceeds the server row cap', async () => {
     // PostgREST caps each response at max-rows (1000 by default) without
     // erroring, so a single unpaged select silently drops the rest.
@@ -278,91 +321,9 @@ describe('supabase transactions service', () => {
     expect(upsertMock).not.toHaveBeenCalled()
   })
 
-  it('soft deletes a transaction', async () => {
-    const { softDeleteTransaction } = await import('./transactions')
-    await softDeleteTransaction(session, 'tx-99')
-
-    expect(updateMock).toHaveBeenCalledWith({
-      is_deleted: true,
-      deleted_at: expect.any(String),
-    })
-    expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
-    expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
-  })
-
-  it('reports a soft delete that matched no row instead of succeeding', async () => {
-    selectAfterUpdateMock.mockResolvedValue({ data: [], error: null })
-    const { softDeleteTransaction } = await import('./transactions')
-
-    await expect(softDeleteTransaction(session, 'tx-gone')).rejects.toThrow(
-      /ya no existe/
-    )
-  })
-
-  it('restores soft-deleted transactions in one request', async () => {
-    selectAfterUpdateMock.mockResolvedValue({
-      data: [{ transaction_id: 'tx-1' }, { transaction_id: 'tx-2' }],
-      error: null,
-    })
-    const { restoreTransactions } = await import('./transactions')
-    await restoreTransactions(session, ['tx-1', 'tx-2'])
-
-    expect(updateMock).toHaveBeenCalledTimes(1)
-    expect(updateMock).toHaveBeenCalledWith({
-      is_deleted: false,
-      deleted_at: null,
-    })
-    expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
-    expect(inForUpdateMock).toHaveBeenCalledWith('transaction_id', [
-      'tx-1',
-      'tx-2',
-    ])
-  })
-
-  it('fails a restore when not every row came back', async () => {
-    selectAfterUpdateMock.mockResolvedValue({
-      data: [{ transaction_id: 'tx-1' }],
-      error: null,
-    })
-    const { restoreTransactions } = await import('./transactions')
-
-    await expect(
-      restoreTransactions(session, ['tx-1', 'tx-2'])
-    ).rejects.toThrow(/No se pudieron restaurar/)
-  })
-
-  it('updates editable fields for a transaction', async () => {
-    const { updateTransaction } = await import('./transactions')
-    await updateTransaction(session, 'tx-99', {
-      description: 'Nuevo comercio',
-      category: '',
-      tags: ['servicio', 'mensual'],
-    })
-
-    expect(updateMock).toHaveBeenCalledWith({
-      description: 'Nuevo comercio',
-      category: null,
-      tags: ['servicio', 'mensual'],
-    })
-    expect(eqForUpdateMock).toHaveBeenCalledWith('user_id', 'user-1')
-    expect(eqForUpdateIdMock).toHaveBeenCalledWith('transaction_id', 'tx-99')
-  })
-
-  it('reports an update that matched no row instead of succeeding', async () => {
-    selectAfterUpdateMock.mockResolvedValue({ data: [], error: null })
-    const { updateTransaction } = await import('./transactions')
-
-    await expect(
-      updateTransaction(session, 'tx-gone', { category: 'food' })
-    ).rejects.toThrow(/ya no existe/)
-  })
-
-  it('does not issue update when no fields are provided', async () => {
-    const { updateTransaction } = await import('./transactions')
-    await updateTransaction(session, 'tx-99', {})
-
-    expect(updateMock).not.toHaveBeenCalled()
-  })
+  // Updates, soft deletes, restores and split writes are single-request
+  // primitives of the repository's Supabase adapter; their requests are
+  // tested in services/repository/supabase-repository.test.ts (#119).
 
   describe('findExistingTransactionIds', () => {
     it('splits existing ids into active and deleted, in chunks', async () => {

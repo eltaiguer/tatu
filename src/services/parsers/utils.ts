@@ -2,6 +2,8 @@
  * Parsing utilities for Santander Uruguay CSV files
  */
 
+import { UserFacingError } from '../../utils/user-error'
+
 /**
  * Parse a number from Santander format
  * - Credit Card format: "1.234,56" (period as thousands, comma as decimal)
@@ -33,7 +35,7 @@ export function parseSantanderNumber(value: string): number {
 
   const parsed = Number(normalized)
   if (!Number.isFinite(parsed)) {
-    throw new Error(`Importe ilegible: "${value}"`)
+    throw new UserFacingError(`Importe ilegible: "${value}"`)
   }
 
   return parsed
@@ -42,8 +44,11 @@ export function parseSantanderNumber(value: string): number {
 /**
  * Parse a date from Santander DD/MM/YYYY format
  *
+ * The result is a calendar day at UTC midnight — the same instant whatever
+ * zone the importing browser is in (#58, see utils/date-utils.ts).
+ *
  * @param dateStr - Date string in DD/MM/YYYY format
- * @returns Date object set to midnight
+ * @returns Date at UTC midnight of that day
  */
 export function parseSantanderDate(dateStr: string): Date {
   const [day, month, year] = dateStr
@@ -51,7 +56,7 @@ export function parseSantanderDate(dateStr: string): Date {
     .map((part) => parseInt(part, 10))
 
   // Month is 0-indexed in JavaScript Date
-  return new Date(year, month - 1, day, 0, 0, 0, 0)
+  return new Date(Date.UTC(year, month - 1, day))
 }
 
 /**

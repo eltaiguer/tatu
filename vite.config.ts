@@ -8,6 +8,15 @@ import { sentryVitePlugin } from '@sentry/vite-plugin'
 // upload so Firebase never serves them. Other builds skip this entirely.
 const uploadSourceMaps = Boolean(process.env.SENTRY_AUTH_TOKEN)
 
+// Tests run in a pinned time zone so a date bug can't pass on one machine and
+// fail on another: Uruguay (the user's zone) by default, others through
+// TATU_TEST_TZ (`npm run test:tz`). Node re-reads TZ when it is assigned, and
+// test workers inherit it from this process — assigning it inside a test does
+// nothing. Only under Vitest: `vite dev`/`build` keep the machine's zone.
+if (process.env.VITEST) {
+  process.env.TZ = process.env.TATU_TEST_TZ ?? 'America/Montevideo'
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [

@@ -3,7 +3,10 @@ import { getDescriptionOverride } from '../services/descriptions/description-ove
 import type { Transaction } from '../models'
 import { countsAsRow } from '../services/spending/spending-rules'
 
-export function getDisplayDescription(transaction: Transaction): string {
+// The name the user gave this row: its own rename, else a live description
+// override (a "future matching" rename). Null when the user never renamed it;
+// whitespace-only names count as no rename.
+export function getUserRename(transaction: Transaction): string | null {
   if (transaction.displayDescription?.trim()) {
     return transaction.displayDescription.trim()
   }
@@ -13,12 +16,17 @@ export function getDisplayDescription(transaction: Transaction): string {
     return override.friendlyDescription.trim()
   }
 
-  return transaction.description
+  return null
+}
+
+export function getDisplayDescription(transaction: Transaction): string {
+  return getUserRename(transaction) ?? transaction.description
 }
 
 // Confidence below which an automatic category is worth a second look (the
-// old meter's "baja" band).
-const LOW_CONFIDENCE = 0.55
+// meter's "baja" band); defined with the other band in the categorizer.
+export { LOW_CONFIDENCE } from '../services/categorizer/confidence'
+import { LOW_CONFIDENCE } from '../services/categorizer/confidence'
 
 // Whether a row's category deserves the user's attention: it has none, or
 // it was assigned automatically with low confidence. Rows the user

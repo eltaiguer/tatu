@@ -99,6 +99,7 @@ import {
   workspaceStore,
 } from './workspace-store'
 import { transactionStore } from './transaction-store'
+import { createInMemoryRepository } from '../services/repository/in-memory-repository'
 import { getAiConfig } from '../services/ai/ai-config'
 import { listMerchantCategoryOverrides } from '../services/categorizer/category-overrides'
 import { listDescriptionOverrides } from '../services/descriptions/description-overrides'
@@ -175,6 +176,34 @@ describe('workspace store', () => {
     pending.clear()
     loads.clear()
     teardownWorkspace()
+  })
+
+  it('loads through the repository port it is given (#119)', async () => {
+    const repo = createInMemoryRepository({
+      userId: 'user-r',
+      transactions: [tx('tx-repo')],
+      deleted: [tx('tx-gone')],
+      customPatterns: [
+        {
+          id: 'cp-1',
+          pattern: 'disco',
+          matchType: 'contains',
+          category: 'groceries',
+          createdAt: '',
+        },
+      ],
+      preferences: A_PREFS,
+    })
+
+    await hydrateWorkspace(session('user-r'), repo).done
+
+    expect(snapshot()).toMatchObject({
+      userId: 'user-r',
+      status: 'ready',
+      preferences: A_PREFS,
+      transactions: ['tx-repo'],
+      patterns: ['cp-1'],
+    })
   })
 
   it('hydrates every piece of a user’s state, and teardown empties all of it', async () => {

@@ -168,8 +168,8 @@ describe('CSV Parser - Integration Tests with All Sample Files', () => {
       allTransactions.forEach((tx) => {
         expect(tx.date).toBeInstanceOf(Date)
         expect(tx.date.toString()).not.toBe('Invalid Date')
-        expect(tx.date.getFullYear()).toBeGreaterThan(2020)
-        expect(tx.date.getFullYear()).toBeLessThan(2030)
+        expect(tx.date.getUTCFullYear()).toBeGreaterThan(2020)
+        expect(tx.date.getUTCFullYear()).toBeLessThan(2030)
       })
     })
 
@@ -223,14 +223,16 @@ describe('CSV Parser - Integration Tests with All Sample Files', () => {
       const invalidCSV = 'This is not a valid Santander CSV\nJust random data'
 
       expect(() => parseCSV(invalidCSV, 'invalid.csv')).toThrow(
-        'Unable to detect CSV file type'
+        'No reconocemos este archivo.'
       )
     })
 
     it('should throw error for empty CSV', () => {
       const emptyCSV = ''
 
-      expect(() => parseCSV(emptyCSV, 'empty.csv')).toThrow()
+      expect(() => parseCSV(emptyCSV, 'empty.csv')).toThrow(
+        'El archivo está vacío.'
+      )
     })
 
     it('should throw error for CSV with wrong format', () => {

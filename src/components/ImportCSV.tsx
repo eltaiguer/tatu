@@ -2,21 +2,76 @@
 
 import { Card } from './ui/card'
 import { Button } from './ui/button'
-import { Upload, FileText, Check, CircleAlert, Loader } from 'lucide-react'
-import { useState } from 'react'
+import {
+  Upload,
+  FileText,
+  Check,
+  CircleAlert,
+  Info,
+  Loader,
+} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { aiErrorMessage, userErrorMessage } from '../utils/user-error'
+import {
+  aiErrorMessage,
+  UserFacingError,
+  userErrorMessage,
+} from '../utils/user-error'
 import { parseCSV } from '../services/parsers/csv-parser'
+import { decodeCsvBytes } from '../services/parsers/decode-csv'
 import { categorizeParsedData } from '../services/categorizer/import-categorization'
 import { transactionStore } from '../stores/transaction-store'
 import { captureError } from '../services/monitoring/error-reporting'
-import type { ParsedData, Transaction } from '../models'
+import type { ParsedData, Transaction, TransactionsFilter } from '../models'
 
-type ImportState = 'idle' | 'validating' | 'success' | 'error'
+// validating = reading/parsing the file; importing = the file is valid and
+// its rows are being saved.
+type ImportState = 'idle' | 'validating' | 'importing' | 'success' | 'error'
 type UiFileType = 'credit_card' | 'usd_account' | 'uyu_account'
 
+interface ImportSummary {
+  added: number
+  duplicates: number
+  previouslyDeleted: number
+  /** Stored rows whose garbled description this import repaired (#192). */
+  repaired: number
+  // The month "Ver transacciones" opens: the newest new row's, or the file's
+  // newest when nothing was new.
+  month: { y: number; m: number } | null
+}
+
+// One line per count in the summary. A new count (e.g. corrected rows) is one
+// more entry here.
+function summaryLines(summary: ImportSummary) {
+  return [
+    { count: summary.added, one: 'nueva', many: 'nuevas' },
+    {
+      count: summary.duplicates,
+      one: 'duplicada omitida',
+      many: 'duplicadas omitidas',
+    },
+    {
+      count: summary.previouslyDeleted,
+      one: 'eliminada antes',
+      many: 'eliminadas antes',
+    },
+    // Only when it happened: most imports repair nothing.
+    ...(summary.repaired > 0
+      ? [{ count: summary.repaired, one: 'corregida', many: 'corregidas' }]
+      : []),
+  ]
+}
+
+function newestMonth(rows: Transaction[]): ImportSummary['month'] {
+  if (rows.length === 0) return null
+  const newest = new Date(Math.max(...rows.map((tx) => tx.date.getTime())))
+  // A calendar day at UTC midnight (#58): read in UTC, as Resumen does.
+  return { y: newest.getUTCFullYear(), m: newest.getUTCMonth() }
+}
+
 interface ImportCSVProps {
-  onImportComplete?: () => void
+  /** "Ver transacciones" on the summary; the import itself never navigates. */
+  onViewTransactions?: (filter: TransactionsFilter) => void
   onTransactionsImported?: (
     transactions: Transaction[],
     context?: {
@@ -29,6 +84,10 @@ interface ImportCSVProps {
     duplicates: Transaction[]
     /** Rows deleted before; skipped so they stay deleted. */
     previouslyDeleted?: Transaction[]
+    /** Stored rows whose garbled description the import repaired (#192). */
+    repaired?: Transaction[]
+    /** Repairs that did not save; importing again retries them. */
+    repairsFailed?: number
     /**
      * Set when the import succeeded but AI enrichment did not, so the user can
      * tell a dead API key apart from the model categorizing badly.
@@ -40,33 +99,59 @@ interface ImportCSVProps {
   }>
 }
 
+// Bytes, not text: the encoding is decided by decodeCsvBytes (#192), since
+// Santander exports are Latin-1 and File.text() would read them as UTF-8.
 async function readFileAsText(file: File): Promise<string> {
-  if (typeof file.text === 'function') {
-    return file.text()
+  if (typeof file.arrayBuffer === 'function') {
+    return decodeCsvBytes(await file.arrayBuffer())
   }
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(new Error('Error al leer el archivo'))
-    reader.readAsText(file)
+    reader.onload = () => {
+      const result = reader.result
+      if (result == null) resolve('')
+      else if (typeof result === 'string') resolve(result)
+      else resolve(decodeCsvBytes(result))
+    }
+    reader.onerror = () =>
+      reject(new UserFacingError('Error al leer el archivo'))
+    reader.readAsArrayBuffer(file)
   })
 }
 
 export function ImportCSV({
-  onImportComplete,
+  onViewTransactions,
   onTransactionsImported,
 }: ImportCSVProps) {
   const [importState, setImportState] = useState<ImportState>('idle')
   const [dragActive, setDragActive] = useState(false)
   const [fileName, setFileName] = useState<string>('')
   const [fileType, setFileType] = useState<UiFileType | null>(null)
-  const [importSummary, setImportSummary] = useState<{
-    total: number
-    imported: number
-    duplicates: number
-  } | null>(null)
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null)
   const [errorMessage, setErrorMessage] = useState<string>('')
+  // Whether the failure happened after the file was understood (saving), so
+  // a valid file is never reported as a validation error.
+  const [failedWhileSaving, setFailedWhileSaving] = useState(false)
+  // The real file input stays hidden; a real button opens it, so the picker
+  // is reachable by Tab and Enter/Space (a <label> is not focusable, #193).
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  // Button takes no ref (React 18 function component); its drop zone does.
+  const pickerRef = useRef<HTMLDivElement>(null)
+  const summaryHeadingRef = useRef<HTMLHeadingElement>(null)
+  // Set by "Importar otro archivo", so focus goes back to the picker.
+  const focusPickerRef = useRef(false)
+
+  // The import replaces what had focus (the picker) with the summary; move
+  // focus to its heading so it is announced and Tab starts from there.
+  useEffect(() => {
+    if (importState === 'success') {
+      summaryHeadingRef.current?.focus()
+    } else if (importState === 'idle' && focusPickerRef.current) {
+      focusPickerRef.current = false
+      pickerRef.current?.querySelector('button')?.focus()
+    }
+  }, [importState])
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -89,7 +174,8 @@ export function ImportCSV({
   }
 
   const handleFile = async (file: File) => {
-    if (!file.name.endsWith('.csv')) {
+    setFailedWhileSaving(false)
+    if (!file.name.toLowerCase().endsWith('.csv')) {
       setImportState('error')
       setFileName(file.name)
       setErrorMessage('El archivo debe estar en formato CSV')
@@ -100,8 +186,9 @@ export function ImportCSV({
     setImportState('validating')
     setErrorMessage('')
 
-    // Parse errors are ours and already in Spanish; anything after parsing
-    // (saving, the network) is translated so raw backend text never shows.
+    // Parser errors are UserFacingErrors (Spanish, say what to do); anything
+    // else — a parser bug, saving, the network — is translated so raw
+    // English never shows.
     let parsed = false
     try {
       const csvContent = await readFileAsText(file)
@@ -109,6 +196,7 @@ export function ImportCSV({
       // sees them (dedup, AI enrichment, the store).
       const result = categorizeParsedData(parseCSV(csvContent, file.name))
       parsed = true
+      setImportState('importing')
 
       if (result.fileType === 'credit_card') {
         setFileType('credit_card')
@@ -122,6 +210,8 @@ export function ImportCSV({
         added,
         duplicates,
         previouslyDeleted = [],
+        repaired = [],
+        repairsFailed = 0,
         aiError,
         aiPartial,
       } = onTransactionsImported
@@ -133,24 +223,29 @@ export function ImportCSV({
         : {
             ...transactionStore.getState().addTransactions(result.transactions),
             // Local-only path never runs AI enrichment.
+            repaired: [] as Transaction[],
+            repairsFailed: 0,
             aiError: undefined as string | undefined,
             aiPartial: undefined as string | undefined,
           }
 
+      // The dialog stays open on this summary (#202): no toast, no
+      // navigation until the user picks "Ver transacciones".
       setImportSummary({
-        total: result.transactions.length,
-        imported: added.length,
+        added: added.length,
         duplicates: duplicates.length,
+        previouslyDeleted: previouslyDeleted.length,
+        repaired: repaired.length,
+        month: newestMonth(added.length > 0 ? added : result.transactions),
       })
 
       setImportState('success')
-      const deletedCount = previouslyDeleted.length
-      toast.success(
-        `${added.length} nueva${added.length === 1 ? '' : 's'} · ${duplicates.length} duplicada${duplicates.length === 1 ? '' : 's'} omitida${duplicates.length === 1 ? '' : 's'}` +
-          (deletedCount > 0
-            ? ` · ${deletedCount} que eliminaste antes ${deletedCount === 1 ? 'omitida' : 'omitidas'}`
-            : '')
-      )
+
+      if (repairsFailed > 0) {
+        toast.warning(
+          `No se ${repairsFailed === 1 ? 'pudo' : 'pudieron'} corregir ${repairsFailed} descripci${repairsFailed === 1 ? 'ón' : 'ones'}. Importá el archivo de nuevo para reintentar.`
+        )
+      }
 
       // The import succeeded, but the AI step did not — say so, otherwise a
       // dead API key looks identical to poor categorization. Total failure
@@ -165,22 +260,20 @@ export function ImportCSV({
           `Categorización con IA incompleta: ${aiErrorMessage(aiPartial)}. El resto se categorizó con reglas.`
         )
       }
-
-      if (onImportComplete) {
-        onImportComplete()
-      }
     } catch (error) {
       console.error('import failed:', error)
       // A save failure is reported by userErrorMessage below; a parse failure
       // is reported here — it may mean Santander changed its export format.
       if (!parsed) captureError(error, 'import-parse')
       setImportState('error')
+      setFailedWhileSaving(parsed)
       setErrorMessage(
-        parsed
-          ? userErrorMessage(error, 'No se pudo guardar la importación')
-          : error instanceof Error
-            ? error.message
-            : 'Error al procesar el archivo'
+        userErrorMessage(
+          error,
+          parsed
+            ? 'No se pudo guardar la importación'
+            : 'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
+        )
       )
     }
   }
@@ -192,21 +285,23 @@ export function ImportCSV({
   }
 
   const resetImport = () => {
+    focusPickerRef.current = true
     setImportState('idle')
     setFileName('')
     setFileType(null)
     setImportSummary(null)
     setErrorMessage('')
+    setFailedWhileSaving(false)
   }
 
   const getAccountTypeLabel = (type: UiFileType) => {
     switch (type) {
       case 'credit_card':
-        return 'Tarjeta de Crédito'
+        return 'Tarjeta de crédito'
       case 'usd_account':
         return 'Cuenta USD'
       case 'uyu_account':
-        return 'Cuenta UYU'
+        return 'Cuenta $U'
       default:
         return ''
     }
@@ -215,7 +310,7 @@ export function ImportCSV({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="mb-1">Importar Transacciones</h2>
+        <h2 className="mb-1">Importar transacciones</h2>
         <p className="text-muted-foreground">
           Importá extractos CSV de Santander Uruguay
         </p>
@@ -224,6 +319,7 @@ export function ImportCSV({
       <Card className="p-8">
         {importState === 'idle' && (
           <div
+            ref={pickerRef}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
@@ -238,84 +334,80 @@ export function ImportCSV({
               <div className="p-4 rounded-full bg-primary/10">
                 <Upload className="text-primary" size={32} />
               </div>
-              <div>
+              {/* Phones can't drag files: below md only the button shows. */}
+              <div className="hidden md:block">
                 <p className="font-medium mb-1">Arrastrá tu archivo CSV aquí</p>
                 <p className="text-sm text-muted-foreground">
-                  o hacé clic para seleccionar
+                  o seleccioná un archivo
                 </p>
               </div>
               <input
+                ref={fileInputRef}
                 type="file"
                 accept=".csv"
                 onChange={handleFileInput}
                 className="hidden"
-                id="file-upload"
+                tabIndex={-1}
+                aria-label="Seleccionar archivo"
               />
-              <Button asChild>
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  Seleccionar archivo
-                </label>
+              <Button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Seleccionar archivo
               </Button>
             </div>
           </div>
         )}
 
-        {importState === 'validating' && (
+        {(importState === 'validating' || importState === 'importing') && (
           <div className="text-center py-12">
             <div className="flex flex-col items-center gap-4">
               <Loader className="animate-spin text-primary" size={48} />
               <div>
-                <p className="font-medium mb-1">Validando archivo...</p>
+                <p className="font-medium mb-1">
+                  {importState === 'importing'
+                    ? 'Importando…'
+                    : 'Validando archivo…'}
+                </p>
                 <p className="text-sm text-muted-foreground">{fileName}</p>
               </div>
             </div>
           </div>
         )}
 
-        {importState === 'success' && (
-          <div className="text-center py-12">
-            <div className="flex flex-col items-center gap-4">
-              <div className="p-4 rounded-full bg-success-100 dark:bg-success-900/20">
-                <Check className="text-success-600" size={48} />
-              </div>
-              <div>
-                <p className="font-medium mb-1">Importación completada</p>
-                <p className="text-sm text-muted-foreground mb-4">{fileName}</p>
-                {fileType && (
-                  <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
-                    {getAccountTypeLabel(fileType)}
-                  </div>
-                )}
-                {importSummary && (
-                  <p className="text-sm text-muted-foreground mt-3">
-                    {importSummary.imported} de {importSummary.total}{' '}
-                    transacciones guardadas
-                    {importSummary.duplicates > 0 && (
-                      <> ({importSummary.duplicates} duplicadas omitidas)</>
-                    )}
-                  </p>
-                )}
-              </div>
-              <div className="flex gap-3 mt-4">
-                <Button onClick={resetImport} variant="outline">
-                  Importar otro archivo
-                </Button>
-                {onImportComplete && (
-                  <Button onClick={onImportComplete}>Ver transacciones</Button>
-                )}
-              </div>
-            </div>
-          </div>
+        {importState === 'success' && importSummary && (
+          <ImportSummaryPanel
+            summary={importSummary}
+            fileName={fileName}
+            accountLabel={fileType ? getAccountTypeLabel(fileType) : null}
+            headingRef={summaryHeadingRef}
+            onImportAnother={resetImport}
+            onViewTransactions={
+              onViewTransactions
+                ? () =>
+                    onViewTransactions(
+                      importSummary.month
+                        ? { period: { mode: 'month', ...importSummary.month } }
+                        : {}
+                    )
+                : undefined
+            }
+          />
         )}
 
         {importState === 'error' && (
           <div className="text-center py-12">
             <div className="flex flex-col items-center gap-4">
-              <div className="p-4 rounded-full bg-red-100 dark:bg-red-900/20">
+              <div className="p-4 rounded-full bg-neg-soft">
                 <CircleAlert className="text-destructive" size={48} />
               </div>
               <div>
-                <p className="font-medium mb-1">Error al validar archivo</p>
+                <p className="font-medium mb-1">
+                  {failedWhileSaving
+                    ? 'No se pudo importar'
+                    : 'Error al validar archivo'}
+                </p>
                 <p className="text-sm text-muted-foreground mb-2">{fileName}</p>
                 <p className="text-sm text-destructive">
                   {errorMessage || 'El archivo debe estar en formato CSV'}
@@ -330,10 +422,10 @@ export function ImportCSV({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/20">
+            <div className="p-2 rounded-lg bg-brand-soft">
               <FileText className="text-primary" size={20} />
             </div>
-            <h4>Tarjeta de Crédito</h4>
+            <h4>Tarjeta de crédito</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Extracto de tarjeta Santander con compras y pagos en UYU y USD.
@@ -342,7 +434,7 @@ export function ImportCSV({
 
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-accent-50 dark:bg-accent-900/20">
+            <div className="p-2 rounded-lg bg-accent-soft">
               <FileText className="text-accent" size={20} />
             </div>
             <h4>Cuenta USD</h4>
@@ -354,10 +446,10 @@ export function ImportCSV({
 
         <Card className="p-6">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 rounded-lg bg-success-50 dark:bg-success-900/20">
-              <FileText className="text-success-600" size={20} />
+            <div className="p-2 rounded-lg bg-pos-soft">
+              <FileText className="text-pos" size={20} />
             </div>
-            <h4>Cuenta UYU</h4>
+            <h4>Cuenta $U</h4>
           </div>
           <p className="text-sm text-muted-foreground">
             Caja de ahorro en pesos uruguayos con todas las operaciones.
@@ -401,13 +493,110 @@ export function ImportCSV({
         </ol>
       </Card>
 
-      <Card className="p-4 bg-primary-50 dark:bg-primary-900/10 border-primary/20">
+      <Card className="p-4 bg-brand-soft border-primary/20">
         <p className="text-sm">
           <strong>Tus datos son tuyos:</strong> Los movimientos se guardan en tu
           cuenta de Supabase bajo tu propio usuario. Nadie más tiene acceso a tu
           información financiera.
         </p>
       </Card>
+    </div>
+  )
+}
+
+function ImportSummaryPanel({
+  summary,
+  fileName,
+  accountLabel,
+  headingRef,
+  onImportAnother,
+  onViewTransactions,
+}: {
+  summary: ImportSummary
+  fileName: string
+  accountLabel: string | null
+  headingRef: React.RefObject<HTMLHeadingElement>
+  onImportAnother: () => void
+  onViewTransactions?: () => void
+}) {
+  // Nothing new is not a success: the file was most likely imported before.
+  const nothingNew = summary.added === 0
+
+  return (
+    <div className="text-center py-8 sm:py-12">
+      <div className="flex flex-col items-center gap-4">
+        {nothingNew ? (
+          <div className="p-4 rounded-full bg-muted">
+            <Info className="text-muted-foreground" size={48} />
+          </div>
+        ) : (
+          <div className="p-4 rounded-full bg-pos-soft">
+            <Check className="text-pos" size={48} />
+          </div>
+        )}
+        <div>
+          <h3
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-medium mb-1 outline-none"
+          >
+            {nothingNew
+              ? 'No había movimientos nuevos'
+              : 'Importación completada'}
+          </h3>
+          {nothingNew && (
+            <p className="text-sm text-muted-foreground mb-1">
+              Este archivo ya estaba importado.
+            </p>
+          )}
+          {nothingNew && summary.repaired > 0 && (
+            <p className="text-sm text-muted-foreground mb-1">
+              {summary.repaired === 1
+                ? 'Se corrigió 1 descripción.'
+                : `Se corrigieron ${summary.repaired} descripciones.`}
+            </p>
+          )}
+          <p className="text-sm text-muted-foreground mb-4 break-all">
+            {fileName}
+          </p>
+          {accountLabel && (
+            <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
+              {accountLabel}
+            </div>
+          )}
+          <ul
+            aria-label="Resumen de la importación"
+            className="mt-4 space-y-1 text-sm"
+          >
+            {summaryLines(summary).map(({ count, one, many }) => (
+              <li key={many}>
+                <span className="font-mono tabular-nums font-medium">
+                  {count}
+                </span>{' '}
+                <span className="text-muted-foreground">
+                  {count === 1 ? one : many}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4 w-full sm:w-auto">
+          <Button
+            onClick={onImportAnother}
+            variant={nothingNew || !onViewTransactions ? 'default' : 'outline'}
+          >
+            Importar otro archivo
+          </Button>
+          {onViewTransactions && (
+            <Button
+              onClick={onViewTransactions}
+              variant={nothingNew ? 'outline' : 'default'}
+            >
+              Ver transacciones
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

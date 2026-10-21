@@ -1,38 +1,17 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import {
   clearAllCategoryOverrides,
   clearMerchantCategoryOverride,
-  clearMerchantCategoryOverrideWithSync,
   getMerchantCategoryOverride,
   listMerchantCategoryOverrides,
+  replaceMerchantCategoryOverrides,
   setMerchantCategoryOverride,
-  setMerchantCategoryOverrideWithSync,
 } from './category-overrides'
 import { Category } from '../../models'
-
-const {
-  getActiveSupabaseSessionMock,
-  upsertCategoryOverrideMock,
-  deleteCategoryOverrideMock,
-} = vi.hoisted(() => ({
-  getActiveSupabaseSessionMock: vi.fn(),
-  upsertCategoryOverrideMock: vi.fn(),
-  deleteCategoryOverrideMock: vi.fn(),
-}))
-
-vi.mock('../supabase/runtime', () => ({
-  getActiveSupabaseSession: getActiveSupabaseSessionMock,
-}))
-
-vi.mock('../supabase/category-overrides', () => ({
-  upsertCategoryOverride: upsertCategoryOverrideMock,
-  deleteCategoryOverride: deleteCategoryOverrideMock,
-}))
 
 describe('Category overrides', () => {
   beforeEach(() => {
     clearAllCategoryOverrides()
-    vi.clearAllMocks()
   })
 
   it('sets and retrieves overrides', () => {
@@ -48,41 +27,79 @@ describe('Category overrides', () => {
 
     expect(getMerchantCategoryOverride('Devoto')).toBeNull()
   })
+})
 
-  it('syncs override changes when session exists', async () => {
-    getActiveSupabaseSessionMock.mockReturnValue({
-      user: { id: 'user-1' },
+describe('Category overrides reach later rows of the same merchant (audit)', () => {
+  beforeEach(() => {
+    clearAllCategoryOverrides()
+  })
+
+  it('matches a row whose codes differ from the corrected one', () => {
+    setMerchantCategoryOverride(
+      'COMPRA CON TARJETA DEBITO KIOSCO X 12/03 15:22 AUT 123456',
+      'healthcare'
+    )
+
+    expect(
+      getMerchantCategoryOverride(
+        'COMPRA CON TARJETA DEBITO KIOSCO X 20/03 09:01 AUT 654321'
+      )
+    ).toBe('healthcare')
+  })
+
+  it('still honours an override stored under the exact normalized description', () => {
+    replaceMerchantCategoryOverrides({
+      'kiosco x 12/03 aut 123456': {
+        merchantName: 'KIOSCO X 12/03 AUT 123456',
+        category: 'healthcare',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
     })
-    upsertCategoryOverrideMock.mockResolvedValue(undefined)
-    deleteCategoryOverrideMock.mockResolvedValue(undefined)
 
-    await setMerchantCategoryOverrideWithSync('Devoto', Category.Groceries)
-    await clearMerchantCategoryOverrideWithSync('Devoto')
-
-    expect(upsertCategoryOverrideMock).toHaveBeenCalledTimes(1)
-    expect(deleteCategoryOverrideMock).toHaveBeenCalledTimes(1)
+    expect(getMerchantCategoryOverride('KIOSCO X 12/03 AUT 123456')).toBe(
+      'healthcare'
+    )
   })
 
-  it('reports a failed remote save and rolls the local rule back', async () => {
-    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
-    setMerchantCategoryOverride('Devoto', Category.Restaurants)
-    upsertCategoryOverrideMock.mockRejectedValue(new Error('timeout'))
+  it('clearing from the corrected row clears both key shapes', () => {
+    replaceMerchantCategoryOverrides({
+      'kiosco x 12/03 aut 123456': {
+        merchantName: 'KIOSCO X 12/03 AUT 123456',
+        category: 'healthcare',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    })
+    setMerchantCategoryOverride('KIOSCO X 12/03 AUT 123456', 'shopping')
 
-    await expect(
-      setMerchantCategoryOverrideWithSync('Devoto', Category.Groceries)
-    ).rejects.toThrow('timeout')
-    // The screen keeps showing what the server has, not the failed change.
-    expect(getMerchantCategoryOverride('Devoto')).toBe(Category.Restaurants)
+    clearMerchantCategoryOverride('KIOSCO X 12/03 AUT 123456')
+
+    expect(getMerchantCategoryOverride('KIOSCO X 12/03 AUT 123456')).toBe(null)
+  })
+})
+
+describe('merchant override keys (review of #222)', () => {
+  beforeEach(() => {
+    clearAllCategoryOverrides()
   })
 
-  it('restores a rule whose remote delete failed', async () => {
-    getActiveSupabaseSessionMock.mockReturnValue({ user: { id: 'user-1' } })
-    setMerchantCategoryOverride('Devoto', Category.Groceries)
-    deleteCategoryOverrideMock.mockRejectedValue(new Error('timeout'))
+  it('ignores the POS processor prefix, as the exact key always did', () => {
+    setMerchantCategoryOverride('Sq Sopranos', 'restaurants')
 
-    await expect(
-      clearMerchantCategoryOverrideWithSync('Devoto')
-    ).rejects.toThrow('timeout')
-    expect(getMerchantCategoryOverride('Devoto')).toBe(Category.Groceries)
+    expect(getMerchantCategoryOverride('Sopranos')).toBe('restaurants')
+    expect(getMerchantCategoryOverride('Tst Sopranos')).toBe('restaurants')
+  })
+
+  it('setting a category drops the exact-key override of the same row', () => {
+    replaceMerchantCategoryOverrides({
+      'kiosco x 12/03 aut 123456': {
+        merchantName: 'KIOSCO X 12/03 AUT 123456',
+        category: 'groceries',
+        updatedAt: '',
+      },
+    })
+
+    setMerchantCategoryOverride('KIOSCO X 12/03 AUT 123456', 'healthcare')
+
+    expect(Object.keys(listMerchantCategoryOverrides())).toEqual(['kiosco x'])
   })
 })

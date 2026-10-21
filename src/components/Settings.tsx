@@ -11,13 +11,16 @@ import { exportTransactions } from '../services/export/export'
 import { CoverageAnalysis } from './dev/CoverageAnalysis'
 import { AiCategorizationPreview } from './dev/AiCategorizationPreview'
 import { AiPatternAnalysis } from './dev/AiPatternAnalysis'
+import { CategorizerEval } from './dev/CategorizerEval'
 import { SectionCard } from './ui/card'
 import { IconTile } from './ui/icon-tile'
 import { SegmentedToggle } from './ui/segmented-toggle'
 import { useConfirm } from './ConfirmDialog'
 import { CATEGORIZATION_MODELS } from '../services/ai/models'
+import { DuplicatesReview } from './settings/DuplicatesReview'
+import type { DeleteResult } from '../services/mutations/transaction-mutations'
 
-interface SettingsProps {
+interface BaseSettingsProps {
   theme: 'light' | 'dark' | 'auto'
   onSetTheme: (t: 'light' | 'dark' | 'auto') => void
   preferredCurrency: 'UYU' | 'USD'
@@ -36,6 +39,19 @@ interface SettingsProps {
   aiModel: string
   onSetAiModel: (model: string) => void
 }
+
+// The duplicates review deletes with "Deshacer", so deleting and restoring
+// are wired together or not at all.
+type DeleteProps =
+  | { onBulkDelete?: never; onRestoreTransactions?: never }
+  | {
+      onBulkDelete: (transactionIds: string[]) => Promise<DeleteResult>
+      onRestoreTransactions: (
+        transactions: Transaction[]
+      ) => Promise<{ restored: number }>
+    }
+
+type SettingsProps = BaseSettingsProps & DeleteProps
 
 function SettingRow({
   label,
@@ -81,6 +97,8 @@ export function Settings({
   onSetAiEnabled,
   aiModel,
   onSetAiModel,
+  onBulkDelete,
+  onRestoreTransactions,
 }: SettingsProps) {
   const userEmail = session?.user?.email ?? ''
   const userName = getFriendlyName(session) || 'Usuario'
@@ -177,6 +195,7 @@ export function Settings({
               </span>
               <input
                 type="number"
+                aria-label="Tipo de cambio"
                 min="0.01"
                 step="0.5"
                 value={fxRate}
@@ -199,8 +218,10 @@ export function Settings({
           description="Usa Claude para categorizar y limpiar los nombres de transacciones al importar"
           control={
             <button
+              type="button"
               role="switch"
               aria-checked={aiEnabled}
+              aria-label="Categorización con IA"
               onClick={() => onSetAiEnabled(!aiEnabled)}
               className={`relative h-[24px] w-[44px] shrink-0 cursor-pointer rounded-[12px] border-none [transition:background_0.2s] ${
                 aiEnabled ? 'bg-[var(--accent)]' : 'bg-[var(--border)]'
@@ -234,6 +255,7 @@ export function Settings({
             <div className="flex items-center gap-[6px]">
               <input
                 type={showKey ? 'text' : 'password'}
+                aria-label="Clave API de Anthropic"
                 value={claudeApiKey}
                 onChange={(e) => onSetClaudeApiKey(e.target.value)}
                 placeholder="sk-ant-..."
@@ -245,6 +267,8 @@ export function Settings({
                 }`}
               />
               <button
+                type="button"
+                aria-label={showKey ? 'Ocultar clave' : 'Mostrar clave'}
                 onClick={() => setShowKey((v) => !v)}
                 disabled={!aiEnabled}
                 className={`flex items-center border-none bg-transparent p-[4px] text-[var(--text-muted)] ${
@@ -379,6 +403,15 @@ export function Settings({
             </Button>
           }
         />
+        {onBulkDelete && onRestoreTransactions && (
+          <DuplicatesReview
+            transactions={transactions}
+            homeCurrency={preferredCurrency}
+            fxRate={fxRate}
+            onBulkDelete={onBulkDelete}
+            onRestoreTransactions={onRestoreTransactions}
+          />
+        )}
         <div className="flex items-center justify-between gap-[24px] px-[24px] py-[16px]">
           <div>
             <div className="text-body font-semibold text-[var(--neg)]">
@@ -402,6 +435,16 @@ export function Settings({
       {import.meta.env.DEV && (
         <SectionCard title="[Dev] Cobertura del clasificador">
           <CoverageAnalysis session={session} />
+        </SectionCard>
+      )}
+
+      {import.meta.env.DEV && (
+        <SectionCard title="[Dev] Evaluación del clasificador">
+          <CategorizerEval
+            transactions={transactions}
+            claudeApiKey={claudeApiKey}
+            aiModel={aiModel}
+          />
         </SectionCard>
       )}
 

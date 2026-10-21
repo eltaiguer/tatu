@@ -7,11 +7,12 @@ stays readable. For how the system works today, see
 
 ## Index
 
-| ADR                                    | Title                                                    | Status                                                                   | Date       |
-| -------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------ | ---------- |
-| [0001](0001-ai-spending-insights.md)   | AI-powered spending insights                             | Accepted. Partially superseded by [0002](0002-insights-integral-view.md) | 2026-07-22 |
-| [0002](0002-insights-integral-view.md) | Insights: integral (all-time) view instead of per-period | Accepted                                                                 | 2026-07-24 |
-| [0003](0003-sentry-error-reporting.md) | Report client errors to Sentry, scrubbed in the browser  | Proposed                                                                 | 2026-10-04 |
+| ADR                                                | Title                                                               | Status                                                                   | Date       |
+| -------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------- |
+| [0001](0001-ai-spending-insights.md)               | AI-powered spending insights                                        | Accepted. Partially superseded by [0002](0002-insights-integral-view.md) | 2026-07-22 |
+| [0002](0002-insights-integral-view.md)             | Insights: integral (all-time) view instead of per-period            | Accepted                                                                 | 2026-07-24 |
+| [0003](0003-repository-port-and-partial-writes.md) | Repository port, one mutation module, and "screen mirrors database" | Proposed                                                                 | 2026-10-04 |
+| [0004](0004-sentry-error-reporting.md)             | Report client errors to Sentry, scrubbed in the browser             | Proposed                                                                 | 2026-10-04 |
 
 ADR-0002 replaced 0001's per-period navigation, per-period cache key and
 `deltaVsPriorPeriod`. ADR-0001's client-side BYO-key pattern, its model choice

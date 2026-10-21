@@ -11,28 +11,26 @@ import { Toaster } from 'sonner'
 import { Transactions } from './Transactions'
 import { ITEMS_PER_PAGE } from '../hooks/useTransactionFiltering'
 import type { Transaction } from '../models'
-import { NeedsConfirmationError } from '../utils/user-error'
+import { NeedsConfirmationError, PartialWriteError } from '../utils/user-error'
 import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
 import { captureCsvDownload } from '../test/csv-download'
+import { parseSantanderDate } from '../services/parsers/utils'
+import { toMonthKey } from '../utils/date-utils'
+import { createInMemoryRepository } from '../services/repository/in-memory-repository'
+import { workspaceStore } from '../stores/workspace-state'
 
-// Category and rule changes are saved to Supabase before they count; give
-// these view tests a signed-in session and a server that accepts writes.
-vi.mock('../services/supabase/runtime', () => ({
-  getActiveSupabaseSession: () => ({ user: { id: 'user-1' } }),
-}))
-vi.mock('../services/supabase/custom-categories', () => ({
-  upsertCustomCategory: vi.fn().mockResolvedValue(undefined),
-  archiveCustomCategory: vi.fn().mockResolvedValue(undefined),
-}))
-vi.mock('../services/supabase/custom-patterns', () => ({
-  upsertCustomPattern: vi.fn().mockResolvedValue(undefined),
-  deleteCustomPattern: vi.fn().mockResolvedValue(undefined),
-}))
+// A category created inline is saved before it can be picked; tests that do
+// that get a signed-in user whose (in-memory) server accepts writes.
+function signedInRepository() {
+  const repo = createInMemoryRepository()
+  workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+  return repo
+}
 
 function makeTransaction(index: number, description?: string): Transaction {
   return {
     id: `tx-${index}`,
-    date: new Date(2026, 0, index + 1),
+    date: new Date(Date.UTC(2026, 0, index + 1)),
     description: description ?? `transaction ${index}`,
     amount: 100 + index,
     currency: 'UYU',
@@ -51,8 +49,7 @@ describe('Transactions', () => {
     // Tx dates are calendar days stored at UTC midnight; read in local time
     // in Uruguay, Oct 1 00:00Z is still Sep 30 and the label would disagree
     // with Resumen.
-    const originalTz = process.env.TZ
-    process.env.TZ = 'America/Montevideo'
+    // (The suite runs in America/Montevideo by default — see vite.config.ts.)
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-10-03T15:00:00.000Z'))
     try {
@@ -72,10 +69,6 @@ describe('Transactions', () => {
       expect(screen.queryByRole('button', { name: 'Último mes' })).toBeNull()
     } finally {
       vi.useRealTimers()
-      // Assigning undefined would set the string "undefined" and leak an
-      // invalid zone into later files in this worker.
-      if (originalTz === undefined) delete process.env.TZ
-      else process.env.TZ = originalTz
     }
   })
 
@@ -113,7 +106,7 @@ describe('Transactions', () => {
     // More than one page, all in one month, so "Siguiente" really moves on.
     const transactions = Array.from({ length: ITEMS_PER_PAGE + 5 }, (_, i) => ({
       ...makeTransaction(i, i === 3 ? 'target merchant' : `transaction ${i}`),
-      date: new Date(2026, 0, 1, i),
+      date: new Date(Date.UTC(2026, 0, 1, i)),
     }))
 
     render(<Transactions transactions={transactions} />)
@@ -169,19 +162,19 @@ describe('Transactions', () => {
     const transactions: Transaction[] = [
       {
         ...makeTransaction(1, 'Alpha Market'),
-        date: new Date(2026, 0, 10),
+        date: new Date(Date.UTC(2026, 0, 10)),
         category: 'groceries',
         source: 'bank_account',
       },
       {
         ...makeTransaction(2, 'Alpha Card'),
-        date: new Date(2026, 0, 15),
+        date: new Date(Date.UTC(2026, 0, 15)),
         category: 'groceries',
         source: 'credit_card',
       },
       {
         ...makeTransaction(3, 'Utilities Payment'),
-        date: new Date(2026, 0, 20),
+        date: new Date(Date.UTC(2026, 0, 20)),
         category: 'utilities',
         source: 'bank_account',
       },
@@ -368,7 +361,7 @@ describe('Transactions', () => {
   const manyTransactions = () =>
     Array.from({ length: N }, (_, index) => ({
       ...makeTransaction(index, `merchant ${index}`),
-      date: new Date(2026, 0, 1, index),
+      date: new Date(Date.UTC(2026, 0, 1, index)),
     }))
 
   it('selects all page transactions via header checkbox', () => {
@@ -464,6 +457,7 @@ describe('Transactions', () => {
       <Transactions
         transactions={transactions}
         onUpdateTransaction={onUpdateTransaction}
+        repository={signedInRepository()}
       />
     )
 
@@ -622,7 +616,7 @@ describe('Transactions', () => {
     await waitFor(() =>
       expect(onUpdateTransaction).toHaveBeenCalledWith('tx-1', {
         displayDescription: 'Devoto',
-        category: undefined,
+        category: null,
         tags: [],
         applyScope: 'matching_past_and_future',
       })
@@ -653,7 +647,7 @@ describe('Transactions', () => {
     await waitFor(() =>
       expect(onUpdateTransaction).toHaveBeenCalledWith('tx-1', {
         displayDescription: 'Devoto',
-        category: undefined,
+        category: null,
         tags: [],
         applyScope: 'future_matching_only',
       })
@@ -872,7 +866,7 @@ describe('Transactions', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
 
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
@@ -928,6 +922,76 @@ describe('Transactions', () => {
     expect(onRestoreTransactions).toHaveBeenCalledWith([a, b])
   })
 
+  it('reports a partial bulk edit with how many saved, and retries only the rest', async () => {
+    const retry = vi.fn().mockResolvedValue({ updated: 1 })
+    const onBulkCategorize = vi
+      .fn()
+      .mockRejectedValue(
+        new PartialWriteError('Se actualizaron 247 de 300', 247, 300, retry)
+      )
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'Merchant A')]}
+          onBulkCategorize={onBulkCategorize}
+          onReload={vi.fn()}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Ignorar$/ }))
+
+    expect(
+      await screen.findByText('Se actualizaron 247 de 300 — reintentar')
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('Cambios guardados')).toBeTruthy()
+  })
+
+  it('keeps undo for the rows a partial delete did remove', async () => {
+    const a = makeTransaction(1, 'Merchant A')
+    const b = makeTransaction(2, 'Merchant B')
+    const onBulkDelete = vi.fn().mockRejectedValue(
+      new PartialWriteError('Se eliminaron 1 de 2', 1, 2, vi.fn(), {
+        removed: [a],
+        reversible: true,
+      })
+    )
+    const onRestoreTransactions = vi.fn().mockResolvedValue({ restored: 1 })
+
+    render(
+      <>
+        <Transactions
+          transactions={[a, b]}
+          onBulkDelete={onBulkDelete}
+          onRestoreTransactions={onRestoreTransactions}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
+    )
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant B' })[0]
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
+
+    expect(
+      await screen.findByText('Se eliminaron 1 de 2 — reintentar')
+    ).toBeTruthy()
+    expect(await screen.findByText('1 transacción eliminada')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+    expect(onRestoreTransactions).toHaveBeenCalledWith([a])
+  })
+
   it('does not bulk delete when an irreversible delete is not confirmed', async () => {
     const onBulkDelete = vi.fn().mockRejectedValue(new NeedsConfirmationError())
 
@@ -979,13 +1043,13 @@ describe('Transactions', () => {
     await act(async () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
-    fireEvent.click(screen.getByLabelText('Categoría bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
     fireEvent.change(screen.getByLabelText('Buscar categoría'), {
       target: { value: 'entretenimiento' },
     })
     const options = screen.getAllByText('Entretenimiento')
     fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'viaje' },
     })
@@ -1000,6 +1064,142 @@ describe('Transactions', () => {
       )
     ).toBeTruthy()
     expect(screen.queryByText(/actualizada/)).not.toBeInTheDocument()
+  })
+
+  it('offers to retry the rest when a bulk edit step saved only some rows', async () => {
+    const retry = vi.fn().mockResolvedValue({ updated: 1 })
+    const onBulkCategorize = vi.fn().mockResolvedValue({ updated: 2 })
+    const onBulkTag = vi
+      .fn()
+      .mockRejectedValue(
+        new PartialWriteError('Se actualizaron 1 de 2', 1, 2, retry)
+      )
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'Devoto')]}
+          onBulkCategorize={onBulkCategorize}
+          onBulkTag={onBulkTag}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+    )
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
+    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
+      target: { value: 'entretenimiento' },
+    })
+    const options = screen.getAllByText('Entretenimiento')
+    fireEvent.click(options[options.length - 1])
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
+    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
+      target: { value: 'viaje' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: /Crear etiqueta "viaje"/ })
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+
+    expect(
+      await screen.findByText(
+        'Se aplicó la categoría, pero falló el resto: Se actualizaron 1 de 2 — reintentar'
+      )
+    ).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    expect(retry).toHaveBeenCalledTimes(1)
+  })
+
+  it('retrying a partial category step also applies the tags that never ran', async () => {
+    const retry = vi.fn().mockResolvedValue({ updated: 1 })
+    const onBulkCategorize = vi
+      .fn()
+      .mockRejectedValue(
+        new PartialWriteError('Se actualizaron 1 de 2', 1, 2, retry)
+      )
+    const onBulkTag = vi.fn().mockResolvedValue({ updated: 2 })
+
+    render(
+      <>
+        <Transactions
+          transactions={[makeTransaction(1, 'Devoto')]}
+          onBulkCategorize={onBulkCategorize}
+          onBulkTag={onBulkTag}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+    )
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
+    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
+      target: { value: 'entretenimiento' },
+    })
+    const options = screen.getAllByText('Entretenimiento')
+    fireEvent.click(options[options.length - 1])
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
+    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
+      target: { value: 'viaje' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: /Crear etiqueta "viaje"/ })
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+
+    expect(
+      await screen.findByText('Se actualizaron 1 de 2 — reintentar')
+    ).toBeTruthy()
+    expect(onBulkTag).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+    expect(await screen.findByText('Cambios guardados')).toBeTruthy()
+    expect(retry).toHaveBeenCalledTimes(1)
+    expect(onBulkTag).toHaveBeenCalledWith(['tx-1'], 'viaje')
+  })
+
+  it('offers undo for the rows a retried delete removed', async () => {
+    const b = makeTransaction(2, 'Merchant B')
+    const retry = vi.fn().mockResolvedValue({ removed: [b], reversible: true })
+    const onBulkDelete = vi.fn().mockRejectedValue(
+      new PartialWriteError('Se eliminaron 0 de 1', 0, 1, retry, {
+        removed: [],
+        reversible: true,
+      })
+    )
+    const onRestoreTransactions = vi.fn().mockResolvedValue({ restored: 1 })
+
+    render(
+      <>
+        <Transactions
+          transactions={[b]}
+          onBulkDelete={onBulkDelete}
+          onRestoreTransactions={onRestoreTransactions}
+        />
+        <Toaster />
+      </>
+    )
+
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant B' })[0]
+    )
+    fireEvent.click(screen.getByRole('button', { name: /^Eliminar$/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+
+    expect(await screen.findByText('1 transacción eliminada')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+    expect(onRestoreTransactions).toHaveBeenCalledWith([b])
   })
 
   it('bulk tags selected transactions', async () => {
@@ -1026,7 +1226,7 @@ describe('Transactions', () => {
       fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
     })
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
 
     const tagButtons = screen.getAllByText('#monthly')
     fireEvent.click(tagButtons[tagButtons.length - 1])
@@ -1054,7 +1254,7 @@ describe('Transactions', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
 
-    fireEvent.click(screen.getByLabelText('Etiquetas bulk dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
 
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'new-tag' },
@@ -1108,5 +1308,124 @@ describe('Transactions', () => {
     it('leaves out the ignored rows hidden from the list', async () => {
       expect(await exportedDescriptions(false)).toEqual(['super'])
     })
+  })
+
+  // #194: the floating selection bar was a single 864px row centred on the
+  // screen, so on a 390px phone Ignorar/Eliminar/× sat off-screen, and its
+  // z-[70] put it above the dialog overlay (z-50). jsdom has no layout, so
+  // this pins the responsive classes; the PR carries the Playwright check.
+  describe('selection bar layout (#194)', () => {
+    function selectOne() {
+      render(<Transactions transactions={[makeTransaction(1, 'Devoto')]} />)
+      fireEvent.click(
+        screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
+      )
+      return screen.getByRole('region', { name: 'Acciones de selección' })
+    }
+
+    it('sits under dialog overlays (z-50) instead of above them', () => {
+      const bar = selectOne()
+      expect(bar).toHaveClass('z-40')
+      expect(bar).not.toHaveClass('z-[70]')
+    })
+
+    it('spans the screen and wraps its actions below md', () => {
+      const bar = selectOne()
+      expect(bar).toHaveClass('inset-x-4', 'md:inset-x-auto')
+      expect(within(bar).getByRole('group', { name: 'Acciones' })).toHaveClass(
+        'max-md:flex-wrap'
+      )
+    })
+
+    it('never wraps an action label mid-word', () => {
+      const bar = selectOne()
+      for (const name of [
+        'Categorizar',
+        'Editar seleccionadas',
+        'Auto-categorizar',
+        'Ignorar',
+        'Eliminar',
+      ]) {
+        expect(within(bar).getByRole('button', { name })).toHaveClass(
+          'whitespace-nowrap'
+        )
+      }
+      expect(
+        within(bar).getByRole('button', { name: 'Deseleccionar' })
+      ).toBeInTheDocument()
+    })
+  })
+})
+
+// #58: Transacciones' month range must hold exactly the rows Resumen sums for
+// that month (calendar months, read in UTC), in any browser zone. Three
+// shapes of the same calendar day: parsed now, stored at UTC midnight, and
+// stored before #58 by a UTC-3 browser (03:00Z).
+describe('Transactions month range', () => {
+  function at(id: string, date: Date): Transaction {
+    return { ...makeTransaction(0, id), id, date }
+  }
+  const rows: Transaction[] = [
+    ['28/02/2026', '2026-02-28'],
+    ['01/03/2026', '2026-03-01'],
+    ['31/03/2026', '2026-03-31'],
+    ['01/04/2026', '2026-04-01'],
+  ].flatMap(([csv, iso]) => [
+    at(`csv ${iso}`, parseSantanderDate(csv)),
+    at(`stored ${iso}`, new Date(`${iso}T00:00:00.000Z`)),
+    at(`pre-58 ${iso}`, new Date(`${iso}T03:00:00.000Z`)),
+  ])
+
+  it('a month link shows exactly the rows Resumen counts in that month', () => {
+    render(
+      <Transactions
+        transactions={rows}
+        initialFilters={{
+          ...DEFAULT_URL_FILTERS,
+          period: { mode: 'month', y: 2026, m: 2 },
+        }}
+      />
+    )
+
+    const shown = rows
+      .filter((row) => screen.queryAllByText(row.description).length > 0)
+      .map((row) => row.id)
+    expect(shown).toEqual([
+      'csv 2026-03-01',
+      'stored 2026-03-01',
+      'pre-58 2026-03-01',
+      'csv 2026-03-31',
+      'stored 2026-03-31',
+      'pre-58 2026-03-31',
+    ])
+    expect(
+      rows.filter((row) => toMonthKey(row.date) === '2026-03').map((r) => r.id)
+    ).toEqual(shown)
+  })
+
+  it('opens on the calendar month of the newest row', () => {
+    render(
+      <Transactions
+        transactions={[at('stored', new Date('2026-03-01T00:00:00.000Z'))]}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: /Marzo 2026/ })).toBeTruthy()
+    expect(screen.getAllByText('stored').length).toBeGreaterThan(0)
+  })
+
+  it('shows each row on its own calendar day', () => {
+    render(
+      <Transactions
+        transactions={[
+          at('stored', new Date('2026-03-01T00:00:00.000Z')),
+          at('pre-58', new Date('2026-03-01T03:00:00.000Z')),
+        ]}
+        initialFilters={{ ...DEFAULT_URL_FILTERS, period: { mode: 'all' } }}
+      />
+    )
+
+    expect(screen.getAllByText('01/03/2026').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('28/02/2026')).toHaveLength(0)
   })
 })

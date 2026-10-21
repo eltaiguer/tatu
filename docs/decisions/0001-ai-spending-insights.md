@@ -1,5 +1,7 @@
 # ADR-0001: AI-Powered Spending Insights
 
+> **Update 2026-10-19:** the model ids below are the ones chosen at the time. The app moved to the 5.5 generation (`claude-opus-5-5` for insights, `claude-haiku-5-5` / `claude-sonnet-5-5` for categorization); `src/services/ai/models.ts` is the source of truth and maps stored pre-5.5 ids to their successors.
+
 ## Status
 
 Accepted — Phase 1 shipped in #42.
@@ -16,7 +18,8 @@ Corrections applied after implementation — places where this document
 described code that does not exist, independent of the ADR-0002
 supersession:
 
-- Insights builds on `src/services/charts/chart-data.ts` only.
+- Insights builds on `src/services/charts/chart-data.ts` and the merchant key
+  in `src/services/merchants/merchant-key.ts` (#120) only.
   `src/services/aggregator/aggregation.ts`, named below, was never wired up <!-- historical -->
   and has been deleted — extending it would have been wasted work.
 - The Insights UI does **not** reuse `DateRangePicker`; that component had no

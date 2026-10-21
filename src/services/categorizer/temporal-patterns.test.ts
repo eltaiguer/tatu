@@ -45,7 +45,10 @@ describe('Temporal Patterns', () => {
       expect(pattern).toBeDefined()
       expect(pattern!.frequency).toBe('monthly')
       expect(pattern!.suggestedCategory).toBe(Category.Utilities)
-      expect(pattern!.confidence).toBeGreaterThan(0.5)
+      // A cadence is a hint, not an identification: it stays in the
+      // review band (< 0.55) so the row is still flagged (audit).
+      expect(pattern!.confidence).toBeGreaterThan(0)
+      expect(pattern!.confidence).toBeLessThan(0.55)
       expect(pattern!.occurrences).toBe(4)
     })
 
@@ -147,5 +150,25 @@ describe('Temporal Patterns', () => {
       const result = getTemporalSuggestion('Something', new Map())
       expect(result).toBeNull()
     })
+  })
+})
+
+// #58: intervals are whole calendar days, whether a row is stored at UTC
+// midnight (after #58) or at 03:00Z (before, from a UTC-3 browser).
+describe('temporal pattern intervals across stored date shapes', () => {
+  it('sees a 9-day cadence as weekly when old and new rows mix', () => {
+    const txs: TemporalTransaction[] = [
+      '2026-01-01T00:00:00.000Z',
+      '2026-01-10T03:00:00.000Z',
+      '2026-01-19T03:00:00.000Z',
+    ].map((iso) => ({
+      description: 'Feria Tristan Narvaja',
+      amount: 900,
+      currency: 'UYU',
+      date: new Date(iso),
+    }))
+
+    const patterns = analyzeTemporalPatterns(txs)
+    expect([...patterns.values()].map((p) => p.frequency)).toEqual(['weekly'])
   })
 })
