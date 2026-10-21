@@ -159,6 +159,16 @@ describe('isUnexpectedAiError', () => {
     ).toBe(false)
   })
 
+  it('does not report a truncated response, which the user can act on', () => {
+    expect(
+      isUnexpectedAiError(
+        new Error(
+          'La respuesta del modelo quedó truncada (límite de tokens alcanzado). Probá importar menos transacciones.'
+        )
+      )
+    ).toBe(false)
+  })
+
   it('shows and does not report a model refusal', () => {
     const refusal = 'El modelo rechazó la solicitud (cyber).'
     expect(aiErrorMessage(refusal)).toBe(refusal)

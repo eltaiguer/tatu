@@ -140,8 +140,15 @@ export function isUnexpectedAiError(error: unknown): boolean {
   // A lost connection or a chunk gone after a deploy (both TypeErrors), and
   // a refusal that depends on the user's data, are not code bugs.
   if (isNetworkError(error) || CHUNK_LOAD_FAILED.test(raw)) return false
-  if (raw.startsWith('El modelo rechazó')) return false
+  if (/^(El modelo rechazó|La respuesta del modelo quedó truncada)/.test(raw)) {
+    return false
+  }
   if (CODE_BUG_TYPES.some((type) => error instanceof type)) return true
   const message = aiErrorMessage(raw)
   return message === raw || message === AI_UNEXPECTED
+}
+
+/** Reports an AI failure only when it is a bug (see isUnexpectedAiError). */
+export function reportAiError(error: unknown, area: string): void {
+  if (isUnexpectedAiError(error)) captureError(error, area)
 }

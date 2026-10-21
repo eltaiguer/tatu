@@ -97,6 +97,27 @@ describe('supabase ai-insights service', () => {
     expect(row).toBeNull()
   })
 
+  it.each(['PGRST205', '42P01'])(
+    'explains a missing insights table (%s) instead of passing the raw text on',
+    async (code) => {
+      singleMock.mockResolvedValue({
+        data: null,
+        error: {
+          code,
+          message:
+            "Could not find the table 'public.ai_insights' in the schema cache",
+        },
+      })
+
+      const { loadCachedInsights } = await import('./ai-insights')
+      const { UserFacingError } = await import('../../utils/user-error')
+      const error = await loadCachedInsights(session).catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(UserFacingError)
+      expect((error as Error).message).not.toMatch(/schema cache/)
+    }
+  )
+
   it('throws on an unexpected error', async () => {
     singleMock.mockResolvedValue({
       data: null,

@@ -43,7 +43,7 @@ export default defineConfig({
         manualChunks: {
           react: ['react', 'react-dom', 'scheduler'],
           supabase: ['@supabase/supabase-js'],
-          sentry: ['@sentry/react', '@sentry/browser', '@sentry/core'],
+          sentry: ['@sentry/react'],
         },
       },
     },

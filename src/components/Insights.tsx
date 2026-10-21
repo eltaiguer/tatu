@@ -29,8 +29,11 @@ import {
   type CachedInsightsLookup,
 } from '../services/insights/insight-cache'
 import { INSIGHTS_MODEL } from '../services/ai/models'
-import { captureError } from '../services/monitoring/error-reporting'
-import { isUnexpectedAiError } from '../utils/user-error'
+import {
+  aiErrorMessage,
+  reportAiError,
+  userErrorMessage,
+} from '../utils/user-error'
 
 interface InsightsProps {
   transactions: Transaction[]
@@ -92,18 +95,6 @@ function groupAndSortInsights(
   }))
 }
 
-// The ai_insights table exists only once schema.sql was applied by hand
-// (supabase/README.md); until then its failures are expected, not bugs.
-function reportStorageFailure(error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error)
-  if (
-    /ai_insights.*does not exist|does not exist.*ai_insights/i.test(message)
-  ) {
-    return
-  }
-  captureError(error, 'insights')
-}
-
 export function Insights({
   transactions,
   homeCurrency,
@@ -145,11 +136,12 @@ export function Insights({
       })
       .catch((e) => {
         if (!cancelled) {
-          reportStorageFailure(e)
           setError(
-            e instanceof Error
-              ? e.message
-              : 'No se pudieron cargar los insights'
+            userErrorMessage(
+              e,
+              'No se pudieron cargar los insights',
+              'insights'
+            )
           )
         }
       })
@@ -165,20 +157,18 @@ export function Insights({
   async function handleGenerate() {
     setGenerating(true)
     setError('')
+    let result: Awaited<ReturnType<typeof generateInsights>>
     try {
-      let result: Awaited<ReturnType<typeof generateInsights>>
-      try {
-        result = await generateInsights(input, claudeApiKey)
-      } catch (e) {
-        if (isUnexpectedAiError(e)) captureError(e, 'insights')
-        throw e
-      }
-      try {
-        await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
-      } catch (e) {
-        reportStorageFailure(e)
-        throw e
-      }
+      result = await generateInsights(input, claudeApiKey)
+    } catch (e) {
+      reportAiError(e, 'insights')
+      const raw = e instanceof Error ? e.message : String(e)
+      setError(`No se pudieron generar los insights: ${aiErrorMessage(raw)}`)
+      setGenerating(false)
+      return
+    }
+    try {
+      await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
       setCached({
         result,
         model: INSIGHTS_MODEL,
@@ -187,7 +177,7 @@ export function Insights({
       })
     } catch (e) {
       setError(
-        e instanceof Error ? e.message : 'No se pudieron generar los insights'
+        userErrorMessage(e, 'No se pudieron guardar los insights', 'insights')
       )
     } finally {
       setGenerating(false)

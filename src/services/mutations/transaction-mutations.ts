@@ -63,7 +63,7 @@ import {
   PartialWriteError,
   UserFacingError,
   WorkspaceChangedError,
-  isUnexpectedAiError,
+  reportAiError,
 } from '../../utils/user-error'
 
 const MISSING_TRANSACTION = new UserFacingError(
@@ -294,17 +294,14 @@ export async function importTransactions(
         )
         toStore = applyAiEnrichment(added, outcome.results)
         aiPartial = outcome.partialFailure
-        if (
-          outcome.partialError !== undefined &&
-          isUnexpectedAiError(outcome.partialError)
-        ) {
-          captureError(outcome.partialError, 'ai')
+        if (outcome.partialError !== undefined) {
+          reportAiError(outcome.partialError, 'ai')
         }
       } catch (error) {
         aiError =
           error instanceof Error ? error.message : 'Error desconocido de IA'
         console.error('AI enrichment failed during import:', error)
-        if (isUnexpectedAiError(error)) captureError(error, 'ai')
+        reportAiError(error, 'ai')
       }
       assertOwner(repo)
     }
@@ -339,7 +336,8 @@ export async function importTransactions(
         )
       } catch (closeError) {
         console.error('Could not mark import run failed:', closeError)
-        captureError(closeError, 'import')
+        // After an account change the new token is expected to refuse it.
+        if (owner) captureError(closeError, 'import')
       }
     }
     if (!owner) throw new WorkspaceChangedError()

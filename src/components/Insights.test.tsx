@@ -5,6 +5,7 @@ import type { Transaction } from '../models'
 import { Category } from '../models'
 import type { SupabaseSession } from '../services/supabase/client'
 import type { InsightsResult } from '../services/insights/insight-generator'
+import { UserFacingError } from '../utils/user-error'
 
 const { getCachedInsightsMock, saveCachedInsightsMock, generateInsightsMock } =
   vi.hoisted(() => ({
@@ -239,25 +240,35 @@ describe('Insights', () => {
     renderInsights()
 
     fireEvent.click(await screen.findByText('Generar insights'))
-    await screen.findByText('401 invalid x-api-key')
+    await screen.findByText(
+      'No se pudieron generar los insights: la clave API de Anthropic no es válida'
+    )
     expect(reporting.captureError).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByText('Generar insights'))
-    await screen.findByText('x is undefined')
+    await screen.findByText(
+      'No se pudieron generar los insights: error inesperado del servicio de IA'
+    )
+    expect(screen.queryByText(/x is undefined/)).not.toBeInTheDocument()
     expect(reporting.captureError).toHaveBeenCalledWith(bug, 'insights')
   })
 
   it('does not report a missing insights table, which needs schema.sql', async () => {
     getCachedInsightsMock.mockRejectedValue(
-      new Error('relation "public.ai_insights" does not exist')
+      new UserFacingError(
+        'Falta crear la tabla de insights en la base de datos.'
+      )
     )
     renderInsights()
 
-    await screen.findByText(/does not exist/)
+    await screen.findByText(
+      'Falta crear la tabla de insights en la base de datos.'
+    )
     expect(reporting.captureError).not.toHaveBeenCalled()
   })
 
   it('reports a failure to save generated insights as a storage failure', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     getCachedInsightsMock.mockResolvedValue(null)
     generateInsightsMock.mockResolvedValue(sampleResult)
     const failure = new Error('permission denied for table ai_insights')
@@ -265,16 +276,21 @@ describe('Insights', () => {
     renderInsights()
 
     fireEvent.click(await screen.findByText('Generar insights'))
-    await screen.findByText(failure.message)
+    await screen.findByText('No se pudieron guardar los insights')
+    expect(screen.queryByText(failure.message)).not.toBeInTheDocument()
     expect(reporting.captureError).toHaveBeenCalledWith(failure, 'insights')
+    expect(errorSpy).toHaveBeenCalledWith(failure)
   })
 
   it('reports a failure to load cached insights', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const failure = new Error('permission denied for table ai_insights')
     getCachedInsightsMock.mockRejectedValue(failure)
     renderInsights()
 
-    await screen.findByText(failure.message)
+    await screen.findByText('No se pudieron cargar los insights')
+    expect(screen.queryByText(failure.message)).not.toBeInTheDocument()
     expect(reporting.captureError).toHaveBeenCalledWith(failure, 'insights')
+    expect(errorSpy).toHaveBeenCalledWith(failure)
   })
 })

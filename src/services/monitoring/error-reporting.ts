@@ -89,16 +89,12 @@ export function scrubBreadcrumb(crumb: Breadcrumb): Breadcrumb | null {
 }
 
 // Production builds only: Vite loads the same `.env` for `npm run dev`, and
-// half-written local code must not reach the project's Sentry.
-export function isReportingEnabled(env: {
-  PROD: boolean
-  VITE_SENTRY_DSN?: string
-}): boolean {
-  return env.PROD && !!env.VITE_SENTRY_DSN
-}
-
+// half-written local code must not reach the project's Sentry. Written
+// inline on purpose: Vite replaces both values at build time, so a build
+// without a DSN drops Sentry.init and with it most of the SDK (a stub chunk
+// of ~4 KB gzipped instead of ~32 KB). A helper function would defeat that.
 export function initErrorReporting(): void {
-  if (!isReportingEnabled(import.meta.env)) return
+  if (!import.meta.env.PROD || !import.meta.env.VITE_SENTRY_DSN) return
   Sentry.init(sentryOptions(import.meta.env.VITE_SENTRY_DSN))
 }
 
@@ -107,7 +103,8 @@ export function isNetworkError(error: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return true
   }
-  const message = error instanceof Error ? error.message : String(error)
+  const message =
+    error instanceof Error ? error.message : describeNonError(error)
   // Safari's bare "Load failed" is anchored: "Preload failed" is not one.
   return /\bfailed to fetch\b|\bnetworkerror\b|(?:^|: )load failed$|\bnetwork request failed\b/i.test(
     message

@@ -7,7 +7,7 @@ import {
   WorkspaceChangedError,
 } from '../../utils/user-error'
 import {
-  isReportingEnabled,
+  isNetworkError,
   redactMessage,
   scrubBreadcrumb,
   scrubEvent,
@@ -18,15 +18,10 @@ function errorEvent(overrides: Partial<ErrorEvent> = {}): ErrorEvent {
   return { type: undefined, ...overrides }
 }
 
-describe('isReportingEnabled', () => {
-  it('reports only from a production build with a DSN', () => {
-    expect(
-      isReportingEnabled({ PROD: true, VITE_SENTRY_DSN: 'https://x' })
-    ).toBe(true)
-    expect(
-      isReportingEnabled({ PROD: false, VITE_SENTRY_DSN: 'https://x' })
-    ).toBe(false)
-    expect(isReportingEnabled({ PROD: true, VITE_SENTRY_DSN: '' })).toBe(false)
+describe('isNetworkError', () => {
+  it('reads the message of a Supabase error object too', () => {
+    expect(isNetworkError({ message: 'TypeError: Failed to fetch' })).toBe(true)
+    expect(isNetworkError({ message: 'duplicate key' })).toBe(false)
   })
 })
 

@@ -61,7 +61,9 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
   is reported at the wrap, because the explained error itself never is. A
   network failure is never reported (`captureError` filters it for every
   caller), nor is a model refusal, and a missing
-  `ai_insights` table during reset is expected until `schema.sql` is applied.
+  `ai_insights` table is expected until `schema.sql` is applied: reset ignores
+  it, and the Insights service turns its codes (42P01, PGRST205) into a
+  `UserFacingError`.
 - **User identity is the Supabase user id only**, set from `useAuthSession`.
 - **Source maps** are uploaded by `@sentry/vite-plugin` only when
   `SENTRY_AUTH_TOKEN` (plus `SENTRY_ORG`, `SENTRY_PROJECT`) is set at build
