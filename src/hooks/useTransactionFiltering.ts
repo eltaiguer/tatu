@@ -12,7 +12,7 @@ import {
 } from '../services/spending/spending-rules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { sortCategoryIdsByLabel } from '../services/categories/category-registry'
-import { todayAsUtcDate } from '../utils/date-utils'
+import { newestDate as newestOf, todayAsUtcDate } from '../utils/date-utils'
 import type { Transaction } from '../models'
 import {
   DEFAULT_URL_FILTERS,
@@ -42,11 +42,6 @@ function clearedFilters(): FilterState {
     accounts: [],
     period: { mode: 'all' },
   }
-}
-
-function newestOf(transactions: Transaction[]): Date | null {
-  if (transactions.length === 0) return null
-  return new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
 }
 
 // Structural equality over filter values: primitives, lists and the period
