@@ -4,6 +4,8 @@ import { captureError } from '../services/monitoring/error-reporting'
 // Anything else — Supabase/PostgREST text, fetch failures — is translated by
 // `userErrorMessage` so raw English never reaches a toast.
 export class UserFacingError extends Error {
+  /** Not a bug: error reporting drops it (services/monitoring). */
+  readonly explained = true
   constructor(message: string) {
     super(message)
     this.name = 'UserFacingError'
@@ -13,6 +15,8 @@ export class UserFacingError extends Error {
 // Thrown by delete handlers before writing anything when the delete can't be
 // undone (split parents hard-delete their parts); the UI must confirm first.
 export class NeedsConfirmationError extends Error {
+  /** Not a bug: error reporting drops it (services/monitoring). */
+  readonly explained = true
   constructor() {
     super('Esta eliminación no se puede deshacer')
     this.name = 'NeedsConfirmationError'
@@ -62,12 +66,22 @@ function isNetworkError(error: unknown): boolean {
   )
 }
 
-export function userErrorMessage(error: unknown, fallback: string): string {
+/**
+ * The text to show for a failure. Errors the app wrote are shown as they are;
+ * anything else is logged, reported (tagged with `area` when given) and
+ * replaced by `fallback`.
+ */
+export function userErrorMessage(
+  error: unknown,
+  fallback: string,
+  area?: string
+): string {
   if (error instanceof UserFacingError) {
     return error.message
   }
   console.error(error)
-  captureError(error)
+  if (area) captureError(error, area)
+  else captureError(error)
   if (isNetworkError(error)) {
     return 'Sin conexión con el servidor. Revisá tu conexión e intentá de nuevo.'
   }
@@ -113,11 +127,17 @@ export function aiErrorMessage(raw: string): string {
   return AI_UNEXPECTED
 }
 
-// Whether an AI failure is worth reporting as a bug: an unexpected error, or
-// one the app raised itself (e.g. a malformed model response). A bad key, a
-// rate limit, no credit or an outage is the user's setup or Anthropic's, and
-// the toast already explains it.
-export function isUnexpectedAiError(raw: string): boolean {
+// A JavaScript engine error is a bug in our code whatever its message says
+// ("reading 'connection'" is not a lost connection).
+const CODE_BUG_TYPES = [TypeError, ReferenceError, RangeError, SyntaxError]
+
+// Whether an AI failure is worth reporting as a bug: a code bug, an unknown
+// failure, or one the app raised itself (e.g. a malformed model response). A
+// bad key, a rate limit, no credit or an outage is the user's setup or
+// Anthropic's, and the toast already explains it.
+export function isUnexpectedAiError(error: unknown): boolean {
+  if (CODE_BUG_TYPES.some((type) => error instanceof type)) return true
+  const raw = error instanceof Error ? error.message : String(error)
   const message = aiErrorMessage(raw)
   return message === raw || message === AI_UNEXPECTED
 }

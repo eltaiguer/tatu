@@ -278,7 +278,7 @@ export async function importTransactions(
     const toEnrich = added.filter((tx) => !hasUserOverride(tx))
     if (toEnrich.length > 0) {
       try {
-        const { results, partialFailure } = await enrichTransactionsWithAi(
+        const outcome = await enrichTransactionsWithAi(
           toEnrich.map((tx) => ({
             id: tx.id,
             description: tx.description,
@@ -290,13 +290,19 @@ export async function importTransactions(
           aiConfig,
           buildCorrectionContext()
         )
-        toStore = applyAiEnrichment(added, results)
-        aiPartial = partialFailure
+        toStore = applyAiEnrichment(added, outcome.results)
+        aiPartial = outcome.partialFailure
+        if (
+          outcome.partialError !== undefined &&
+          isUnexpectedAiError(outcome.partialError)
+        ) {
+          captureError(outcome.partialError, 'ai')
+        }
       } catch (error) {
         aiError =
           error instanceof Error ? error.message : 'Error desconocido de IA'
         console.error('AI enrichment failed during import:', error)
-        if (isUnexpectedAiError(aiError)) captureError(error, 'ai')
+        if (isUnexpectedAiError(error)) captureError(error, 'ai')
       }
       assertOwner(repo)
     }

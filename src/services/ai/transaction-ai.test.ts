@@ -762,6 +762,31 @@ describe('enrichTransactionsWithAi — partial batch failures', () => {
     expect(partialFailure).toBeUndefined()
   })
 
+  it('hands back the first failure of a partial run, as thrown', async () => {
+    const bug = new TypeError('x is undefined')
+    messagesCreateMock
+      .mockResolvedValueOnce(textResponse([]))
+      .mockRejectedValueOnce(bug)
+      .mockResolvedValueOnce(textResponse([]))
+
+    const { partialError } = await enrichTransactionsWithAi(
+      makeInputs(450),
+      baseConfig,
+      emptyContext
+    )
+
+    expect(partialError).toBe(bug)
+  })
+
+  it('rethrows the first error as thrown when every batch fails', async () => {
+    const bug = new TypeError('x is undefined')
+    messagesCreateMock.mockRejectedValue(bug)
+
+    await expect(
+      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
+    ).rejects.toBe(bug)
+  })
+
   it('throws when no batch succeeds at all', async () => {
     messagesCreateMock.mockRejectedValue(new Error('401 invalid x-api-key'))
 

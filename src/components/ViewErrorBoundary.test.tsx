@@ -2,6 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ViewErrorBoundary } from './ViewErrorBoundary'
 
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../services/monitoring/error-reporting', () => ({
+  captureError: reporting.captureError,
+}))
+
 function ChunkThatFailed(): never {
   throw new TypeError('Failed to fetch dynamically imported module')
 }
@@ -27,6 +32,20 @@ describe('ViewErrorBoundary', () => {
       'No se pudo cargar esta sección'
     )
     expect(screen.getByRole('button', { name: 'Recargar' })).toBeInTheDocument()
+  })
+
+  it('reports the failure to Sentry', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    reporting.captureError.mockClear()
+    render(
+      <ViewErrorBoundary resetKey="overview">
+        <ChunkThatFailed />
+      </ViewErrorBoundary>
+    )
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(TypeError),
+      'view'
+    )
   })
 
   it('tries again when the user moves to another view', () => {

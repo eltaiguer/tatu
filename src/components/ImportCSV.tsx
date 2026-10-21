@@ -21,7 +21,6 @@ import { parseCSV } from '../services/parsers/csv-parser'
 import { decodeCsvBytes } from '../services/parsers/decode-csv'
 import { categorizeParsedData } from '../services/categorizer/import-categorization'
 import { transactionStore } from '../stores/transaction-store'
-import { captureError } from '../services/monitoring/error-reporting'
 import type { ParsedData, Transaction, TransactionsFilter } from '../models'
 
 // validating = reading/parsing the file; importing = the file is valid and
@@ -262,9 +261,6 @@ export function ImportCSV({
       }
     } catch (error) {
       console.error('import failed:', error)
-      // A save failure is reported by userErrorMessage below; a parse failure
-      // is reported here — it may mean Santander changed its export format.
-      if (!parsed) captureError(error, 'import-parse')
       setImportState('error')
       setFailedWhileSaving(parsed)
       setErrorMessage(
@@ -272,7 +268,10 @@ export function ImportCSV({
           error,
           parsed
             ? 'No se pudo guardar la importación'
-            : 'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
+            : 'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.',
+          // Reported once, by userErrorMessage. A parse crash may mean
+          // Santander changed its export format.
+          parsed ? 'import' : 'import-parse'
         )
       )
     }

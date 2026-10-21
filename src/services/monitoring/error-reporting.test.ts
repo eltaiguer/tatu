@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { ErrorEvent } from '@sentry/react'
-import { NeedsConfirmationError, UserFacingError } from '../../utils/user-error'
+import {
+  NeedsConfirmationError,
+  PartialWriteError,
+  UserFacingError,
+  WorkspaceChangedError,
+} from '../../utils/user-error'
 import {
   redactMessage,
   scrubBreadcrumb,
@@ -45,6 +50,21 @@ describe('redactMessage', () => {
     ).toBe('Key (id)=([redacted]) already exists in "[redacted]"')
   })
 
+  it('hides a quoted snippet that contains quotes itself', () => {
+    const message = redactMessage(
+      `No se pudo parsear la respuesta del modelo: Unexpected token 'x', "[{"id":"tx-1","displayDescription":"FARMACIA PIGALLE"}]" is not valid JSON`
+    )
+    expect(message).not.toContain('FARMACIA')
+    expect(message).not.toContain('tx-1')
+    expect(message).toContain('is not valid JSON')
+  })
+
+  it('hides everything after an unclosed quote', () => {
+    expect(redactMessage('Importe ilegible: "1.234,56 USD')).not.toContain(
+      '1.234'
+    )
+  })
+
   it('leaves messages without values alone', () => {
     expect(redactMessage('No se pudo iniciar la importación')).toBe(
       'No se pudo iniciar la importación'
@@ -62,6 +82,23 @@ describe('scrubEvent', () => {
     expect(
       scrubEvent(errorEvent(), {
         originalException: new NeedsConfirmationError(),
+      })
+    ).toBeNull()
+  })
+
+  it('drops the subclasses of the errors written for the user', () => {
+    expect(
+      scrubEvent(errorEvent(), {
+        originalException: new WorkspaceChangedError(),
+      })
+    ).toBeNull()
+    expect(
+      scrubEvent(errorEvent(), {
+        originalException: new PartialWriteError(
+          'Se actualizaron 1 de 2',
+          1,
+          2
+        ),
       })
     ).toBeNull()
   })

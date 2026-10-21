@@ -3,6 +3,11 @@ import type { SupabaseSession } from '../services/supabase/client'
 import type { UserPreferences } from '../services/supabase/user-preferences'
 import type { Transaction } from '../models'
 
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../services/monitoring/error-reporting', () => ({
+  captureError: reporting.captureError,
+}))
+
 // One deferred load per user, so a test decides when (and in which order)
 // each user's data arrives.
 type Loaded = {
@@ -416,6 +421,10 @@ describe('workspace store', () => {
       expect(errorSpy).toHaveBeenCalledWith(
         'preferences save failed:',
         expect.any(Error)
+      )
+      expect(reporting.captureError).toHaveBeenCalledWith(
+        expect.any(Error),
+        'preferences'
       )
     })
   })

@@ -28,6 +28,17 @@ describe('userErrorMessage', () => {
     expect(captureError).toHaveBeenCalledWith(unexpected)
   })
 
+  it('tags the report with the area the caller names', () => {
+    vi.mocked(captureError).mockClear()
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const unexpected = new TypeError('x is undefined')
+
+    userErrorMessage(unexpected, 'x', 'import-parse')
+
+    expect(captureError).toHaveBeenCalledTimes(1)
+    expect(captureError).toHaveBeenCalledWith(unexpected, 'import-parse')
+  })
+
   it('passes user-facing messages through', () => {
     expect(
       userErrorMessage(new UserFacingError('La transacción ya no existe'), 'x')
@@ -107,6 +118,24 @@ describe('isUnexpectedAiError', () => {
     )
     expect(
       isUnexpectedAiError('Respuesta inesperada del modelo (tipo: tool_use)')
+    ).toBe(true)
+  })
+
+  it('takes the error itself, not just its message', () => {
+    expect(isUnexpectedAiError(new Error('401 invalid x-api-key'))).toBe(false)
+    expect(isUnexpectedAiError(new Error('boom'))).toBe(true)
+  })
+
+  it('is true for a code bug even when its message looks like an outage', () => {
+    expect(
+      isUnexpectedAiError(
+        new TypeError(
+          "Cannot read properties of undefined (reading 'connection')"
+        )
+      )
+    ).toBe(true)
+    expect(
+      isUnexpectedAiError(new SyntaxError('Unexpected token at position 503'))
     ).toBe(true)
   })
 })

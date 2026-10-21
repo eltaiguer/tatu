@@ -339,6 +339,28 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
   })
 
+  it('reports a code bug in one AI batch to Sentry, but not an outage', async () => {
+    const bug = new TypeError('x is undefined')
+    ai.enrichTransactionsWithAi.mockResolvedValueOnce({
+      results: new Map(),
+      partialFailure: '1 de 3 lotes fallaron: x is undefined',
+      partialError: bug,
+    })
+    const first = signedIn()
+    await first.handlers.handleTransactionsImported([makeTransaction('tx-1')])
+    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
+
+    reporting.captureError.mockClear()
+    ai.enrichTransactionsWithAi.mockResolvedValueOnce({
+      results: new Map(),
+      partialFailure: '1 de 3 lotes fallaron: 529 overloaded',
+      partialError: new Error('529 overloaded'),
+    })
+    const second = signedIn()
+    await second.handlers.handleTransactionsImported([makeTransaction('tx-1')])
+    expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
   it('does not call the AI when it is disabled', async () => {
     ai.getAiConfig.mockReturnValue({ ...AI_ON, enabled: false, apiKey: '' })
     const { handlers } = signedIn()

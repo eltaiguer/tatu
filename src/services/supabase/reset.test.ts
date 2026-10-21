@@ -7,6 +7,10 @@ const { deleteMock, eqMock, fromMock } = vi.hoisted(() => ({
   fromMock: vi.fn(),
 }))
 
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../monitoring/error-reporting', () => ({
+  captureError: reporting.captureError,
+}))
 vi.mock('./client', () => ({
   getSupabaseClient: () => ({ from: fromMock }),
 }))
@@ -60,5 +64,9 @@ describe('supabase reset service', () => {
 
     const { resetUserSupabaseData } = await import('./reset')
     await expect(resetUserSupabaseData(session)).resolves.toBeUndefined()
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.anything(),
+      'reset'
+    )
   })
 })

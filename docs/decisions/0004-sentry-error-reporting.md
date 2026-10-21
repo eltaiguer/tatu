@@ -43,9 +43,14 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
   key values (`Key (id)=(…)`) are redacted from messages, and `extra` is
   dropped. Non-`Error` throws (Supabase error objects) are wrapped in an
   `Error` carrying only their `message`.
-- **Report only bugs.** `UserFacingError` and `NeedsConfirmationError` are
-  dropped, and so are chunk-load and network failures, which the app already
-  recovers from.
+- **Report only bugs.** `UserFacingError` and `NeedsConfirmationError`, and
+  their subclasses (`PartialWriteError`, `WorkspaceChangedError`), are
+  dropped: they carry `explained: true`. So are chunk-load and network
+  failures, which the app already recovers from. An AI failure caused by the
+  user's key, quota or an Anthropic outage is not reported; a JavaScript
+  engine error (`TypeError`, `SyntaxError`, …) always is, whatever its
+  message says. A partial AI failure reports its first batch error the same
+  way.
 - **One report per failure.** `userErrorMessage` reports any error it did not
   write itself. Sites that log an error and do not pass it to
   `userErrorMessage` call `captureError(error, area)` with an `area` tag
@@ -79,6 +84,14 @@ descriptions appear, and it would report expected errors.
 ## Consequences
 
 - Production failures become visible, grouped and tied to a release.
+- A changed Santander export is only seen if it makes a parser crash. The
+  parsers' format and column checks throw `UserFacingError`, which is never
+  sent, and the same errors also fire when a user picks the wrong file.
+  Reporting them would need a separate, value-free signal (e.g. the header
+  shape); not built yet.
+- Supabase errors are plain objects, wrapped in an `Error` inside
+  `captureError`, so their stack points at the reporting call, not the
+  failing request. Sentry groups them by message and `area`.
 - Data now leaves the browser for a third party. The scrubbers are the
   boundary, and they are covered by tests that run the real SDK with a fake
   transport (`error-reporting.sentry.test.ts`). A new error message that

@@ -87,7 +87,7 @@ export function useAuthSession() {
 
   useEffect(() => {
     setErrorReportingUser(session?.user?.id ?? null)
-  }, [session])
+  }, [session?.user?.id])
 
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges(

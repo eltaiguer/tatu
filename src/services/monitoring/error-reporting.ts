@@ -8,9 +8,15 @@ import type { Breadcrumb, ErrorEvent, EventHint } from '@sentry/react'
 
 const REDACTED = '[redacted]'
 
-// Errors the app already explains to the user (utils/user-error.ts); they are
-// not bugs. Matched by name: importing the classes would be a circular import.
-const EXPECTED_ERROR_NAMES = ['UserFacingError', 'NeedsConfirmationError']
+// Errors the app already explains to the user (utils/user-error.ts), and
+// their subclasses, carry `explained: true`; they are not bugs. A marker, not
+// the class: importing utils/user-error here would be a circular import.
+function isExplainedError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error as { explained?: unknown }).explained === true
+  )
+}
 
 // Keeps origin + path only: the password-recovery hash carries an
 // access_token, and Transacciones filters (search text included) live in the
@@ -25,10 +31,12 @@ export function stripUrl(url: string): string {
 }
 
 // Parser and Supabase messages quote the offending value
-// (`Importe ilegible: "1.234,56"`, `Key (id)=(abc) already exists`).
+// (`Importe ilegible: "1.234,56"`, `Key (id)=(abc) already exists`). Quotes
+// can nest (a JSON parse error quotes the model's JSON), so everything from
+// the first quote to the last, or to the end when unclosed, goes.
 export function redactMessage(message: string): string {
   return message
-    .replace(/"[^"]*"/g, `"${REDACTED}"`)
+    .replace(/"[\s\S]*"|"[\s\S]*$/, `"${REDACTED}"`)
     .replace(/=\([^)]*\)/g, `=(${REDACTED})`)
 }
 
@@ -36,13 +44,7 @@ export function scrubEvent(
   event: ErrorEvent,
   hint?: EventHint
 ): ErrorEvent | null {
-  const original = hint?.originalException
-  if (
-    original instanceof Error &&
-    EXPECTED_ERROR_NAMES.includes(original.name)
-  ) {
-    return null
-  }
+  if (isExplainedError(hint?.originalException)) return null
 
   if (event.request) {
     if (event.request.url) event.request.url = stripUrl(event.request.url)
