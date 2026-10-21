@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { TransactionFilters } from './TransactionFilters'
-import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
 import {
+  DEFAULT_URL_FILTERS,
   hasActiveFilters,
-  type FilterState,
-} from '../services/filters/transaction-filter'
+} from '../services/filters/url-filters'
+import type { FilterState } from '../services/filters/transaction-filter'
 import { getCategoryDisplay } from '../utils/category-display'
 import { replaceCustomCategories } from '../services/categories/category-store'
 

@@ -31,12 +31,12 @@ import {
 } from '../services/merchants/merchant-key'
 import {
   DEFAULT_URL_FILTERS,
+  hasActiveFilters,
   serializeFilterParams,
   type UrlFilterState,
   type UrlPeriod,
 } from '../services/filters/url-filters'
 import { getPeriodLabel } from '../services/filters/period-label'
-import { hasActiveFilters } from '../services/filters/transaction-filter'
 import { MonthNav } from './transactions/MonthNav'
 import { TotalsStrip } from './transactions/TotalsStrip'
 import { BulkBar } from './transactions/BulkBar'
@@ -66,15 +66,11 @@ export function Transactions({
 }: TransactionsProps) {
   /* ---- Filter state (period included) ---- */
   // The URL's filters, with the view's default period filled in once: a link
-  // that filters by category/account/currency but names no period means all
+  // that filters at all (hasActiveFilters) but names no period means all
   // time; a plain visit starts on the newest month.
   const [initialState] = useState<UrlFilterState>(() => {
     if (initialFilters.period) return initialFilters
-    const deepLinked =
-      initialFilters.categories.length > 0 ||
-      initialFilters.accounts.length > 0 ||
-      initialFilters.currency !== 'all'
-    if (deepLinked || transactions.length === 0) {
+    if (hasActiveFilters(initialFilters) || transactions.length === 0) {
       return { ...initialFilters, period: { mode: 'all' } }
     }
     const newest = new Date(

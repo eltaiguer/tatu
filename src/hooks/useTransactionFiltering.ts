@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   countsTowardTotals,
   countsAsRow,
@@ -9,7 +16,6 @@ import { todayAsUtcDate } from '../utils/date-utils'
 import type { Transaction } from '../models'
 import {
   DEFAULT_URL_FILTERS,
-  serializeFilterParams,
   type UrlFilterState,
 } from '../services/filters/url-filters'
 import {
@@ -28,9 +34,14 @@ export type { FilterPatch, FilterState, SortDirection, SortField }
 
 export const ITEMS_PER_PAGE = 25
 
-const CLEARED_FILTERS: FilterState = {
-  ...DEFAULT_URL_FILTERS,
-  period: { mode: 'all' },
+// Fresh lists every time: the state never shares DEFAULT_URL_FILTERS' arrays.
+function clearedFilters(): FilterState {
+  return {
+    ...DEFAULT_URL_FILTERS,
+    categories: [],
+    accounts: [],
+    period: { mode: 'all' },
+  }
 }
 
 function newestOf(transactions: Transaction[]): Date | null {
@@ -38,18 +49,48 @@ function newestOf(transactions: Transaction[]): Date | null {
   return new Date(Math.max(...transactions.map((tx) => tx.date.getTime())))
 }
 
+// Structural equality over filter values: primitives, lists and the period
+// (a plain object), however the state grows.
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return (
+      a.length === b.length && a.every((value, i) => sameValue(value, b[i]))
+    )
+  }
+  if (
+    a !== null &&
+    b !== null &&
+    typeof a === 'object' &&
+    typeof b === 'object' &&
+    !Array.isArray(a) &&
+    !Array.isArray(b)
+  ) {
+    const left = a as Record<string, unknown>
+    const right = b as Record<string, unknown>
+    const keys = Object.keys(left)
+    return (
+      keys.length === Object.keys(right).length &&
+      keys.every((key) => key in right && sameValue(left[key], right[key]))
+    )
+  }
+  return false
+}
+
 // `current` with the patch's defined fields applied — or `current` itself
-// when that changes nothing, so the value (and the URL written from it) only
-// changes when a filter does. Compared in the URL's own representation: every
-// filter lives in the URL, so a new field is compared without touching this.
+// when no field changes, so the value (and the URL written from it) only
+// changes when a filter does.
 function applyPatch(current: FilterState, patch: FilterPatch): FilterState {
-  const defined = Object.fromEntries(
-    Object.entries(patch).filter(([, value]) => value !== undefined)
+  const changes = Object.fromEntries(
+    Object.entries(patch).filter(
+      ([key, value]) =>
+        value !== undefined &&
+        !sameValue(value, current[key as keyof FilterState])
+    )
   ) as FilterPatch
-  const next = { ...current, ...defined }
-  return serializeFilterParams(next) === serializeFilterParams(current)
+  return Object.keys(changes).length === 0
     ? current
-    : next
+    : { ...current, ...changes }
 }
 
 // The Transacciones filters as one value in the URL's shape (what
@@ -66,9 +107,12 @@ export function useTransactionFiltering({
   initial?: UrlFilterState
 }) {
   const newestDate = useMemo(() => newestOf(transactions), [transactions])
-  // Read by the stable updaters below: the newest row as of this render.
+  // The newest row as of the last commit, for the stable updaters below
+  // (read when they are called, never written during render).
   const newestRef = useRef(newestDate)
-  newestRef.current = newestDate
+  useLayoutEffect(() => {
+    newestRef.current = newestDate
+  }, [newestDate])
 
   // The filters, and the month "últimos n meses" counts back from: the
   // newest month with data at the moment it is chosen (or the page is
@@ -78,19 +122,26 @@ export function useTransactionFiltering({
     filters: FilterState
     recentAnchor: Date
   }>(() => ({
-    filters: { ...initial, period: initial.period ?? { mode: 'all' } },
+    filters: {
+      ...initial,
+      categories: [...initial.categories],
+      accounts: [...initial.accounts],
+      period: initial.period ?? { mode: 'all' },
+    },
     recentAnchor: newestOf(transactions) ?? todayAsUtcDate(),
   }))
 
   // Applied to the latest state, so several changes in one batch all stick.
   // Choosing "últimos n meses" (again) anchors it to the newest row now.
   const update = useCallback((patch: FilterPatch) => {
+    // Taken when the change is made, from committed rows.
+    const chosenAnchor =
+      patch.period?.mode === 'recent'
+        ? (newestRef.current ?? todayAsUtcDate())
+        : null
     setState((current) => {
       const nextFilters = applyPatch(current.filters, patch)
-      const anchor =
-        patch.period?.mode === 'recent'
-          ? (newestRef.current ?? todayAsUtcDate())
-          : current.recentAnchor
+      const anchor = chosenAnchor ?? current.recentAnchor
       if (
         nextFilters === current.filters &&
         anchor.getTime() === current.recentAnchor.getTime()
@@ -119,7 +170,7 @@ export function useTransactionFiltering({
   }, [])
 
   // Every filter back to its default: all dates, ignored rows hidden.
-  const clear = useCallback(() => update(CLEARED_FILTERS), [update])
+  const clear = useCallback(() => update(clearedFilters()), [update])
 
   // The period as days, for the date inputs.
   const dateRange = periodDateRange(filters.period, recentAnchor)

@@ -35,6 +35,23 @@ export const DEFAULT_URL_FILTERS: UrlFilterState = {
   showIgnored: false,
 }
 
+// Whether the view is "filtrado" — and whether a link filters at all: every
+// filter the bar sets. The period is
+// not one (the month navigator shows it), nor is showing ignored rows (a
+// table toggle); clearing the filters resets those too.
+export function hasActiveFilters(filters: UrlFilterState): boolean {
+  return (
+    filters.search.trim() !== '' ||
+    filters.merchant !== '' ||
+    filters.categories.length > 0 ||
+    filters.accounts.length > 0 ||
+    filters.currency !== 'all' ||
+    filters.type !== 'all' ||
+    filters.min !== '' ||
+    filters.max !== ''
+  )
+}
+
 const ACCOUNTS = ['credit_card', 'bank_account'] as const
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
@@ -137,13 +154,8 @@ export function filterToSearch(filter: TransactionsFilter): string {
     currency: filter.currency ?? 'all',
     type: filter.type ?? 'all',
   }
-  const filtered =
-    state.merchant !== '' ||
-    state.categories.length > 0 ||
-    state.accounts.length > 0 ||
-    state.currency !== 'all' ||
-    state.type !== 'all'
   const period =
-    filter.period ?? (filtered ? { mode: 'all' as const } : undefined)
+    filter.period ??
+    (hasActiveFilters(state) ? { mode: 'all' as const } : undefined)
   return serializeFilterParams({ ...state, ...(period && { period }) })
 }

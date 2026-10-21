@@ -10,31 +10,33 @@ import { useClickOutside } from '../hooks/useClickOutside'
 import type { UrlFilterState } from '../services/filters/url-filters'
 import type { FilterPatch } from '../services/filters/transaction-filter'
 
-const ACCOUNT_OPTIONS = [
+type Account = UrlFilterState['accounts'][number]
+
+const ACCOUNT_OPTIONS: { value: Account; label: string }[] = [
   { value: 'credit_card', label: 'Tarjeta' },
   { value: 'bank_account', label: 'Cuenta bancaria' },
 ]
 
-interface MultiSelectPopoverProps {
+interface MultiSelectPopoverProps<T extends string> {
   label: string
-  options: { value: string; label: string; color?: string }[]
-  selected: string[]
-  onChange: (next: string[]) => void
+  options: { value: T; label: string; color?: string }[]
+  selected: T[]
+  onChange: (next: T[]) => void
   ariaLabel?: string
 }
 
-function MultiSelectPopover({
+function MultiSelectPopover<T extends string>({
   label,
   options,
   selected,
   onChange,
   ariaLabel,
-}: MultiSelectPopoverProps) {
+}: MultiSelectPopoverProps<T>) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useClickOutside(ref, () => setOpen(false))
 
-  function toggle(value: string) {
+  function toggle(value: T) {
     onChange(
       selected.includes(value)
         ? selected.filter((v) => v !== value)
@@ -243,10 +245,7 @@ export function TransactionFilters({
           ariaLabel="Filtro cuenta"
           options={ACCOUNT_OPTIONS}
           selected={accounts}
-          // The list only offers the two account kinds.
-          onChange={(next) =>
-            onChange({ accounts: next as UrlFilterState['accounts'] })
-          }
+          onChange={(next) => onChange({ accounts: next })}
         />
 
         {/* Type filter */}

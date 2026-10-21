@@ -151,22 +151,6 @@ export function sortTransactions(
   })
 }
 
-// Whether the view is "filtrado": every filter the bar sets. The period is
-// not one (the month navigator shows it), nor is showing ignored rows (a
-// table toggle); clearing the filters resets those too.
-export function hasActiveFilters(filters: UrlFilterState): boolean {
-  return (
-    filters.search.trim() !== '' ||
-    filters.merchant !== '' ||
-    filters.categories.length > 0 ||
-    filters.accounts.length > 0 ||
-    filters.currency !== 'all' ||
-    filters.type !== 'all' ||
-    filters.min !== '' ||
-    filters.max !== ''
-  )
-}
-
 // Editing one end of the date inputs (shown as `range`, see
 // periodDateRange) makes the period a custom range that keeps the other end;
 // with both ends empty it is all dates.

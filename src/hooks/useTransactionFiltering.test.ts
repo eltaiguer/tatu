@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { Transaction } from '../models'
 import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
-import { hasActiveFilters } from '../services/filters/transaction-filter'
+import { hasActiveFilters } from '../services/filters/url-filters'
 import {
   ITEMS_PER_PAGE,
   useTransactionFiltering,
@@ -689,5 +689,36 @@ describe('useTransactionFiltering — stable updates', () => {
     act(() => result.current.update({ period: { mode: 'recent', n: 2 } }))
 
     expect(renders).toBe(before)
+  })
+})
+
+describe('useTransactionFiltering — every edit sticks', () => {
+  const transactions = [makeTransaction('a', { description: 'UBER' })]
+
+  it('keeps spaces typed in the search box', () => {
+    const { result } = setup(transactions)
+    act(() => result.current.update({ search: 'uber' }))
+    act(() => result.current.update({ search: 'uber ' }))
+
+    expect(result.current.filters.search).toBe('uber ')
+  })
+
+  // The defaults are shared; the hook's lists must never be them.
+  it('never hands out the shared default lists', () => {
+    const { result } = setup(transactions)
+    expect(result.current.filters.categories).not.toBe(
+      DEFAULT_URL_FILTERS.categories
+    )
+
+    act(() => result.current.update({ categories: ['groceries'] }))
+    act(() => result.current.clear())
+
+    expect(result.current.filters.categories).toEqual([])
+    expect(result.current.filters.categories).not.toBe(
+      DEFAULT_URL_FILTERS.categories
+    )
+    expect(result.current.filters.accounts).not.toBe(
+      DEFAULT_URL_FILTERS.accounts
+    )
   })
 })

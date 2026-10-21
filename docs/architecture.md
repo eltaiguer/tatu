@@ -381,8 +381,9 @@ The hook sorts, groups split parts under their parent (`groupSplitRows`) and
 paginates. It freezes the "últimos n meses" anchor (the newest row) when that
 period is chosen, so an import does not shift the window. `TransactionFilters`
 takes `filters` and emits patches; "filtrado" is `hasActiveFilters(filters)`
-(the period and "show ignored" don't count), computed once by the view and
-passed down. Export writes the rows it is handed; if it ever has to filter, it
+(`url-filters.ts`; the period and "show ignored" don't count), computed once
+by the view and passed down. The same rule decides that a link which filters
+but names no period means all time (`filterToSearch` and the view's default). Export writes the rows it is handed; if it ever has to filter, it
 calls `filterTransactions`.
 
 - **Day distances** (transfer pairing's ±2 days, recurring cadences) count
