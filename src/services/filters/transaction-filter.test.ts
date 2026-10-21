@@ -3,7 +3,10 @@ import type { Transaction } from '../../models'
 import { DEFAULT_URL_FILTERS, type UrlFilterState } from './url-filters'
 import {
   filterTransactions,
+  groupSplitRows,
+  hasActiveFilters,
   periodDateRange,
+  periodWithDateBound,
   sortTransactions,
 } from './transaction-filter'
 
@@ -438,5 +441,126 @@ describe('sortTransactions', () => {
   it('does not reorder its input', () => {
     sortTransactions(rows, 'date', 'asc')
     expect(ids(rows)).toEqual(['b', 'a', 'c'])
+  })
+})
+
+describe('hasActiveFilters', () => {
+  it('is false for the defaults', () => {
+    expect(hasActiveFilters(filters())).toBe(false)
+  })
+
+  it.each<[string, Partial<UrlFilterState>]>([
+    ['a search', { search: 'disco' }],
+    ['a merchant', { merchant: 'uber' }],
+    ['a category', { categories: ['groceries'] }],
+    ['an account', { accounts: ['credit_card'] }],
+    ['a currency', { currency: 'UYU' }],
+    ['a type', { type: 'debit' }],
+    ['a minimum amount', { min: '10' }],
+    ['a maximum amount', { max: '10' }],
+  ])('is true with %s', (_, overrides) => {
+    expect(hasActiveFilters(filters(overrides))).toBe(true)
+  })
+
+  it('ignores a search of only spaces', () => {
+    expect(hasActiveFilters(filters({ search: '   ' }))).toBe(false)
+  })
+
+  // The period is shown by the month navigator and "show ignored" is a
+  // table toggle: neither makes the view "filtrado".
+  it('does not count the period or showing ignored rows', () => {
+    expect(
+      hasActiveFilters(
+        filters({
+          period: { mode: 'month', y: 2026, m: 2 },
+          showIgnored: true,
+        })
+      )
+    ).toBe(false)
+  })
+})
+
+describe('periodWithDateBound', () => {
+  const march = { from: '2026-03-01', to: '2026-03-31' }
+
+  it('keeps the other end when one end is edited', () => {
+    expect(periodWithDateBound(march, 'from', '2026-03-05')).toEqual({
+      mode: 'range',
+      from: '2026-03-05',
+      to: '2026-03-31',
+    })
+    expect(periodWithDateBound(march, 'to', '2026-03-20')).toEqual({
+      mode: 'range',
+      from: '2026-03-01',
+      to: '2026-03-20',
+    })
+  })
+
+  it('leaves an open end open', () => {
+    expect(
+      periodWithDateBound({ from: '', to: '' }, 'to', '2026-03-20')
+    ).toEqual({ mode: 'range', from: '', to: '2026-03-20' })
+  })
+
+  it('means all dates once both ends are empty', () => {
+    expect(
+      periodWithDateBound({ from: '', to: '2026-03-20' }, 'to', '')
+    ).toEqual({ mode: 'all' })
+  })
+})
+
+describe('groupSplitRows', () => {
+  const parent = tx('parent', { isSplitParent: true })
+  const part1 = tx('part-1', { splitParentId: 'parent' })
+  const part2 = tx('part-2', { splitParentId: 'parent' })
+  const other = tx('other')
+  const all = [parent, part1, part2, other]
+
+  it('leaves rows without split parts in their order', () => {
+    expect(ids(groupSplitRows([tx('a'), tx('b'), tx('c')], all))).toEqual([
+      'a',
+      'b',
+      'c',
+    ])
+  })
+
+  // Split parents never match the filter; they come from all rows.
+  it('shows the parent, as context, right above its matching parts', () => {
+    expect(ids(groupSplitRows([other, part1, part2], all))).toEqual([
+      'other',
+      'parent',
+      'part-1',
+      'part-2',
+    ])
+  })
+
+  it('gathers the parts under the parent where the first one appears', () => {
+    expect(ids(groupSplitRows([part2, other, part1], all))).toEqual([
+      'parent',
+      'part-2',
+      'part-1',
+      'other',
+    ])
+  })
+
+  it('lists only the parts that matched', () => {
+    expect(ids(groupSplitRows([part2], all))).toEqual(['parent', 'part-2'])
+  })
+
+  it('shows a part whose parent is gone as a row of its own', () => {
+    const orphan = tx('orphan', { splitParentId: 'missing' })
+    expect(ids(groupSplitRows([other, orphan], all))).toEqual([
+      'other',
+      'orphan',
+    ])
+  })
+
+  it('emits every row once, even if the parent also matched', () => {
+    expect(ids(groupSplitRows([parent, part1, part2, other], all))).toEqual([
+      'parent',
+      'part-1',
+      'part-2',
+      'other',
+    ])
   })
 })
