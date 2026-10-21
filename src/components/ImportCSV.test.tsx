@@ -10,6 +10,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { ImportCSV } from './ImportCSV'
 import { UserFacingError } from '../utils/user-error'
+import { AiError } from '../services/ai/ai-error'
 import type { ParsedData, Transaction } from '../models'
 
 const { parseCSVMock, addTransactionsMock, toastMock } = vi.hoisted(() => ({
@@ -534,7 +535,7 @@ describe('ImportCSV', () => {
     const onTransactionsImported = vi.fn().mockResolvedValue({
       added: [makeTx('tx-1'), makeTx('tx-2')],
       duplicates: [makeTx('tx-3')],
-      aiError: '401 invalid x-api-key',
+      aiError: new AiError('auth'),
     })
 
     render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
@@ -721,13 +722,66 @@ describe('ImportCSV', () => {
     expect(toastMock.warning).not.toHaveBeenCalled()
   })
 
+  it('suggests a smaller file when the AI answer was cut off', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-1')],
+      duplicates: [],
+      aiError: new AiError('truncated'),
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        'Categorización con IA no disponible: la respuesta del modelo quedó truncada (límite de tokens alcanzado); probá importar menos transacciones a la vez. Se usaron las reglas de categorización.'
+      )
+    )
+  })
+
+  it('warns about an AI failure even when its message is empty', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-1')],
+      duplicates: [],
+      aiError: new Error(''),
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        'Categorización con IA no disponible: error inesperado del servicio de IA. Se usaron las reglas de categorización.'
+      )
+    )
+  })
+
   it('says the AI run was incomplete, not unavailable, on a partial failure', async () => {
     // "no disponible" would be plainly wrong when 10 of 12 batches enriched.
     parseCSVMock.mockReturnValue(makeParsedData())
     const onTransactionsImported = vi.fn().mockResolvedValue({
       added: [makeTx('tx-1')],
       duplicates: [],
-      aiPartial: '2 de 12 lotes fallaron: 529 overloaded',
+      aiPartial:
+        '2 de 12 lotes fallaron (el servicio de IA no está disponible en este momento)',
     })
 
     render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
@@ -742,9 +796,9 @@ describe('ImportCSV', () => {
       await screen.findByText('Importación completada')
     ).toBeInTheDocument()
     await waitFor(() => expect(toastMock.warning).toHaveBeenCalledTimes(1))
-    const message = toastMock.warning.mock.calls[0][0] as string
-    expect(message).toContain('incompleta')
-    expect(message).not.toContain('no disponible')
+    expect(toastMock.warning).toHaveBeenCalledWith(
+      'Categorización con IA incompleta: 2 de 12 lotes fallaron (el servicio de IA no está disponible en este momento). El resto se categorizó con reglas.'
+    )
   })
   describe('summary after an import (#202)', () => {
     // Transaction dates are calendar days at UTC midnight (#58).

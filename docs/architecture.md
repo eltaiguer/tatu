@@ -616,7 +616,16 @@ and skip their rollback after a switch.
   schema, and nothing in the app or CI runs it. See `supabase/README.md`.
 - **Claude calls run in the browser** with the user's own key
   (`dangerouslyAllowBrowser`), both for AI enrichment (`services/ai/`) and for
-  Insights (`services/insights/`). There is no backend of our own.
+  Insights (`services/insights/`). There is no backend of our own. Every call
+  goes through `createClaudeClient` (`services/ai/claude-client.ts`), which
+  loads the SDK on demand, returns the answer's first text block and turns
+  every failure it understands into an `AiError` with a `kind` (`auth`,
+  `rate_limit`, `billing`, `unavailable`, `network`, `truncated`,
+  `stale_chunk`, `refused`, `bad_response`, `too_large`) and a Spanish message (a lowercase fragment the screen writes its sentence around). Anything
+  else (a code bug, a 400/404 for a malformed request) is rethrown as it was.
+  `aiErrorMessage` shows an `AiError`'s message and "error inesperado del
+  servicio de IA" for anything else; a batch loop stops at the first failure
+  that is not `retryable` (`auth`, `billing`, `stale_chunk`).
 - **Derived state is not persisted:** inferred transfer categories, converted
   amounts, learned patterns and temporal patterns are recomputed from the
   stored data.
@@ -631,4 +640,6 @@ catches an error without passing it there calls `captureError(error, area)`.
 Before anything is sent, the browser strips URLs down to their path, redacts
 quoted values and Postgres key values from messages, and drops `extra`
 and every breadcrumb except navigation. `UserFacingError` and `NeedsConfirmationError`
-are never sent.
+are never sent. An AI failure is reported only when `isUnexpectedAiError` says
+so: an `AiError` of kind `bad_response`, or anything that is not an `AiError`
+(except a lost connection or a stale chunk).

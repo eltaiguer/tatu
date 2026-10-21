@@ -3,6 +3,7 @@ import { Button } from '../ui/button'
 import type { Transaction } from '../../models'
 import type { AiConfig } from '../../services/ai/ai-config'
 import { analyzeTransactionPatterns } from '../../services/ai/prompt-analysis'
+import { devFailureMessage } from './dev-failure'
 
 interface Props {
   transactions: Transaction[]
@@ -39,7 +40,7 @@ export function AiPatternAnalysis({
       setOutput(result)
       setRunState('done')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido')
+      setError(devFailureMessage(err, 'AI pattern analysis'))
       setRunState('error')
     }
   }

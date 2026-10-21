@@ -111,7 +111,7 @@ src/
     suggestions/           # suggestions.ts: category/tag suggestion lists + search filters shared by the edit dialogs
     descriptions/          # Description override management
     transfers/             # Internal transfer detection
-    ai/                    # Client-side Claude (BYO API key): categorization/enrichment; models.ts is the only place model IDs live; jev-classifier.ts: Jev (TypeSafe, via OpenRouter) category-only classifier, eval panel only for now
+    ai/                    # Client-side Claude (BYO API key): categorization/enrichment; claude-client.ts is the only place the SDK is called (complete(), parseModelJson; tests inject a fake ClaudeClient), every failure it understands is an AiError with a kind (ai-error.ts); models.ts is the only place model IDs live; jev-classifier.ts: Jev (TypeSafe, via OpenRouter) category-only classifier, eval panel only for now
     preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
     insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
     monitoring/            # error-reporting.ts: Sentry init, captureError, scrubbers (ADR-0004)
@@ -129,8 +129,8 @@ src/
     tailwind.css           # Tailwind 4 import + sources
     theme.css              # CSS custom properties — light + dark tokens
                            # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
-  utils/                   # date-utils, formatting, memo, transaction-display, user-display, user-error, auth-errors
-  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-backend.ts = in-memory auth + one in-memory repository per user, for the App suites
+  utils/                   # date-utils, formatting, memo, transaction-display, user-display, user-error, auth-errors, sha256 (import file checksum)
+  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-claude-client.ts records Claude requests and scripts answers; fake-backend.ts = in-memory auth + one in-memory repository per user, for the App suites
 supabase/
   schema.sql               # PostgreSQL schema (tables, RLS policies)
 samples/                   # Example Santander CSV files for testing

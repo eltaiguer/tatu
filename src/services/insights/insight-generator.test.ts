@@ -1,21 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { InsightInput } from './insight-data'
 import { buildInsightInput } from './insight-data'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
-
-const { messagesCreateMock } = vi.hoisted(() => ({
-  messagesCreateMock: vi.fn(),
-}))
-
-vi.mock('@anthropic-ai/sdk', () => {
-  return {
-    default: class Anthropic {
-      messages = { create: messagesCreateMock }
-    },
-  }
-})
-
+import { fakeClaudeClient } from '../../test/fake-claude-client'
+import { AiError } from '../ai/ai-error'
+import { buildInsightSystemPrompt } from './insight-prompt'
 import { parseInsightsResponse, generateInsights } from './insight-generator'
 
 const baseInput: InsightInput = {
@@ -235,88 +225,81 @@ describe('parseInsightsResponse', () => {
     )
   })
 
-  it('throws a descriptive error when the response is not valid JSON', () => {
-    expect(() => parseInsightsResponse('not json at all', baseInput)).toThrow(
-      /No se pudo parsear/
-    )
+  it('throws a bad response when the answer is not valid JSON', () => {
+    let error: unknown
+    try {
+      parseInsightsResponse('not json at all', baseInput)
+    } catch (e) {
+      error = e
+    }
+    expect(error).toBeInstanceOf(AiError)
+    expect((error as AiError).kind).toBe('bad_response')
+    expect((error as AiError).message).toMatch(/^no se pudo parsear/)
+  })
+
+  it('throws a bad response, not a crash, when the JSON is not an object', () => {
+    let error: unknown
+    try {
+      parseInsightsResponse('null', baseInput)
+    } catch (e) {
+      error = e
+    }
+    expect(error).toBeInstanceOf(AiError)
+    expect((error as AiError).kind).toBe('bad_response')
   })
 })
 
 describe('generateInsights', () => {
-  it("calls Claude with the insights model and the user's API key", async () => {
-    messagesCreateMock.mockResolvedValueOnce({
-      content: [{ type: 'text', text: JSON.stringify({ insights: [] }) }],
-    })
+  const noInsights = () => JSON.stringify({ insights: [] })
 
-    await generateInsights(baseInput, 'sk-test-key')
+  it('asks the insights model, with medium effort and room to think', async () => {
+    const client = fakeClaudeClient(noInsights)
 
-    expect(messagesCreateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        model: 'claude-opus-5-5',
-        messages: [
-          { role: 'user', content: expect.stringContaining('"historyStart"') },
+    await generateInsights(baseInput, 'sk-test-key', client)
+
+    expect(client.requests).toHaveLength(1)
+    const [request] = client.requests
+    expect(request.model).toBe('claude-opus-5-5')
+    expect(request.system).toBe(buildInsightSystemPrompt())
+    expect(request.cacheSystem).toBeFalsy()
+    expect(request.user).toContain('"historyStart"')
+    expect(request.maxTokens).toBeGreaterThanOrEqual(16000)
+    expect(request.effort).toBe('medium')
+  })
+
+  it("returns the sanitized insights from the model's answer", async () => {
+    const client = fakeClaudeClient(() =>
+      JSON.stringify({
+        insights: [
+          {
+            type: 'trend',
+            title: 'Restaurantes',
+            narrative: 'Subió',
+            amount: 120,
+            severity: 'high',
+          },
         ],
       })
     )
-  })
 
-  it('reads the first text block when the model thinks first', async () => {
-    messagesCreateMock.mockResolvedValueOnce({
-      content: [
-        { type: 'thinking', thinking: '', signature: 'sig' },
-        { type: 'text', text: JSON.stringify({ insights: [] }) },
-      ],
-    })
+    const result = await generateInsights(baseInput, 'sk-test-key', client)
 
-    await expect(generateInsights(baseInput, 'sk-test-key')).resolves.toEqual({
-      insights: [],
+    expect(result.insights).toHaveLength(1)
+    expect(result.insights[0]).toMatchObject({
+      title: 'Restaurantes',
+      amount: 120,
     })
   })
 
-  it('leaves the output budget room for thinking and sets the effort', async () => {
-    messagesCreateMock.mockResolvedValueOnce({
-      content: [{ type: 'text', text: JSON.stringify({ insights: [] }) }],
-      stop_reason: 'end_turn',
+  it('passes a failure on as the client named it (truncated, refused, …)', async () => {
+    const truncated = new AiError('truncated')
+    const client = fakeClaudeClient(() => {
+      throw truncated
     })
 
-    await generateInsights(baseInput, 'sk-test-key')
-
-    const params = messagesCreateMock.mock.calls[0][0]
-    expect(params.max_tokens).toBeGreaterThanOrEqual(16000)
-    expect(params.output_config).toEqual({ effort: 'medium' })
-  })
-
-  it('reports a refusal in its own words', async () => {
-    messagesCreateMock.mockResolvedValueOnce({
-      content: [],
-      stop_reason: 'refusal',
-      stop_details: { type: 'refusal', category: 'general_harms' },
-    })
-
-    await expect(generateInsights(baseInput, 'sk-test-key')).rejects.toThrow(
-      /rechazó/
-    )
-  })
-
-  it('reports a truncated response instead of a parse error', async () => {
-    messagesCreateMock.mockResolvedValueOnce({
-      content: [{ type: 'text', text: '{"insights": [' }],
-      stop_reason: 'max_tokens',
-    })
-
-    await expect(generateInsights(baseInput, 'sk-test-key')).rejects.toThrow(
-      /truncada/
-    )
-  })
-
-  it('throws if the model returns a non-text content block', async () => {
-    messagesCreateMock.mockResolvedValueOnce({
-      content: [{ type: 'image' }],
-    })
-
-    await expect(generateInsights(baseInput, 'sk-test-key')).rejects.toThrow(
-      /Respuesta inesperada/
-    )
+    await expect(
+      generateInsights(baseInput, 'sk-test-key', client)
+    ).rejects.toBe(truncated)
   })
 })
 

@@ -15,6 +15,7 @@ import { categorizeTransaction } from '../../services/categorizer/transaction-ca
 import { getDescriptionOverride } from '../../services/descriptions/description-overrides'
 import { getMerchantCategoryOverride } from '../../services/categorizer/category-overrides'
 import { formatDate } from '../../utils/formatting'
+import { devFailureMessage } from './dev-failure'
 
 interface Props {
   transactions: Transaction[]
@@ -193,7 +194,7 @@ export function AiCategorizationPreview({
         toEnrich.length
       )
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error desconocido')
+      setError(devFailureMessage(err, 'AI preview'))
       setRunState('error')
     }
   }

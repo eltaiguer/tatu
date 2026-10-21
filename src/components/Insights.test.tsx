@@ -11,6 +11,7 @@ import {
 } from '../services/repository/in-memory-repository'
 import { buildInsightInput } from '../services/insights/insight-data'
 import { hashInsightInput } from '../services/insights/insight-cache'
+import { AiError } from '../services/ai/ai-error'
 
 const { generateInsightsMock } = vi.hoisted(() => ({
   generateInsightsMock: vi.fn(),
@@ -222,7 +223,7 @@ describe('Insights', () => {
   it('reports an unexpected failure to generate insights, not a bad key', async () => {
     const bug = new TypeError('x is undefined')
     generateInsightsMock
-      .mockRejectedValueOnce(new Error('401 invalid x-api-key'))
+      .mockRejectedValueOnce(new AiError('auth'))
       .mockRejectedValueOnce(bug)
     renderInsights()
 

@@ -2,10 +2,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Category } from '../../models'
 import type { Transaction } from '../../models'
 import type { CustomCategory } from '../categories/category-store'
-
-const { messagesCreateMock } = vi.hoisted(() => ({
-  messagesCreateMock: vi.fn(),
-}))
+import { fakeClaudeClient } from '../../test/fake-claude-client'
+import { AiError } from './ai-error'
 
 const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
 vi.mock('../monitoring/error-reporting', async (importOriginal) => ({
@@ -13,20 +11,16 @@ vi.mock('../monitoring/error-reporting', async (importOriginal) => ({
   captureError: reporting.captureError,
 }))
 
-vi.mock('@anthropic-ai/sdk', () => {
-  return {
-    default: class Anthropic {
-      messages = { create: messagesCreateMock }
-    },
-  }
-})
-
 import {
   validateCategory,
   applyAiEnrichment,
   enrichTransactionsWithAi,
 } from './transaction-ai'
-import type { AiEnrichmentResult } from './transaction-ai'
+import type {
+  AiCorrectionContext,
+  AiEnrichmentInput,
+  AiEnrichmentResult,
+} from './transaction-ai'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 
 function makeTx(
@@ -58,38 +52,54 @@ const baseConfig = {
   model: 'claude-haiku-4-5',
 }
 
-// The system prompt is sent as a cacheable block array, so tests read through
-// this rather than assuming a bare string.
-function systemTextOf(request: {
-  system: string | Array<{ type: string; text: string }>
-}): string {
-  return typeof request.system === 'string'
-    ? request.system
-    : request.system.map((b) => b.text).join('\n')
+// What the fake Claude answers on each call, in order; the last one repeats.
+// An array is sent back as the JSON text, a string as is.
+type Reply = unknown[] | string | { throws: unknown }
+
+let client: ReturnType<typeof fakeClaudeClient>
+
+function answers(...replies: Reply[]) {
+  client = fakeClaudeClient((_request, call) => {
+    const reply = replies[Math.min(call, replies.length - 1)]
+    if (typeof reply === 'string') return reply
+    if (Array.isArray(reply)) return JSON.stringify(reply)
+    throw reply.throws
+  })
 }
 
-function textResponse(items: unknown[], stopReason = 'end_turn') {
+function enrich(
+  inputs: AiEnrichmentInput[],
+  context: AiCorrectionContext = emptyContext
+) {
+  return enrichTransactionsWithAi(inputs, baseConfig, context, client)
+}
+
+function userMessageOf(call: number): string {
+  return client.requests[call].user
+}
+
+function input(
+  id: string,
+  description: string,
+  overrides: Partial<AiEnrichmentInput> = {}
+): AiEnrichmentInput {
   return {
-    stop_reason: stopReason,
-    content: [{ type: 'text', text: JSON.stringify(items) }],
+    id,
+    description,
+    type: 'debit',
+    amount: 100,
+    currency: 'UYU',
+    source: 'bank_account',
+    ...overrides,
   }
 }
 
-function call0MaxTokens(): number {
-  return messagesCreateMock.mock.calls[0][0].max_tokens as number
-}
-
 function makeInputs(count: number) {
-  return Array.from({ length: count }, (_, i) => ({
-    id: `tx${i}`,
-    description: `MERCHANT ${i}`,
-    type: 'debit' as const,
-    amount: 100,
-    currency: 'UYU' as const,
-    source: 'bank_account' as const,
-  }))
+  return Array.from({ length: count }, (_, i) =>
+    input(`tx${i}`, `MERCHANT ${i}`)
+  )
 }
-const emptyContext = {
+const emptyContext: AiCorrectionContext = {
   descriptionExamples: [],
   categoryExamples: [],
   customCategories: noCustomCategories,
@@ -211,395 +221,211 @@ describe('applyAiEnrichment', () => {
 
 describe('enrichTransactionsWithAi', () => {
   beforeEach(() => {
-    messagesCreateMock.mockReset()
+    reporting.captureError.mockClear()
   })
 
   it('parses valid response and returns map keyed by id', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify([
-            {
-              id: 'tx1',
-              displayDescription: 'Devoto',
-              category: 'groceries',
-              confidence: 0.9,
-            },
-          ]),
-        },
-      ],
-    })
-    const { results } = await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'SUPERMERCADO DEVOTO',
-          type: 'debit',
-          amount: 500,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
-      ],
-      baseConfig,
-      emptyContext
-    )
+    answers([
+      {
+        id: 'tx1',
+        displayDescription: 'Devoto',
+        category: 'groceries',
+        confidence: 0.9,
+      },
+    ])
+    const { results } = await enrich([
+      input('tx1', 'SUPERMERCADO DEVOTO', { amount: 500 }),
+    ])
     expect(results.get('tx1')?.category).toBe('groceries')
     expect(results.get('tx1')?.displayDescription).toBe('Devoto')
     expect(results.get('tx1')?.confidence).toBe(0.9)
   })
 
   it("caps the model's confidence below 1, so 1 stays the user's (review of #224)", async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify([
-            {
-              id: 'tx1',
-              displayDescription: 'Netflix',
-              category: 'entertainment',
-              confidence: 1,
-            },
-          ]),
-        },
-      ],
-    })
-    const { results } = await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'NETFLIX.COM',
-          type: 'debit',
-          amount: 500,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
-      ],
-      baseConfig,
-      emptyContext
-    )
+    answers([
+      {
+        id: 'tx1',
+        displayDescription: 'Netflix',
+        category: 'entertainment',
+        confidence: 1,
+      },
+    ])
+    const { results } = await enrich([input('tx1', 'NETFLIX.COM')])
     expect(results.get('tx1')?.confidence).toBeLessThan(1)
     expect(results.get('tx1')?.confidence).toBeGreaterThanOrEqual(0.95)
   })
 
-  it('reads the first text block when the model thinks first (5.5 models)', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [
-        { type: 'thinking', thinking: '', signature: 'sig' },
-        {
-          type: 'text',
-          text: JSON.stringify([
-            { id: 'tx1', displayDescription: 'Devoto', category: 'groceries' },
-          ]),
-        },
-      ],
+  it('asks the chosen model for low effort: classification, not reasoning', async () => {
+    answers([])
+    await enrich([input('tx1', 'X')])
+    expect(client.requests[0]).toMatchObject({
+      model: 'claude-haiku-4-5',
+      effort: 'low',
     })
-    const { results } = await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'SUPERMERCADO DEVOTO',
-          type: 'debit',
-          amount: 500,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
-      ],
-      baseConfig,
-      emptyContext
+  })
+
+  it('finds the JSON when the model wraps it in fences', async () => {
+    answers(
+      '```json\n[{"id":"tx1","displayDescription":"Devoto","category":"groceries"}]\n```'
     )
+    const { results } = await enrich([input('tx1', 'DEVOTO')])
     expect(results.get('tx1')?.category).toBe('groceries')
   })
 
-  it('asks for low effort: classification, not reasoning', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: '[]' }],
-    })
-    await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'X',
-          type: 'debit',
-          amount: 1,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
-      ],
-      baseConfig,
-      emptyContext
-    )
-    expect(messagesCreateMock).toHaveBeenCalledWith(
-      expect.objectContaining({ output_config: { effort: 'low' } })
-    )
-  })
-
   it('falls back to 0.7 confidence when AI omits the field', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify([
-            {
-              id: 'tx1',
-              displayDescription: 'Unknown',
-              category: 'uncategorized',
-            },
-          ]),
-        },
-      ],
-    })
-    const { results } = await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'XXXX',
-          type: 'debit',
-          amount: 100,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
-      ],
-      baseConfig,
-      emptyContext
-    )
+    answers([
+      { id: 'tx1', displayDescription: 'Unknown', category: 'uncategorized' },
+    ])
+    const { results } = await enrich([input('tx1', 'XXXX')])
     expect(results.get('tx1')?.confidence).toBe(0.7)
   })
 
   it('clamps out-of-range confidence values to [0, 0.99]', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify([
-            {
-              id: 'tx1',
-              displayDescription: 'Netflix',
-              category: 'entertainment',
-              confidence: 1.5,
-            },
-            {
-              id: 'tx2',
-              displayDescription: 'Unknown',
-              category: 'uncategorized',
-              confidence: -0.2,
-            },
-          ]),
-        },
-      ],
-    })
-    const { results } = await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'NETFLIX',
-          type: 'debit',
-          amount: 9.99,
-          currency: 'USD',
-          source: 'credit_card',
-        },
-        {
-          id: 'tx2',
-          description: 'XXXX',
-          type: 'debit',
-          amount: 100,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
-      ],
-      baseConfig,
-      emptyContext
-    )
+    answers([
+      {
+        id: 'tx1',
+        displayDescription: 'Netflix',
+        category: 'entertainment',
+        confidence: 1.5,
+      },
+      {
+        id: 'tx2',
+        displayDescription: 'Unknown',
+        category: 'uncategorized',
+        confidence: -0.2,
+      },
+    ])
+    const { results } = await enrich([
+      input('tx1', 'NETFLIX', { currency: 'USD', source: 'credit_card' }),
+      input('tx2', 'XXXX'),
+    ])
     // The upper bound is just below 1: confidence 1 is reserved for the user
     expect(results.get('tx1')?.confidence).toBe(0.99)
     expect(results.get('tx2')?.confidence).toBe(0)
   })
 
   it('includes custom categories in the system prompt', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify([
-            { id: 'tx1', displayDescription: 'Starbucks', category: 'coffee' },
-          ]),
-        },
-      ],
+    answers([
+      { id: 'tx1', displayDescription: 'Starbucks', category: 'coffee' },
+    ])
+    const { results } = await enrich([input('tx1', 'STARBUCKS')], {
+      ...emptyContext,
+      customCategories,
     })
-    const { results } = await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'STARBUCKS',
-          type: 'debit',
-          amount: 200,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
-      ],
-      baseConfig,
-      { ...emptyContext, customCategories }
-    )
     expect(results.get('tx1')?.category).toBe('coffee')
-    const systemPrompt = systemTextOf(messagesCreateMock.mock.calls[0][0])
-    expect(systemPrompt).toContain('coffee — Coffee')
+    expect(client.requests[0].system).toContain('coffee — Coffee')
   })
 
   it('coerces invalid category to uncategorized', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify([
-            {
-              id: 'tx1',
-              displayDescription: 'Somewhere',
-              category: 'food_and_drink',
-            },
-          ]),
-        },
-      ],
-    })
-    const { results } = await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'SOMEWHERE',
-          type: 'debit',
-          amount: 100,
-          currency: 'USD',
-          source: 'credit_card',
-        },
-      ],
-      baseConfig,
-      emptyContext
-    )
+    answers([
+      {
+        id: 'tx1',
+        displayDescription: 'Somewhere',
+        category: 'food_and_drink',
+      },
+    ])
+    const { results } = await enrich([input('tx1', 'SOMEWHERE')])
     expect(results.get('tx1')?.category).toBe(Category.Uncategorized)
   })
 
-  it('silently drops items with missing id', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify([
-            { displayDescription: 'No ID', category: 'groceries' },
-            {
-              id: 'tx2',
-              displayDescription: 'Netflix',
-              category: 'entertainment',
-            },
-          ]),
-        },
-      ],
+  it('skips only items without a string id, and ignores fields of the wrong type', async () => {
+    answers([
+      { id: 'tx1', displayDescription: 'Devoto', category: null },
+      { id: 'tx2', displayDescription: 5, category: 'groceries' },
+      { id: 7, displayDescription: 'Seven', category: 'groceries' },
+      null,
+      'tx3',
+    ])
+
+    const { results, partialFailure } = await enrich([
+      input('tx1', 'DEVOTO'),
+      input('tx2', 'TATA 123'),
+    ])
+
+    expect([...results.keys()]).toEqual(['tx1', 'tx2'])
+    // A category that is not a string is no answer: uncategorized, as when
+    // the field is missing; the name the model gave is kept.
+    expect(results.get('tx1')).toMatchObject({
+      category: Category.Uncategorized,
+      displayDescription: 'Devoto',
     })
-    const { results } = await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'DEVOTO',
-          type: 'debit',
-          amount: 100,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
-        {
-          id: 'tx2',
-          description: 'NETFLIX',
-          type: 'debit',
-          amount: 9.99,
-          currency: 'USD',
-          source: 'credit_card',
-        },
-      ],
-      baseConfig,
-      emptyContext
-    )
+    // A name that is not a string is ignored: the row keeps its description.
+    expect(results.get('tx2')).toMatchObject({
+      category: 'groceries',
+      displayDescription: 'TATA 123',
+    })
+    expect(partialFailure).toBeUndefined()
+    expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
+  it('silently drops items with missing id', async () => {
+    answers([
+      { displayDescription: 'No ID', category: 'groceries' },
+      { id: 'tx2', displayDescription: 'Netflix', category: 'entertainment' },
+    ])
+    const { results } = await enrich([
+      input('tx1', 'DEVOTO'),
+      input('tx2', 'NETFLIX'),
+    ])
     expect(results.has('tx1')).toBe(false)
     expect(results.get('tx2')?.category).toBe('entertainment')
   })
 
-  it('throws on unparseable JSON response', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: 'not json at all' }],
-    })
-    await expect(
-      enrichTransactionsWithAi(
-        [
-          {
-            id: 'tx1',
-            description: 'DEVOTO',
-            type: 'debit',
-            amount: 100,
-            currency: 'UYU',
-            source: 'bank_account',
-          },
-        ],
-        baseConfig,
-        emptyContext
-      )
-    ).rejects.toThrow('No se pudo parsear la respuesta del modelo')
+  it('throws on unparseable JSON response, and reports it as a bad response', async () => {
+    answers('not json at all')
+
+    const error = await enrich([input('tx1', 'DEVOTO')]).catch(
+      (e: unknown) => e
+    )
+
+    expect(error).toBeInstanceOf(AiError)
+    expect((error as AiError).kind).toBe('bad_response')
+    expect((error as AiError).message).toMatch(
+      /^no se pudo parsear la respuesta del modelo/
+    )
+    expect(reporting.captureError).toHaveBeenCalledTimes(1)
+    expect(reporting.captureError).toHaveBeenCalledWith(error, 'ai')
+  })
+
+  it('treats JSON that is not a list as a bad response, not a crash', async () => {
+    answers('{"id":"tx1"}')
+
+    const error = await enrich([input('tx1', 'DEVOTO')]).catch(
+      (e: unknown) => e
+    )
+
+    expect(error).toBeInstanceOf(AiError)
+    expect((error as AiError).kind).toBe('bad_response')
   })
 
   it('includes source field in the user message', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: '[]' }],
-    })
-    await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'PAGO RECIBIDO',
-          type: 'credit',
-          amount: 1200,
-          currency: 'UYU',
-          source: 'credit_card',
-        },
-      ],
-      baseConfig,
-      emptyContext
-    )
-    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0]
-      .content as string
-    expect(userMessage).toContain('"source":"credit_card"')
+    answers([])
+    await enrich([
+      input('tx1', 'PAGO RECIBIDO', {
+        type: 'credit',
+        amount: 1200,
+        source: 'credit_card',
+      }),
+    ])
+    expect(userMessageOf(0)).toContain('"source":"credit_card"')
   })
 
   it('includes correction examples in the user message', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: '[]' }],
-    })
-    await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'DEVOTO',
-          type: 'debit',
-          amount: 100,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
+    answers([])
+    await enrich([input('tx1', 'DEVOTO')], {
+      descriptionExamples: [
+        { raw: 'SUPERM DEVOTO', friendly: 'Devoto', category: 'groceries' },
       ],
-      baseConfig,
-      {
-        descriptionExamples: [
-          { raw: 'SUPERM DEVOTO', friendly: 'Devoto', category: 'groceries' },
-        ],
-        categoryExamples: [{ merchant: 'tintoreria', category: 'personal' }],
-        customCategories: noCustomCategories,
-        customPatterns: [],
-      }
-    )
-    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0]
-      .content as string
-    expect(userMessage).toContain('SUPERM DEVOTO')
-    expect(userMessage).toContain('tintoreria')
+      categoryExamples: [{ merchant: 'tintoreria', category: 'personal' }],
+      customCategories: noCustomCategories,
+      customPatterns: [],
+    })
+    expect(userMessageOf(0)).toContain('SUPERM DEVOTO')
+    expect(userMessageOf(0)).toContain('tintoreria')
   })
 
   it('includes custom pattern rules in the user message', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: '[]' }],
-    })
+    answers([])
     const customPatterns: CustomPattern[] = [
       {
         id: 'cp1',
@@ -623,22 +449,11 @@ describe('enrichTransactionsWithAi', () => {
         createdAt: '',
       },
     ]
-    await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'FARMACIA DEVOTO',
-          type: 'debit',
-          amount: 200,
-          currency: 'UYU',
-          source: 'bank_account',
-        },
-      ],
-      baseConfig,
-      { ...emptyContext, customPatterns }
-    )
-    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0]
-      .content as string
+    await enrich([input('tx1', 'FARMACIA DEVOTO')], {
+      ...emptyContext,
+      customPatterns,
+    })
+    const userMessage = userMessageOf(0)
     expect(userMessage).toContain('USER RULES (always apply these')
     expect(userMessage).toContain('contains "farmacia" → healthcare')
     expect(userMessage).toContain('starts with "ute " → utilities')
@@ -646,82 +461,41 @@ describe('enrichTransactionsWithAi', () => {
   })
 
   it('omits USER RULES block when no custom patterns exist', async () => {
-    messagesCreateMock.mockResolvedValue({
-      content: [{ type: 'text', text: '[]' }],
-    })
-    await enrichTransactionsWithAi(
-      [
-        {
-          id: 'tx1',
-          description: 'NETFLIX',
-          type: 'debit',
-          amount: 9.99,
-          currency: 'USD',
-          source: 'credit_card',
-        },
-      ],
-      baseConfig,
-      emptyContext
-    )
-    const userMessage = messagesCreateMock.mock.calls[0][0].messages[0]
-      .content as string
-    expect(userMessage).not.toContain('USER RULES')
+    answers([])
+    await enrich([input('tx1', 'NETFLIX')])
+    expect(userMessageOf(0)).not.toContain('USER RULES')
   })
 
-  it('throws when API call fails (caller handles fallback)', async () => {
-    messagesCreateMock.mockRejectedValue(new Error('API error'))
-    await expect(
-      enrichTransactionsWithAi(
-        [
-          {
-            id: 'tx1',
-            description: 'DEVOTO',
-            type: 'debit',
-            amount: 100,
-            currency: 'UYU',
-            source: 'bank_account',
-          },
-        ],
-        baseConfig,
-        emptyContext
-      )
-    ).rejects.toThrow('API error')
+  it('throws when the call fails (caller handles fallback)', async () => {
+    answers({ throws: new AiError('unavailable') })
+    await expect(enrich([input('tx1', 'DEVOTO')])).rejects.toThrow(
+      'el servicio de IA no está disponible en este momento'
+    )
   })
 })
 
 describe('enrichTransactionsWithAi — response truncation', () => {
-  beforeEach(() => {
-    messagesCreateMock.mockReset()
-  })
+  it('passes a cut-off answer on as the client named it', async () => {
+    const truncated = new AiError('truncated')
+    answers({ throws: truncated })
 
-  it('reports a truncated response as such instead of failing on parse', async () => {
-    // A response cut off at max_tokens leaves invalid JSON behind. Without a
-    // stop_reason check the user only ever sees a confusing parse error.
-    messagesCreateMock.mockResolvedValue({
-      stop_reason: 'max_tokens',
-      content: [{ type: 'text', text: '[{"id":"tx0","displayDescri' }],
-    })
-
-    await expect(
-      enrichTransactionsWithAi(makeInputs(1), baseConfig, emptyContext)
-    ).rejects.toThrow(/truncad/i)
+    await expect(enrich(makeInputs(1))).rejects.toBe(truncated)
   })
 
   it('keeps every batch inside the output token budget, and sends them all', async () => {
-    messagesCreateMock.mockResolvedValue(textResponse([]))
+    answers([])
 
-    await enrichTransactionsWithAi(makeInputs(400), baseConfig, emptyContext)
+    await enrich(makeInputs(400))
 
-    const batchSizes = messagesCreateMock.mock.calls.map((call) => {
-      const userMessage = call[0].messages[0].content as string
-      return (userMessage.match(/"id":"tx\d+"/g) ?? []).length
-    })
+    const batchSizes = client.requests.map(
+      (request) => (request.user.match(/"id":"tx\d+"/g) ?? []).length
+    )
 
     // The property that matters is the one that broke: a batch's worst-case
     // output must fit under max_tokens. Each result object costs ~60 output
     // tokens, and max_tokens is 16000.
     const WORST_CASE_TOKENS_PER_RESULT = 60
-    const maxTokens = call0MaxTokens()
+    const maxTokens = client.requests[0].maxTokens
     expect(Math.max(...batchSizes) * WORST_CASE_TOKENS_PER_RESULT).toBeLessThan(
       maxTokens
     )
@@ -733,205 +507,200 @@ describe('enrichTransactionsWithAi — response truncation', () => {
 
 describe('enrichTransactionsWithAi — partial batch failures', () => {
   beforeEach(() => {
-    messagesCreateMock.mockReset()
+    reporting.captureError.mockClear()
   })
 
-  it('keeps results from batches that succeeded when a later batch fails', async () => {
-    messagesCreateMock
-      .mockResolvedValueOnce(
-        textResponse([
-          { id: 'tx0', displayDescription: 'Devoto', category: 'groceries' },
-        ])
-      )
-      .mockRejectedValueOnce(new Error('529 overloaded'))
-      .mockResolvedValueOnce(textResponse([]))
-
-    const { results, partialFailure } = await enrichTransactionsWithAi(
-      makeInputs(450),
-      baseConfig,
-      emptyContext
+  it('keeps results from batches that succeeded, and says how many failed and why', async () => {
+    answers(
+      [{ id: 'tx0', displayDescription: 'Devoto', category: 'groceries' }],
+      { throws: new AiError('unavailable') },
+      []
     )
 
+    const { results, partialFailure } = await enrich(makeInputs(450))
+
     expect(results.get('tx0')?.category).toBe('groceries')
-    expect(partialFailure).toContain('529 overloaded')
+    expect(partialFailure).toBe(
+      '1 de 3 lotes fallaron (el servicio de IA no está disponible en este momento)'
+    )
   })
 
   it('reports no partial failure when every batch succeeds', async () => {
-    messagesCreateMock.mockResolvedValue(textResponse([]))
+    answers([])
 
-    const { partialFailure } = await enrichTransactionsWithAi(
-      makeInputs(450),
-      baseConfig,
-      emptyContext
-    )
+    const { partialFailure } = await enrich(makeInputs(450))
 
     expect(partialFailure).toBeUndefined()
   })
 
   it('rethrows the first error as thrown when every batch fails', async () => {
     const bug = new TypeError('x is undefined')
-    messagesCreateMock.mockRejectedValue(bug)
+    answers({ throws: bug })
 
-    await expect(
-      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
-    ).rejects.toBe(bug)
+    await expect(enrich(makeInputs(450))).rejects.toBe(bug)
   })
 
   it('reports a code bug in a later batch even when an earlier one hit a rate limit', async () => {
-    reporting.captureError.mockClear()
     const bug = new TypeError('x is undefined')
-    messagesCreateMock
-      .mockRejectedValueOnce(new Error('429 rate_limit_error'))
-      .mockRejectedValueOnce(bug)
-      .mockResolvedValueOnce(textResponse([]))
+    answers({ throws: new AiError('rate_limit') }, { throws: bug }, [])
 
-    await enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
+    await enrich(makeInputs(450))
 
     expect(reporting.captureError).toHaveBeenCalledTimes(1)
     expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
   })
 
   it('reports a code bug once even when every batch fails with it', async () => {
-    reporting.captureError.mockClear()
     const bug = new TypeError('x is undefined')
-    messagesCreateMock.mockRejectedValue(bug)
+    answers({ throws: bug })
 
-    await expect(
-      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
-    ).rejects.toBe(bug)
+    await expect(enrich(makeInputs(450))).rejects.toBe(bug)
 
     expect(reporting.captureError).toHaveBeenCalledTimes(1)
     expect(reporting.captureError).toHaveBeenCalledWith(bug, 'ai')
   })
 
   it('reports a bug before the first batch, then rethrows it', async () => {
-    reporting.captureError.mockClear()
+    answers([])
     const malformed = { ...emptyContext, customCategories: null as never }
 
-    const error = await enrichTransactionsWithAi(
-      makeInputs(10),
-      baseConfig,
-      malformed
-    ).catch((e: unknown) => e)
+    const error = await enrich(makeInputs(10), malformed).catch(
+      (e: unknown) => e
+    )
 
     expect(error).toBeInstanceOf(TypeError)
     expect(reporting.captureError).toHaveBeenCalledWith(error, 'ai')
   })
 
   it('counts the batches a bad key left unsent as failed', async () => {
-    messagesCreateMock
-      .mockResolvedValueOnce(textResponse([]))
-      .mockRejectedValueOnce(
-        Object.assign(new Error('403 forbidden'), { status: 403 })
-      )
+    answers([], { throws: new AiError('auth') })
 
-    const { partialFailure } = await enrichTransactionsWithAi(
-      makeInputs(450),
-      baseConfig,
-      emptyContext
+    const { partialFailure } = await enrich(makeInputs(450))
+
+    expect(partialFailure).toBe(
+      '2 de 3 lotes fallaron (la clave API de Anthropic no es válida)'
     )
-
-    expect(partialFailure).toMatch(/^2 de 3 lotes fallaron/)
   })
 
   it('keeps the message of a non-Error rejection', async () => {
-    messagesCreateMock.mockRejectedValue({ message: '529 overloaded' })
+    answers({ throws: { message: '529 overloaded' } })
 
-    await expect(
-      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
-    ).rejects.toThrow('529 overloaded')
+    await expect(enrich(makeInputs(450))).rejects.toThrow('529 overloaded')
   })
 
-  it('does not report a bad key', async () => {
-    reporting.captureError.mockClear()
-    messagesCreateMock.mockRejectedValue(new Error('401 invalid x-api-key'))
-
-    await expect(
-      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
-    ).rejects.toThrow()
+  it('does not report a failure the user can act on', async () => {
+    for (const kind of [
+      'auth',
+      'rate_limit',
+      'billing',
+      'unavailable',
+      'network',
+      'stale_chunk',
+      'refused',
+      'truncated',
+    ] as const) {
+      answers({ throws: new AiError(kind) })
+      await expect(enrich(makeInputs(450))).rejects.toThrow()
+    }
 
     expect(reporting.captureError).not.toHaveBeenCalled()
   })
 
   it('throws when no batch succeeds at all', async () => {
-    messagesCreateMock.mockRejectedValue(new Error('401 invalid x-api-key'))
+    answers({ throws: new AiError('auth') })
 
-    await expect(
-      enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
-    ).rejects.toThrow('401 invalid x-api-key')
+    await expect(enrich(makeInputs(450))).rejects.toThrow(
+      'la clave API de Anthropic no es válida'
+    )
   })
 })
 
 describe('enrichTransactionsWithAi — prompt caching', () => {
-  beforeEach(() => {
-    messagesCreateMock.mockReset()
-  })
-
   it('marks the system prompt as cacheable so it is not re-billed per batch', async () => {
-    messagesCreateMock.mockResolvedValue(textResponse([]))
+    answers([])
 
-    await enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
+    await enrich(makeInputs(450))
 
-    for (const call of messagesCreateMock.mock.calls) {
-      expect(call[0].system).toEqual([
-        expect.objectContaining({
-          type: 'text',
-          cache_control: { type: 'ephemeral' },
-        }),
-      ])
+    expect(client.requests).toHaveLength(3)
+    for (const request of client.requests) {
+      expect(request.cacheSystem).toBe(true)
     }
   })
 
   it('sends a byte-identical system prompt across batches so the prefix hits', async () => {
-    messagesCreateMock.mockResolvedValue(textResponse([]))
+    answers([])
 
-    await enrichTransactionsWithAi(makeInputs(450), baseConfig, emptyContext)
+    await enrich(makeInputs(450))
 
-    const prompts = messagesCreateMock.mock.calls.map((c) => systemTextOf(c[0]))
+    const prompts = client.requests.map((request) => request.system)
     expect(new Set(prompts).size).toBe(1)
   })
 })
 
-describe('enrichTransactionsWithAi — non-retryable failures', () => {
-  beforeEach(() => {
-    messagesCreateMock.mockReset()
+describe('enrichTransactionsWithAi — failures every batch would repeat', () => {
+  // A bad key or an empty account fails identically for every batch.
+  // Carrying on would fire one doomed request per batch before the user
+  // sees the same message.
+  it('stops immediately on an auth error instead of retrying every batch', async () => {
+    answers({ throws: new AiError('auth') })
+
+    await expect(enrich(makeInputs(600))).rejects.toThrow(
+      'la clave API de Anthropic no es válida'
+    )
+
+    expect(client.requests).toHaveLength(1)
   })
 
-  it('stops immediately on an auth error instead of retrying every batch', async () => {
-    // A bad key fails identically for every batch. Carrying on would fire
-    // one doomed request per batch before the user sees the same message.
-    const authError = Object.assign(new Error('invalid x-api-key'), {
-      status: 401,
-    })
-    messagesCreateMock.mockRejectedValue(authError)
+  it('names the failure that stopped the run, not an earlier transient one', async () => {
+    const auth = new AiError('auth')
+    answers({ throws: new AiError('rate_limit') }, { throws: auth })
 
-    await expect(
-      enrichTransactionsWithAi(makeInputs(600), baseConfig, emptyContext)
-    ).rejects.toThrow('invalid x-api-key')
+    await expect(enrich(makeInputs(600))).rejects.toBe(auth)
+  })
 
-    expect(messagesCreateMock).toHaveBeenCalledTimes(1)
+  it('suggests a smaller import when some batches were cut off', async () => {
+    answers([], { throws: new AiError('truncated') }, [])
+
+    const { partialFailure } = await enrich(makeInputs(450))
+
+    expect(partialFailure).toBe(
+      '1 de 3 lotes fallaron (la respuesta del modelo quedó truncada (límite de tokens alcanzado); probá importar menos transacciones a la vez)'
+    )
+  })
+
+  it('names the failure that stopped a partial run', async () => {
+    answers(
+      [],
+      { throws: new AiError('rate_limit') },
+      { throws: new AiError('auth') }
+    )
+
+    const { partialFailure } = await enrich(makeInputs(600))
+
+    expect(partialFailure).toBe(
+      '3 de 4 lotes fallaron (la clave API de Anthropic no es válida)'
+    )
+  })
+
+  it('stops immediately when the account has no credit', async () => {
+    answers({ throws: new AiError('billing') })
+
+    await expect(enrich(makeInputs(600))).rejects.toThrow(
+      'la cuenta de Anthropic no tiene saldo'
+    )
+
+    expect(client.requests).toHaveLength(1)
   })
 
   it('keeps trying later batches after a transient error', async () => {
-    const overloaded = Object.assign(new Error('529 overloaded'), {
-      status: 529,
-    })
-    messagesCreateMock
-      .mockRejectedValueOnce(overloaded)
-      .mockResolvedValue(
-        textResponse([
-          { id: 'tx199', displayDescription: 'Devoto', category: 'groceries' },
-        ])
-      )
+    answers({ throws: new AiError('unavailable') }, [
+      { id: 'tx199', displayDescription: 'Devoto', category: 'groceries' },
+    ])
 
-    const { results, partialFailure } = await enrichTransactionsWithAi(
-      makeInputs(450),
-      baseConfig,
-      emptyContext
-    )
+    const { results, partialFailure } = await enrich(makeInputs(450))
 
-    expect(messagesCreateMock.mock.calls.length).toBeGreaterThan(1)
+    expect(client.requests.length).toBeGreaterThan(1)
     expect(results.get('tx199')?.category).toBe('groceries')
-    expect(partialFailure).toContain('529 overloaded')
+    expect(partialFailure).toContain('no está disponible')
   })
 })

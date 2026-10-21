@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { CategorizerEval } from './CategorizerEval'
+import { AiError } from '../../services/ai/ai-error'
 import type { Transaction } from '../../models'
 import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
 
@@ -10,6 +11,16 @@ vi.mock('../../services/ai/jev-classifier', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../services/ai/jev-classifier')>()
   return { ...actual, classifyWithJev: jev.classifyWithJev }
+})
+
+const agreement = vi.hoisted(() => ({ rulePredictions: vi.fn() }))
+vi.mock('../../services/categorizer/eval/agreement', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../../services/categorizer/eval/agreement')
+    >()
+  agreement.rulePredictions.mockImplementation(actual.rulePredictions)
+  return { ...actual, rulePredictions: agreement.rulePredictions }
 })
 
 const claude = vi.hoisted(() => ({ enrichTransactionsWithAi: vi.fn() }))
@@ -42,7 +53,12 @@ const labelled = () => [
   tx('UBER TRIP', { category: 'transport', categoryConfidence: 0.8 }),
 ]
 
-beforeEach(() => {
+beforeEach(async () => {
+  const actual = await vi.importActual<
+    typeof import('../../services/categorizer/eval/agreement')
+  >('../../services/categorizer/eval/agreement')
+  agreement.rulePredictions.mockReset()
+  agreement.rulePredictions.mockImplementation(actual.rulePredictions)
   replaceMerchantCategoryOverrides({})
   claude.enrichTransactionsWithAi.mockReset()
   jev.classifyWithJev.mockReset()
@@ -188,5 +204,80 @@ describe('CategorizerEval — Jev', () => {
     const row = await screen.findByTestId('eval-jev')
     expect(row.textContent).toContain('2 de 2')
     expect(row.textContent).toContain('100 %')
+  })
+})
+
+describe('CategorizerEval — failures', () => {
+  function renderEval() {
+    render(
+      <CategorizerEval
+        transactions={labelled()}
+        claudeApiKey="sk-test"
+        aiModel="claude-haiku"
+      />
+    )
+  }
+
+  it('says why a Claude run failed in Spanish', async () => {
+    claude.enrichTransactionsWithAi.mockRejectedValue(new AiError('billing'))
+    renderEval()
+
+    await userEvent.click(screen.getByRole('button', { name: /Evaluar IA/ }))
+
+    expect(
+      await screen.findByText(/la cuenta de Anthropic no tiene saldo/)
+    ).toBeInTheDocument()
+  })
+
+  it('shows and logs the text of a Claude-run failure that is not an AI error', async () => {
+    const bug = new TypeError('x is undefined')
+    claude.enrichTransactionsWithAi.mockRejectedValue(bug)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderEval()
+
+    await userEvent.click(screen.getByRole('button', { name: /Evaluar IA/ }))
+
+    expect(await screen.findByText(/x is undefined/)).toBeInTheDocument()
+    expect(logged).toHaveBeenCalledWith('[Dev] evaluation failed:', bug)
+    logged.mockRestore()
+  })
+
+  it('describes a failure of the rules as the rules, not as the AI', async () => {
+    const bug = new TypeError('rules exploded')
+    agreement.rulePredictions.mockImplementation(() => {
+      throw bug
+    })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderEval()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Evaluar reglas/ })
+    )
+
+    expect(
+      await screen.findByText('Reglas: rules exploded')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/error inesperado del servicio de IA/)
+    ).not.toBeInTheDocument()
+    expect(logged).toHaveBeenCalledWith('[Dev] evaluation failed:', bug)
+    logged.mockRestore()
+  })
+
+  it("keeps Jev's own explanation of an OpenRouter failure", async () => {
+    jev.classifyWithJev.mockRejectedValue(
+      new Error('Jev respondió 401: invalid key')
+    )
+    renderEval()
+
+    await userEvent.type(
+      screen.getByLabelText(/OpenRouter API key/),
+      'or-test-key'
+    )
+    await userEvent.click(screen.getByRole('button', { name: /Evaluar Jev/ }))
+
+    expect(
+      await screen.findByText(/Jev respondió 401: invalid key/)
+    ).toBeInTheDocument()
   })
 })
