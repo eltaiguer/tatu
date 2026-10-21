@@ -103,7 +103,14 @@ const READ_FAILED = 'Error al leer el archivo'
 // Bytes, not text: the encoding is decided by the import (#192), since
 // Santander exports are Latin-1 and File.text() would read them as UTF-8.
 async function readFileBytes(file: File): Promise<ArrayBuffer> {
-  if (typeof file.arrayBuffer === 'function') return file.arrayBuffer()
+  if (typeof file.arrayBuffer === 'function') {
+    try {
+      return await file.arrayBuffer()
+    } catch (error) {
+      // e.g. NotReadableError: the file moved or lost permission.
+      throw new StatementReadError(READ_FAILED, { cause: error })
+    }
+  }
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader()

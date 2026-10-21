@@ -126,6 +126,11 @@ const failsToRead = (error: StatementReadError) =>
   vi.fn<Parameters<Importer>, ReturnType<Importer>>(async () => {
     throw error
   })
+// Rejects before reporting progress with something other than a read error.
+const failsUnexpectedly = (error: unknown) =>
+  vi.fn<Parameters<Importer>, ReturnType<Importer>>(async () => {
+    throw error
+  })
 const failsToSave = (error: unknown) =>
   vi.fn<Parameters<Importer>, ReturnType<Importer>>(
     async (_file, { onParsed }) => {
@@ -443,6 +448,52 @@ describe('ImportCSV', () => {
     expect(screen.getByText('Error al leer el archivo')).toBeInTheDocument()
     expect(importer).not.toHaveBeenCalled()
     expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+  })
+
+  it('treats a file the browser cannot read as a read error', async () => {
+    const unreadable = new DOMException(
+      'The file could not be read',
+      'NotReadableError'
+    )
+    const file = new File(['a,b'], 'movements.csv', { type: 'text/csv' })
+    Object.defineProperty(file, 'arrayBuffer', {
+      value: () => Promise.reject(unreadable),
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const importer = parsedThen()
+    render(<ImportCSV onTransactionsImported={importer} />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: { files: [file] },
+    })
+
+    expect(
+      await screen.findByText('Error al validar archivo')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Error al leer el archivo')).toBeInTheDocument()
+    expect(importer).not.toHaveBeenCalled()
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ cause: unreadable }),
+      'import-parse'
+    )
+  })
+
+  it('reports an unexpected failure before progress as an import failure', async () => {
+    // e.g. a categorizer bug: the file was fine, the app was not.
+    const bug = new TypeError(
+      "Cannot read properties of undefined (reading 'type')"
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<ImportCSV onTransactionsImported={failsUnexpectedly(bug)} />)
+
+    pick()
+
+    expect(await screen.findByText('No se pudo importar')).toBeInTheDocument()
+    expect(
+      screen.getByText('No se pudo guardar la importación')
+    ).toBeInTheDocument()
+    expect(reporting.captureError).toHaveBeenCalledTimes(1)
+    expect(reporting.captureError).toHaveBeenCalledWith(bug, 'import')
   })
 
   it('treats a reader that returns no bytes as a read error', async () => {

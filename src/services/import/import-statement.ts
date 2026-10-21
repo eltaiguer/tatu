@@ -1,7 +1,7 @@
 // The import pipeline, behind one function: a Santander statement file in,
 // its rows saved for the signed-in user out. The import dialog only picks the
 // file and reports the outcome; every step between lives here or below.
-import type { FileType } from '../../models'
+import type { FileType, ParsedData } from '../../models'
 import type { Repository } from '../repository/repository'
 import { decodeCsvBytes } from '../parsers/decode-csv'
 import { parseCSV } from '../parsers/csv-parser'
@@ -48,9 +48,9 @@ export interface ImportStatementOptions {
  * content (#57), AI-enriched when enabled, inserted, recorded as an import
  * run, and rows stored garbled repaired in place.
  *
- * A file it cannot read rejects with a `StatementReadError`: the parser's
- * own message (Spanish, says what to do), or for a crash a generic one with
- * the crash as `cause`. Anything else — a save failure, the session ended —
+ * A file it cannot decode or parse rejects with a `StatementReadError`: the
+ * parser's own message (Spanish, says what to do), or for a parser crash a
+ * generic one with the crash as `cause`. Anything else — a save failure, the session ended —
  * is whatever `importTransactions` throws.
  */
 export async function importStatement(
@@ -77,12 +77,11 @@ export async function importStatement(
 }
 
 function readStatement(file: StatementFile) {
+  let csvContent: string
+  let parsed: ParsedData
   try {
-    const csvContent = decodeCsvBytes(file.bytes)
-    // Parsers are pure and return uncategorized rows; categorize before
-    // anything else sees them (dedup, AI enrichment, the store).
-    const parsed = categorizeParsedData(parseCSV(csvContent, file.fileName))
-    return { csvContent, parsed }
+    csvContent = decodeCsvBytes(file.bytes)
+    parsed = parseCSV(csvContent, file.fileName)
   } catch (error) {
     // A crash may mean Santander changed its export format: kept as the
     // cause, so error reporting sends it.
@@ -91,4 +90,8 @@ function readStatement(file: StatementFile) {
     }
     throw new StatementReadError(UNREADABLE, { cause: error })
   }
+  // Parsers are pure and return uncategorized rows; categorize before
+  // anything else sees them (dedup, AI enrichment, the store). Outside the
+  // read: a categorizer crash is a bug in the app, not a bad file.
+  return { csvContent, parsed: categorizeParsedData(parsed) }
 }

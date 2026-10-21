@@ -11,6 +11,7 @@ import { replaceMerchantCategoryOverrides } from '../categorizer/category-overri
 import { replaceCustomPatterns } from '../categorizer/custom-patterns'
 import { StatementReadError } from '../../utils/user-error'
 import { parseCSV } from '../parsers/csv-parser'
+import { categorizeParsedData } from '../categorizer/import-categorization'
 import { sha256Hex } from '../supabase/import-runs'
 import { decodeCsvBytes } from '../parsers/decode-csv'
 
@@ -18,11 +19,18 @@ import { decodeCsvBytes } from '../parsers/decode-csv'
 // repository and shown in the store. Real parsers, real categorizer, real
 // sample files; persistence is the in-memory repository adapter.
 
-// The real parser, wrapped only so one test can make it crash the way a
-// parser bug would (no real input does).
+// The real parser and categorizer, wrapped only so a test can make one crash
+// the way a bug would (no real input does).
 vi.mock('../parsers/csv-parser', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../parsers/csv-parser')>()
   return { ...actual, parseCSV: vi.fn(actual.parseCSV) }
+})
+vi.mock('../categorizer/import-categorization', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../categorizer/import-categorization')
+    >()
+  return { ...actual, categorizeParsedData: vi.fn(actual.categorizeParsedData) }
 })
 
 const SAMPLES = join(__dirname, '../../../samples')
@@ -251,6 +259,25 @@ describe('importStatement', () => {
         'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.'
       )
       expect((error as StatementReadError).cause).toBe(bug)
+      expect(repo.importRuns).toEqual([])
+    })
+
+    it('lets a categorizer crash through as itself: a bug, not a bad file', async () => {
+      const repo = signedIn()
+      const bug = new TypeError(
+        "Cannot read properties of undefined (reading 'type')"
+      )
+      vi.mocked(categorizeParsedData).mockImplementationOnce(() => {
+        throw bug
+      })
+
+      const error = await importStatement(
+        repo,
+        sample('UYUmovements.csv')
+      ).catch((e: unknown) => e)
+
+      expect(error).toBe(bug)
+      expect(error).not.toBeInstanceOf(StatementReadError)
       expect(repo.importRuns).toEqual([])
     })
 
