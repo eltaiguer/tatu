@@ -46,6 +46,8 @@ import {
   loadUserPreferences,
   saveUserPreferences,
 } from '../supabase/user-preferences'
+import { loadCachedInsights, saveInsights } from '../supabase/ai-insights'
+import { resetUserSupabaseData } from '../supabase/reset'
 import { UserFacingError } from '../../utils/user-error'
 import { groupByPatch, insertSequentially, settleChunks } from './batching'
 import {
@@ -207,5 +209,10 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
     deleteCustomPattern: (id) => deleteCustomPattern(session, id),
     upsertCustomCategory: (input) => upsertCustomCategory(session, input),
     archiveCustomCategory: (id) => archiveCustomCategory(session, id),
+
+    loadInsights: () => loadCachedInsights(session),
+    saveInsights: (row) => saveInsights(session, row),
+
+    resetAll: () => resetUserSupabaseData(session),
   }
 }

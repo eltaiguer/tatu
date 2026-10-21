@@ -10,6 +10,7 @@ import type { DescriptionOverrideRecord } from '../supabase/description-override
 import type { CustomCategoryRecord } from '../supabase/custom-categories'
 import type { UserPreferences } from '../supabase/user-preferences'
 import type { CustomPattern } from '../categorizer/custom-patterns'
+import type { CachedInsightsRow } from '../supabase/ai-insights'
 import { UserFacingError } from '../../utils/user-error'
 import { groupByPatch, insertSequentially, settleChunks } from './batching'
 import {
@@ -53,6 +54,10 @@ export type InMemoryOp =
   | 'upsertCustomCategory'
   | 'archiveCustomCategory'
   | 'savePreferences'
+  | 'loadInsights'
+  | 'saveInsights'
+  /** One request per table; `when` receives `[tableName]`. */
+  | 'resetAll'
 
 interface Fault {
   op: InMemoryOp
@@ -90,6 +95,7 @@ export interface InMemoryRepository extends Repository {
   customPatterns: Map<string, CustomPattern>
   customCategories: Map<string, CustomCategoryRecord>
   preferences: UserPreferences | null
+  insights: CachedInsightsRow | null
   importRuns: ImportRunRecord[]
   /** Makes matching requests of `op` reject. */
   failOn(
@@ -173,6 +179,7 @@ export function createInMemoryRepository(
       (seed.customCategories ?? []).map((c) => [c.id, c])
     ),
     preferences: seed.preferences ?? null,
+    insights: null,
     importRuns: [],
     requests,
     actingUserId: userId,
@@ -464,6 +471,40 @@ export function createInMemoryRepository(
       const existing = repo.customCategories.get(id)
       if (existing)
         repo.customCategories.set(id, { ...existing, isArchived: true })
+    },
+
+    async loadInsights() {
+      await request('loadInsights')
+      return repo.insights && authorized() ? { ...repo.insights } : null
+    },
+    async saveInsights(row) {
+      await request('saveInsights')
+      requireAuthorized()
+      repo.insights = { ...row, generatedAt: new Date().toISOString() }
+    },
+
+    // Same tables, same order and same failure rule as the Supabase adapter.
+    async resetAll() {
+      if (!authorized()) return
+      const steps: [string, () => void][] = [
+        ['transactions', () => table.clear()],
+        ['import_runs', () => repo.importRuns.splice(0)],
+        ['category_overrides', () => repo.categoryOverrides.clear()],
+        ['description_overrides', () => repo.descriptionOverrides.clear()],
+        ['custom_categories', () => repo.customCategories.clear()],
+        ['custom_patterns', () => repo.customPatterns.clear()],
+        ['user_preferences', () => (repo.preferences = null)],
+      ]
+      for (const [name, clear] of steps) {
+        await request('resetAll', [name])
+        clear()
+      }
+      try {
+        await request('resetAll', ['ai_insights'])
+        repo.insights = null
+      } catch (error) {
+        console.warn('Could not clear cached insights during reset:', error)
+      }
     },
   }
 

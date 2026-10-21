@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Transaction } from '../../models'
 import { createInMemoryRepository } from './in-memory-repository'
 
@@ -49,5 +49,106 @@ describe('in-memory repository fidelity', () => {
 
     expect(transactions.find((t) => t.id === 'a')?.importId).toBe('run-1')
     expect(transactions.find((t) => t.id === 'b')?.importId).toBeUndefined()
+  })
+})
+
+describe('in-memory repository — insights cache', () => {
+  it('has no cached insights until some are saved, then reads them back', async () => {
+    const repo = createInMemoryRepository()
+    expect(await repo.loadInsights()).toBeNull()
+
+    await repo.saveInsights({
+      inputHash: 'h1',
+      model: 'm',
+      insights: { insights: [] },
+    })
+
+    expect(await repo.loadInsights()).toMatchObject({
+      inputHash: 'h1',
+      model: 'm',
+      insights: { insights: [] },
+      generatedAt: expect.any(String),
+    })
+  })
+})
+
+describe('in-memory repository — reset all data', () => {
+  function seeded() {
+    return createInMemoryRepository({
+      transactions: [tx('a')],
+      deleted: [tx('b')],
+      categoryOverrides: [
+        {
+          merchantNormalized: 'disco',
+          category: 'groceries',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      customCategories: [
+        {
+          id: 'mine',
+          label: 'Mía',
+          color: '#f00',
+          isIgnored: false,
+          isArchived: false,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      preferences: {
+        theme: 'dark',
+        currency: 'UYU',
+        fxRate: 41,
+        claudeApiKey: 'sk',
+        aiEnabled: true,
+        aiModel: 'm',
+      },
+    })
+  }
+
+  it('deletes everything the user has stored', async () => {
+    const repo = seeded()
+    await repo.saveInsights({
+      inputHash: 'h',
+      model: 'm',
+      insights: { insights: [] },
+    })
+
+    await repo.resetAll()
+
+    expect(repo.has('a') || repo.has('b')).toBe(false)
+    expect(await repo.loadWorkspace()).toMatchObject({
+      transactions: [],
+      categoryOverrides: [],
+      customCategories: [],
+      preferences: null,
+    })
+    expect(await repo.loadInsights()).toBeNull()
+  })
+
+  it('stops at the first table that fails, keeping what it did not reach', async () => {
+    const repo = seeded()
+    repo.failOn('resetAll', {
+      when: ([table]) => table === 'custom_categories',
+    })
+
+    await expect(repo.resetAll()).rejects.toThrow('resetAll failed')
+
+    expect(repo.has('a')).toBe(false)
+    expect(repo.categoryOverrides.size).toBe(0)
+    expect(repo.customCategories.size).toBe(1)
+    expect(repo.preferences).not.toBeNull()
+  })
+
+  it('still succeeds when only the insights cache cannot be cleared', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const repo = seeded()
+    repo.failOn('resetAll', { when: ([table]) => table === 'ai_insights' })
+
+    await expect(repo.resetAll()).resolves.toBeUndefined()
+
+    expect(repo.preferences).toBeNull()
+    expect(warn).toHaveBeenCalled()
   })
 })

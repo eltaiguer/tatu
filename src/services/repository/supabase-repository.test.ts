@@ -408,3 +408,71 @@ describe('Supabase repository — workspace', () => {
     expect(snapshot.preferences).toBeNull()
   })
 })
+
+describe('Supabase repository — insights cache', () => {
+  it('reads no cache as null, and reads back what it saved', async () => {
+    const repo = createSupabaseRepository(session)
+    expect(await repo.loadInsights()).toBeNull()
+
+    await repo.saveInsights({
+      inputHash: 'h1',
+      model: 'm',
+      insights: { insights: [] },
+    })
+    db.rows('ai_insights')[0].generated_at = '2026-06-30T12:00:00.000Z'
+
+    expect(await repo.loadInsights()).toEqual({
+      inputHash: 'h1',
+      model: 'm',
+      insights: { insights: [] },
+      generatedAt: '2026-06-30T12:00:00.000Z',
+    })
+    expect(db.rows('ai_insights')).toHaveLength(1)
+  })
+})
+
+describe('Supabase repository — reset all data', () => {
+  const RESET_TABLES = [
+    'transactions',
+    'import_runs',
+    'category_overrides',
+    'description_overrides',
+    'custom_categories',
+    'custom_patterns',
+    'user_preferences',
+    'ai_insights',
+  ]
+
+  it("deletes the user's rows from every table, and nobody else's", async () => {
+    db.seed('transactions', [row('tx-1'), row('tx-2', { user_id: 'user-2' })])
+    db.seed('user_preferences', [{ user_id: 'user-1' }, { user_id: 'user-2' }])
+    const repo = createSupabaseRepository(session)
+
+    await repo.resetAll()
+
+    const deletes = db.requests.filter((r) => r.op === 'delete')
+    expect(deletes.map((r) => r.table)).toEqual(RESET_TABLES)
+    expect(deletes.every((r) => r.eq.user_id === 'user-1')).toBe(true)
+    expect(db.rows('transactions').map((r) => r.user_id)).toEqual(['user-2'])
+    expect(db.rows('user_preferences')).toEqual([{ user_id: 'user-2' }])
+  })
+
+  it('stops at the first table that fails', async () => {
+    db.failWhen((r) => r.op === 'delete' && r.table === 'custom_categories')
+    const repo = createSupabaseRepository(session)
+
+    await expect(repo.resetAll()).rejects.toThrow('request failed')
+
+    const deletes = db.requests.filter((r) => r.op === 'delete')
+    expect(deletes.map((r) => r.table)).toEqual(RESET_TABLES.slice(0, 5))
+  })
+
+  it('still succeeds when the insights table is missing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    db.failWhen((r) => r.table === 'ai_insights', { code: '42P01' })
+    const repo = createSupabaseRepository(session)
+
+    await expect(repo.resetAll()).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalled()
+  })
+})
