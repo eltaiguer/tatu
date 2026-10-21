@@ -257,7 +257,7 @@ export function ImportCSV({
       // dead API key looks identical to poor categorization. Total failure
       // and partial failure need different wording: telling the user "no
       // disponible" when 10 of 12 batches did enrich is simply wrong.
-      if (aiError) {
+      if (aiFailure !== undefined || aiError !== undefined) {
         toast.warning(
           `Categorización con IA no disponible: ${aiErrorMessage(aiFailure)}. Se usaron las reglas de categorización.`
         )

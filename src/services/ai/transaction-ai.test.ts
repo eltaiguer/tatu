@@ -328,6 +328,25 @@ describe('enrichTransactionsWithAi', () => {
     expect(results.get('tx1')?.category).toBe(Category.Uncategorized)
   })
 
+  it('skips items of the wrong shape instead of losing the batch', async () => {
+    answers([
+      { id: 'tx1', displayDescription: 'Devoto', category: 5 },
+      { id: 7, displayDescription: 'Seven', category: 'groceries' },
+      null,
+      'tx3',
+      { id: 'tx4', displayDescription: 'Netflix', category: 'entertainment' },
+    ])
+
+    const { results, partialFailure } = await enrich([
+      input('tx1', 'DEVOTO'),
+      input('tx4', 'NETFLIX'),
+    ])
+
+    expect([...results.keys()]).toEqual(['tx4'])
+    expect(partialFailure).toBeUndefined()
+    expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
   it('silently drops items with missing id', async () => {
     answers([
       { displayDescription: 'No ID', category: 'groceries' },

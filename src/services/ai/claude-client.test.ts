@@ -211,6 +211,16 @@ describe('createClaudeClient — failures', () => {
     ).toBe('billing')
   })
 
+  it('does not read no credit from a 400 that merely mentions the words', async () => {
+    const tooBig = apiError(
+      400,
+      'invalid_request_error',
+      'prompt is too long: insufficient max_tokens for the requested credit'
+    )
+
+    expect(await failureOf(tooBig)).toBe(tooBig)
+  })
+
   it('treats a lost, timed-out or aborted connection as the network', async () => {
     expect(await kindOf(new sdk.APIConnectionError({}))).toBe('network')
     expect(await kindOf(new sdk.APIConnectionTimeoutError())).toBe('network')
@@ -271,23 +281,35 @@ describe('createClaudeClient — failures', () => {
     )
   })
 
-  it('retries loading the SDK after a failed load', async () => {
-    const { load } = fakeSdk(answer([{ type: 'text', text: 'ok' }]))
+  it('does not load the SDK again after a failed load (one per batch would follow)', async () => {
+    const failure = new Error('module evaluation failed')
     let attempts = 0
     const client = createClaudeClient('sk-test', () => {
       attempts += 1
-      if (attempts === 1) {
-        return Promise.reject(new TypeError('Failed to fetch'))
-      }
-      return load()
+      return Promise.reject(failure)
     })
 
-    await expect(client.complete(request)).rejects.toThrow()
-    await expect(client.complete(request)).resolves.toBe('ok')
+    await expect(client.complete(request)).rejects.toBe(failure)
+    await expect(client.complete(request)).rejects.toBe(failure)
+
+    expect(attempts).toBe(1)
   })
 })
 
 describe('AiError', () => {
+  it('has a generic message for a bad response, and one refusal text', () => {
+    expect(new AiError('bad_response').message).toBe(
+      'Respuesta inesperada del modelo.'
+    )
+    expect(new AiError('refused').message).toBe(
+      'El modelo rechazó la solicitud.'
+    )
+    expect(AiError.refused('cyber').message).toBe(
+      'El modelo rechazó la solicitud (cyber).'
+    )
+    expect(AiError.refused('cyber').kind).toBe('refused')
+  })
+
   it('says which failures a later request cannot get past', () => {
     const retryable = (kind: AiErrorKind) => new AiError(kind).retryable
 

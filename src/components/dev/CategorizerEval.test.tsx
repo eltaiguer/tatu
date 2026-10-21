@@ -13,6 +13,16 @@ vi.mock('../../services/ai/jev-classifier', async (importOriginal) => {
   return { ...actual, classifyWithJev: jev.classifyWithJev }
 })
 
+const agreement = vi.hoisted(() => ({ rulePredictions: vi.fn() }))
+vi.mock('../../services/categorizer/eval/agreement', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('../../services/categorizer/eval/agreement')
+    >()
+  agreement.rulePredictions.mockImplementation(actual.rulePredictions)
+  return { ...actual, rulePredictions: agreement.rulePredictions }
+})
+
 const claude = vi.hoisted(() => ({ enrichTransactionsWithAi: vi.fn() }))
 vi.mock('../../services/ai/transaction-ai', async (importOriginal) => {
   const actual =
@@ -43,7 +53,12 @@ const labelled = () => [
   tx('UBER TRIP', { category: 'transport', categoryConfidence: 0.8 }),
 ]
 
-beforeEach(() => {
+beforeEach(async () => {
+  const actual = await vi.importActual<
+    typeof import('../../services/categorizer/eval/agreement')
+  >('../../services/categorizer/eval/agreement')
+  agreement.rulePredictions.mockReset()
+  agreement.rulePredictions.mockImplementation(actual.rulePredictions)
   replaceMerchantCategoryOverrides({})
   claude.enrichTransactionsWithAi.mockReset()
   jev.classifyWithJev.mockReset()
@@ -214,10 +229,10 @@ describe('CategorizerEval — failures', () => {
     ).toBeInTheDocument()
   })
 
-  it('never shows the raw text of an unexpected Claude failure', async () => {
-    claude.enrichTransactionsWithAi.mockRejectedValue(
-      new TypeError('x is undefined')
-    )
+  it('never shows the raw text of an unexpected Claude failure, but logs it', async () => {
+    const bug = new TypeError('x is undefined')
+    claude.enrichTransactionsWithAi.mockRejectedValue(bug)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     renderEval()
 
     await userEvent.click(screen.getByRole('button', { name: /Evaluar IA/ }))
@@ -226,6 +241,30 @@ describe('CategorizerEval — failures', () => {
       await screen.findByText(/error inesperado del servicio de IA/)
     ).toBeInTheDocument()
     expect(screen.queryByText(/x is undefined/)).not.toBeInTheDocument()
+    expect(logged).toHaveBeenCalledWith('[Dev] evaluation failed:', bug)
+    logged.mockRestore()
+  })
+
+  it('describes a failure of the rules as the rules, not as the AI', async () => {
+    const bug = new TypeError('rules exploded')
+    agreement.rulePredictions.mockImplementation(() => {
+      throw bug
+    })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderEval()
+
+    await userEvent.click(
+      screen.getByRole('button', { name: /Evaluar reglas/ })
+    )
+
+    expect(
+      await screen.findByText(/las reglas fallaron: rules exploded/)
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText(/error inesperado del servicio de IA/)
+    ).not.toBeInTheDocument()
+    expect(logged).toHaveBeenCalledWith('[Dev] evaluation failed:', bug)
+    logged.mockRestore()
   })
 
   it("keeps Jev's own explanation of an OpenRouter failure", async () => {

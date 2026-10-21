@@ -113,6 +113,16 @@ export function isNetworkError(error: unknown): boolean {
   )
 }
 
+// The browser's words for a lazy chunk that is gone after a deploy (#62):
+// Chrome/Firefox, then Safari.
+const CHUNK_LOAD_FAILED =
+  /dynamically imported module|importing a module script failed/i
+
+/** A lazy chunk that failed to load, by the browser's messages. */
+export function isChunkLoadError(error: unknown): boolean {
+  return CHUNK_LOAD_FAILED.test(errorMessage(error))
+}
+
 export function sentryOptions(dsn: string): Sentry.BrowserOptions {
   return {
     dsn,

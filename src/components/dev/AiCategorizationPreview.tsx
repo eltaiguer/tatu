@@ -15,7 +15,7 @@ import { categorizeTransaction } from '../../services/categorizer/transaction-ca
 import { getDescriptionOverride } from '../../services/descriptions/description-overrides'
 import { getMerchantCategoryOverride } from '../../services/categorizer/category-overrides'
 import { formatDate } from '../../utils/formatting'
-import { aiErrorMessage } from '../../utils/user-error'
+import { aiErrorMessage, isUnexpectedAiError } from '../../utils/user-error'
 
 interface Props {
   transactions: Transaction[]
@@ -198,6 +198,7 @@ export function AiCategorizationPreview({
         toEnrich.length
       )
     } catch (err) {
+      if (isUnexpectedAiError(err)) console.error('AI preview failed:', err)
       setError(aiErrorMessage(err))
       setRunState('error')
     }

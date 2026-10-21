@@ -9,7 +9,7 @@
  * type and stack and is reported. Callers depend on `ClaudeClient`, not the
  * SDK: tests hand them a fake (`src/test/fake-claude-client.ts`).
  */
-import { errorMessage } from '../monitoring/error-reporting'
+import { errorMessage, isChunkLoadError } from '../monitoring/error-reporting'
 import { AiError } from './ai-error'
 
 export type SdkModule = typeof import('@anthropic-ai/sdk')
@@ -36,27 +36,22 @@ export interface ClaudeClient {
 
 const loadAnthropicSdk = () => import('@anthropic-ai/sdk')
 
-// The browser's words for a lazy chunk that is gone after a deploy.
-const CHUNK_LOAD_FAILED =
-  /dynamically imported module|importing a module script failed/i
-
 export function createClaudeClient(
   apiKey: string,
   loadSdk: () => Promise<SdkModule> = loadAnthropicSdk
 ): ClaudeClient {
   let loaded: Promise<SdkModule> | null = null
 
+  // Loaded once per client. A failed load stays failed for this client (one
+  // run): every batch would otherwise load it again, and fail again. The
+  // next run builds a new client and tries afresh.
   async function sdk(): Promise<SdkModule> {
-    loaded ??= loadSdk()
-    try {
-      return await loaded
-    } catch (error) {
-      loaded = null // the next call tries again
-      if (CHUNK_LOAD_FAILED.test(errorMessage(error))) {
-        throw new AiError('stale_chunk', undefined, error)
-      }
-      throw error
-    }
+    loaded ??= loadSdk().catch((error: unknown) => {
+      throw isChunkLoadError(error)
+        ? new AiError('stale_chunk', undefined, error)
+        : error
+    })
+    return loaded
   }
 
   let anthropic: InstanceType<SdkModule['default']> | null = null
@@ -103,8 +98,8 @@ interface ClaudeResponse {
 /**
  * The SDK error as an `AiError`, or null when it is not one the user can act
  * on (a 400 for a malformed request, a 404 for an unknown model: our bug).
- * By class and `status`/`type`; the message only tells no credit from other
- * 400s, since the API reports a low balance as an invalid request.
+ * By class and `status`/`type`; the message only tells Anthropic's own
+ * "credit balance is too low" 400 from other invalid requests.
  */
 function classify(error: unknown, sdk: SdkModule): AiError | null {
   // Before APIError: these are APIErrors without a status.
@@ -118,7 +113,7 @@ function classify(error: unknown, sdk: SdkModule): AiError | null {
   const { status, type } = error
   if (
     type === 'billing_error' ||
-    (status === 400 && /credit|billing|insufficient/i.test(error.message))
+    (status === 400 && /credit balance is too low/i.test(error.message))
   ) {
     return new AiError('billing', undefined, error)
   }
@@ -152,18 +147,17 @@ function classify(error: unknown, sdk: SdkModule): AiError | null {
  */
 function answerText(response: ClaudeResponse): string {
   if (response.stop_reason === 'refusal') {
-    const category = response.stop_details?.category
-    throw new AiError(
-      'refused',
-      `El modelo rechazó la solicitud${category ? ` (${category})` : ''}.`
-    )
+    throw AiError.refused(response.stop_details?.category)
   }
   if (response.stop_reason === 'max_tokens') {
     throw new AiError('truncated')
   }
   const block = response.content.find((b) => b.type === 'text')
   if (!block || typeof block.text !== 'string') {
-    throw new AiError('bad_response')
+    throw new AiError(
+      'bad_response',
+      'Respuesta inesperada del modelo (sin bloque de texto).'
+    )
   }
   return block.text
 }

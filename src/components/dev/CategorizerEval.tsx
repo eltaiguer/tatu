@@ -15,7 +15,7 @@ import {
 } from '../../services/ai/jev-classifier'
 import { JEV_MODEL } from '../../services/ai/models'
 import { errorMessage } from '../../services/monitoring/error-reporting'
-import { aiErrorMessage } from '../../utils/user-error'
+import { aiErrorMessage, isUnexpectedAiError } from '../../utils/user-error'
 import { getCategoryDefinition } from '../../services/categories/category-registry'
 import {
   labelledRows,
@@ -116,12 +116,14 @@ export function CategorizerEval({
   const [jevKey, setJevKey] = useState('')
   const [jev, setJev] = useState<EngineRun>(idle)
 
-  // Claude failures read as the rest of the app shows them; Jev's (an
-  // OpenRouter call, not Claude) are already written for this panel.
+  // Each engine names its own failures: Claude's read as the rest of the
+  // app shows them, Jev's (an OpenRouter call) are already written for this
+  // panel, and the rules' are a bug in our code.
   async function runEngine(
     set: (run: EngineRun) => void,
     classify: Classify,
-    describeError: (error: unknown) => string = aiErrorMessage
+    describeError: (error: unknown) => string,
+    isBug: (error: unknown) => boolean = () => true
   ) {
     set({ ...idle(), state: 'running' })
     try {
@@ -139,6 +141,7 @@ export function CategorizerEval({
         error: partialFailure ?? null,
       })
     } catch (e) {
+      if (isBug(e)) console.error('[Dev] evaluation failed:', e)
       set({
         ...idle(),
         state: 'error',
@@ -148,32 +151,41 @@ export function CategorizerEval({
   }
 
   const handleRules = () =>
-    runEngine(setRules, async (s) => ({ predictions: rulePredictions(s) }))
+    runEngine(
+      setRules,
+      async (s) => ({ predictions: rulePredictions(s) }),
+      (e) => `las reglas fallaron: ${errorMessage(e)}`
+    )
 
   const handleClaude = () =>
-    runEngine(setClaude, async (s) => {
-      const config: AiConfig = {
-        apiKey: claudeApiKey,
-        enabled: true,
-        model: aiModel,
-      }
-      // No correction examples and no custom patterns: the labels came
-      // from those, so handing them to the model would score its memory.
-      const { results, partialFailure } = await enrichTransactionsWithAi(
-        toInputs(s),
-        config,
-        {
-          descriptionExamples: [],
-          categoryExamples: [],
-          customCategories: listCustomCategories(),
-          customPatterns: [],
+    runEngine(
+      setClaude,
+      async (s) => {
+        const config: AiConfig = {
+          apiKey: claudeApiKey,
+          enabled: true,
+          model: aiModel,
         }
-      )
-      return {
-        predictions: new Map([...results].map(([id, r]) => [id, r.category])),
-        partialFailure,
-      }
-    })
+        // No correction examples and no custom patterns: the labels came
+        // from those, so handing them to the model would score its memory.
+        const { results, partialFailure } = await enrichTransactionsWithAi(
+          toInputs(s),
+          config,
+          {
+            descriptionExamples: [],
+            categoryExamples: [],
+            customCategories: listCustomCategories(),
+            customPatterns: [],
+          }
+        )
+        return {
+          predictions: new Map([...results].map(([id, r]) => [id, r.category])),
+          partialFailure,
+        }
+      },
+      aiErrorMessage,
+      isUnexpectedAiError
+    )
 
   const handleJev = () =>
     runEngine(
@@ -189,7 +201,8 @@ export function CategorizerEval({
           partialFailure,
         }
       },
-      errorMessage
+      errorMessage,
+      () => false
     )
 
   const engines: Array<{ key: string; name: string; run: EngineRun }> = [

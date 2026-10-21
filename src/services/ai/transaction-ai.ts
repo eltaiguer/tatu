@@ -237,18 +237,24 @@ function parseBatchResponse(
   }
 
   const results: AiEnrichmentResult[] = []
-  for (const item of parsed as Array<{
-    id?: string
-    displayDescription?: unknown
-    category?: string
-    confidence?: unknown
-  }>) {
-    if (!item?.id || typeof item.displayDescription !== 'string') continue
+  // An item of the wrong shape is skipped, like one without an id: the rest
+  // of the batch is still good, and the row keeps its rule-based result.
+  for (const raw of parsed as unknown[]) {
+    if (typeof raw !== 'object' || raw === null) continue
+    const item = raw as Record<string, unknown>
+    if (typeof item.id !== 'string' || !item.id) continue
+    if (typeof item.displayDescription !== 'string') continue
+    if (item.category !== undefined && typeof item.category !== 'string') {
+      continue
+    }
     const rawConfidence =
       typeof item.confidence === 'number' ? item.confidence : 0.7
     results.push({
       id: item.id,
-      category: validateCategory(item.category ?? '', context.customCategories),
+      category: validateCategory(
+        (item.category as string | undefined) ?? '',
+        context.customCategories
+      ),
       displayDescription:
         item.displayDescription.trim() ||
         (inputs.find((t) => t.id === item.id)?.description ?? item.id),

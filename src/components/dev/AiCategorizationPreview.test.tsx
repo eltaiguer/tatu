@@ -72,4 +72,29 @@ describe('AiCategorizationPreview', () => {
       await screen.findByText('la clave API de Anthropic no es válida')
     ).toBeInTheDocument()
   })
+
+  it('logs an unexpected failure it does not show', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 3, 15, 12))
+    const bug = new TypeError('x is undefined')
+    ai.enrichTransactionsWithAi.mockRejectedValue(bug)
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    render(
+      <AiCategorizationPreview
+        transactions={[at('mar-1', '2026-03-01T00:00:00.000Z')]}
+        claudeApiKey="sk-test"
+        aiModel="claude-haiku"
+      />
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Ejecutar preview de IA' })
+    )
+
+    expect(
+      await screen.findByText('error inesperado del servicio de IA')
+    ).toBeInTheDocument()
+    expect(logged).toHaveBeenCalledWith('AI preview failed:', bug)
+    logged.mockRestore()
+  })
 })

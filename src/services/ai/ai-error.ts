@@ -37,7 +37,7 @@ const MESSAGES: Record<AiErrorKind, string> = {
   truncated:
     'La respuesta del modelo quedó truncada (límite de tokens alcanzado).',
   refused: 'El modelo rechazó la solicitud.',
-  bad_response: 'Respuesta inesperada del modelo (sin bloque de texto).',
+  bad_response: 'Respuesta inesperada del modelo.',
 }
 
 // Failures every later request would repeat: a batch loop stops on these
@@ -69,5 +69,15 @@ export class AiError extends Error {
     this.retryable = !FINAL.has(kind)
     // ES2020 has no `cause` option on Error.
     if (cause !== undefined) this.cause = cause
+  }
+
+  /** A refusal, naming the safety category when the API gives one. */
+  static refused(category?: string | null): AiError {
+    return new AiError(
+      'refused',
+      category
+        ? `${MESSAGES.refused.slice(0, -1)} (${category}).`
+        : MESSAGES.refused
+    )
   }
 }

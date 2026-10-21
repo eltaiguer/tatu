@@ -1,6 +1,6 @@
 import {
   captureError,
-  errorMessage,
+  isChunkLoadError,
   isNetworkError,
 } from '../services/monitoring/error-reporting'
 import { AiError } from '../services/ai/ai-error'
@@ -113,10 +113,6 @@ export function aiPartialFailureMessage(
   return `${failed} de ${total} lotes fallaron (${aiErrorMessage(firstError)})`
 }
 
-// The browser's words for a lazy chunk that is gone after a deploy.
-const CHUNK_LOAD_FAILED =
-  /dynamically imported module|importing a module script failed/i
-
 /**
  * Whether an AI failure is worth reporting as a bug: an answer not in the
  * shape asked for, or anything the Claude client did not explain (a code
@@ -128,7 +124,7 @@ const CHUNK_LOAD_FAILED =
 export function isUnexpectedAiError(error: unknown): boolean {
   if (error instanceof AiError) return error.kind === 'bad_response'
   // Belt and braces for a failure that reached here without the client.
-  return !(isNetworkError(error) || CHUNK_LOAD_FAILED.test(errorMessage(error)))
+  return !(isNetworkError(error) || isChunkLoadError(error))
 }
 
 /** Reports an AI failure only when it is a bug (see isUnexpectedAiError). */

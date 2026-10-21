@@ -723,6 +723,33 @@ describe('ImportCSV', () => {
     expect(toastMock.warning).not.toHaveBeenCalled()
   })
 
+  it('warns about an AI failure even when its message is empty', async () => {
+    parseCSVMock.mockReturnValue(makeParsedData())
+    const onTransactionsImported = vi.fn().mockResolvedValue({
+      added: [makeTx('tx-1')],
+      duplicates: [],
+      aiError: '',
+      aiFailure: new Error(''),
+    })
+
+    render(<ImportCSV onTransactionsImported={onTransactionsImported} />)
+
+    fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+      target: {
+        files: [new File(['a,b'], 'movements.csv', { type: 'text/csv' })],
+      },
+    })
+
+    expect(
+      await screen.findByText('Importación completada')
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        'Categorización con IA no disponible: error inesperado del servicio de IA. Se usaron las reglas de categorización.'
+      )
+    )
+  })
+
   it('says the AI run was incomplete, not unavailable, on a partial failure', async () => {
     // "no disponible" would be plainly wrong when 10 of 12 batches enriched.
     parseCSVMock.mockReturnValue(makeParsedData())

@@ -49,8 +49,8 @@ Report errors to Sentry (free Developer plan) with `@sentry/react`, through
   dropped: they carry `explained: true`. So are chunk-load and network
   failures, which the app already recovers from. AI failures are classified
   once, by the Claude client (`services/ai/claude-client.ts`), from the SDK
-  error's class, `status` and `type` (the message only tells no credit from
-  other 400s): a bad key, rate limit, no credit, outage, lost connection,
+  error's class, `status` and `type` (the message is read only for
+  Anthropic's "credit balance is too low" 400): a bad key, rate limit, no credit, outage, lost connection,
   truncated or refused answer and a stale SDK chunk become an `AiError` and
   are not reported; a malformed answer (`bad_response`) and anything the
   client did not explain — a JavaScript engine error (`TypeError`,
