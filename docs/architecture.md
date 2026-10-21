@@ -368,11 +368,19 @@ totals match only with `showIgnored`; categories are compared through
 see Merchant key below), amounts by absolute value, search over display name +
 raw description + tags. `sortTransactions` orders the result.
 
-`useTransactionFiltering` only holds that state in React (seeded once from the
-URL; the view fills in its default period first), sorts, groups split parts
-under their parent, and paginates. It freezes the "últimos n meses" anchor
-(the newest row) when that period is chosen, so an import does not shift the
-window. Export writes the rows it is handed; if it ever has to filter, it calls
+`useTransactionFiltering` holds that state in React as one value (seeded once
+from the URL; the view fills in its default period first): it returns
+`filters` (a `FilterState`, period always set), `update(patch)` (merges the
+patch's defined fields; a patch that changes nothing keeps the same value, so
+the URL write-back stays quiet) and `clear()` (every filter back to its
+default, all dates, ignored rows hidden). Changing the filters keeps the page
+unless it no longer exists. The hook sorts, groups split parts under their
+parent (`groupSplitRows`) and paginates. It freezes the "últimos n meses"
+anchor (the newest row) when that period is chosen, so an import does not
+shift the window. `TransactionFilters` takes `filters` and emits patches;
+"filtrado" is `hasActiveFilters(filters)` (the period and "show ignored" don't
+count), and editing a date input makes a custom range that keeps the other end
+(`periodWithDateBound`). Export writes the rows it is handed; if it ever has to filter, it calls
 `filterTransactions`.
 
 - **Day distances** (transfer pairing's ±2 days, recurring cadences) count

@@ -12,6 +12,13 @@ import type { UrlFilterState, UrlPeriod } from './url-filters'
 // anything else that needs filtered rows (export, if it ever filters) calls
 // this too, so the two can't drift apart.
 
+// The view's filters: the URL state with the period always set (the view
+// fills in its default when the URL names none).
+export type FilterState = UrlFilterState & { period: UrlPeriod }
+
+// A change to some of the filters; fields left out (or undefined) stay.
+export type FilterPatch = Partial<FilterState>
+
 export type SortField = 'date' | 'amount' | 'description' | 'category'
 export type SortDirection = 'asc' | 'desc'
 

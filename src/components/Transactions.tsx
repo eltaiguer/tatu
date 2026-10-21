@@ -35,6 +35,7 @@ import {
   type UrlFilterState,
 } from '../services/filters/url-filters'
 import { getPeriodLabel } from '../services/filters/period-label'
+import { hasActiveFilters } from '../services/filters/transaction-filter'
 import { MonthNav } from './transactions/MonthNav'
 import { TotalsStrip } from './transactions/TotalsStrip'
 import { BulkBar } from './transactions/BulkBar'
@@ -89,31 +90,10 @@ export function Transactions({
   })
 
   const {
-    searchTerm,
-    setSearchTerm,
-    merchantFilter,
-    setMerchantFilter,
-    period,
-    setPeriod,
     filters,
-    dateFromFilter,
-    setDateFromFilter,
-    dateToFilter,
-    setDateToFilter,
-    categoryFilters,
-    setCategoryFilters,
-    accountFilters,
-    setAccountFilters,
-    currencyFilter,
-    setCurrencyFilter,
-    typeFilter,
-    setTypeFilter,
-    minAmount,
-    setMinAmount,
-    maxAmount,
-    setMaxAmount,
-    showIgnored,
-    setShowIgnored,
+    update: updateFilters,
+    clear: clearFilters,
+    dateRange,
     sortField,
     sortDirection,
     handleSort,
@@ -121,7 +101,6 @@ export function Transactions({
     filteredTransactions,
     ignoredCount,
     availableCategories,
-    hasActiveFilters,
     newestDate,
     currentPage,
     setCurrentPage,
@@ -131,11 +110,12 @@ export function Transactions({
     displayedRowCount,
     paginatedTransactionIds,
     filteredTransactionIds,
-    clearAllFilters,
   } = useTransactionFiltering({
     transactions,
     initial: initialState,
   })
+  const { merchant: merchantFilter, period } = filters
+  const filtered = hasActiveFilters(filters)
 
   // The merchant filter holds a merchant key (#120); the chip shows the same
   // label Resumen's "Mayores comercios" row did.
@@ -357,14 +337,14 @@ export function Transactions({
           <>
             {filteredTransactions.length} movimiento
             {filteredTransactions.length !== 1 ? 's' : ''}
-            {hasActiveFilters ? ' · filtrado' : ''} · {periodLabelText}
+            {filtered ? ' · filtrado' : ''} · {periodLabelText}
           </>
         }
         actions={
           <>
             <MonthNav
               period={period}
-              setPeriod={setPeriod}
+              setPeriod={(next) => updateFilters({ period: next })}
               newest={newestForNav}
             />
             <Button
@@ -384,7 +364,7 @@ export function Transactions({
         {merchantFilter && (
           <button
             type="button"
-            onClick={() => setMerchantFilter('')}
+            onClick={() => updateFilters({ merchant: '' })}
             aria-label={`Quitar filtro de comercio ${merchantLabel}`}
             className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs"
           >
@@ -432,27 +412,11 @@ export function Transactions({
 
       {/* Filters */}
       <TransactionFilters
-        searchTerm={searchTerm}
-        dateFromFilter={dateFromFilter}
-        dateToFilter={dateToFilter}
-        categoryFilters={categoryFilters}
-        accountFilters={accountFilters}
-        currencyFilter={currencyFilter}
-        typeFilter={typeFilter}
-        minAmount={minAmount}
-        maxAmount={maxAmount}
+        filters={filters}
+        dateRange={dateRange}
         availableCategories={availableCategories}
-        hasActiveFilters={hasActiveFilters}
-        onSearchChange={setSearchTerm}
-        onDateFromChange={setDateFromFilter}
-        onDateToChange={setDateToFilter}
-        onCategoryFiltersChange={setCategoryFilters}
-        onAccountFiltersChange={setAccountFilters}
-        onCurrencyChange={setCurrencyFilter}
-        onTypeChange={setTypeFilter}
-        onMinAmountChange={setMinAmount}
-        onMaxAmountChange={setMaxAmount}
-        onClearAll={clearAllFilters}
+        onChange={updateFilters}
+        onClearAll={clearFilters}
       />
 
       {/* Table */}
@@ -465,18 +429,18 @@ export function Transactions({
         pendingTransactionIds={pendingTransactionIds}
         sortField={sortField}
         sortDirection={sortDirection}
-        hasActiveFilters={hasActiveFilters}
+        hasActiveFilters={filtered}
         selectionCount={selectionCount}
         totalCount={filteredTransactions.length}
-        showIgnored={showIgnored}
+        showIgnored={filters.showIgnored}
         ignoredCount={ignoredCount}
         homeCurrency={homeCurrency}
         fxRate={fxRate}
         onToggleSelect={toggleTransactionSelection}
         onHeaderCheckboxChange={handleHeaderCheckboxChange}
         onSort={handleSort}
-        onClearFilters={clearAllFilters}
-        onShowIgnoredChange={setShowIgnored}
+        onClearFilters={clearFilters}
+        onShowIgnoredChange={(show) => updateFilters({ showIgnored: show })}
         onEdit={setEditingTransaction}
         onDelete={(transaction) => {
           void handleDeleteTransaction(transaction)

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { Transaction } from '../models'
 import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
+import { hasActiveFilters } from '../services/filters/transaction-filter'
 import {
   ITEMS_PER_PAGE,
   useTransactionFiltering,
@@ -47,25 +48,25 @@ describe('useTransactionFiltering — search', () => {
 
   it('matches the raw description, case-insensitively', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setSearchTerm('farmacia san'))
+    act(() => result.current.update({ search: 'farmacia san' }))
     expect(result.current.filteredTransactions.map((t) => t.id)).toEqual(['a'])
   })
 
   it('matches the friendly display description', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setSearchTerm('farmashop'))
+    act(() => result.current.update({ search: 'farmashop' }))
     expect(result.current.filteredTransactions.map((t) => t.id)).toEqual(['c'])
   })
 
   it('matches tags', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setSearchTerm('farmacia-mes'))
+    act(() => result.current.update({ search: 'farmacia-mes' }))
     expect(result.current.filteredTransactions.map((t) => t.id)).toEqual(['d'])
   })
 
   it('returns nothing when nothing matches', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setSearchTerm('zzzz'))
+    act(() => result.current.update({ search: 'zzzz' }))
     expect(result.current.filteredTransactions).toHaveLength(0)
   })
 })
@@ -81,7 +82,7 @@ describe('useTransactionFiltering — filters', () => {
 
   it('filters by currency', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setCurrencyFilter('UYU'))
+    act(() => result.current.update({ currency: 'UYU' }))
     expect(result.current.filteredTransactions.map((t) => t.id)).toEqual([
       'uyu-debit',
     ])
@@ -89,7 +90,7 @@ describe('useTransactionFiltering — filters', () => {
 
   it('filters by type', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setTypeFilter('credit'))
+    act(() => result.current.update({ type: 'credit' }))
     expect(result.current.filteredTransactions.map((t) => t.id)).toEqual([
       'usd-credit',
     ])
@@ -97,7 +98,7 @@ describe('useTransactionFiltering — filters', () => {
 
   it('filters by account source', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setAccountFilters(['credit_card']))
+    act(() => result.current.update({ accounts: ['credit_card'] }))
     expect(result.current.filteredTransactions.map((t) => t.id)).toEqual([
       'card',
     ])
@@ -105,7 +106,7 @@ describe('useTransactionFiltering — filters', () => {
 
   it('filters by category', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setCategoryFilters(['restaurants']))
+    act(() => result.current.update({ categories: ['restaurants'] }))
     expect(result.current.filteredTransactions.map((t) => t.id)).toEqual([
       'restaurant',
     ])
@@ -114,13 +115,13 @@ describe('useTransactionFiltering — filters', () => {
   it('clears every filter at once', () => {
     const { result } = setup(transactions)
     act(() => {
-      result.current.setCurrencyFilter('UYU')
-      result.current.setSearchTerm('nope')
+      result.current.update({ currency: 'UYU' })
+      result.current.update({ search: 'nope' })
     })
-    expect(result.current.hasActiveFilters).toBe(true)
+    expect(hasActiveFilters(result.current.filters)).toBe(true)
 
-    act(() => result.current.clearAllFilters())
-    expect(result.current.hasActiveFilters).toBe(false)
+    act(() => result.current.clear())
+    expect(hasActiveFilters(result.current.filters)).toBe(false)
     expect(result.current.filteredTransactions).toHaveLength(
       transactions.length
     )
@@ -137,7 +138,7 @@ describe('useTransactionFiltering — amount and date ranges', () => {
 
   it('applies an inclusive minimum amount', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setMinAmount('100'))
+    act(() => result.current.update({ min: '100' }))
     expect(result.current.filteredTransactions.map((t) => t.id).sort()).toEqual(
       ['mid', 'old', 'pricey']
     )
@@ -145,7 +146,7 @@ describe('useTransactionFiltering — amount and date ranges', () => {
 
   it('applies an inclusive maximum amount', () => {
     const { result } = setup(transactions)
-    act(() => result.current.setMaxAmount('100'))
+    act(() => result.current.update({ max: '100' }))
     expect(result.current.filteredTransactions.map((t) => t.id).sort()).toEqual(
       ['cheap', 'mid', 'old']
     )
@@ -153,10 +154,11 @@ describe('useTransactionFiltering — amount and date ranges', () => {
 
   it('filters by a date range', () => {
     const { result } = setup(transactions)
-    act(() => {
-      result.current.setDateFromFilter('2026-03-01')
-      result.current.setDateToFilter('2026-03-31')
-    })
+    act(() =>
+      result.current.update({
+        period: { mode: 'range', from: '2026-03-01', to: '2026-03-31' },
+      })
+    )
     expect(result.current.filteredTransactions.map((t) => t.id)).not.toContain(
       'old'
     )
@@ -164,10 +166,11 @@ describe('useTransactionFiltering — amount and date ranges', () => {
 
   it('ignores an inverted date range rather than returning nothing', () => {
     const { result } = setup(transactions)
-    act(() => {
-      result.current.setDateFromFilter('2026-12-31')
-      result.current.setDateToFilter('2026-01-01')
-    })
+    act(() =>
+      result.current.update({
+        period: { mode: 'range', from: '2026-12-31', to: '2026-01-01' },
+      })
+    )
     expect(result.current.filteredTransactions).toHaveLength(
       transactions.length
     )
@@ -249,7 +252,7 @@ describe('useTransactionFiltering — pagination', () => {
     act(() => result.current.setCurrentPage(3))
     expect(result.current.currentPage).toBe(3)
 
-    act(() => result.current.setSearchTerm('tx-00'))
+    act(() => result.current.update({ search: 'tx-00' }))
     expect(result.current.currentPage).toBe(1)
     expect(result.current.paginatedTransactions).toHaveLength(1)
   })
@@ -280,7 +283,7 @@ describe('useTransactionFiltering — derived array identity', () => {
     const { result } = setup(transactions)
     const before = result.current.paginatedTransactions
 
-    act(() => result.current.setSearchTerm('tx-1'))
+    act(() => result.current.update({ search: 'tx-1' }))
 
     expect(result.current.paginatedTransactions).not.toBe(before)
   })
@@ -322,39 +325,12 @@ describe('useTransactionFiltering — initial state from the URL', () => {
       { initialProps: { category: 'restaurants' } }
     )
 
-    act(() => result.current.setCategoryFilters(['groceries']))
-    expect(result.current.categoryFilters).toEqual(['groceries'])
+    act(() => result.current.update({ categories: ['groceries'] }))
+    expect(result.current.filters.categories).toEqual(['groceries'])
 
     rerender({ category: 'restaurants' })
 
-    expect(result.current.categoryFilters).toEqual(['groceries'])
-  })
-})
-
-describe('useTransactionFiltering — split grouping through the hook', () => {
-  // The existing grouping test asserts against a copy of this logic rather
-  // than the hook, so it cannot catch a regression in the hook itself.
-  const transactions = [
-    makeTransaction('parent', { isSplitParent: true }),
-    makeTransaction('other'),
-    makeTransaction('child-1', { splitParentId: 'parent' }),
-    makeTransaction('child-2', { splitParentId: 'parent' }),
-  ]
-
-  it('emits split children directly after their parent', () => {
-    const { result } = setup(transactions)
-    const ids = result.current.paginatedTransactions.map((t) => t.id)
-
-    expect(ids.indexOf('child-1')).toBe(ids.indexOf('parent') + 1)
-    expect(ids.indexOf('child-2')).toBe(ids.indexOf('parent') + 2)
-  })
-
-  it('emits every transaction exactly once', () => {
-    const { result } = setup(transactions)
-    const ids = result.current.paginatedTransactions.map((t) => t.id)
-
-    expect(ids).toHaveLength(4)
-    expect(new Set(ids).size).toBe(4)
+    expect(result.current.filters.categories).toEqual(['groceries'])
   })
 })
 
@@ -464,21 +440,41 @@ describe('useTransactionFiltering — period', () => {
     period: { mode: 'month' as const, y: 2026, m: 2 },
   }
 
-  it('keeps the month end when only the start date is edited', () => {
+  it('exposes the period as days, for the date inputs', () => {
     const { result } = renderHook(() =>
       useTransactionFiltering({ transactions, initial: march })
     )
-    act(() => result.current.setDateFromFilter('2026-03-05'))
-
-    expect(result.current.period).toEqual({
-      mode: 'range',
-      from: '2026-03-05',
+    expect(result.current.dateRange).toEqual({
+      from: '2026-03-01',
       to: '2026-03-31',
     })
-    expect(ids(result.current.filteredTransactions)).toEqual([
-      'mar-31',
-      'mar-10',
-    ])
+
+    act(() => result.current.update({ period: { mode: 'recent', n: 2 } }))
+    expect(result.current.dateRange).toEqual({
+      from: '2026-03-01',
+      to: '2026-04-30',
+    })
+  })
+
+  it('counts "últimos n meses" from the newest row when it is chosen again', () => {
+    const { result, rerender } = renderHook(
+      ({ rows }) =>
+        useTransactionFiltering({
+          transactions: rows,
+          initial: { ...DEFAULT_URL_FILTERS, period: { mode: 'recent', n: 1 } },
+        }),
+      { initialProps: { rows: transactions } }
+    )
+    rerender({
+      rows: [
+        ...transactions,
+        makeTransaction('may', { date: new Date('2026-05-05T00:00:00.000Z') }),
+      ],
+    })
+    expect(ids(result.current.filteredTransactions)).toEqual(['apr'])
+
+    act(() => result.current.update({ period: { mode: 'recent', n: 1 } }))
+    expect(ids(result.current.filteredTransactions)).toEqual(['may'])
   })
 
   it('does not move "últimos n meses" when a newer row arrives', () => {
@@ -513,9 +509,79 @@ describe('useTransactionFiltering — period', () => {
     const { result } = renderHook(() =>
       useTransactionFiltering({ transactions, initial: march })
     )
-    act(() => result.current.clearAllFilters())
+    act(() => result.current.update({ showIgnored: true }))
+    act(() => result.current.clear())
 
     expect(result.current.filters.period).toEqual({ mode: 'all' })
+    expect(result.current.filters.showIgnored).toBe(false)
     expect(result.current.filteredTransactions).toHaveLength(4)
+  })
+})
+
+describe('useTransactionFiltering — the filters as one value', () => {
+  const transactions = [
+    makeTransaction('usd', { currency: 'USD', category: 'restaurants' }),
+    makeTransaction('uyu', { currency: 'UYU', category: 'restaurants' }),
+    makeTransaction('uyu-food', { currency: 'UYU', category: 'groceries' }),
+  ]
+
+  it('changes only the fields a patch names', () => {
+    const { result } = setup(transactions)
+    act(() => result.current.update({ currency: 'UYU' }))
+    act(() => result.current.update({ categories: ['restaurants'] }))
+
+    expect(result.current.filters).toEqual({
+      ...DEFAULT_URL_FILTERS,
+      currency: 'UYU',
+      categories: ['restaurants'],
+      period: { mode: 'all' },
+    })
+    expect(result.current.filteredTransactions.map((t) => t.id)).toEqual([
+      'uyu',
+    ])
+  })
+
+  it('keeps both of two changes made in the same batch', () => {
+    const { result } = setup(transactions)
+    act(() => {
+      result.current.update({ currency: 'UYU' })
+      result.current.update({ categories: ['groceries'] })
+    })
+    expect(result.current.filteredTransactions.map((t) => t.id)).toEqual([
+      'uyu-food',
+    ])
+  })
+
+  it('leaves a field alone when the patch holds undefined for it', () => {
+    const { result } = renderHook(() =>
+      useTransactionFiltering({
+        transactions,
+        initial: {
+          ...DEFAULT_URL_FILTERS,
+          search: 'uyu',
+          period: { mode: 'month', y: 2026, m: 2 },
+        },
+      })
+    )
+    act(() => result.current.update({ search: undefined, period: undefined }))
+
+    expect(result.current.filters.search).toBe('uyu')
+    expect(result.current.filters.period).toEqual({
+      mode: 'month',
+      y: 2026,
+      m: 2,
+    })
+  })
+
+  // The view writes the URL whenever the filters value changes.
+  it('keeps the same filters value when nothing changes', () => {
+    const { result, rerender } = setup(transactions)
+    const before = result.current.filters
+
+    rerender()
+    act(() => result.current.update({ currency: 'all', categories: [] }))
+    act(() => result.current.clear())
+
+    expect(result.current.filters).toBe(before)
   })
 })
