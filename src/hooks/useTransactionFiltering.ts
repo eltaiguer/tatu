@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type SetStateAction,
 } from 'react'
 import {
   countsTowardTotals,
@@ -117,10 +118,13 @@ export function useTransactionFiltering({
   // The filters, and the month "últimos n meses" counts back from: the
   // newest month with data at the moment it is chosen (or the page is
   // opened); it does not move when rows are imported or deleted afterwards.
-  // One state, so choosing that period updates both at once.
-  const [{ filters, recentAnchor }, setState] = useState<{
+  // The page shown is part of the same state: anything that changes which
+  // rows are in the window (a filter, or the anchor) goes back to page 1 in
+  // the same update (#231), and a no-op keeps it.
+  const [{ filters, recentAnchor, page: currentPage }, setState] = useState<{
     filters: FilterState
     recentAnchor: Date
+    page: number
   }>(() => ({
     filters: {
       ...initial,
@@ -129,6 +133,7 @@ export function useTransactionFiltering({
       period: initial.period ?? { mode: 'all' },
     },
     recentAnchor: newestOf(transactions) ?? todayAsUtcDate(),
+    page: 1,
   }))
 
   // Applied to the latest state, so several changes in one batch all stick.
@@ -148,7 +153,7 @@ export function useTransactionFiltering({
       ) {
         return current
       }
-      return { filters: nextFilters, recentAnchor: anchor }
+      return { filters: nextFilters, recentAnchor: anchor, page: 1 }
     })
   }, [])
 
@@ -165,7 +170,7 @@ export function useTransactionFiltering({
       })
       return nextFilters === current.filters
         ? current
-        : { ...current, filters: nextFilters }
+        : { ...current, filters: nextFilters, page: 1 }
     })
   }, [])
 
@@ -177,16 +182,12 @@ export function useTransactionFiltering({
 
   const [sortField, setSortField] = useState<SortField>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
-  const [currentPage, setCurrentPage] = useState(1)
-
-  // A new filter starts on its first page (#231): a later page would hide its
-  // first matches. `filters` keeps its identity when a patch changes nothing,
-  // so a no-op keeps the page.
-  const [pageFilters, setPageFilters] = useState(filters)
-  if (pageFilters !== filters) {
-    setPageFilters(filters)
-    setCurrentPage(1)
-  }
+  const setCurrentPage = useCallback((next: SetStateAction<number>) => {
+    setState((current) => {
+      const page = typeof next === 'function' ? next(current.page) : next
+      return current.page === page ? current : { ...current, page }
+    })
+  }, [])
 
   // Every matching row, ignored ones included (the totals strip and the
   // "n ignoradas" count need them), sorted for the table.
@@ -253,7 +254,11 @@ export function useTransactionFiltering({
   const safeTotalPages = Math.max(1, totalPages)
 
   useEffect(() => {
-    setCurrentPage((p) => Math.min(p, safeTotalPages))
+    setState((current) =>
+      current.page <= safeTotalPages
+        ? current
+        : { ...current, page: safeTotalPages }
+    )
   }, [safeTotalPages])
 
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE

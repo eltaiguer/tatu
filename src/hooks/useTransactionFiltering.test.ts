@@ -270,11 +270,56 @@ describe('useTransactionFiltering — pagination', () => {
 
   it('keeps the page when a patch changes nothing', () => {
     const { result } = setup(transactions)
+    act(() => result.current.update({ categories: ['groceries'] }))
     act(() => result.current.setCurrentPage(2))
 
-    act(() => result.current.update({ search: result.current.filters.search }))
+    // Same contents, new array: not a change.
+    act(() => result.current.update({ categories: ['groceries'] }))
 
     expect(result.current.currentPage).toBe(2)
+  })
+
+  it('goes back to the first page on clearing the filters', () => {
+    const { result } = setup(transactions)
+    act(() => result.current.update({ search: 'tx-' }))
+    act(() => result.current.setCurrentPage(3))
+
+    act(() => result.current.clear())
+
+    expect(result.current.currentPage).toBe(1)
+  })
+
+  it('goes back to the first page when a date bound changes', () => {
+    const { result } = setup(transactions)
+    act(() => result.current.setCurrentPage(3))
+
+    act(() => result.current.setDateBound('from', '2026-03-01'))
+
+    expect(result.current.currentPage).toBe(1)
+  })
+
+  it('goes back to the first page when "últimos n meses" moves to newer rows', () => {
+    const recent = {
+      ...DEFAULT_URL_FILTERS,
+      period: { mode: 'recent' as const, n: 1 },
+    }
+    const { result, rerender } = renderHook(
+      ({ rows }) =>
+        useTransactionFiltering({ transactions: rows, initial: recent }),
+      { initialProps: { rows: transactions } }
+    )
+    const april = Array.from({ length: 2 * P + 6 }, (_, i) =>
+      makeTransaction(`apr-${String(i).padStart(2, '0')}`, {
+        date: new Date(Date.UTC(2026, 3, 1) + i * 3_600_000),
+      })
+    )
+    rerender({ rows: [...transactions, ...april] })
+    act(() => result.current.setCurrentPage(3))
+
+    // Same filters, new anchor: the window now holds April's rows.
+    act(() => result.current.update({ period: { mode: 'recent', n: 1 } }))
+
+    expect(result.current.currentPage).toBe(1)
   })
 })
 
