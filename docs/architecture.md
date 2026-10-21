@@ -17,11 +17,14 @@ only reads the picked file's bytes, shows progress and reports the outcome.
 to windows-1252, because Santander exports are Latin-1 (a UTF-8 BOM is
 dropped). It then parses, categorizes the parsed rows
 (`categorizeParsedData` in `src/services/categorizer/import-categorization.ts`),
-calls `onParsed`, and hands the rows to `importTransactions`
+then hands the rows to `importTransactions`
 (`src/services/mutations/transaction-mutations.ts`) for everything after.
-`onParsed` is the read/save boundary: a rejection before it is a file that
-could not be read ("Error al validar archivo", reported to Sentry as
-`import-parse`), after it a failure to save ("No se pudo importar", `import`).
+A file it cannot read (decode, parse or categorize failed) rejects with a
+`StatementReadError` (`src/utils/user-error.ts`): the parser's own message, or
+for a crash a generic one with the crash as `cause`. The dialog shows it as
+"Error al validar archivo" and reports it to Sentry as `import-parse`. Any
+other rejection — saving, the network, a session that ended — is "No se pudo
+importar", area `import`. `onParsed` only reports progress ("Importando…").
 The result is `ImportResult` plus the file type and the month to show.
 The parsers are pure: they map columns, dates, amounts, currency and IDs and
 never call the categorizer.

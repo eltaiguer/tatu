@@ -70,10 +70,10 @@ export function Transactions({
   // time; a plain visit starts on the newest month.
   const [initialState] = useState<UrlFilterState>(() => {
     if (initialFilters.period) return initialFilters
-    const newest = newestDataMonth(transactions)
-    if (hasActiveFilters(initialFilters) || !newest) {
-      return { ...initialFilters, period: { mode: 'all' } }
-    }
+    const newest = hasActiveFilters(initialFilters)
+      ? null
+      : newestDataMonth(transactions)
+    if (!newest) return { ...initialFilters, period: { mode: 'all' } }
     return { ...initialFilters, period: { mode: 'month', ...newest } }
   })
 
@@ -90,7 +90,7 @@ export function Transactions({
     filteredTransactions,
     ignoredCount,
     availableCategories,
-    newestDate,
+    newestRowDate,
     currentPage,
     setCurrentPage,
     safeTotalPages,
@@ -133,8 +133,8 @@ export function Transactions({
     onFiltersChange(serializeFilterParams(filters))
   }, [onFiltersChange, filters])
 
-  // `newestDate` is null only without rows.
-  const newestForNav = newestDate ?? todayAsUtcDate()
+  // `newestRowDate` is null only without rows.
+  const newestForNav = newestRowDate ?? todayAsUtcDate()
 
   /* ---- Edit state ---- */
   // Rows with a mutation in flight. A set, not a single id, so two
