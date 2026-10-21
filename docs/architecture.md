@@ -541,3 +541,15 @@ and skip their rollback after a switch.
 - **Derived state is not persisted:** inferred transfer categories, converted
   amounts, learned patterns and temporal patterns are recomputed from the
   stored data.
+
+## Error reporting
+
+Unexpected errors go to Sentry from a production build with `VITE_SENTRY_DSN`
+set, and nowhere
+otherwise (ADR-0004, `src/services/monitoring/error-reporting.ts`).
+`userErrorMessage` reports every error it did not write itself. Code that
+catches an error without passing it there calls `captureError(error, area)`.
+Before anything is sent, the browser strips URLs down to their path, redacts
+quoted values and Postgres key values from messages, and drops `extra`
+and every breadcrumb except navigation. `UserFacingError` and `NeedsConfirmationError`
+are never sent.

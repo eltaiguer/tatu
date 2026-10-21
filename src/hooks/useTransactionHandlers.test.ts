@@ -9,6 +9,14 @@ const ai = vi.hoisted(() => ({
   getAiConfig: vi.fn(),
   enrichTransactionsWithAi: vi.fn(),
 }))
+// Sentry is the other external service.
+const reporting = vi.hoisted(() => ({ captureError: vi.fn() }))
+vi.mock('../services/monitoring/error-reporting', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../services/monitoring/error-reporting')
+  >()),
+  captureError: reporting.captureError,
+}))
 
 vi.mock('../services/ai', () => ({
   getAiConfig: ai.getAiConfig,
@@ -302,6 +310,22 @@ describe('useTransactionHandlers — import with AI enrichment', () => {
     )
   })
 
+  it('does not report an AI failure caused by the user key to Sentry', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    ai.enrichTransactionsWithAi.mockRejectedValueOnce(
+      new Error('401 invalid x-api-key')
+    )
+    const { handlers } = signedIn()
+    reporting.captureError.mockClear()
+
+    await handlers.handleTransactionsImported(
+      [makeTransaction('tx-1')],
+      makeImportContext()
+    )
+
+    expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
   it('does not call the AI when it is disabled', async () => {
     ai.getAiConfig.mockReturnValue({ ...AI_ON, enabled: false, apiKey: '' })
     const { handlers } = signedIn()
@@ -369,6 +393,8 @@ describe('useTransactionHandlers — import persistence (#61)', () => {
     expect(storedIds()).toEqual(rows.slice(0, 500).map((t) => t.id))
     expect(repo.importRuns[0]).toMatchObject({ status: 'failed' })
     expect(repo.importRuns[0].errorMessage).toMatch(/^500 de 1200 guardadas/)
+    // Reported where it is shown, through its cause.
+    expect((error as UserFacingError).cause).toBeInstanceOf(Error)
   })
 
   it('finishes the job when the same file is imported again', async () => {
@@ -400,6 +426,29 @@ describe('useTransactionHandlers — import persistence (#61)', () => {
 
     expect(result.added).toHaveLength(1)
     expect(repo.importRuns[0].status).toBe('processing')
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      'import'
+    )
+  })
+
+  it('reports to Sentry when a failed import cannot be marked failed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { repo, handlers } = signedIn()
+    repo.failOn('insert', { error: new Error('network down') })
+    repo.failOn('failImportRun')
+
+    await expect(
+      handlers.handleTransactionsImported(
+        [makeTransaction('tx-1')],
+        makeImportContext()
+      )
+    ).rejects.toThrow('network down')
+
+    expect(reporting.captureError).toHaveBeenCalledWith(
+      expect.any(Error),
+      'import'
+    )
   })
 
   it('fails before recording the import when the lookup fails', async () => {
@@ -650,6 +699,20 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
       expect(repo.row(garbled.id)?.description).toBe(garbled.description)
       expect(stored(garbled.id)?.description).toBe(garbled.description)
       expect(errorSpy).toHaveBeenCalled()
+    })
+
+    it('reports a failed repair to Sentry', async () => {
+      const [garbled] = garbledFile(PENAROL)
+      const { repo, handlers } = signedIn([garbled])
+      failChunksWith(repo, 'update', garbled.id)
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await handlers.handleTransactionsImported(file(NEW, PENAROL))
+
+      expect(reporting.captureError).toHaveBeenCalledWith(
+        expect.anything(),
+        'import'
+      )
     })
 
     describe('rules learned from the garbled text', () => {
@@ -966,13 +1029,15 @@ describe('useTransactionHandlers — apply scope', () => {
       repo.failOn('upsertCategoryOverride')
       repo.failOn('deleteDescriptionOverride')
 
-      await expect(
-        handlers.handleUpdateTransaction('same-1', {
+      const error = (await handlers
+        .handleUpdateTransaction('same-1', {
           displayDescription: 'Disco',
           category: 'restaurants',
           applyScope: 'matching_past_and_future',
         })
-      ).rejects.toThrow('Se guardó el nombre, pero no la categoría')
+        .catch((e: unknown) => e)) as UserFacingError
+      expect(error.message).toMatch('Se guardó el nombre, pero no la categoría')
+      expect(error.cause).toBeInstanceOf(Error)
 
       // Screen mirrors database: the name override is on the server, so it
       // is shown; the category override is not.
@@ -1006,6 +1071,7 @@ describe('useTransactionHandlers — apply scope', () => {
       expect(stored('tx-150')?.category).toBe('groceries')
       expect(repo.row('tx-150')?.category).toBe('groceries')
       expect(getMerchantCategoryOverride(MERCHANT)).toBe('restaurants')
+      expect(error.cause).toBeInstanceOf(Error)
 
       const upserts = repo.requests.upsertCategoryOverride
       await error.retry!()
@@ -1307,6 +1373,7 @@ describe('useTransactionHandlers — bulk operations (#60)', () => {
     expect(error.message).toBe('Se actualizaron 200 de 300')
     expect(error.done).toBe(200)
     expect(error.total).toBe(300)
+    expect(error.cause).toBeInstanceOf(Error)
     // Screen mirrors database, row by row.
     for (const tx of transactionStore.getState().transactions) {
       expect(tx.category).toBe(repo.row(tx.id)?.category)
@@ -1745,6 +1812,7 @@ describe('useTransactionHandlers — delete and undo', () => {
     expect(transactionStore.getState().transactions).toHaveLength(50)
     expect(repo.rows()).toHaveLength(50)
     expect(error.result?.removed).toHaveLength(100)
+    expect(error.cause).toBeInstanceOf(Error)
 
     const retried = (await error.retry!()) as DeleteResult
     expect(transactionStore.getState().transactions).toHaveLength(0)
@@ -1815,9 +1883,11 @@ describe('useTransactionHandlers — split and unsplit', () => {
     repo.failOn('splitMark')
     repo.failOn('splitUndo')
 
-    await expect(
-      handlers.handleSplitTransaction('parent', parts)
-    ).rejects.toThrow(/partes/)
+    const error = (await handlers
+      .handleSplitTransaction('parent', parts)
+      .catch((e: unknown) => e)) as UserFacingError
+    expect(error.message).toMatch(/partes/)
+    expect(error.cause).toBeInstanceOf(Error)
 
     // Never a split parent without parts: both visible, parts deletable.
     expect(stored('parent')?.isSplitParent).toBeFalsy()
@@ -2036,6 +2106,41 @@ describe('useTransactionHandlers — switching accounts mid-write', () => {
     await pending
 
     expect(storedIds()).toEqual([])
+  })
+
+  it('does not report the refused close of a run when the account changed mid-import', async () => {
+    const { repo, handlers } = signedIn()
+    repo.failOn('insert', {
+      when: () => {
+        workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+        return true
+      },
+    })
+    repo.failOn('failImportRun')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await handlers
+      .handleTransactionsImported([makeTransaction('a')], makeImportContext())
+      .catch(() => {})
+
+    expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
+  it('does not report the refused completion of a run when the account changed', async () => {
+    const { repo, handlers } = signedIn()
+    repo.failOn('completeImportRun', {
+      when: () => {
+        workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+        return true
+      },
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await handlers
+      .handleTransactionsImported([makeTransaction('a')], makeImportContext())
+      .catch(() => {})
+
+    expect(reporting.captureError).not.toHaveBeenCalled()
   })
 
   it("refuses A's undo once B is signed in, before sending anything", async () => {

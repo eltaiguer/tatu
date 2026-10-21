@@ -29,6 +29,12 @@ import {
   type CachedInsightsLookup,
 } from '../services/insights/insight-cache'
 import { INSIGHTS_MODEL } from '../services/ai/models'
+import {
+  aiErrorMessage,
+  reportAiError,
+  userErrorMessage,
+} from '../utils/user-error'
+import { errorMessage } from '../services/monitoring/error-reporting'
 
 interface InsightsProps {
   transactions: Transaction[]
@@ -132,9 +138,11 @@ export function Insights({
       .catch((e) => {
         if (!cancelled) {
           setError(
-            e instanceof Error
-              ? e.message
-              : 'No se pudieron cargar los insights'
+            userErrorMessage(
+              e,
+              'No se pudieron cargar los insights',
+              'insights'
+            )
           )
         }
       })
@@ -150,19 +158,29 @@ export function Insights({
   async function handleGenerate() {
     setGenerating(true)
     setError('')
+    let step: 'generate' | 'save' = 'generate'
     try {
       const result = await generateInsights(input, claudeApiKey)
-      await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
+      // Shown even if saving fails: it was generated (and paid for).
       setCached({
         result,
         model: INSIGHTS_MODEL,
         generatedAt: new Date().toISOString(),
         isStale: false,
       })
+      step = 'save'
+      await saveCachedInsights(session, input, result, INSIGHTS_MODEL)
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : 'No se pudieron generar los insights'
-      )
+      if (step === 'generate') {
+        reportAiError(e, 'insights')
+        setError(
+          `No se pudieron generar los insights: ${aiErrorMessage(errorMessage(e))}`
+        )
+      } else {
+        setError(
+          userErrorMessage(e, 'No se pudieron guardar los insights', 'insights')
+        )
+      }
     } finally {
       setGenerating(false)
     }

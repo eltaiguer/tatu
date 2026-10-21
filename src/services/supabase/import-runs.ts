@@ -1,4 +1,7 @@
 import { getSupabaseClient, type SupabaseSession } from './client'
+import { UserFacingError } from '../../utils/user-error'
+
+const IMPORT_RUN_FAILED = 'No se pudo iniciar la importación. Intentá de nuevo.'
 
 type ImportRunFileType = 'credit_card' | 'bank_account_usd' | 'bank_account_uyu'
 
@@ -33,11 +36,13 @@ export async function createImportRun(
 
   if (error) {
     console.error('createImportRun failed:', error.message)
-    throw new Error('No se pudo iniciar la importación. Intentá de nuevo.')
+    throw new UserFacingError(IMPORT_RUN_FAILED, { cause: error })
   }
 
   if (!data?.id) {
-    throw new Error('No se pudo iniciar la importación. Intentá de nuevo.')
+    throw new UserFacingError(IMPORT_RUN_FAILED, {
+      cause: new Error('createImportRun returned no id'),
+    })
   }
 
   return data.id as string
