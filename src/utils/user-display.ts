@@ -1,6 +1,6 @@
-import type { SupabaseSession } from '../services/supabase/client'
+import type { AuthSession } from '../services/auth/auth-port'
 
-export function getFriendlyName(session: SupabaseSession | null): string {
+export function getFriendlyName(session: AuthSession | null): string {
   if (!session?.user) return ''
 
   const displayName =

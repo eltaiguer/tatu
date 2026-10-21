@@ -2,6 +2,8 @@
 // Two adapters implement it: `supabase-auth.ts` (production, wired in
 // `main.tsx`) and `in-memory-auth.ts` (tests). App receives it as a prop and
 // hands it to `useAuthSession`; nothing else talks to Supabase Auth.
+// Callers always call methods on the port (`auth.signOut()`), never pass them
+// detached, so an adapter may be a class whose methods use `this`.
 import type { SupabaseSession } from '../supabase/client'
 
 export type AuthSession = SupabaseSession

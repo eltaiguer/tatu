@@ -7,7 +7,7 @@ import {
   Upload,
   LogOut,
 } from 'lucide-react'
-import type { SupabaseSession } from '../services/supabase/client'
+import type { AuthSession } from '../services/auth/auth-port'
 import { getFriendlyName } from '../utils/user-display'
 
 export type View =
@@ -33,7 +33,7 @@ interface AppSidebarProps {
   onNavigate: (v: View) => void
   onImport: () => void
   onSignOut: () => void
-  session: SupabaseSession | null
+  session: AuthSession | null
   // Transactions without a category (shown as a badge on Transacciones).
   uncategorizedCount: number
   supabaseEnabled: boolean

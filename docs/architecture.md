@@ -222,17 +222,23 @@ Ordering guarantees:
   `DEFAULT_PREFERENCES`, including the Claude key) and the AI config. Sign
   out, back-to-sign-in and password update end the session through
   `endSession` (wait for pending preference saves, at most
-  `PREFERENCE_FLUSH_TIMEOUT_MS`; sign out; tear down — a failed sign-out
-  keeps the workspace for "Cerrar sesión" and is ignored by the other two).
-  Supabase's `SIGNED_OUT` event and a session that switches to another user
-  (`setSession` in `useAuthSession`) call it directly.
-- **Reset all data.** `resetWorkspace(repository)` waits for pending saves,
-  then `repository.resetAll()` (one table at a time, stopping at the first
-  failure; the insights cache last and best-effort). On success the same
-  user is marked ready with nothing and default preferences; on a failure
-  what remains is reloaded and a `UserFacingError` with the failure as
-  `cause` is thrown (reported, ADR-0004). If another user signed in
-  meanwhile, their workspace is left alone.
+  `PREFERENCE_FLUSH_TIMEOUT_MS`; sign out; tear down). The teardown happens
+  even when the sign-out request fails — the stored session is cleared
+  either way — but only for the user who was leaving. "Cerrar sesión" then
+  shows a Spanish message on the sign-in screen; password update ignores
+  the failure; back-to-sign-in switches screens at once and runs
+  `endSession` in the background with its failure caught. Supabase's
+  `SIGNED_OUT` event and a session that switches to another user
+  (`setSession` in `useAuthSession`) call `teardownWorkspace` directly.
+- **Reset all data.** `resetWorkspace(repository, reload)` waits for pending
+  saves, then `repository.resetAll()` (one table at a time, stopping at the
+  first failure; the insights cache last and best-effort). On success the
+  same user is marked ready with nothing and default preferences. On a
+  failure it calls `reload` — App passes `useUserWorkspace`'s `refetch`, so
+  the reload clears stale messages and is abandoned with the hook — and
+  throws a `UserFacingError` with the failure as `cause` (reported,
+  ADR-0004). If another user signed in meanwhile, their workspace is left
+  alone and nothing is reloaded.
 - **Late loads are discarded.** Each hydrate takes a generation number; a
   teardown, a newer hydrate or an abandoned effect invalidates it, and a load
   that resolves late applies nothing.
@@ -552,7 +558,8 @@ and Configuración shows it instead of a success toast.
 Every write goes through a `Repository` bound to one signed-in user
 (`src/services/repository/repository.ts`, #119). There is no ambient session:
 `App` receives `createRepository: (session) => Repository` as a prop, builds
-the signed-in user's repository once per session and hands it to
+the signed-in user's repository once per user id (a token refresh's new
+session object does not rebuild it) and hands it to
 `useUserWorkspace`, `useTransactionHandlers`, the views that save rules,
 Insights (its cache: `loadInsights` / `saveInsights`) and Configuración
 ("reset all data": `resetAll`, through `resetWorkspace`). `main.tsx` passes

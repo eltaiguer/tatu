@@ -29,6 +29,7 @@ const CANDIDATE_WINDOW_MS = 2 * 24 * 60 * 60 * 1000
 /** Operations a test can make fail or pause. */
 export type InMemoryOp =
   | 'load'
+  | 'loadTransactions'
   | 'findImportCandidates'
   | 'findExistingIds'
   | 'insert'
@@ -214,6 +215,17 @@ export function createInMemoryRepository(
 
     async loadWorkspace() {
       await request('load')
+      // As RLS: another user's token reads nothing.
+      if (!authorized()) {
+        return {
+          transactions: [],
+          categoryOverrides: [],
+          descriptionOverrides: [],
+          customPatterns: [],
+          customCategories: [],
+          preferences: null,
+        }
+      }
       return {
         transactions: repo.rows().map(clone),
         categoryOverrides: Array.from(repo.categoryOverrides.values()),
@@ -224,6 +236,10 @@ export function createInMemoryRepository(
         ),
         preferences: repo.preferences,
       }
+    },
+    async loadTransactions() {
+      await request('loadTransactions')
+      return authorized() ? repo.rows() : []
     },
     async savePreferences(preferences) {
       await request('savePreferences')
@@ -484,8 +500,9 @@ export function createInMemoryRepository(
     },
 
     // Same tables, same order and same failure rule as the Supabase adapter.
+    // As RLS: under another user's token every delete is sent and matches
+    // nothing.
     async resetAll() {
-      if (!authorized()) return
       const steps: [string, () => void][] = [
         ['transactions', () => table.clear()],
         ['import_runs', () => repo.importRuns.splice(0)],
@@ -497,11 +514,11 @@ export function createInMemoryRepository(
       ]
       for (const [name, clear] of steps) {
         await request('resetAll', [name])
-        clear()
+        if (authorized()) clear()
       }
       try {
         await request('resetAll', ['ai_insights'])
-        repo.insights = null
+        if (authorized()) repo.insights = null
       } catch (error) {
         console.warn('Could not clear cached insights during reset:', error)
       }

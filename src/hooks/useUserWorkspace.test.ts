@@ -6,7 +6,7 @@ import {
   type InMemoryRepository,
 } from '../services/repository/in-memory-repository'
 import { useUserWorkspace } from './useUserWorkspace'
-import { teardownWorkspace } from '../stores/workspace-store'
+import { teardownWorkspace, workspaceStore } from '../stores/workspace-store'
 
 function makeSession(userId: string): SupabaseSession {
   // New object identity each call — mirrors what Supabase hands us on refocus.
@@ -29,10 +29,16 @@ const saves = (userId = 'user-1') =>
 
 type Props = { session: SupabaseSession | null; authMode: 'signin' | 'reset' }
 
+const onHydrateStart = vi.fn()
+
 function renderWorkspace(initial: Props) {
   return renderHook(
     (p: Props) =>
-      useUserWorkspace({ ...p, repository: repositoryFor(p.session) }),
+      useUserWorkspace({
+        repository: repositoryFor(p.session),
+        authMode: p.authMode,
+        onHydrateStart,
+      }),
     { initialProps: initial }
   )
 }
@@ -92,6 +98,25 @@ describe('useUserWorkspace', () => {
     act(() => result.current.refetch())
 
     await waitFor(() => expect(loads()).toBe(2))
+    // App clears stale auth messages on every load, a refetch's too.
+    expect(onHydrateStart).toHaveBeenCalledTimes(2)
+  })
+
+  it('discards a refetch that has not landed when the hook unmounts', async () => {
+    const { result, unmount } = renderWorkspace({
+      session: makeSession('user-1'),
+      authMode: 'signin',
+    })
+    await waitFor(() => expect(result.current.status).toBe('ready'))
+    const load = stored.get('user-1')!.hold('load')
+
+    act(() => result.current.refetch())
+    await waitFor(() => expect(loads()).toBe(2))
+    unmount()
+    load.release()
+    await Promise.resolve()
+
+    expect(workspaceStore.getState().status).toBe('loading')
   })
 
   it('does not load anything while choosing a new password', async () => {

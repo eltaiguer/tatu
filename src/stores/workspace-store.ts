@@ -91,12 +91,21 @@ export function teardownWorkspace(): void {
  * Ends the signed-in user's session: lets a pending preference save reach
  * the server while the token is still valid (bounded by
  * PREFERENCE_FLUSH_TIMEOUT_MS), signs out, then tears the workspace down.
- * If signing out rejects, the error is rethrown and the workspace kept.
+ * The teardown happens even if signing out rejects (the stored session is
+ * cleared either way; the error is rethrown for the caller to explain), but
+ * only for the user who was leaving: one who signed in meanwhile is kept.
  */
 export async function endSession(signOut: () => Promise<void>): Promise<void> {
+  const leaving = workspaceStore.getState().userId
+  const teardownIfStillLeaving = () => {
+    if (workspaceStore.getState().userId === leaving) teardownWorkspace()
+  }
   await flushPreferenceSaves()
-  await signOut()
-  teardownWorkspace()
+  try {
+    await signOut()
+  } finally {
+    teardownIfStillLeaving()
+  }
 }
 
 export const RESET_FAILED_MESSAGE =
@@ -106,17 +115,21 @@ export const RESET_FAILED_MESSAGE =
  * Deletes everything the user has stored, then starts them over empty and
  * ready, still signed in, with default preferences (no key, AI off). Waits
  * for pending preference saves first, so a late save can't recreate the
- * row it deletes. The delete is several requests: if one fails, what remains
- * is reloaded and a UserFacingError carrying the failure as `cause` is
- * thrown. If another user's workspace was loaded meanwhile, it is left alone.
+ * row it deletes. The delete is several requests: if one fails, `reload()`
+ * is asked to show what remains (the workspace hook's refetch, which owns
+ * the load) and a UserFacingError carrying the failure as `cause` is thrown.
+ * If another user's workspace was loaded meanwhile, it is left alone.
  */
-export async function resetWorkspace(repository: Repository): Promise<void> {
+export async function resetWorkspace(
+  repository: Repository,
+  reload: () => void
+): Promise<void> {
   await flushPreferenceSaves()
   try {
     await repository.resetAll()
   } catch (error) {
     console.error('reset failed:', error)
-    if (isWorkspaceOwner(repository.userId)) hydrateWorkspace(repository)
+    if (isWorkspaceOwner(repository.userId)) reload()
     throw new UserFacingError(RESET_FAILED_MESSAGE, { cause: error })
   }
   if (!isWorkspaceOwner(repository.userId)) return

@@ -96,8 +96,11 @@ Supabase modules each.
 - `Repository` gained `loadInsights()` / `saveInsights(row)` (the
   `ai_insights` cache; a missing table is still a `UserFacingError`) and
   `resetAll()` (table by table, stopping at the first failure; the insights
-  cache last and best-effort). The in-memory adapter implements them with
-  the same fault injection (`resetAll` fails per table).
+  cache last and best-effort), plus `loadTransactions()` (one table, for
+  the dev coverage panel). The in-memory adapter implements them with the
+  same fault injection (`resetAll` fails per table) and the same RLS-like
+  behaviour under another user's token (requests sent, nothing read or
+  deleted).
 - A second port, `AuthPort` (`src/services/auth/`), with a Supabase and an
   in-memory adapter.
 - `App` receives `auth` and `createRepository` as props; `main.tsx` wires the

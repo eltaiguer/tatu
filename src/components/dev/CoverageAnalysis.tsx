@@ -3,7 +3,10 @@ import { Button } from '../ui/button'
 import type { Repository } from '../../services/repository/repository'
 import { categorizeTransaction } from '../../services/categorizer/transaction-categorizer'
 import { normalizeMerchantName } from '../../services/categorizer/merchant-patterns'
-import { merchantOverrideKey } from '../../services/categorizer/category-overrides'
+import {
+  listMerchantCategoryOverrides,
+  merchantOverrideKey,
+} from '../../services/categorizer/category-overrides'
 import type { Transaction } from '../../models'
 
 interface MerchantStat {
@@ -32,12 +35,11 @@ function tier(confidence: number): 'high' | 'medium' | 'low' {
 }
 
 // Reads the stored rows, not the store's: these are the categories as saved,
-// before transfer inference rewrites them in memory.
+// before transfer inference rewrites them in memory. The overrides are the
+// loaded workspace's (the store mirrors the server's).
 async function runAnalysis(repository: Repository): Promise<AnalysisResult> {
-  const { transactions, categoryOverrides: overrides } =
-    await repository.loadWorkspace()
-
-  const overrideKeys = new Set(overrides.map((o) => o.merchantNormalized))
+  const transactions = await repository.loadTransactions()
+  const overrideKeys = new Set(Object.keys(listMerchantCategoryOverrides()))
 
   // Group by normalized description
   const byKey = new Map<
@@ -100,7 +102,7 @@ async function runAnalysis(repository: Repository): Promise<AnalysisResult> {
     high,
     medium,
     low,
-    overrideCount: overrides.length,
+    overrideCount: overrideKeys.size,
     lowInOverrides: low.filter((s) => s.isInOverrides).length,
   }
 }

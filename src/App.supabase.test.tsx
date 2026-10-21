@@ -1,6 +1,6 @@
 import { MemoryRouter } from 'react-router-dom'
 import { ROUTER_FUTURE } from './router-future'
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { preloadViews } from './lazy-views'
 import {
   act,
@@ -11,7 +11,10 @@ import {
   within,
 } from '@testing-library/react'
 import { teardownWorkspace } from './stores/workspace-store'
-import { makeSession } from './services/auth/in-memory-auth'
+import { makeSession, type InMemoryAuth } from './services/auth/in-memory-auth'
+import type { AuthPort } from './services/auth/auth-port'
+import { transactionStore } from './stores/transaction-store'
+import { listCustomCategories } from './services/categories/category-store'
 import { createFakeBackend, type FakeBackend } from './test/fake-backend'
 
 // The backend: nobody signed in and nothing stored, unless a test says so.
@@ -255,11 +258,155 @@ describe('App with supabase enabled', () => {
       screen.getByRole('button', { name: 'Volver a iniciar sesión' })
     )
 
+    // At once: the sign-out runs in the background.
     expect(
-      await screen.findByRole('heading', { name: 'Ingresar a Tatú' })
+      screen.getByRole('heading', { name: 'Ingresar a Tatú' })
     ).toBeInTheDocument()
-    expect(backend.auth.signOuts).toBe(1)
+    await waitFor(() => expect(backend.auth.signOuts).toBe(1))
     expect(backend.auth.getSession()).toBeNull()
+  })
+
+  it('signs out through an auth adapter whose methods need their object (a class)', async () => {
+    signedInAsUser1()
+    const inner = backend.auth
+    class ClassAuth implements AuthPort {
+      constructor(private readonly delegate: InMemoryAuth) {}
+      getSession() {
+        return this.delegate.getSession()
+      }
+      onAuthChange(...args: Parameters<AuthPort['onAuthChange']>) {
+        return this.delegate.onAuthChange(...args)
+      }
+      signIn(email: string, password: string) {
+        return this.delegate.signIn(email, password)
+      }
+      signUp(email: string, password: string) {
+        return this.delegate.signUp(email, password)
+      }
+      requestPasswordReset(email: string) {
+        return this.delegate.requestPasswordReset(email)
+      }
+      updatePassword(password: string) {
+        return this.delegate.updatePassword(password)
+      }
+      signOut() {
+        return this.delegate.signOut()
+      }
+    }
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App
+          auth={new ClassAuth(inner)}
+          createRepository={backend.createRepository}
+        />
+      </MemoryRouter>
+    )
+    await screen.findAllByText('Configuración')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cerrar sesión' })[0])
+
+    await screen.findByRole('heading', { name: 'Ingresar a Tatú' })
+    expect(inner.signOuts).toBe(1)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('a failed sign-out still leaves (the session is gone) and says so in Spanish', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    signedInAsUser1()
+    backend.seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-02-10T00:00:00.000Z'),
+          description: 'Comercio',
+          amount: 10,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+    })
+    const failure = new Error('Internal Server Error')
+    backend.auth.failOn('signOut', failure)
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cerrar sesión' })[0])
+
+    await screen.findByRole('heading', { name: 'Ingresar a Tatú' })
+    expect(
+      screen.getByText(
+        'No se pudo cerrar la sesión en el servidor; en este dispositivo ya está cerrada.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Internal Server Error')).not.toBeInTheDocument()
+    expect(transactionStore.getState().transactions).toEqual([])
+    expect(errorSpy).toHaveBeenCalledWith(failure)
+  })
+
+  it('when reset all data fails part-way, reloads what remains and explains it', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    signedInAsUser1()
+    backend.seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-02-10T00:00:00.000Z'),
+          description: 'Comercio',
+          amount: 10,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          rawData: {},
+        },
+      ],
+      customCategories: [
+        {
+          id: 'mine',
+          label: 'Mía',
+          color: '#f00',
+          isIgnored: false,
+          isArchived: false,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+    })
+    backend
+      .repo()
+      .failOn('resetAll', { when: ([table]) => table === 'custom_categories' })
+    window.history.replaceState({}, '', '/configuracion')
+    const { default: App } = await import('./App')
+    render(
+      <MemoryRouter initialEntries={['/configuracion']} future={ROUTER_FUTURE}>
+        <App auth={backend.auth} createRepository={backend.createRepository} />
+      </MemoryRouter>
+    )
+    await waitFor(() => expect(backend.repo().requests.load).toBe(1))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Resetear' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Eliminar todo' })
+    )
+
+    expect(
+      await screen.findByText(
+        'No se pudieron borrar todos los datos. Recargamos lo que quedó guardado; intentá de nuevo.'
+      )
+    ).toBeInTheDocument()
+    // Reloaded through the workspace hook: what remains is shown.
+    await waitFor(() => expect(backend.repo().requests.load).toBe(2))
+    await waitFor(() =>
+      expect(transactionStore.getState().transactions).toEqual([])
+    )
+    expect(listCustomCategories().map((c) => c.id)).toEqual(['mine'])
   })
 
   it('updates and soft-deletes transactions from transactions view', async () => {

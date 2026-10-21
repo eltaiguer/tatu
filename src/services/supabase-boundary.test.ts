@@ -22,12 +22,46 @@ function sourceFiles(dir: string): string[] {
   })
 }
 
-// `import … from '…'` / `export … from '…'` statements, type-only or not.
-// Only a whole `import type` counts as type-only: `import { type X }` is
+// Every module specifier `source` names, in order: `import … from` /
+// `export … from` (group 1 is set when the whole statement is `type`-only),
+// side-effect `import '…'` and dynamic `import('…')`. `import { type X }` is
 // treated as a runtime import on purpose (conservative, and simple).
-const STATEMENT = /\b(import|export)\s+(type\s+)?[^'"]*?\bfrom\s+'([^']+)'/g
+const SPECIFIER =
+  /\b(?:(?:import|export)\s+(type\s+)?[^'"()]*?\bfrom\s+|import\s*\(\s*|import\s+)(['"])([^'"]+)\2/g
+
+/** The `services/supabase` modules `source` loads at runtime. */
+function runtimeSupabaseImports(source: string): string[] {
+  const found: string[] = []
+  for (const [, typeOnly, , from] of source.matchAll(SPECIFIER)) {
+    if (!typeOnly && /(^|\/)supabase\//.test(from)) found.push(from)
+  }
+  return found
+}
 
 describe('Supabase boundary', () => {
+  it('finds static, side-effect and dynamic imports, but not type-only ones', () => {
+    const source = [
+      "import { signOut } from '../supabase/auth'",
+      "import {\n  a,\n  b,\n} from '../supabase/transactions'",
+      "export { x } from './supabase/reset'",
+      "import '../supabase/client'",
+      "const m = await import('../supabase/ai-insights')",
+      'const n = import("../supabase/import-runs")',
+      "import type { SupabaseSession } from '../supabase/client'",
+      "export type { Row } from '../supabase/transactions'",
+      "import { createClient } from '@supabase/supabase-js'",
+    ].join('\n')
+
+    expect(runtimeSupabaseImports(source)).toEqual([
+      '../supabase/auth',
+      '../supabase/transactions',
+      './supabase/reset',
+      '../supabase/client',
+      '../supabase/ai-insights',
+      '../supabase/import-runs',
+    ])
+  })
+
   it('nothing outside the Supabase adapters imports services/supabase at runtime', () => {
     const offenders: string[] = []
     for (const path of sourceFiles(SRC)) {
@@ -35,12 +69,8 @@ describe('Supabase boundary', () => {
       if (file.startsWith('services/supabase/') || ADAPTERS.includes(file)) {
         continue
       }
-      for (const [, , typeOnly, from] of readFileSync(path, 'utf8').matchAll(
-        STATEMENT
-      )) {
-        if (!typeOnly && /(^|\/)supabase\//.test(from)) {
-          offenders.push(`${file} -> ${from}`)
-        }
+      for (const from of runtimeSupabaseImports(readFileSync(path, 'utf8'))) {
+        offenders.push(`${file} -> ${from}`)
       }
     }
 

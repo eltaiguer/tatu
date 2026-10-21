@@ -61,6 +61,10 @@ import { useTransactionHandlers } from './hooks/useTransactionHandlers'
 import type { AuthPort, AuthSession } from './services/auth/auth-port'
 import type { Repository } from './services/repository/repository'
 import { getFriendlyName } from './utils/user-display'
+import { userErrorMessage } from './utils/user-error'
+
+const SIGN_OUT_FAILED_MESSAGE =
+  'No se pudo cerrar la sesión en el servidor; en este dispositivo ya está cerrada.'
 
 export interface AppProps {
   /** Who is signed in (Supabase Auth in `main.tsx`, in-memory in tests). */
@@ -136,11 +140,19 @@ function App({ auth, createRepository }: AppProps) {
   } = useAuthSession(auth)
 
   // The signed-in user's repository (#119): every read and write goes
-  // through it. A new session object (token refresh) gives a new one for the
-  // same user, which the workspace does not reload for.
+  // through it. One per user: a token refresh hands us a new session object
+  // for the same user, which must not rebuild it (Insights would refetch its
+  // cache). The repository is bound to the user, not to the token: the
+  // Supabase client sends the current token itself.
+  const userId = session?.user.id ?? null
+  const sessionRef = useRef(session)
+  sessionRef.current = session
   const repository = useMemo(
-    () => (session ? createRepository(session) : null),
-    [session, createRepository]
+    () =>
+      userId && sessionRef.current
+        ? createRepository(sessionRef.current)
+        : null,
+    [userId, createRepository]
   )
 
   // Signed in: fetch every view's chunk now, while the first sync runs, so
@@ -181,7 +193,6 @@ function App({ auth, createRepository }: AppProps) {
     aiModel,
     setAiModel,
   } = useUserWorkspace({
-    session,
     repository,
     authMode,
     onHydrateStart: () => {
@@ -190,49 +201,51 @@ function App({ auth, createRepository }: AppProps) {
     },
   })
 
+  // Signs out and goes back to the sign-in screen. If the sign-out request
+  // fails the session is gone anyway (the stored one is cleared and the
+  // workspace torn down): leave, and say the server may not know.
   async function handleSignOut() {
     setAuthSubmitting(true)
+    let failure: unknown = null
     try {
-      await endSession(auth.signOut)
-      clearPasswordResetModeFromUrl()
-      setSession(null)
-      setAuthMode('signin')
-      toast('Sesión cerrada')
-      navigate('/', { replace: true })
-      setImportOpen(false)
-      setAuthError('')
-      setAuthNotice('')
+      await endSession(() => auth.signOut())
     } catch (error) {
-      setAuthError(
-        error instanceof Error ? error.message : 'No se pudo cerrar sesión'
-      )
-    } finally {
-      setAuthSubmitting(false)
+      failure = error
     }
+    clearPasswordResetModeFromUrl()
+    setSession(null)
+    setAuthMode('signin')
+    navigate('/', { replace: true })
+    setImportOpen(false)
+    setAuthNotice('')
+    if (failure) {
+      setAuthError(userErrorMessage(failure, SIGN_OUT_FAILED_MESSAGE, 'auth'))
+    } else {
+      setAuthError('')
+      toast('Sesión cerrada')
+    }
+    setAuthSubmitting(false)
   }
 
   // Deletes on the server first and clears local state only once that
   // succeeded (see resetWorkspace).
   async function handleResetAllData() {
-    if (repository) await resetWorkspace(repository)
+    if (repository) await resetWorkspace(repository, refetch)
     else teardownWorkspace()
   }
 
   // Leaves the new-password screen: the same end of session as signing out
   // (pending preference saves first), except a failed sign-out still leaves.
-  async function handleBackToSignIn() {
-    setAuthSubmitting(true)
-    try {
-      await endSession(() => auth.signOut().catch(() => {}))
-    } finally {
-      setAuthSubmitting(false)
-    }
+  function handleBackToSignIn() {
     setAuthMode('signin')
     setPassword('')
     setAuthError('')
     setAuthNotice('')
     clearPasswordResetModeFromUrl()
     setSession(null)
+    // In the background: the screen has already changed, and a failed
+    // sign-out changes nothing for the user (the stored session is cleared).
+    void endSession(() => auth.signOut()).catch(() => {})
   }
 
   function navigateToTransactions(
@@ -297,9 +310,7 @@ function App({ auth, createRepository }: AppProps) {
             onUpdatePassword={() => {
               void handlePasswordUpdate()
             }}
-            onBackToSignIn={() => {
-              void handleBackToSignIn()
-            }}
+            onBackToSignIn={handleBackToSignIn}
           />
         </div>
       </main>

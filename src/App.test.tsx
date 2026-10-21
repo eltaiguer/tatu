@@ -748,6 +748,27 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
+  it('a token refresh (new session object, same user) keeps the repository: Insights does not refetch its cache', async () => {
+    seed({
+      transactions: [
+        tx('tx-1', '2026-02-10T00:00:00.000Z', 'Comercio', 'food'),
+      ],
+      preferences: {
+        ...DEFAULT_PREFERENCES,
+        aiEnabled: true,
+        claudeApiKey: 'sk-ant-test',
+      },
+    })
+    renderApp('/insights')
+    await waitFor(() => expect(backend.repo().requests.loadInsights).toBe(1))
+
+    act(() => backend.auth.emit(makeSession('user-1', 'test@example.com')))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(backend.repo().requests.loadInsights).toBe(1)
+    expect(backend.repo().requests.load).toBe(1)
+  })
+
   it('clears custom categories from memory on sign out', async () => {
     seed({
       customCategories: [

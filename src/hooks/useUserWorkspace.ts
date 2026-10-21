@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useStore } from 'zustand'
-import type { SupabaseSession } from '../services/supabase/client'
 import type { Repository } from '../services/repository/repository'
 import {
   hydrateWorkspace,
@@ -18,24 +17,25 @@ export type SyncStatus = 'loading' | 'ready' | 'error'
  * load status. Teardown is `teardownWorkspace()` from the store.
  */
 export function useUserWorkspace({
-  session,
   repository,
   authMode,
   onHydrateStart,
 }: {
-  session: SupabaseSession | null
-  /** The signed-in user's repository; the workspace loads through it. */
+  /**
+   * The signed-in user's repository (null: signed out); the workspace loads
+   * through it, and its user is the signed-in user.
+   */
   repository: Repository | null
   authMode: 'signin' | 'reset'
   /** Runs when a load starts (App clears stale auth messages). */
   onHydrateStart?: () => void
 }) {
-  const userId = session?.user?.id ?? null
+  const userId = repository?.userId ?? null
   const [syncKey, setSyncKey] = useState(0)
   const refetch = useCallback(() => setSyncKey((k) => k + 1), [])
 
-  // Read through a ref: a token refresh hands App a new session, and so a
-  // new repository object, for the same user — that must not reload.
+  // Read through a ref: a new repository object for the same user must not
+  // reload.
   const repositoryRef = useRef(repository)
   repositoryRef.current = repository
   const userIdRef = useRef(userId)
@@ -43,9 +43,7 @@ export function useUserWorkspace({
   const onHydrateStartRef = useRef(onHydrateStart)
   onHydrateStartRef.current = onHydrateStart
 
-  // Keyed on the stable user id, not the session object: Supabase hands us a
-  // new session object on every token refresh (tab refocus), which must not
-  // reload everything.
+  // Keyed on the stable user id, not the repository object.
   useEffect(() => {
     const loadedFor = workspaceStore.getState().userId
     // Safety net: a session that ended or switched without going through

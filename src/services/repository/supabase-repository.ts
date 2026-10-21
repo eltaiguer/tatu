@@ -86,6 +86,7 @@ export function createSupabaseRepository(session: SupabaseSession): Repository {
         preferences,
       }
     },
+    loadTransactions: () => loadUserTransactions(session),
     savePreferences: (preferences) => saveUserPreferences(session, preferences),
 
     findImportCandidates: (incoming) => findImportCandidates(session, incoming),

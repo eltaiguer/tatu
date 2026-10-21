@@ -6,7 +6,7 @@ import { Button } from './ui/button'
 import { toast } from 'sonner'
 import { userErrorMessage } from '../utils/user-error'
 import type { Transaction } from '../models'
-import type { SupabaseSession } from '../services/supabase/client'
+import type { AuthSession } from '../services/auth/auth-port'
 import type { Repository } from '../services/repository/repository'
 import { exportTransactions } from '../services/export/export'
 import { CoverageAnalysis } from './dev/CoverageAnalysis'
@@ -28,7 +28,7 @@ interface BaseSettingsProps {
   onSetCurrency: (c: 'UYU' | 'USD') => void
   fxRate?: number
   onSetFxRate?: (r: number) => void
-  session: SupabaseSession | null
+  session: AuthSession | null
   /** The signed-in user's repository (the dev panels read through it). */
   repository?: Repository | null
   supabaseEnabled: boolean

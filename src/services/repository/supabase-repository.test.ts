@@ -409,6 +409,24 @@ describe('Supabase repository — workspace', () => {
   })
 })
 
+describe('Supabase repository — transactions only', () => {
+  it("reads only the user's live rows from the transactions table", async () => {
+    db.seed('transactions', [
+      row('tx-1'),
+      row('tx-2', { is_deleted: true }),
+      row('tx-3', { user_id: 'user-2' }),
+    ])
+    const repo = createSupabaseRepository(session)
+
+    const rows = await repo.loadTransactions()
+
+    expect(rows.map((t) => t.id)).toEqual(['tx-1'])
+    expect(new Set(db.requests.map((r) => r.table))).toEqual(
+      new Set(['transactions'])
+    )
+  })
+})
+
 describe('Supabase repository — insights cache', () => {
   it('reads no cache as null, and reads back what it saved', async () => {
     const repo = createSupabaseRepository(session)

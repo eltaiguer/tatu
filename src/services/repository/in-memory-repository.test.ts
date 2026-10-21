@@ -32,6 +32,44 @@ describe('in-memory repository fidelity', () => {
     expect(repo.has('b')).toBe(false)
   })
 
+  it("reads nothing under another user's token, as RLS filters it", async () => {
+    const repo = createInMemoryRepository({
+      transactions: [tx('a')],
+      preferences: {
+        theme: 'dark',
+        currency: 'UYU',
+        fxRate: 41,
+        claudeApiKey: 'sk',
+        aiEnabled: true,
+        aiModel: 'm',
+      },
+    })
+    repo.actingUserId = 'someone-else'
+
+    expect(await repo.loadWorkspace()).toEqual({
+      transactions: [],
+      categoryOverrides: [],
+      descriptionOverrides: [],
+      customPatterns: [],
+      customCategories: [],
+      preferences: null,
+    })
+    expect(repo.requests.load).toBe(1)
+  })
+
+  it("resets nothing under another user's token, but still sends every request", async () => {
+    const repo = createInMemoryRepository({ transactions: [tx('a')] })
+    repo.actingUserId = 'someone-else'
+
+    await repo.resetAll()
+
+    expect(repo.has('a')).toBe(true)
+    expect(repo.requests.resetAll).toBe(8)
+
+    repo.failOn('resetAll', { when: ([table]) => table === 'transactions' })
+    await expect(repo.resetAll()).rejects.toThrow('resetAll failed')
+  })
+
   it('never shares row objects with the caller', async () => {
     const repo = createInMemoryRepository({ transactions: [tx('a')] })
 
@@ -49,6 +87,20 @@ describe('in-memory repository fidelity', () => {
 
     expect(transactions.find((t) => t.id === 'a')?.importId).toBe('run-1')
     expect(transactions.find((t) => t.id === 'b')?.importId).toBeUndefined()
+  })
+})
+
+describe('in-memory repository — transactions only', () => {
+  it('reads the live rows, as stored, in one request', async () => {
+    const repo = createInMemoryRepository({
+      transactions: [tx('a')],
+      deleted: [tx('b')],
+    })
+
+    const rows = await repo.loadTransactions()
+
+    expect(rows.map((t) => t.id)).toEqual(['a'])
+    expect(repo.requests).toEqual({ loadTransactions: 1 })
   })
 })
 

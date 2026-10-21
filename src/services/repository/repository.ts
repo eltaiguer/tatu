@@ -142,6 +142,8 @@ export interface Repository {
   readonly userId: string
 
   loadWorkspace(): Promise<WorkspaceSnapshot>
+  /** Just the live rows, as stored (one table: for the dev panels). */
+  loadTransactions(): Promise<Transaction[]>
   savePreferences(preferences: UserPreferences): Promise<void>
 
   // Transactions --------------------------------------------------------

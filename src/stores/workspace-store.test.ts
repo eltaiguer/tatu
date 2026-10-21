@@ -394,15 +394,31 @@ describe('workspace store', () => {
       expect(snapshot()).toEqual(EMPTY)
     })
 
-    it('keeps the workspace when signing out fails', async () => {
+    it('still tears down when signing out fails (the stored session is gone), and rethrows', async () => {
       await signIn(repoOf('a', A_PREFS))
 
       await expect(
         endSession(() => Promise.reject(new Error('offline')))
       ).rejects.toThrow('offline')
 
-      expect(snapshot().userId).toBe('a')
-      expect(snapshot().transactions).toEqual(['tx-a'])
+      expect(snapshot()).toEqual(EMPTY)
+    })
+
+    it('leaves alone a user who signed in while the sign-out was in flight', async () => {
+      await signIn(repoOf('a', A_PREFS))
+      let finishSignOut: () => void = () => {}
+
+      const ended = endSession(
+        () => new Promise<void>((resolve) => (finishSignOut = resolve))
+      )
+      await vi.waitFor(() => expect(finishSignOut).not.toBe(undefined))
+      await Promise.resolve()
+      teardownWorkspace()
+      await signIn(repoOf('b'))
+      finishSignOut()
+      await ended
+
+      expect(snapshot()).toMatchObject({ userId: 'b', transactions: ['tx-b'] })
     })
 
     it('does not wait forever for a hung save', async () => {
@@ -427,11 +443,14 @@ describe('workspace store', () => {
   })
 
   describe('resetting all data', () => {
+    // What App passes: the workspace hook's refetch, which owns the reload.
+    const reload = vi.fn()
     it('deletes everything on the server and starts the user over empty, ready, with saves allowed', async () => {
+      reload.mockClear()
       const a = repoOf('a', A_PREFS)
       await signIn(a)
 
-      await resetWorkspace(a)
+      await resetWorkspace(a, reload)
 
       expect(snapshot()).toEqual({ ...EMPTY, userId: 'a', status: 'ready' })
       expect(a.rows()).toEqual([])
@@ -447,7 +466,7 @@ describe('workspace store', () => {
       const save = heldSave(a)
       setPreference('a', 'fxRate', 43)
 
-      const reset = resetWorkspace(a)
+      const reset = resetWorkspace(a, reload)
       save.release()
       await reset
 
@@ -464,7 +483,7 @@ describe('workspace store', () => {
         error: failure,
       })
 
-      const error = await resetWorkspace(a).catch((e: unknown) => e)
+      const error = await resetWorkspace(a, reload).catch((e: unknown) => e)
 
       expect(error).toBeInstanceOf(UserFacingError)
       expect((error as UserFacingError).message).toBe(
@@ -472,16 +491,27 @@ describe('workspace store', () => {
       )
       expect((error as UserFacingError).cause).toBe(failure)
       expect(errorSpy).toHaveBeenCalledWith('reset failed:', failure)
-      // The rows went; the custom category and the preferences did not.
-      await vi.waitFor(() =>
-        expect(snapshot()).toMatchObject({
-          userId: 'a',
-          status: 'ready',
-          transactions: [],
-          categories: ['cat-a'],
-          preferences: A_PREFS,
-        })
-      )
+      // The reload is the caller's (the hook clears stale messages and can
+      // abandon it); the store does not load behind its back.
+      expect(reload).toHaveBeenCalledTimes(1)
+      await Promise.resolve()
+      expect(a.requests.load).toBe(1)
+    })
+
+    it('does not reload for a user who is no longer loaded', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const a = repoOf('a', A_PREFS)
+      await signIn(a)
+      a.failOn('resetAll')
+      const deleting = a.hold('resetAll')
+
+      const reset = resetWorkspace(a, reload).catch(() => {})
+      await Promise.resolve()
+      await signIn(repoOf('b'))
+      deleting.release()
+      await reset
+
+      expect(reload).not.toHaveBeenCalled()
     })
 
     it('leaves the next user alone when the account changes during the reset', async () => {
@@ -489,7 +519,7 @@ describe('workspace store', () => {
       await signIn(a)
       const deleting = a.hold('resetAll')
 
-      const reset = resetWorkspace(a)
+      const reset = resetWorkspace(a, reload)
       await Promise.resolve()
       await signIn(repoOf('b'))
       deleting.release()
