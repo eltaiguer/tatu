@@ -22,7 +22,8 @@ let cachedHash: string | null = null
 
 function hashOverrides(overrides: CategoryOverrides): string {
   const entries = Object.entries(overrides)
-    .map(([k, v]) => `${k}:${v.category}`)
+    // merchantName too: it is what the tokens are learned from
+    .map(([k, v]) => `${k}:${v.category}:${v.merchantName ?? ''}`)
     .sort()
   return entries.join('|')
 }

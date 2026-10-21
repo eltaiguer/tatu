@@ -130,7 +130,7 @@ src/
     theme.css              # CSS custom properties — light + dark tokens
                            # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
   utils/                   # account-display (ACCOUNT_LABELS: the three accounts' names, accountOf), date-utils (newestDate / newestDataMonth = the newest month with data; pass only the rows that count where that matters), formatting, memo, transaction-display, user-display, user-error, auth-errors
-  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-claude-client.ts records Claude requests and scripts answers
+  test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-claude-client.ts records Claude requests and scripts answers; user-rules.ts builds a UserRules literal keyed like the stores
 supabase/
   schema.sql               # PostgreSQL schema (tables, RLS policies)
 samples/                   # Example Santander CSV files for testing

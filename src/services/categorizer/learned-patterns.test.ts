@@ -170,3 +170,25 @@ describe('learned patterns ignore bank wording (audit)', () => {
     expect([...learned.keys()]).toEqual(['farmacia'])
   })
 })
+
+// Overrides are handed in as a value now: two values with the same keys and
+// categories but different merchants must not share one cached learned map.
+describe('learned patterns of overrides handed in', () => {
+  const override = (merchantName: string) => ({
+    merchantName,
+    category: Category.Healthcare,
+    updatedAt: '2026-03-01T00:00:00.000Z',
+  })
+
+  it('learns from the merchants of the overrides it is given', () => {
+    const botica = { a: override('Botica Central'), b: override('Botica Sur') }
+    const clinica = {
+      a: override('Clinica Central'),
+      b: override('Clinica Sur'),
+    }
+
+    expect(matchLearnedPattern('Botica Norte', botica)).not.toBeNull()
+    expect(matchLearnedPattern('Botica Norte', clinica)).toBeNull()
+    expect(matchLearnedPattern('Clinica Norte', clinica)).not.toBeNull()
+  })
+})
