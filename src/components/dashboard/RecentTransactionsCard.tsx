@@ -25,9 +25,9 @@ export function RecentTransactionsCard({
   return (
     <Card className="p-6">
       <div className="mb-[14px] flex items-center justify-between">
-        <h2 className="m-0 font-[family-name:var(--font-sans)] text-[15px] font-semibold">
+        <h3 className="m-0 font-[family-name:var(--font-sans)] text-[15px] font-semibold">
           Movimientos recientes
-        </h2>
+        </h3>
         {onNavigateToTransactions && (
           <button
             onClick={() => onNavigateToTransactions({})}

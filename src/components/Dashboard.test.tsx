@@ -488,11 +488,98 @@ describe('Dashboard', () => {
 
     render(<Dashboard transactions={transactions} />)
 
+    // Resumen reads top-down in three questions, each a named region.
+    for (const name of [
+      '¿A dónde se fue la plata?',
+      'Mes a mes',
+      'Tus cuentas',
+    ]) {
+      expect(screen.getByRole('region', { name })).toBeInTheDocument()
+    }
     expect(screen.getByText('Gasto por categoría')).toBeInTheDocument()
-    expect(screen.getByText('Ingresos vs Gastos')).toBeInTheDocument()
-    expect(screen.getByText('¿Estás ahorrando?')).toBeInTheDocument()
-    expect(screen.getByText('Gasto por moneda')).toBeInTheDocument()
     expect(screen.getByText('Mayores comercios')).toBeInTheDocument()
+    expect(screen.getByText('¿Estás ahorrando?')).toBeInTheDocument()
+    expect(screen.getByText('Gasto por mes')).toBeInTheDocument()
+    expect(screen.getByText('Gasto por moneda')).toBeInTheDocument()
+    // Gone: a curve that drew spend between months with no data, a tile that
+    // repeated the donut's first row, and a savings rate that ignored the
+    // outlier the savings verdict explains.
+    expect(screen.queryByText('Ingresos vs Gastos')).not.toBeInTheDocument()
+    expect(screen.queryByText('Mayor categoría')).not.toBeInTheDocument()
+    expect(screen.queryByText('Tasa de ahorro')).not.toBeInTheDocument()
+  })
+
+  it('names a single month of data in the singular', () => {
+    render(<Dashboard transactions={[makeTransaction({ id: 'only' })]} />)
+
+    expect(screen.getByText(/El único mes con datos/)).toBeInTheDocument()
+    expect(screen.queryByText(/Últimos 1 meses/)).not.toBeInTheDocument()
+  })
+
+  it('averages monthly spend over the months that had spend, to the cent', () => {
+    render(
+      <Dashboard
+        homeCurrency="USD"
+        transactions={[
+          makeTransaction({
+            id: 'jan',
+            date: new Date('2026-01-10T00:00:00.000Z'),
+            currency: 'USD',
+            amount: 100,
+          }),
+          // February: salary only, no spend.
+          makeTransaction({
+            id: 'feb',
+            date: new Date('2026-02-01T00:00:00.000Z'),
+            currency: 'USD',
+            type: 'credit',
+            category: Category.Income,
+            amount: 500,
+          }),
+          makeTransaction({
+            id: 'mar',
+            date: new Date('2026-03-02T00:00:00.000Z'),
+            currency: 'USD',
+            amount: 15.5,
+          }),
+        ]}
+      />
+    )
+
+    // (100 + 15,50) / 2 — February had no spend, so it doesn't pull it down.
+    const label = screen.getByText('Promedio por mes con gastos')
+    expect(label.parentElement).toHaveTextContent('US$ 57,75')
+  })
+
+  it("says the month's spend as one sentence", () => {
+    render(
+      <Dashboard
+        transactions={[
+          makeTransaction({ id: 'a', currency: 'USD', amount: 120 }),
+          makeTransaction({ id: 'b', currency: 'USD', amount: 30 }),
+        ]}
+        homeCurrency="USD"
+      />
+    )
+
+    // The month is part of the heading, so the outline reads on its own.
+    const hero = screen.getByRole('heading', { name: /Gastaste/ })
+    expect(hero).toHaveTextContent(/todo en dólares\s*Gastaste US\$ 150,00$/)
+  })
+
+  it('shows no uncategorized nudge when everything has a category', () => {
+    render(
+      <Dashboard
+        transactions={[
+          makeTransaction({ id: 'a', category: Category.Groceries }),
+        ]}
+      />
+    )
+
+    expect(
+      screen.queryByRole('button', { name: 'Ver los gastos sin categoría' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Sin categoría')).not.toBeInTheDocument()
   })
 
   it('does not call a mostly-losing year "saving" because of one large inflow', () => {
@@ -681,14 +768,25 @@ describe('Dashboard', () => {
       expect(go).toHaveBeenLastCalledWith({ period: march, type: 'debit' })
     })
 
-    it("top-category KPI → that category's expenses", () => {
+    it("monthly spend bars → that month's expenses", () => {
       const go = setup()
       fireEvent.click(
-        screen.getByRole('button', { name: /Ver la mayor categoría/ })
+        screen.getByRole('button', { name: /Ver los gastos de mar/ })
       )
       expect(go).toHaveBeenCalledWith({
-        categories: [Category.Housing],
+        period: { mode: 'month', y: 2026, m: 2 },
         type: 'debit',
+      })
+    })
+
+    it("monthly income ghost bars → that month's income", () => {
+      const go = setup()
+      fireEvent.click(
+        screen.getByRole('button', { name: /Ver los ingresos de mar/ })
+      )
+      expect(go).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2026, m: 2 },
+        type: 'credit',
       })
     })
 

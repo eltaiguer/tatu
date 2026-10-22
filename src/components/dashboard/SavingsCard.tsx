@@ -21,6 +21,7 @@ import { summarizeSavings, niceTicks } from '../../services/charts/chart-data'
 import type { MonthlyTrendRow } from '../../services/charts/dashboard-rows'
 import { formatCurrency, formatCurrencyShort } from '../../utils/formatting'
 import { Card } from '../ui/card'
+import { MonthButtons } from './MonthButtons'
 
 interface SavingsCardProps {
   monthlyTrend: MonthlyTrendRow[]
@@ -94,14 +95,10 @@ export function SavingsCard({
       <div className="grid grid-cols-1 lg:grid-cols-[258px_1fr] gap-8 items-center">
         {/* Verdict text */}
         <div>
-          <div className="mb-[10px] flex items-baseline gap-[10px]">
-            <h2 className="m-0 font-[family-name:var(--font-sans)] text-[16px] font-semibold">
-              ¿Estás ahorrando?
-            </h2>
-            <span className="text-[11px] text-[var(--text-faint)]">
-              Últimos 12 meses
-            </span>
-          </div>
+          {/* The section heading above names the months covered. */}
+          <h3 className="m-0 mb-[10px] text-title font-semibold">
+            ¿Estás ahorrando?
+          </h3>
           <div className="text-[12px] font-medium text-muted-foreground">
             Mes típico (mediana de ingresos − gastos)
           </div>
@@ -182,23 +179,15 @@ export function SavingsCard({
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-        {/* Keyboard equivalent of clicking a bar; visible when focused. */}
         {openMonth && (
-          <nav
-            aria-label="Movimientos por mes"
-            className="sr-only focus-within:not-sr-only focus-within:mt-2 focus-within:flex focus-within:flex-wrap focus-within:gap-1"
-          >
-            {monthlyTrend.map((m) => (
-              <button
-                key={m.key}
-                type="button"
-                onClick={() => openMonth(m.key)}
-                className="rounded border border-border px-2 py-0.5 text-xs"
-              >
-                Ver movimientos de {m.month}
-              </button>
-            ))}
-          </nav>
+          <MonthButtons
+            label="Movimientos por mes"
+            buttons={monthlyTrend.map((m) => ({
+              key: m.key,
+              text: `Ver movimientos de ${m.month}`,
+              onClick: () => openMonth(m.key),
+            }))}
+          />
         )}
       </div>
     </Card>

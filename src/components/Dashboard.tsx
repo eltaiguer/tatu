@@ -1,4 +1,5 @@
-// Dashboard — Resumen view: account cards + este mes + analysis section (merged)
+// Dashboard — Resumen view: what changed, the month in one sentence, then
+// three questions (where the money went, month by month, your accounts).
 // Sub-components live in ./dashboard/; this file owns the data memos.
 
 import { PageHeader } from './ui/page-header'
@@ -27,13 +28,13 @@ import { AccountCards } from './dashboard/AccountCards'
 import { CategorySpendCard } from './dashboard/CategorySpendCard'
 import { CurrencySplitCard } from './dashboard/CurrencySplitCard'
 import { AllIgnoredState, NoTransactionsState } from './dashboard/EmptyStates'
-import { IncomeExpenseChart } from './dashboard/IncomeExpenseChart'
-import { KpiTiles } from './dashboard/KpiTiles'
-import { MonthSummaryCard } from './dashboard/MonthSummaryCard'
+import { MonthHero } from './dashboard/MonthHero'
+import { MonthlySpendChart } from './dashboard/MonthlySpendChart'
 import { RecentTransactionsCard } from './dashboard/RecentTransactionsCard'
 import { SavingsCard } from './dashboard/SavingsCard'
-import { SectionDivider } from './dashboard/SectionDivider'
+import { ResumenSection } from './dashboard/ResumenSection'
 import { TopMerchantsCard } from './dashboard/TopMerchantsCard'
+import { UncategorizedNudge } from './dashboard/UncategorizedNudge'
 import { newestDate, todayAsUtcDate } from '../utils/date-utils'
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -119,14 +120,12 @@ export function Dashboard({
     [transactions, homeCurrency, fxRate]
   )
 
-  // Uncategorized expenses: same rows and conversion as the category list,
-  // so the tile's numbers equal the rows its link opens.
+  // Uncategorized expenses: the category list's own row, so the nudge's
+  // numbers equal the rows its link opens.
   const uncategorizedSpend = useMemo(
     () =>
-      buildCategorySpendingConverted(transactions, homeCurrency, fxRate).find(
-        (row) => row.category === Category.Uncategorized
-      ),
-    [transactions, homeCurrency, fxRate]
+      categorySpending.find((row) => row.category === Category.Uncategorized),
+    [categorySpending]
   )
 
   const totalExpenses = categoryData.reduce((s, c) => s + c.value, 0)
@@ -148,7 +147,7 @@ export function Dashboard({
   )
 
   // Opens exactly one month's rows (optionally only income or expenses), as
-  // summed by the savings and income/expense charts.
+  // summed by the savings and monthly spend charts.
   const openMonth = onNavigateToTransactions
     ? (key: string, type?: 'credit' | 'debit') => {
         const [y, m] = key.split('-').map(Number)
@@ -190,18 +189,24 @@ export function Dashboard({
   const curWord = homeCurrency === 'USD' ? 'dólares' : 'pesos'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <PageHeader
         title={greeting}
         subtitle={
           <>
-            Tus cuentas Santander de un vistazo ·{' '}
-            {monthSummary.monthLabel ||
-              latestDate.toLocaleDateString('es-UY', {
-                month: 'long',
-                year: 'numeric',
-                timeZone: 'UTC',
-              })}
+            Tus cuentas Santander de un vistazo
+            {/* With data, the hero below names the month. */}
+            {(!hasTransactions || allIgnored) && (
+              <>
+                {' · '}
+                {monthSummary.monthLabel ||
+                  latestDate.toLocaleDateString('es-UY', {
+                    month: 'long',
+                    year: 'numeric',
+                    timeZone: 'UTC',
+                  })}
+              </>
+            )}
           </>
         }
         actions={
@@ -240,87 +245,82 @@ export function Dashboard({
             onOpen={onNavigateToTransactions}
           />
 
-          {/* Account source cards — 3-col grid */}
-          {periodRange && (
-            <p className="m-0 text-[11px] text-[var(--text-faint)]">
-              Período analizado: {periodRange}
-            </p>
-          )}
-          <AccountCards
-            acctSpend={acctSpend}
-            homeCurrency={homeCurrency}
-            onNavigateToTransactions={onNavigateToTransactions}
-          />
-
-          <MonthSummaryCard
+          <MonthHero
             monthSummary={monthSummary}
             homeCurrency={homeCurrency}
             curWord={curWord}
             onNavigateToTransactions={onNavigateToTransactions}
           />
 
-          {/* Analysis section divider */}
-          <SectionDivider
-            label="Análisis"
-            sub={`Tendencias y patrones · combinado en ${curWord}`}
-          />
-
-          <KpiTiles
-            topCategory={categoryData[0]}
-            monthlyTrend={monthlyTrend}
-            uncategorizedSpend={uncategorizedSpend}
-            homeCurrency={homeCurrency}
-            onNavigateToTransactions={onNavigateToTransactions}
-          />
-
-          {monthlyTrend.length > 0 && (
-            <SavingsCard
-              monthlyTrend={monthlyTrend}
+          <ResumenSection
+            title="¿A dónde se fue la plata?"
+            period={periodRange}
+          >
+            <UncategorizedNudge
+              uncategorizedSpend={uncategorizedSpend}
               homeCurrency={homeCurrency}
-              openMonth={openMonth}
-            />
-          )}
-
-          <CategorySpendCard
-            donutData={donutData}
-            otherCategoryIds={otherCategoryIds}
-            totalExpenses={totalExpenses}
-            periodRange={periodRange}
-            homeCurrency={homeCurrency}
-            onNavigateToTransactions={onNavigateToTransactions}
-          />
-
-          {currencySplit.total > 0 && (
-            <CurrencySplitCard
-              currencySplit={currencySplit}
-              periodRange={periodRange}
-              homeCurrency={homeCurrency}
-            />
-          )}
-
-          <IncomeExpenseChart
-            monthlyTrend={monthlyTrend}
-            homeCurrency={homeCurrency}
-            openMonth={openMonth}
-          />
-
-          {/* Bottom 2-col grid — recent transactions + top merchants */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <RecentTransactionsCard
-              recentTransactions={recentTransactions}
-              homeCurrency={homeCurrency}
-              fxRate={fxRate}
               onNavigateToTransactions={onNavigateToTransactions}
             />
-            {topMerchants.length > 0 && (
-              <TopMerchantsCard
-                topMerchants={topMerchants}
-                periodRange={periodRange}
+            <CategorySpendCard
+              donutData={donutData}
+              otherCategoryIds={otherCategoryIds}
+              totalExpenses={totalExpenses}
+              homeCurrency={homeCurrency}
+              onNavigateToTransactions={onNavigateToTransactions}
+            />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {topMerchants.length > 0 && (
+                <TopMerchantsCard
+                  topMerchants={topMerchants}
+                  homeCurrency={homeCurrency}
+                  onNavigateToTransactions={onNavigateToTransactions}
+                />
+              )}
+              <RecentTransactionsCard
+                recentTransactions={recentTransactions}
                 homeCurrency={homeCurrency}
+                fxRate={fxRate}
                 onNavigateToTransactions={onNavigateToTransactions}
               />
+            </div>
+          </ResumenSection>
+
+          {monthlyTrend.length > 0 && (
+            <ResumenSection
+              title="Mes a mes"
+              period={`${
+                monthlyTrend.length === 1
+                  ? 'El único mes con datos'
+                  : `Últimos ${monthlyTrend.length} meses con datos`
+              } · combinado en ${curWord}`}
+            >
+              <SavingsCard
+                monthlyTrend={monthlyTrend}
+                homeCurrency={homeCurrency}
+                openMonth={openMonth}
+              />
+              <MonthlySpendChart
+                monthlyTrend={monthlyTrend}
+                homeCurrency={homeCurrency}
+                openMonth={openMonth}
+              />
+            </ResumenSection>
+          )}
+
+          {/* No section period: each account card shows its own. */}
+          <ResumenSection title="Tus cuentas">
+            <AccountCards
+              acctSpend={acctSpend}
+              homeCurrency={homeCurrency}
+              onNavigateToTransactions={onNavigateToTransactions}
+            />
+            {currencySplit.total > 0 && (
+              <CurrencySplitCard
+                currencySplit={currencySplit}
+                homeCurrency={homeCurrency}
+              />
             )}
-          </div>
+          </ResumenSection>
         </>
       )}
     </div>
