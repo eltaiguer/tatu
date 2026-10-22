@@ -35,7 +35,10 @@ export function CurrencySplitCard({
       <div>
         <h3 className="m-0 text-body font-semibold">Gasto por moneda</h3>
         <p className="m-0 text-caption text-[var(--text-faint)]">
-          Total {formatCurrency(currencySplit.total, homeCurrency)}
+          Total{' '}
+          <span className="font-mono tabular-nums">
+            {formatCurrency(currencySplit.total, homeCurrency)}
+          </span>
         </p>
       </div>
       <SplitBar pctUSD={currencySplit.pctUSD} pctUYU={currencySplit.pctUYU} />

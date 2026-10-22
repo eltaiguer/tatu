@@ -29,23 +29,26 @@ export function UncategorizedNudge({
           }))
       }
       label="Ver los gastos sin categoría"
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--radius-md)] bg-[var(--accent-soft)] px-4 py-3"
+      className="rounded-[var(--radius-md)] bg-[var(--accent-soft)] px-4 py-3"
     >
-      <span className="text-body font-semibold">Sin categoría</span>
-      <span className="font-mono text-body tabular-nums">
-        {formatCurrency(total, homeCurrency)}
-      </span>
-      <span className="text-small text-muted-foreground">
-        {`${count} ${count === 1 ? 'gasto' : 'gastos'} · todo el historial`}
-      </span>
-      {onNavigateToTransactions && (
-        <span
-          aria-hidden="true"
-          className="ml-auto text-small font-semibold text-[var(--text)]"
-        >
-          Categorizalos →
+      {/* Inner flex: DrillTarget sets its own display. */}
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="text-body font-semibold">Sin categoría</span>
+        <span className="font-mono text-body tabular-nums">
+          {formatCurrency(total, homeCurrency)}
         </span>
-      )}
+        <span className="text-small text-muted-foreground">
+          {`${count} ${count === 1 ? 'gasto' : 'gastos'} · todo el historial`}
+        </span>
+        {onNavigateToTransactions && (
+          <span
+            aria-hidden="true"
+            className="ml-auto text-small font-semibold text-[var(--text)]"
+          >
+            Categorizalos →
+          </span>
+        )}
+      </span>
     </DrillTarget>
   )
 }

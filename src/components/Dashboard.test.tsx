@@ -516,9 +516,7 @@ describe('Dashboard', () => {
     expect(screen.queryByText(/Últimos 1 meses/)).not.toBeInTheDocument()
   })
 
-  it('averages monthly spend over finished months that had spend', () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'))
+  it('averages monthly spend over the months that had spend, to the cent', () => {
     render(
       <Dashboard
         homeCurrency="USD"
@@ -538,20 +536,19 @@ describe('Dashboard', () => {
             category: Category.Income,
             amount: 500,
           }),
-          // March is still running: a few days of spend.
           makeTransaction({
             id: 'mar',
             date: new Date('2026-03-02T00:00:00.000Z'),
             currency: 'USD',
-            amount: 10,
+            amount: 15.5,
           }),
         ]}
       />
     )
-    vi.useRealTimers()
 
+    // (100 + 15,50) / 2 — February had no spend, so it doesn't pull it down.
     const label = screen.getByText('Promedio por mes con gastos')
-    expect(label.parentElement).toHaveTextContent('US$ 100,00')
+    expect(label.parentElement).toHaveTextContent('US$ 57,75')
   })
 
   it("says the month's spend as one sentence", () => {
@@ -565,8 +562,24 @@ describe('Dashboard', () => {
       />
     )
 
-    const hero = screen.getByRole('heading', { name: /^Gastaste/ })
-    expect(hero).toHaveTextContent('Gastaste US$ 150,00')
+    // The month is part of the heading, so the outline reads on its own.
+    const hero = screen.getByRole('heading', { name: /Gastaste/ })
+    expect(hero).toHaveTextContent(/todo en dólares\s*Gastaste US\$ 150,00$/)
+  })
+
+  it('shows no uncategorized nudge when everything has a category', () => {
+    render(
+      <Dashboard
+        transactions={[
+          makeTransaction({ id: 'a', category: Category.Groceries }),
+        ]}
+      />
+    )
+
+    expect(
+      screen.queryByRole('button', { name: 'Ver los gastos sin categoría' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Sin categoría')).not.toBeInTheDocument()
   })
 
   it('does not call a mostly-losing year "saving" because of one large inflow', () => {

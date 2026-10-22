@@ -19,21 +19,9 @@ import type {
 import type { Currency } from '../../models'
 import type { MonthlyTrendRow } from '../../services/charts/dashboard-rows'
 import { formatCurrency, formatCurrencyShort } from '../../utils/formatting'
-import { todayAsUtcDate } from '../../utils/date-utils'
+import { averageSpendOfMonthsWithSpend } from '../../services/charts/chart-data'
 import { Card } from '../ui/card'
 import { MonthButtons } from './MonthButtons'
-
-// Average spend of the months that are over and had any: a month with only a
-// salary, or the month still running, would pull it down.
-export function averageMonthlySpend(
-  monthlyTrend: MonthlyTrendRow[],
-  today: Date = todayAsUtcDate()
-): number | null {
-  const current = today.toISOString().slice(0, 7)
-  const months = monthlyTrend.filter((m) => m.gastos > 0 && m.key !== current)
-  if (months.length === 0) return null
-  return Math.round(months.reduce((s, m) => s + m.gastos, 0) / months.length)
-}
 
 interface MonthlySpendChartProps {
   monthlyTrend: MonthlyTrendRow[]
@@ -47,7 +35,9 @@ export function MonthlySpendChart({
   homeCurrency,
   openMonth,
 }: MonthlySpendChartProps) {
-  const avgMonthly = averageMonthlySpend(monthlyTrend)
+  const avgMonthly = averageSpendOfMonthsWithSpend(
+    monthlyTrend.map((m) => m.gastos)
+  )
 
   const tooltip = ({
     active,

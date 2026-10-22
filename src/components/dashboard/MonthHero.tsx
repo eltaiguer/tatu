@@ -42,16 +42,18 @@ export function MonthHero({
   return (
     <div className="space-y-5">
       <div>
-        <p className="m-0 text-label font-semibold tracking-[0.06em] text-[var(--text-faint)] uppercase">
-          {monthSummary.isCurrentMonth
-            ? 'Este mes'
-            : capitalize(monthSummary.monthLabel)}{' '}
-          · todo en {curWord}
-        </p>
-        <h2 className="mt-1.5 mb-0 font-display text-[34px] leading-[1.15] font-semibold tracking-[-0.02em]">
-          Gastaste{' '}
-          <span className="font-mono text-[32px] font-medium tracking-[-0.03em] tabular-nums">
-            {formatCurrency(monthSummary.expense, homeCurrency)}
+        <h2 className="m-0">
+          <span className="block text-label font-semibold tracking-[0.06em] text-[var(--text-faint)] uppercase">
+            {monthSummary.isCurrentMonth
+              ? 'Este mes'
+              : capitalize(monthSummary.monthLabel)}{' '}
+            · todo en {curWord}
+          </span>
+          <span className="mt-1.5 block font-display text-[34px] leading-[1.15] font-semibold tracking-[-0.02em]">
+            Gastaste{' '}
+            <span className="font-mono text-[32px] font-medium tracking-[-0.03em] tabular-nums">
+              {formatCurrency(monthSummary.expense, homeCurrency)}
+            </span>
           </span>
         </h2>
         <p className="mt-1.5 mb-0 text-small text-[var(--text-faint)]">
