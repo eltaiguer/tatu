@@ -51,11 +51,22 @@ const VALID_TYPES = new Set<InsightType>([
 
 const VALID_SEVERITIES = new Set<InsightSeverity>(['low', 'medium', 'high'])
 
+// The money amounts of categoryChanges (not pctChange, a percentage).
+function categoryChangeAmounts(input: InsightInput): number[] {
+  const changes = input.categoryChanges
+  if (!changes) return []
+  const rows = changes.decrease
+    ? [...changes.increases, changes.decrease]
+    : changes.increases
+  return rows.flatMap((c) => [c.current, c.median, c.delta])
+}
+
 function isKnownAmount(amount: number, input: InsightInput): boolean {
   return (
     input.categoryTotals.some((c) => c.amount === amount) ||
     input.topMerchants.some((m) => m.amount === amount) ||
-    input.recurringCharges.some((r) => r.approxAmount === amount)
+    input.recurringCharges.some((r) => r.approxAmount === amount) ||
+    categoryChangeAmounts(input).includes(amount)
   )
 }
 

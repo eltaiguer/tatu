@@ -6,6 +6,11 @@ import {
   buildMerchantSpendingConverted,
   buildMonthlyTrendsConverted,
 } from '../charts/chart-data'
+import {
+  categoryChangesBefore,
+  shiftMonth,
+  type CategoryChange,
+} from '../charts/category-changes'
 import { groupByMerchant } from '../merchants/merchant-key'
 import {
   calendarDaysBetween,
@@ -52,6 +57,31 @@ export interface MonthlyTrendPoint {
   expense: number
 }
 
+export interface CategoryChangeInsight {
+  category: string
+  /** Spend in referenceMonth. */
+  current: number
+  /** Median monthly spend over baselineMonths. */
+  median: number
+  /** current − median: positive grew, negative shrank. */
+  delta: number
+  /** delta as a % of median, null when the median is too small to mean anything. */
+  pctChange: number | null
+}
+
+/**
+ * Resumen's "what changed" card (category-changes.ts) for Insights: each
+ * category's spend in the latest month every account fully covers vs. the
+ * median of the months just before it — up to 3 biggest increases and the
+ * biggest decrease, over a noise floor.
+ */
+export interface CategoryChangesInsight {
+  referenceMonth: string
+  baselineMonths: string[]
+  increases: CategoryChangeInsight[]
+  decrease: CategoryChangeInsight | null
+}
+
 export interface InsightInput {
   /** Earliest/latest transaction date (toDateKey format), '' if none. */
   historyStart: string
@@ -61,6 +91,8 @@ export interface InsightInput {
   topMerchants: MerchantTotal[]
   recurringCharges: RecurringCharge[]
   monthlyTrend: MonthlyTrendPoint[]
+  /** null when fewer than 3 complete months can be compared. */
+  categoryChanges: CategoryChangesInsight | null
 }
 
 const TOP_MERCHANTS_LIMIT = 8
@@ -226,6 +258,41 @@ function detectRecurringCharges(
   return charges.sort((a, b) => b.approxAmount - a.approxAmount)
 }
 
+function toChangeInsight(change: CategoryChange): CategoryChangeInsight {
+  return {
+    category: change.category,
+    current: round2(change.current),
+    median: round2(change.median),
+    delta: round2(change.delta),
+    pctChange: change.pct === null ? null : round2(change.pct * 100),
+  }
+}
+
+// The month after the history's last one stands in for "this month", so the
+// result depends on the rows alone, never on the date it is built (the input
+// is hashed for the insights cache). The history's last month still counts
+// only if every account covers it to its end, as in Resumen.
+function buildCategoryChanges(
+  transactions: Transaction[],
+  homeCurrency: Currency,
+  fxRate: number,
+  historyEndMonthKey: string
+): CategoryChangesInsight | null {
+  const changes = categoryChangesBefore(
+    transactions,
+    homeCurrency,
+    fxRate,
+    shiftMonth(historyEndMonthKey, 1)
+  )
+  if (changes.kind !== 'ok') return null
+  return {
+    referenceMonth: changes.reference,
+    baselineMonths: changes.baseline,
+    increases: changes.increases.map(toChangeInsight),
+    decrease: changes.decrease ? toChangeInsight(changes.decrease) : null,
+  }
+}
+
 /**
  * Builds the deterministic, pre-computed input handed to the AI insight
  * generator, over the user's *entire* transaction history — there is no
@@ -248,6 +315,7 @@ export function buildInsightInput(
       topMerchants: [],
       recurringCharges: [],
       monthlyTrend: [],
+      categoryChanges: null,
     }
   }
 
@@ -286,5 +354,11 @@ export function buildInsightInput(
       income: round2(d.income),
       expense: round2(d.expense),
     })),
+    categoryChanges: buildCategoryChanges(
+      allTransactions,
+      homeCurrency,
+      fxRate,
+      historyEndMonthKey
+    ),
   }
 }

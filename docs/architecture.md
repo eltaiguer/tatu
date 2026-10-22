@@ -486,7 +486,7 @@ All conversion happens in the browser, at render or aggregation time, with
 | Caller                                                                                                                                                                                  | What it converts                                                                                                    |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `buildCurrencySplit`, `spendByAccount`, `buildMerchantSpendingConverted`) | Resumen totals, charts, account cards and "Mayores comercios" (also Insights' `topMerchants`), in the home currency |
-| `category-changes.ts` (`categoryChanges`)                                                                                                                                               | "Qué cambió" month comparisons and its US$ 10 noise floor                                                           |
+| `category-changes.ts` (`categoryChanges`, `categoryChangesBefore`)                                                                                                                      | "Qué cambió" month comparisons (also Insights' `categoryChanges`) and its US$ 10 noise floor                        |
 | `insight-data.ts` (`buildInsightInput`)                                                                                                                                                 | Every number handed to the Insights model, rounded to cents                                                         |
 | `Dashboard.tsx`                                                                                                                                                                         | Recent rows                                                                                                         |
 | `Transactions.tsx`                                                                                                                                                                      | Filtered-set totals                                                                                                 |
@@ -596,6 +596,17 @@ rise doesn't read as a lapse. `npx vite-node scripts/recurring-diff.ts
 [--home UYU|USD] [--fx 40.5] [paths…]` prints, per merchant key, what the old
 rules (main; #120) and the current one detect on a Santander CSV or Tatu export
 (`scripts/fixtures/recurring-12mo.csv` is a synthetic 12-month example).
+
+**Category changes** (Insights' `categoryChanges`, #239): the same numbers
+as Resumen's "Qué cambió" card — `categoryChangesBefore` in
+`category-changes.ts`, rounded to cents — so Insights can say a category grew
+or shrank. Resumen reads "this month" off the clock; `buildInsightInput`
+passes the month after the history's last one instead, because its output is
+hashed for the insights cache and must depend on the rows alone. The two agree
+except when the history's last month is the real current month and every
+account already covers it to within 3 days of its end. The model may quote
+`current`, `median` and `delta` (`isKnownAmount` accepts them), not
+`pctChange`.
 
 **Export** (`services/export/export.ts`) writes exactly the rows it is given
 and returns how many it wrote. Configuración exports every row (a full

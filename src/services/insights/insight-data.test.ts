@@ -1,5 +1,6 @@
-import { afterEach, describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { buildInsightInput } from './insight-data'
+import { categoryChanges } from '../charts/category-changes'
 import {
   clearAllDescriptionOverrides,
   setDescriptionOverride,
@@ -36,6 +37,7 @@ describe('buildInsightInput', () => {
       topMerchants: [],
       recurringCharges: [],
       monthlyTrend: [],
+      categoryChanges: null,
     })
   })
 
@@ -724,5 +726,112 @@ describe('recurring cadence across stored date shapes', () => {
       40.5
     ).recurringCharges.find((c) => c.merchant === 'Feria')
     expect(feria?.cadence).toBe('weekly')
+  })
+})
+
+describe('buildInsightInput — category changes (#239)', () => {
+  // A USD and a UYU account, both covering January to April 2026 end to end.
+  // April is the latest complete month; January to March are its baseline.
+  const usd = (
+    id: string,
+    day: string,
+    amount: number,
+    category: Category,
+    extra: Partial<Transaction> = {}
+  ) =>
+    makeTransaction(id, {
+      date: new Date(`${day}T00:00:00.000Z`),
+      amount,
+      category,
+      ...extra,
+    })
+  const uyu = (id: string, day: string, amount: number, category: Category) =>
+    usd(id, day, amount, category, { currency: 'UYU' })
+
+  const rows = [
+    // The UYU account opens with a transfer: not spend, but proof of coverage.
+    uyu('t1', '2026-01-01', 1000, Category.InternalTransfer),
+    usd('g1', '2026-01-02', 200, Category.Groceries),
+    usd('r1', '2026-01-28', 100, Category.Restaurants),
+    usd('g2', '2026-02-10', 200, Category.Groceries),
+    usd('r2', '2026-02-10', 120, Category.Restaurants),
+    usd('g3', '2026-03-10', 200, Category.Groceries),
+    usd('r3', '2026-03-10', 110, Category.Restaurants),
+    usd('r4', '2026-04-10', 100, Category.Restaurants),
+    // Income and a split parent never count as spend.
+    usd('i1', '2026-04-15', 5000, Category.Income, { type: 'credit' }),
+    usd('p1', '2026-04-20', 999, Category.Restaurants, {
+      isSplitParent: true,
+    }),
+    usd('g4', '2026-04-29', 150, Category.Groceries),
+    // 8100 UYU = 200 USD at 40.5.
+    uyu('r5', '2026-04-30', 8100, Category.Restaurants),
+  ]
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('compares the latest complete month with the median of the months before it, in the home currency', () => {
+    expect(buildInsightInput(rows, 'USD', 40.5).categoryChanges).toEqual({
+      referenceMonth: '2026-04',
+      baselineMonths: ['2026-01', '2026-02', '2026-03'],
+      increases: [
+        {
+          category: Category.Restaurants,
+          current: 300,
+          median: 110,
+          delta: 190,
+          pctChange: 172.73,
+        },
+      ],
+      decrease: {
+        category: Category.Groceries,
+        current: 150,
+        median: 200,
+        delta: -50,
+        pctChange: -25,
+      },
+    })
+  })
+
+  it('converts into a UYU home currency too', () => {
+    const changes = buildInsightInput(rows, 'UYU', 40.5).categoryChanges
+    expect(changes?.increases[0]).toMatchObject({
+      current: 12150,
+      median: 4455,
+      delta: 7695,
+    })
+    expect(changes?.decrease?.delta).toBe(-2025)
+  })
+
+  it('matches Resumen\'s "what changed" card for the same rows', () => {
+    const card = categoryChanges(
+      rows,
+      'USD',
+      40.5,
+      new Date('2026-06-15T12:00:00.000Z')
+    )
+    const insight = buildInsightInput(rows, 'USD', 40.5).categoryChanges
+    if (card.kind !== 'ok') throw new Error('expected a comparison')
+    expect(insight?.referenceMonth).toBe(card.reference)
+    expect(insight?.baselineMonths).toEqual(card.baseline)
+    expect(insight?.increases.map((c) => [c.category, c.delta])).toEqual(
+      card.increases.map((c) => [c.category, c.delta])
+    )
+    expect(insight?.decrease?.delta).toBe(card.decrease?.delta)
+  })
+
+  it('does not read the clock: the same rows give the same input on any date', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-05-02T12:00:00.000Z'))
+    const early = buildInsightInput(rows, 'USD', 40.5)
+    vi.setSystemTime(new Date('2031-01-01T12:00:00.000Z'))
+    expect(buildInsightInput(rows, 'USD', 40.5)).toEqual(early)
+  })
+
+  it('is null when there are not enough complete months to compare', () => {
+    const twoMonths = rows.filter((tx) => tx.date >= new Date('2026-03-01'))
+    expect(buildInsightInput(twoMonths, 'USD', 40.5).categoryChanges).toBeNull()
   })
 })

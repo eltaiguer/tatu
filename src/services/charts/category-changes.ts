@@ -52,7 +52,7 @@ function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10)
 }
 
-function shiftMonth(key: string, by: number): string {
+export function shiftMonth(key: string, by: number): string {
   const [y, m] = key.split('-').map(Number)
   const d = new Date(Date.UTC(y, m - 1 + by, 1))
   return toMonthKey(d)
@@ -83,6 +83,19 @@ export function categoryChanges(
   fxRate: number,
   now: Date = new Date()
 ): CategoryChanges {
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  return categoryChangesBefore(transactions, homeCurrency, fxRate, currentMonth)
+}
+
+// The same comparison with the in-progress month given as a 'YYYY-MM' key
+// instead of read off the clock, so a caller whose output must not depend on
+// the date (Insights, whose input is hashed) can anchor it to its data.
+export function categoryChangesBefore(
+  transactions: Transaction[],
+  homeCurrency: Currency,
+  fxRate: number,
+  currentMonth: string
+): CategoryChanges {
   // Coverage: the first and last day each account has data for.
   const coverage = new Map<AccountKey, { first: string; last: string }>()
   for (const tx of transactions) {
@@ -100,7 +113,6 @@ export function categoryChanges(
   }
   if (coverage.size === 0) return { kind: 'insufficient' }
 
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const pad = (n: number) => String(n).padStart(2, '0')
   // Every account must cover the month: already started by then (not
   // imported later) and, if the month is the account's last one, running to
