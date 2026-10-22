@@ -17,7 +17,7 @@ import {
   type InMemoryRepository,
 } from '../repository/in-memory-repository'
 import { workspaceStore } from '../../stores/workspace-state'
-import { CATEGORY_COLORS, Category } from '../../models'
+import { CATEGORY_COLORS, CATEGORY_LABELS, Category } from '../../models'
 
 describe('Custom category store', () => {
   beforeEach(() => {
@@ -383,6 +383,14 @@ describe('rows that collapse into one category', () => {
 
 describe('upsertBuiltinOverride', () => {
   afterEach(() => replaceCustomCategories([]))
+
+  it("keeps the built-in's own label when only the ignore flag changes", () => {
+    upsertBuiltinOverride(Category.Groceries, { isIgnored: true })
+
+    expect(
+      listCustomCategories().find((c) => c.id === Category.Groceries)?.label
+    ).toBe(CATEGORY_LABELS[Category.Groceries])
+  })
 
   it("keeps the built-in's own colour when only the label changes", () => {
     upsertBuiltinOverride(Category.Groceries, { label: 'Súper' })

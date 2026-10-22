@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { CATEGORY_COLORS, Category } from './category'
-import { DEFAULT_CATEGORY_COLOR } from '../services/categories/category-store'
+import { CATEGORY_COLORS, Category, DEFAULT_CATEGORY_COLOR } from './category'
 
 // Rows that don't count as spend by default (ignored or income): they never
 // share the donut with each other's neighbours, so they get a looser bar.
@@ -21,6 +20,9 @@ function themeCanvases(): Record<string, string> {
   const css = readFileSync(join(__dirname, '../styles/theme.css'), 'utf8')
   const block = (selector: string) => {
     const start = css.indexOf(`${selector} {`)
+    // A theme.css restructure should fail here with a clear message, not
+    // check the wrong colours.
+    if (start === -1) throw new Error(`theme.css: no "${selector} {" block`)
     return css.slice(start, css.indexOf('\n}', start))
   }
   const token = (text: string, name: string) => {
@@ -127,6 +129,13 @@ describe('category palette', () => {
 
   it('keeps every category that can share the donut distinguishable', () => {
     expect(closePairs(SPEND, 6.5)).toEqual([])
+  })
+
+  it('starts a new custom category in a colour no built-in uses', () => {
+    const close = SPEND.filter(
+      (c) => distance(DEFAULT_CATEGORY_COLOR, CATEGORY_COLORS[c]) < 6.5
+    )
+    expect(close).toEqual([])
   })
 
   it('keeps every category, ignored ones included, apart from every other', () => {

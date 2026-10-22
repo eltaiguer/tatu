@@ -1,4 +1,9 @@
-import { CATEGORY_COLORS, type Category } from '../../models'
+import {
+  CATEGORY_COLORS,
+  CATEGORY_LABELS,
+  DEFAULT_CATEGORY_COLOR,
+  type Category,
+} from '../../models'
 import { isReservedCategoryId, normalizeCategoryId } from './category-aliases'
 import { UserFacingError } from '../../utils/user-error'
 import type { Repository } from '../repository/repository'
@@ -10,7 +15,8 @@ export type CategoryRepository = Pick<
   'userId' | 'upsertCustomCategory' | 'archiveCustomCategory'
 >
 
-export const DEFAULT_CATEGORY_COLOR = '#3179b7'
+// Lives with the palette in models; re-exported for existing callers.
+export { DEFAULT_CATEGORY_COLOR }
 
 export interface CustomCategory {
   /** The id rows are grouped under: always normalizeCategoryId(stored id). */
@@ -261,7 +267,7 @@ export function upsertBuiltinOverride(
       ..._customCategories,
       {
         id,
-        label: updates.label ?? id,
+        label: updates.label ?? CATEGORY_LABELS[id as Category] ?? id,
         color:
           updates.color ??
           CATEGORY_COLORS[id as Category] ??

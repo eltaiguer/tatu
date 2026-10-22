@@ -1,7 +1,9 @@
 import {
   Category,
   CATEGORY_COLORS,
-  LEGACY_CATEGORY_COLORS,
+  PAST_CATEGORY_COLORS,
+  PAST_DEFAULT_CATEGORY_COLORS,
+  isShippedDefaultColor,
   CATEGORY_ICONS,
   CATEGORY_LABELS,
 } from '../../models'
@@ -68,15 +70,19 @@ function ignoredFor(key: string, row: CustomCategory | undefined): boolean {
   )
 }
 
-// An override's colour, unless it is the pre-palette default it was saved
-// with (see LEGACY_CATEGORY_COLORS).
+// An override's colour, unless it is a default the app shipped (see
+// PAST_CATEGORY_COLORS): then the category follows the current palette.
 function chosenColor(
   category: Category,
   override: CustomCategory | undefined
 ): string | undefined {
   const color = override?.color
   if (!color) return undefined
-  return color.toLowerCase() === LEGACY_CATEGORY_COLORS[category]
+  return isShippedDefaultColor(
+    color,
+    CATEGORY_COLORS[category],
+    PAST_CATEGORY_COLORS[category]
+  )
     ? undefined
     : color
 }
@@ -100,7 +106,15 @@ function customDefinition(key: string, c: CustomCategory): CategoryDefinition {
   return {
     id: key,
     label: c.label || humanizeCategoryId(key),
-    color: c.color || DEFAULT_CATEGORY_COLOR,
+    color:
+      c.color &&
+      !isShippedDefaultColor(
+        c.color,
+        DEFAULT_CATEGORY_COLOR,
+        PAST_DEFAULT_CATEGORY_COLORS
+      )
+        ? c.color
+        : DEFAULT_CATEGORY_COLOR,
     icon: c.icon || DEFAULT_CUSTOM_ICON,
     isCustom: true,
     isIgnored: ignoredFor(key, c),

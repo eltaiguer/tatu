@@ -111,27 +111,46 @@ export const CATEGORY_COLORS: Record<Category, string> = {
 }
 
 /**
- * The defaults before the 2026-10 palette. Editing a built-in category saved
- * its then-default colour with the override, so an override still carrying
- * one of these was never a choice: the registry draws it in the current one.
+ * Every default each built-in has shipped with before the current one. The
+ * colour column is NOT NULL, so editing a built-in saves its colour with the
+ * override even when the user never touched the picker: a stored colour equal
+ * to the current or a past default means "follow the default". When the
+ * palette changes again, append the outgoing CATEGORY_COLORS value here.
+ * (Trade-off: a user who picks exactly a shipped default gets the current one.)
  */
-export const LEGACY_CATEGORY_COLORS: Record<Category, string> = {
-  [Category.Groceries]: '#22c55e',
-  [Category.Restaurants]: '#f97316',
-  [Category.Transport]: '#0ea5e9',
-  [Category.Utilities]: '#64748b',
-  [Category.Healthcare]: '#ef4444',
-  [Category.Shopping]: '#ec4899',
-  [Category.Entertainment]: '#f59e0b',
-  [Category.Software]: '#6366f1',
-  [Category.Education]: '#14b8a6',
-  [Category.Automotive]: '#84cc16',
-  [Category.Housing]: '#6b7280',
-  [Category.Personal]: '#f43f5e',
-  [Category.Insurance]: '#10b981',
-  [Category.Income]: '#16a34a',
-  [Category.InternalTransfer]: '#0284c7',
-  [Category.ExternalTransfer]: '#7c3aed',
-  [Category.Fees]: '#fb7185',
-  [Category.Uncategorized]: '#94a3b8',
+export const PAST_CATEGORY_COLORS: Record<Category, readonly string[]> = {
+  [Category.Groceries]: ['#22c55e'],
+  [Category.Restaurants]: ['#f97316'],
+  [Category.Transport]: ['#0ea5e9'],
+  [Category.Utilities]: ['#64748b'],
+  [Category.Healthcare]: ['#ef4444'],
+  [Category.Shopping]: ['#ec4899'],
+  [Category.Entertainment]: ['#f59e0b'],
+  [Category.Software]: ['#6366f1'],
+  [Category.Education]: ['#14b8a6'],
+  [Category.Automotive]: ['#84cc16'],
+  [Category.Housing]: ['#6b7280'],
+  [Category.Personal]: ['#f43f5e'],
+  [Category.Insurance]: ['#10b981'],
+  [Category.Income]: ['#16a34a'],
+  [Category.InternalTransfer]: ['#0284c7'],
+  [Category.ExternalTransfer]: ['#7c3aed'],
+  [Category.Fees]: ['#fb7185'],
+  [Category.Uncategorized]: ['#94a3b8'],
+}
+
+/** New custom categories start here: distinct from every built-in. */
+export const DEFAULT_CATEGORY_COLOR = '#718ce8' // oklch(0.66 0.14 270)
+
+/** Past DEFAULT_CATEGORY_COLOR values, same rule as PAST_CATEGORY_COLORS. */
+export const PAST_DEFAULT_CATEGORY_COLORS: readonly string[] = ['#0ea5e9']
+
+/** A stored colour that is one the app chose, not the user. */
+export function isShippedDefaultColor(
+  color: string,
+  current: string,
+  past: readonly string[]
+): boolean {
+  const c = color.toLowerCase()
+  return c === current || past.includes(c)
 }

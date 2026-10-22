@@ -47,6 +47,12 @@ describe('built-in colours after the palette change', () => {
     expect(resolveCategory(Category.Groceries).label).toBe('Súper')
   })
 
+  it('draws a custom category saved with the old default colour in the new default', () => {
+    loadCustom([{ id: 'mascotas', label: 'Mascotas', color: '#0ea5e9' }])
+
+    expect(resolveCategory('mascotas').color).toBe(DEFAULT_CATEGORY_COLOR)
+  })
+
   it('keeps a colour the user picked', () => {
     loadCustom([{ id: Category.Groceries, label: 'Súper', color: '#123456' }])
 
