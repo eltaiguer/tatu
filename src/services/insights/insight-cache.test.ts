@@ -27,6 +27,7 @@ const input: InsightInput = {
   topMerchants: [],
   recurringCharges: [],
   monthlyTrend: [],
+  categoryChanges: null,
 }
 
 const result: InsightsResult = { insights: [] }
