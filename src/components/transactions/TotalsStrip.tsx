@@ -21,7 +21,9 @@ function TotalTile({
   icon: React.ReactNode
 }) {
   return (
-    <div className="@container flex min-w-0 flex-col gap-[3px] px-4 py-1 first:pl-0">
+    // Phones: label left, amount right, one row each (three columns would
+    // shrink long peso totals to ~9px). From sm: three columns.
+    <div className="@container flex min-w-0 items-baseline justify-between gap-3 py-2 sm:flex-col sm:items-stretch sm:justify-start sm:gap-[3px] sm:px-4 sm:py-1 sm:first:pl-0 sm:last:pr-0">
       <div className="flex min-w-0 items-center gap-[6px]">
         <span className="grid shrink-0 text-[var(--text-muted)]">{icon}</span>
         <span className="overflow-hidden text-[11px] font-semibold tracking-[0.05em] text-ellipsis whitespace-nowrap text-[var(--text-muted)] uppercase">
@@ -68,7 +70,11 @@ export function TotalsStrip({
   )
 
   return (
-    <div className="mb-4 grid grid-cols-3 divide-x divide-[var(--border)]">
+    <div
+      role="group"
+      aria-label="Totales del período"
+      className="mb-4 grid grid-cols-1 divide-y divide-[var(--border)] sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+    >
       <TotalTile
         label="Ingresos"
         icon={<TrendingUp size={14} />}

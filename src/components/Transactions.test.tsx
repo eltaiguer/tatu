@@ -96,12 +96,25 @@ describe('Transactions', () => {
       />
     )
 
+    const totals = screen.getByRole('group', { name: 'Totales del período' })
     expect(
-      screen.queryByText('Ignoradas · no se cuentan')
-    ).not.toBeInTheDocument()
+      within(totals)
+        .getAllByText(/^(Ingresos|Gastos|Balance|Transferencias)$/)
+        .map((el) => el.textContent)
+    ).toEqual(['Ingresos', 'Gastos', 'Balance'])
+    const toggle = screen.getByRole('button', {
+      name: /transferencias ignoradas/,
+    })
+    expect(toggle).toHaveTextContent('· 1')
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('says there are no ignored transfers instead of a blank disabled toggle', () => {
+    render(<Transactions transactions={[makeTransaction(0)]} />)
+
     expect(
-      screen.getByRole('button', { name: /transferencias ignoradas/ })
-    ).toHaveTextContent('· 1')
+      screen.getByRole('button', { name: /Sin transferencias ignoradas/ })
+    ).toBeDisabled()
   })
 
   it('flags only categories worth reviewing, without a confidence column', () => {
