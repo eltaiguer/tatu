@@ -824,14 +824,51 @@ describe('buildInsightInput — category changes (#239)', () => {
 
   it('does not read the clock: the same rows give the same input on any date', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-05-02T12:00:00.000Z'))
+    // Inside the history's last month: reading the clock would leave April
+    // out as "this month".
+    vi.setSystemTime(new Date('2026-04-30T12:00:00.000Z'))
     const early = buildInsightInput(rows, 'USD', 40.5)
     vi.setSystemTime(new Date('2031-01-01T12:00:00.000Z'))
     expect(buildInsightInput(rows, 'USD', 40.5)).toEqual(early)
   })
 
-  it('is null when there are not enough complete months to compare', () => {
-    const twoMonths = rows.filter((tx) => tx.date >= new Date('2026-03-01'))
+  it('is null when fewer than 2 complete months precede the latest one', () => {
+    // Both accounts cover March and April end to end: one baseline month.
+    const twoMonths = [
+      uyu('t0', '2026-03-01', 1000, Category.InternalTransfer),
+      usd('g0', '2026-03-01', 200, Category.Groceries),
+      ...rows.filter((tx) => tx.date >= new Date('2026-03-02')),
+    ]
     expect(buildInsightInput(twoMonths, 'USD', 40.5).categoryChanges).toBeNull()
+    // One more complete month is enough.
+    const threeMonths = [
+      uyu('t0', '2026-02-01', 1000, Category.InternalTransfer),
+      usd('g0', '2026-02-01', 200, Category.Groceries),
+      ...rows.filter((tx) => tx.date >= new Date('2026-02-02')),
+    ]
+    expect(
+      buildInsightInput(threeMonths, 'USD', 40.5).categoryChanges
+    ).not.toBeNull()
+  })
+
+  it('rounds so that delta is exactly current minus median as shown', () => {
+    // 9012 / 40.5 = 222.5185…, 4004 / 40.5 = 98.8642…: unrounded delta
+    // 123.654… would round to 123.65, a cent off 222.52 − 98.86.
+    const odd = [
+      ...rows,
+      uyu('e1', '2026-01-15', 4004, Category.Entertainment),
+      uyu('e2', '2026-02-15', 4004, Category.Entertainment),
+      uyu('e3', '2026-03-15', 4004, Category.Entertainment),
+      uyu('e4', '2026-04-15', 9012, Category.Entertainment),
+    ]
+    const change = buildInsightInput(
+      odd,
+      'USD',
+      40.5
+    ).categoryChanges?.increases.find(
+      (c) => c.category === Category.Entertainment
+    )
+    expect(change).toMatchObject({ current: 222.52, median: 98.86 })
+    expect(change?.delta).toBe(123.66)
   })
 })

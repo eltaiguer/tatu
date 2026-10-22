@@ -605,8 +605,9 @@ passes the month after the history's last one instead, because its output is
 hashed for the insights cache and must depend on the rows alone. The two agree
 except when the history's last month is the real current month and every
 account already covers it to within 3 days of its end. The model may quote
-`current`, `median` and `delta` (`isKnownAmount` accepts them), not
-`pctChange`.
+`current`, `median` and `delta` (`isKnownAmount` accepts them; a drop's
+`delta` also without its minus sign, never 0), not `pctChange`. `delta` is
+computed from the rounded `current` and `median`, so the three always agree.
 
 **Export** (`services/export/export.ts`) writes exactly the rows it is given
 and returns how many it wrote. Configuración exports every row (a full

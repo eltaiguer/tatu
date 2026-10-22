@@ -166,6 +166,58 @@ describe('parseInsightsResponse', () => {
     }
   )
 
+  it('accepts a drop quoted without its minus sign', () => {
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'trend',
+          title: 'Alimentación bajó',
+          narrative: 'Gastaste menos en alimentación que en un mes típico.',
+          amount: 20,
+          category: 'groceries',
+          severity: 'low',
+        },
+      ],
+    })
+
+    expect(parseInsightsResponse(text, baseInput).insights[0].amount).toBe(20)
+  })
+
+  it('does not accept 0, a categoryChanges median or current with no spend', () => {
+    const input: InsightInput = {
+      ...baseInput,
+      categoryChanges: {
+        referenceMonth: '2026-05',
+        baselineMonths: ['2026-03', '2026-04'],
+        increases: [
+          {
+            category: 'restaurants',
+            current: 50,
+            median: 0,
+            delta: 50,
+            pctChange: null,
+          },
+        ],
+        decrease: null,
+      },
+    }
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'anomaly',
+          title: 'Nuevo gasto',
+          narrative: 'Antes no gastabas en restaurantes.',
+          amount: 0,
+          severity: 'low',
+        },
+      ],
+    })
+
+    expect(parseInsightsResponse(text, input).insights[0].amount).toBe(
+      undefined
+    )
+  })
+
   it('does not accept a percentage from categoryChanges as an amount', () => {
     const text = JSON.stringify({
       insights: [

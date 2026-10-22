@@ -51,14 +51,18 @@ const VALID_TYPES = new Set<InsightType>([
 
 const VALID_SEVERITIES = new Set<InsightSeverity>(['low', 'medium', 'high'])
 
-// The money amounts of categoryChanges (not pctChange, a percentage).
+// The money amounts of categoryChanges a card may show: current, median and
+// delta, a drop's also without its minus sign — not pctChange (a percentage)
+// and never 0 (a month with no spend is not a figure worth a card).
 function categoryChangeAmounts(input: InsightInput): number[] {
   const changes = input.categoryChanges
   if (!changes) return []
   const rows = changes.decrease
     ? [...changes.increases, changes.decrease]
     : changes.increases
-  return rows.flatMap((c) => [c.current, c.median, c.delta])
+  return rows
+    .flatMap((c) => [c.current, c.median, c.delta, Math.abs(c.delta)])
+    .filter((amount) => amount !== 0)
 }
 
 function isKnownAmount(amount: number, input: InsightInput): boolean {
