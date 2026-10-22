@@ -32,9 +32,10 @@ export function CategoryForm({
   return (
     <div className="mb-[24px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-[24px] py-[20px]">
       <div className="mb-[16px] flex items-center justify-between">
-        <h3 className="text-[15px] font-semibold">
+        {/* h2: a sibling of "Tus categorías", not nested under it */}
+        <h2 className="text-[15px] font-semibold">
           {isEditing ? 'Editar categoría' : 'Nueva categoría'}
-        </h3>
+        </h2>
         <button
           onClick={onCancel}
           className="grid cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] text-[var(--text-faint)]"

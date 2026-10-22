@@ -13,7 +13,7 @@ import { CoverageAnalysis } from './dev/CoverageAnalysis'
 import { AiCategorizationPreview } from './dev/AiCategorizationPreview'
 import { AiPatternAnalysis } from './dev/AiPatternAnalysis'
 import { CategorizerEval } from './dev/CategorizerEval'
-import { SectionCard } from './ui/card'
+import { Card, SectionCard } from './ui/card'
 import { IconTile } from './ui/icon-tile'
 import { SegmentedToggle } from './ui/segmented-toggle'
 import { useConfirm } from './ConfirmDialog'
@@ -79,6 +79,25 @@ function SettingRow({
       </div>
       {control}
     </div>
+  )
+}
+
+// One developer panel inside "Herramientas de desarrollo": a card with its
+// own h3 title, a level below the page's sections.
+function DevPanel({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <Card className="mb-4 gap-0 overflow-hidden">
+      <h3 className="border-b border-border px-6 py-4 text-[15px] font-semibold">
+        {title}
+      </h3>
+      <div>{children}</div>
+    </Card>
   )
 }
 
@@ -438,40 +457,39 @@ export function Settings({
         </div>
       </SectionCard>
 
+      {/* Developer tooling: dev builds only, out of the way until opened. */}
       {import.meta.env.DEV && (
-        <SectionCard title="[Dev] Cobertura del clasificador">
-          <CoverageAnalysis repository={repository} />
-        </SectionCard>
-      )}
-
-      {import.meta.env.DEV && (
-        <SectionCard title="[Dev] Evaluación del clasificador">
-          <CategorizerEval
-            transactions={transactions}
-            claudeApiKey={claudeApiKey}
-            aiModel={aiModel}
-          />
-        </SectionCard>
-      )}
-
-      {import.meta.env.DEV && (
-        <SectionCard title="[Dev] Preview de categorización IA">
-          <AiCategorizationPreview
-            transactions={transactions}
-            claudeApiKey={claudeApiKey}
-            aiModel={aiModel}
-          />
-        </SectionCard>
-      )}
-
-      {import.meta.env.DEV && (
-        <SectionCard title="[Dev] Análisis de patrones para prompt">
-          <AiPatternAnalysis
-            transactions={transactions}
-            claudeApiKey={claudeApiKey}
-            aiModel={aiModel}
-          />
-        </SectionCard>
+        <details className="mb-8">
+          <summary className="cursor-pointer rounded-[var(--radius-sm)] text-small font-semibold text-[var(--text-muted)] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            Herramientas de desarrollo
+          </summary>
+          <div className="mt-4">
+            <DevPanel title="[Dev] Cobertura del clasificador">
+              <CoverageAnalysis repository={repository} />
+            </DevPanel>
+            <DevPanel title="[Dev] Evaluación del clasificador">
+              <CategorizerEval
+                transactions={transactions}
+                claudeApiKey={claudeApiKey}
+                aiModel={aiModel}
+              />
+            </DevPanel>
+            <DevPanel title="[Dev] Preview de categorización IA">
+              <AiCategorizationPreview
+                transactions={transactions}
+                claudeApiKey={claudeApiKey}
+                aiModel={aiModel}
+              />
+            </DevPanel>
+            <DevPanel title="[Dev] Análisis de patrones para prompt">
+              <AiPatternAnalysis
+                transactions={transactions}
+                claudeApiKey={claudeApiKey}
+                aiModel={aiModel}
+              />
+            </DevPanel>
+          </div>
+        </details>
       )}
 
       {confirmDialog}

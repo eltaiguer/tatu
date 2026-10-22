@@ -426,4 +426,65 @@ describe('Settings', () => {
       csv.restore()
     }
   })
+  describe('section outline', () => {
+    function renderSettings() {
+      return render(
+        <Settings
+          theme="light"
+          onSetTheme={() => {}}
+          preferredCurrency="UYU"
+          onSetCurrency={() => {}}
+          session={mockSession}
+          supabaseEnabled
+          onSignOut={() => {}}
+          transactions={[]}
+          {...defaultAiProps}
+        />
+      )
+    }
+
+    it('titles each section with a level-2 heading that names its region', () => {
+      renderSettings()
+
+      for (const name of [
+        'Apariencia',
+        'Monedas',
+        'Inteligencia Artificial',
+        'Cuenta',
+        'Datos',
+      ]) {
+        expect(
+          screen.getByRole('heading', { level: 2, name })
+        ).toBeInTheDocument()
+        expect(screen.getByRole('region', { name })).toBeInTheDocument()
+      }
+    })
+
+    it('keeps the dev panels in one closed "Herramientas de desarrollo" disclosure', () => {
+      // Vitest runs in dev mode, so the dev-only block renders here.
+      expect(import.meta.env.DEV).toBe(true)
+      renderSettings()
+
+      const summary = screen.getByText('Herramientas de desarrollo')
+      expect(summary.tagName).toBe('SUMMARY')
+      const details = summary.closest('details')
+      expect(details).not.toBeNull()
+      expect(details).not.toHaveAttribute('open')
+
+      // Every dev panel lives inside it, titled one level below the sections.
+      for (const name of [
+        '[Dev] Cobertura del clasificador',
+        '[Dev] Evaluación del clasificador',
+        '[Dev] Preview de categorización IA',
+        '[Dev] Análisis de patrones para prompt',
+      ]) {
+        const heading = within(details as HTMLElement).getByRole('heading', {
+          level: 3,
+          name,
+        })
+        expect(heading).toBeInTheDocument()
+      }
+      expect(document.querySelectorAll('details')).toHaveLength(1)
+    })
+  })
 })
