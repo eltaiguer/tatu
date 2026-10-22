@@ -200,10 +200,9 @@ export function Categories({
   })
 
   return (
-    <div>
+    <div className="space-y-8">
       {/* Page header */}
       <PageHeader
-        className="mb-7"
         title="Categorías y reglas"
         subtitle="Personalizá cómo Tatú clasifica tus movimientos"
         actions={

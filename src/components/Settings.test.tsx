@@ -460,7 +460,7 @@ describe('Settings', () => {
       }
     })
 
-    it('keeps the dev panels in one closed "Herramientas de desarrollo" disclosure', () => {
+    it('keeps the dev panels in one closed "Herramientas de desarrollo" disclosure', async () => {
       // Vitest runs in dev mode, so the dev-only block renders here.
       expect(import.meta.env.DEV).toBe(true)
       renderSettings()
@@ -470,6 +470,12 @@ describe('Settings', () => {
       const details = summary.closest('details')
       expect(details).not.toBeNull()
       expect(details).not.toHaveAttribute('open')
+      // Closed, the panels aren't mounted: they scan every transaction.
+      expect(
+        screen.queryByText('[Dev] Cobertura del clasificador')
+      ).not.toBeInTheDocument()
+      ;(details as HTMLDetailsElement).open = true
+      await screen.findByText('[Dev] Cobertura del clasificador')
 
       // Every dev panel lives inside it, titled one level below the sections.
       for (const name of [

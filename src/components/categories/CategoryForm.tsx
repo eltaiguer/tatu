@@ -30,10 +30,10 @@ export function CategoryForm({
   onSave,
 }: CategoryFormProps) {
   return (
-    <div className="mb-[24px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-[24px] py-[20px]">
+    <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-[24px] py-[20px]">
       <div className="mb-[16px] flex items-center justify-between">
         {/* h2: a sibling of "Tus categorías", not nested under it */}
-        <h2 className="text-[15px] font-semibold">
+        <h2 className="font-sans text-[15px] font-semibold">
           {isEditing ? 'Editar categoría' : 'Nueva categoría'}
         </h2>
         <button

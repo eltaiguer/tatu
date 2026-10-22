@@ -66,7 +66,7 @@ function SettingRow({
   control: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between gap-[24px] border-b border-[var(--border)] px-[24px] py-[16px]">
+    <div className="flex items-center justify-between gap-[24px] border-b border-[var(--border)] px-[24px] py-[16px] last:border-b-0">
       <div>
         <div className="text-body font-semibold text-[var(--text)]">
           {label}
@@ -127,6 +127,7 @@ export function Settings({
   const userName = getFriendlyName(session) || 'Usuario'
   const avatarInitial = userName.charAt(0).toUpperCase()
   const [showKey, setShowKey] = useState(false)
+  const [devToolsOpen, setDevToolsOpen] = useState(false)
   const { confirm: confirmReset, dialog: confirmDialog } = useConfirm()
 
   // A full backup: every row, split parents and ignored rows included; the
@@ -166,9 +167,8 @@ export function Settings({
   }
 
   return (
-    <div>
+    <div className="space-y-8">
       <PageHeader
-        className="mb-7"
         title="Configuración"
         subtitle="Apariencia, cuenta y tus datos"
       />
@@ -459,36 +459,39 @@ export function Settings({
 
       {/* Developer tooling: dev builds only, out of the way until opened. */}
       {import.meta.env.DEV && (
-        <details className="mb-8">
+        <details onToggle={(e) => setDevToolsOpen(e.currentTarget.open)}>
           <summary className="cursor-pointer rounded-[var(--radius-sm)] text-small font-semibold text-[var(--text-muted)] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
             Herramientas de desarrollo
           </summary>
-          <div className="mt-4">
-            <DevPanel title="[Dev] Cobertura del clasificador">
-              <CoverageAnalysis repository={repository} />
-            </DevPanel>
-            <DevPanel title="[Dev] Evaluación del clasificador">
-              <CategorizerEval
-                transactions={transactions}
-                claudeApiKey={claudeApiKey}
-                aiModel={aiModel}
-              />
-            </DevPanel>
-            <DevPanel title="[Dev] Preview de categorización IA">
-              <AiCategorizationPreview
-                transactions={transactions}
-                claudeApiKey={claudeApiKey}
-                aiModel={aiModel}
-              />
-            </DevPanel>
-            <DevPanel title="[Dev] Análisis de patrones para prompt">
-              <AiPatternAnalysis
-                transactions={transactions}
-                claudeApiKey={claudeApiKey}
-                aiModel={aiModel}
-              />
-            </DevPanel>
-          </div>
+          {/* Mounted only when opened: the panels scan every transaction. */}
+          {devToolsOpen && (
+            <div className="mt-4">
+              <DevPanel title="[Dev] Cobertura del clasificador">
+                <CoverageAnalysis repository={repository} />
+              </DevPanel>
+              <DevPanel title="[Dev] Evaluación del clasificador">
+                <CategorizerEval
+                  transactions={transactions}
+                  claudeApiKey={claudeApiKey}
+                  aiModel={aiModel}
+                />
+              </DevPanel>
+              <DevPanel title="[Dev] Preview de categorización IA">
+                <AiCategorizationPreview
+                  transactions={transactions}
+                  claudeApiKey={claudeApiKey}
+                  aiModel={aiModel}
+                />
+              </DevPanel>
+              <DevPanel title="[Dev] Análisis de patrones para prompt">
+                <AiPatternAnalysis
+                  transactions={transactions}
+                  claudeApiKey={claudeApiKey}
+                  aiModel={aiModel}
+                />
+              </DevPanel>
+            </div>
+          )}
         </details>
       )}
 

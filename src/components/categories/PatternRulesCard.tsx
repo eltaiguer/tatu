@@ -136,7 +136,7 @@ export function PatternRulesCard({
   )
 
   return (
-    <Section title="Reglas de auto-categorización" className="mb-0">
+    <Section title="Reglas de auto-categorización">
       <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-[24px] py-[20px]">
         <p className="mb-[16px] text-[13px] text-[var(--text-muted)]">
           Creá reglas para categorizar transacciones automáticamente según el
