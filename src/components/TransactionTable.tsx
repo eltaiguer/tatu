@@ -88,9 +88,10 @@ export function TransactionTable({
         </span>
         <button
           onClick={() => onShowIgnoredChange(!showIgnored)}
+          aria-label={`${showIgnored ? 'Ocultar' : 'Mostrar'} transferencias ignoradas${ignoredCount > 0 ? ` (${ignoredCount})` : ''}`}
           disabled={ignoredCount === 0}
           title="Las transferencias se ignoran de los totales"
-          className={`inline-flex h-[32px] items-center gap-[6px] rounded-[8px] border bg-transparent px-[10px] py-0 text-[13px] font-medium ${
+          className={`inline-flex h-[32px] shrink-0 items-center gap-[6px] rounded-[8px] border bg-transparent px-[10px] py-0 text-[13px] font-medium ${
             showIgnored
               ? 'border-[var(--brand)] text-[color:var(--brand-text,var(--brand))]'
               : 'border-[var(--border)] text-[color:var(--text-muted)]'
@@ -101,7 +102,11 @@ export function TransactionTable({
           }`}
         >
           {showIgnored ? <Eye size={14} /> : <EyeOff size={14} />}
-          {showIgnored ? 'Ocultar' : 'Mostrar'} transferencias ignoradas
+          {/* Short on phones; the button's name keeps the full action. */}
+          <span className="hidden sm:inline">
+            {showIgnored ? 'Ocultar' : 'Mostrar'} transferencias ignoradas
+          </span>
+          <span className="sm:hidden">Transferencias</span>
           {ignoredCount > 0 && (
             <span className="font-[family-name:var(--font-mono)] text-[11px] text-[color:var(--text-muted)]">
               · {ignoredCount}
