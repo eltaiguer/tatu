@@ -8,6 +8,7 @@ import {
   replaceCustomCategories,
   updateCustomCategory,
   updateCustomCategoryWithSync,
+  upsertBuiltinOverride,
   upsertBuiltinOverrideWithSync,
   type CustomCategory,
 } from './category-store'
@@ -16,6 +17,7 @@ import {
   type InMemoryRepository,
 } from '../repository/in-memory-repository'
 import { workspaceStore } from '../../stores/workspace-state'
+import { CATEGORY_COLORS, Category } from '../../models'
 
 describe('Custom category store', () => {
   beforeEach(() => {
@@ -376,5 +378,17 @@ describe('rows that collapse into one category', () => {
 
     expect(repo.customCategories.get('transfer')?.isIgnored).toBe(false)
     expect(repo.customCategories.has('internal_transfer')).toBe(false)
+  })
+})
+
+describe('upsertBuiltinOverride', () => {
+  afterEach(() => replaceCustomCategories([]))
+
+  it("keeps the built-in's own colour when only the label changes", () => {
+    upsertBuiltinOverride(Category.Groceries, { label: 'Súper' })
+
+    expect(
+      listCustomCategories().find((c) => c.id === Category.Groceries)?.color
+    ).toBe(CATEGORY_COLORS[Category.Groceries])
   })
 })

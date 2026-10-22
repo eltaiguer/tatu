@@ -1,3 +1,4 @@
+import { CATEGORY_COLORS, type Category } from '../../models'
 import { isReservedCategoryId, normalizeCategoryId } from './category-aliases'
 import { UserFacingError } from '../../utils/user-error'
 import type { Repository } from '../repository/repository'
@@ -261,7 +262,10 @@ export function upsertBuiltinOverride(
       {
         id,
         label: updates.label ?? id,
-        color: updates.color ?? '#94a3b8',
+        color:
+          updates.color ??
+          CATEGORY_COLORS[id as Category] ??
+          DEFAULT_CATEGORY_COLOR,
         isIgnored: updates.isIgnored,
       },
     ]

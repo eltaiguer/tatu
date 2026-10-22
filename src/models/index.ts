@@ -51,4 +51,5 @@ export {
   CATEGORY_LABELS,
   CATEGORY_ICONS,
   CATEGORY_COLORS,
+  LEGACY_CATEGORY_COLORS,
 } from './category'

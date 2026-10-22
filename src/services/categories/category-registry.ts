@@ -1,6 +1,7 @@
 import {
   Category,
   CATEGORY_COLORS,
+  LEGACY_CATEGORY_COLORS,
   CATEGORY_ICONS,
   CATEGORY_LABELS,
 } from '../../models'
@@ -67,6 +68,19 @@ function ignoredFor(key: string, row: CustomCategory | undefined): boolean {
   )
 }
 
+// An override's colour, unless it is the pre-palette default it was saved
+// with (see LEGACY_CATEGORY_COLORS).
+function chosenColor(
+  category: Category,
+  override: CustomCategory | undefined
+): string | undefined {
+  const color = override?.color
+  if (!color) return undefined
+  return color.toLowerCase() === LEGACY_CATEGORY_COLORS[category]
+    ? undefined
+    : color
+}
+
 function builtinDefinition(
   category: Category,
   override: CustomCategory | undefined
@@ -74,7 +88,7 @@ function builtinDefinition(
   return {
     id: category,
     label: override?.label || CATEGORY_LABELS[category],
-    color: override?.color || CATEGORY_COLORS[category],
+    color: chosenColor(category, override) ?? CATEGORY_COLORS[category],
     icon: override?.icon || CATEGORY_ICONS[category],
     isCustom: false,
     isIgnored: ignoredFor(category, override),
