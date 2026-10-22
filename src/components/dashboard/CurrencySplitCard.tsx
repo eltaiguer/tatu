@@ -65,7 +65,7 @@ export function CurrencySplitCard({
               <div className="text-[13px] font-semibold">
                 {label} · {Math.round(pct)}%
               </div>
-              <div className="font-mono text-[12px] text-muted-foreground">
+              <div className="font-mono text-[12px] text-muted-foreground tabular-nums">
                 {formatCurrency(amount, homeCurrency)}
               </div>
             </div>

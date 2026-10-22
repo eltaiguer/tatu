@@ -29,7 +29,7 @@ export function UncategorizedNudge({
           }))
       }
       label="Ver los gastos sin categoría"
-      className="rounded-[var(--radius-md)] bg-[var(--accent-soft)] px-4 py-3"
+      className="bg-[var(--accent-soft)] px-4 py-3"
     >
       {/* Inner flex: DrillTarget sets its own display. */}
       <span className="flex flex-wrap items-center gap-x-3 gap-y-1">

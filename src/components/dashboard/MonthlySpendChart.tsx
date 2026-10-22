@@ -53,13 +53,13 @@ export function MonthlySpendChart({
         </p>
         <p className="mx-0 my-[3px] text-[12px] font-semibold">
           Gastos:{' '}
-          <span className="font-mono">
+          <span className="font-mono tabular-nums">
             {formatCurrency(d.gastos, homeCurrency)}
           </span>
         </p>
         <p className="mx-0 my-[3px] text-[12px] text-[var(--pos)]">
           Ingresos:{' '}
-          <span className="font-mono">
+          <span className="font-mono tabular-nums">
             {formatCurrency(d.ingresos, homeCurrency)}
           </span>
         </p>

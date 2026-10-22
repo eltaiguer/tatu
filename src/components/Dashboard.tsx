@@ -194,13 +194,19 @@ export function Dashboard({
         title={greeting}
         subtitle={
           <>
-            Tus cuentas Santander de un vistazo ·{' '}
-            {monthSummary.monthLabel ||
-              latestDate.toLocaleDateString('es-UY', {
-                month: 'long',
-                year: 'numeric',
-                timeZone: 'UTC',
-              })}
+            Tus cuentas Santander de un vistazo
+            {/* With data, the hero below names the month. */}
+            {(!hasTransactions || allIgnored) && (
+              <>
+                {' · '}
+                {monthSummary.monthLabel ||
+                  latestDate.toLocaleDateString('es-UY', {
+                    month: 'long',
+                    year: 'numeric',
+                    timeZone: 'UTC',
+                  })}
+              </>
+            )}
           </>
         }
         actions={
@@ -248,7 +254,7 @@ export function Dashboard({
 
           <ResumenSection
             title="¿A dónde se fue la plata?"
-            period={periodRange && `${periodRange} · todo el historial`}
+            period={periodRange}
           >
             <UncategorizedNudge
               uncategorizedSpend={uncategorizedSpend}
@@ -301,7 +307,8 @@ export function Dashboard({
             </ResumenSection>
           )}
 
-          <ResumenSection title="Tus cuentas" period={periodRange}>
+          {/* No section period: each account card shows its own. */}
+          <ResumenSection title="Tus cuentas">
             <AccountCards
               acctSpend={acctSpend}
               homeCurrency={homeCurrency}
