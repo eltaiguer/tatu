@@ -133,14 +133,15 @@ export function CategoryChangesCard({
 }) {
   if (changes.kind === 'insufficient') {
     return (
-      <Card className="gap-1 p-5">
-        <h2 className="text-ui font-semibold">Qué cambió</h2>
+      // Nothing to compare yet: a quiet note, so the month below leads.
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-[var(--radius-md)] bg-[var(--surface-2)] px-4 py-2.5">
+        <h2 className="text-small font-semibold">Qué cambió</h2>
         <p className="text-small text-muted-foreground">
           Todavía no hay suficientes meses completos para comparar: hace falta
           un mes cerrado y al menos dos anteriores con todas tus cuentas
           importadas.
         </p>
-      </Card>
+      </div>
     )
   }
 
