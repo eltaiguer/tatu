@@ -87,7 +87,7 @@ export function MonthlySpendChart({
           </p>
         </div>
         {avgMonthly !== null && (
-          <div className="text-right">
+          <div className="sm:text-right">
             <div className="text-label text-muted-foreground">
               Promedio por mes con gastos
             </div>
