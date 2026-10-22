@@ -11,8 +11,8 @@ import {
   removeCustomCategoryWithSync,
   updateCustomCategoryWithSync,
   upsertBuiltinOverrideWithSync,
-  DEFAULT_CATEGORY_COLOR,
 } from '../services/categories/category-store'
+import { DEFAULT_CATEGORY_COLOR } from '../models'
 import { getCategoryTransactionCount } from '../services/categories/category-counts'
 import { resolveCategory } from '../services/categories/category-registry'
 import { buildCategorySpendingConverted } from '../services/charts/chart-data'

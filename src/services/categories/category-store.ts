@@ -1,3 +1,9 @@
+import {
+  CATEGORY_COLORS,
+  CATEGORY_LABELS,
+  DEFAULT_CATEGORY_COLOR,
+  type Category,
+} from '../../models'
 import { isReservedCategoryId, normalizeCategoryId } from './category-aliases'
 import { UserFacingError } from '../../utils/user-error'
 import type { Repository } from '../repository/repository'
@@ -8,8 +14,6 @@ export type CategoryRepository = Pick<
   Repository,
   'userId' | 'upsertCustomCategory' | 'archiveCustomCategory'
 >
-
-export const DEFAULT_CATEGORY_COLOR = '#0ea5e9'
 
 export interface CustomCategory {
   /** The id rows are grouped under: always normalizeCategoryId(stored id). */
@@ -260,8 +264,11 @@ export function upsertBuiltinOverride(
       ..._customCategories,
       {
         id,
-        label: updates.label ?? id,
-        color: updates.color ?? '#94a3b8',
+        label: updates.label ?? CATEGORY_LABELS[id as Category] ?? id,
+        color:
+          updates.color ??
+          CATEGORY_COLORS[id as Category] ??
+          DEFAULT_CATEGORY_COLOR,
         isIgnored: updates.isIgnored,
       },
     ]

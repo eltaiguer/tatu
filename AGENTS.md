@@ -129,7 +129,7 @@ src/
     fonts.css              # Google Fonts: Spectral, Hanken Grotesk, JetBrains Mono
     tailwind.css           # Tailwind 4 import + sources
     theme.css              # CSS custom properties — light + dark tokens
-                           # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
+                           # (+ theme.test.ts / typography.test.ts) — category colours: `CATEGORY_COLORS` in `models/category.ts` (resolved per category by the registry; `category-palette.test.ts` guards contrast + distinctness)
   utils/                   # account-display (ACCOUNT_LABELS: the three accounts' names, accountOf), date-utils (newestDate / newestDataMonth = the newest month with data; pass only the rows that count where that matters), formatting, memo, transaction-display, user-display, user-error, auth-errors, sha256 (import file checksum)
   test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-claude-client.ts records Claude requests and scripts answers; fake-backend.ts = in-memory auth + one in-memory repository per user, for the App suites; user-rules.ts builds a UserRules literal keyed like the stores
 supabase/

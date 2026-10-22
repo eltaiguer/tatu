@@ -524,13 +524,13 @@ collapsed rows disagree, each load logs one `console.warn` naming them. No
 schema change, no migration. The registry therefore does a plain lookup by
 id; it no longer resolves aliases or breaks ties itself.
 
-| Stored id                                   | Resolves to                                                                                                                 |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| missing, `''`                               | Sin categoría (and follows its ignore flag, like a row stored as `uncategorized`)                                           |
-| built-in, any casing, or a pre-rename alias | the current built-in, with the user's label / colour / icon / ignore override if any                                        |
-| a loaded custom category                    | its stored name, colour, icon and ignore flag                                                                               |
-| `ignored` (written by "Ignorar")            | "Ignorada", left out of totals; a legacy custom row keyed `ignored` supplies its label and can only un-ignore it explicitly |
-| anything else (usually a deleted category)  | itself: label derived from the id, neutral colour, 🏷️, counted in totals, `known: false` — never Sin categoría              |
+| Stored id                                   | Resolves to                                                                                                                                                                              |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| missing, `''`                               | Sin categoría (and follows its ignore flag, like a row stored as `uncategorized`)                                                                                                        |
+| built-in, any casing, or a pre-rename alias | the current built-in, with the user's label / colour / icon / ignore override if any (a stored colour equal to a shipped default — `PAST_CATEGORY_COLORS` — follows the current palette) |
+| a loaded custom category                    | its stored name, colour (one equal to a past or current `DEFAULT_CATEGORY_COLOR` follows the current default), icon and ignore flag                                                      |
+| `ignored` (written by "Ignorar")            | "Ignorada", left out of totals; a legacy custom row keyed `ignored` supplies its label and can only un-ignore it explicitly                                                              |
+| anything else (usually a deleted category)  | itself: label derived from the id, neutral colour, 🏷️, counted in totals, `known: false` — never Sin categoría                                                                           |
 
 Deleting a custom category archives its row and stops loading it, so the
 stored name of a deleted category is not available; its rows keep the id and
