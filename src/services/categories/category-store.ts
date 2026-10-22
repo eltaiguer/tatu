@@ -15,9 +15,6 @@ export type CategoryRepository = Pick<
   'userId' | 'upsertCustomCategory' | 'archiveCustomCategory'
 >
 
-// Lives with the palette in models; re-exported for existing callers.
-export { DEFAULT_CATEGORY_COLOR }
-
 export interface CustomCategory {
   /** The id rows are grouped under: always normalizeCategoryId(stored id). */
   id: string

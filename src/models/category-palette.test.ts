@@ -144,8 +144,12 @@ describe('category palette', () => {
 
   it('reaches 3:1 on the light and dark canvas and card surface', () => {
     const weak: string[] = []
-    for (const [category, color] of Object.entries(CATEGORY_COLORS)) {
-      for (const [canvas, bg] of Object.entries(themeCanvases())) {
+    const canvases = Object.entries(themeCanvases())
+    for (const [category, color] of Object.entries({
+      ...CATEGORY_COLORS,
+      'new custom category': DEFAULT_CATEGORY_COLOR,
+    })) {
+      for (const [canvas, bg] of canvases) {
         const ratio = contrast(color, bg)
         if (ratio < 3) weak.push(`${category} on ${canvas} ${ratio.toFixed(2)}`)
       }

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  DEFAULT_CATEGORY_COLOR,
   removeCustomCategory,
   replaceCustomCategories,
   type CustomCategory,
@@ -11,7 +10,7 @@ import {
   resolveCategory,
 } from './category-registry'
 import { normalizeCategoryId } from './category-aliases'
-import { CATEGORY_COLORS, Category } from '../../models'
+import { CATEGORY_COLORS, Category, DEFAULT_CATEGORY_COLOR } from '../../models'
 
 // The registry reads the real in-memory store: tests load it the way the app
 // does on sign-in (replaceCustomCategories) instead of mocking it.
@@ -51,6 +50,17 @@ describe('built-in colours after the palette change', () => {
     loadCustom([{ id: 'mascotas', label: 'Mascotas', color: '#0ea5e9' }])
 
     expect(resolveCategory('mascotas').color).toBe(DEFAULT_CATEGORY_COLOR)
+  })
+
+  it('repairs rows the old override fallback wrote: slate colour, raw-id label', () => {
+    loadCustom([
+      { id: Category.Groceries, label: 'groceries', color: '#94a3b8' },
+    ])
+
+    expect(resolveCategory(Category.Groceries).color).toBe(
+      CATEGORY_COLORS[Category.Groceries]
+    )
+    expect(resolveCategory(Category.Groceries).label).toBe('Alimentación')
   })
 
   it('keeps a colour the user picked', () => {

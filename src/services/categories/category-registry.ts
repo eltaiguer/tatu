@@ -1,6 +1,7 @@
 import {
   Category,
   CATEGORY_COLORS,
+  DEFAULT_CATEGORY_COLOR,
   PAST_CATEGORY_COLORS,
   PAST_DEFAULT_CATEGORY_COLORS,
   isShippedDefaultColor,
@@ -8,7 +9,7 @@ import {
   CATEGORY_LABELS,
 } from '../../models'
 import type { CustomCategory } from './category-store'
-import { DEFAULT_CATEGORY_COLOR, listCustomCategories } from './category-store'
+import { listCustomCategories } from './category-store'
 import { memoizeByReference } from '../../utils/memo'
 import {
   ID_ALIASES,
@@ -70,21 +71,16 @@ function ignoredFor(key: string, row: CustomCategory | undefined): boolean {
   )
 }
 
-// An override's colour, unless it is a default the app shipped (see
-// PAST_CATEGORY_COLORS): then the category follows the current palette.
-function chosenColor(
-  category: Category,
-  override: CustomCategory | undefined
-): string | undefined {
-  const color = override?.color
-  if (!color) return undefined
-  return isShippedDefaultColor(
-    color,
-    CATEGORY_COLORS[category],
-    PAST_CATEGORY_COLORS[category]
-  )
-    ? undefined
-    : color
+// A stored colour, unless it is a default the app shipped (see
+// PAST_CATEGORY_COLORS): then it follows the current default.
+function followDefault(
+  stored: string | undefined,
+  current: string,
+  past: readonly string[]
+): string {
+  return stored && !isShippedDefaultColor(stored, current, past)
+    ? stored
+    : current
 }
 
 function builtinDefinition(
@@ -93,8 +89,16 @@ function builtinDefinition(
 ): CategoryDefinition {
   return {
     id: category,
-    label: override?.label || CATEGORY_LABELS[category],
-    color: chosenColor(category, override) ?? CATEGORY_COLORS[category],
+    // A label equal to the raw id was a fallback, never typed by the user.
+    label:
+      override?.label && override.label !== category
+        ? override.label
+        : CATEGORY_LABELS[category],
+    color: followDefault(
+      override?.color,
+      CATEGORY_COLORS[category],
+      PAST_CATEGORY_COLORS[category]
+    ),
     icon: override?.icon || CATEGORY_ICONS[category],
     isCustom: false,
     isIgnored: ignoredFor(category, override),
@@ -106,15 +110,11 @@ function customDefinition(key: string, c: CustomCategory): CategoryDefinition {
   return {
     id: key,
     label: c.label || humanizeCategoryId(key),
-    color:
-      c.color &&
-      !isShippedDefaultColor(
-        c.color,
-        DEFAULT_CATEGORY_COLOR,
-        PAST_DEFAULT_CATEGORY_COLORS
-      )
-        ? c.color
-        : DEFAULT_CATEGORY_COLOR,
+    color: followDefault(
+      c.color,
+      DEFAULT_CATEGORY_COLOR,
+      PAST_DEFAULT_CATEGORY_COLORS
+    ),
     icon: c.icon || DEFAULT_CUSTOM_ICON,
     isCustom: true,
     isIgnored: ignoredFor(key, c),

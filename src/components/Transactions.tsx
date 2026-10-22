@@ -5,7 +5,7 @@ import { requireRepository } from '../services/repository/repository'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import { Download, X } from 'lucide-react'
 import { Button } from './ui/button'
-import { Category } from '../models'
+import { Category, DEFAULT_CATEGORY_COLOR } from '../models'
 import type { Transaction } from '../models'
 import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
 import { EditTransactionDialog } from './EditTransactionDialog'
@@ -16,10 +16,7 @@ import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
 import { newestDataMonth, todayAsUtcDate } from '../utils/date-utils'
 import { exportTransactions } from '../services/export/export'
-import {
-  addCustomCategoryWithSync,
-  DEFAULT_CATEGORY_COLOR,
-} from '../services/categories/category-store'
+import { addCustomCategoryWithSync } from '../services/categories/category-store'
 import {
   buildCategorySuggestions,
   buildTagSuggestions,
