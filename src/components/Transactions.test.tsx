@@ -73,6 +73,37 @@ describe('Transactions', () => {
     }
   })
 
+  it('keeps the filters with the movements they filter, in one region', () => {
+    render(<Transactions transactions={[makeTransaction(0)]} />)
+
+    const movements = screen.getByRole('region', { name: 'Movimientos' })
+    expect(
+      within(movements).getByPlaceholderText(/Buscar por comercio/)
+    ).toBeInTheDocument()
+    expect(within(movements).getByRole('table')).toBeInTheDocument()
+  })
+
+  it('counts ignored transfers on their toggle, not as a fourth total', () => {
+    render(
+      <Transactions
+        transactions={[
+          makeTransaction(0),
+          {
+            ...makeTransaction(1, 'Transferencia a mi cuenta'),
+            category: 'internal_transfer',
+          },
+        ]}
+      />
+    )
+
+    expect(
+      screen.queryByText('Ignoradas · no se cuentan')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /transferencias ignoradas/ })
+    ).toHaveTextContent('· 1')
+  })
+
   it('flags only categories worth reviewing, without a confidence column', () => {
     render(
       <Transactions

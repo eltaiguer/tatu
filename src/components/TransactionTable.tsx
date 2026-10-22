@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ArrowUpDown, Eye, EyeOff, Search } from 'lucide-react'
 import { Button } from './ui/button'
 import { EmptyState } from './EmptyState'
@@ -12,6 +13,8 @@ import { TransactionCard } from './transactions/TransactionCard'
 export { getAccountLabel } from './transactions/transaction-row-parts'
 
 interface TransactionTableProps {
+  // The filter bar, drawn as this card's header.
+  filters?: ReactNode
   paginatedTransactions: Transaction[]
   selectedTransactionIds: string[]
   allPageSelected: boolean
@@ -39,6 +42,7 @@ interface TransactionTableProps {
 }
 
 export function TransactionTable({
+  filters,
   paginatedTransactions,
   selectedTransactionIds,
   allPageSelected,
@@ -65,7 +69,12 @@ export function TransactionTable({
   onUnsplit,
 }: TransactionTableProps) {
   return (
-    <Card className="overflow-hidden gap-0">
+    <Card
+      role="region"
+      aria-label="Movimientos"
+      className="overflow-hidden gap-0"
+    >
+      {filters}
       {/* Toolbar row: selection count + transfers toggle */}
       <div className="flex items-center justify-between gap-[12px] border-b border-[var(--border)] px-[16px] py-[10px]">
         <span

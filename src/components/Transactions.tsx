@@ -371,7 +371,6 @@ export function Transactions({
         rows={allFilteredTransactions}
         homeCurrency={homeCurrency}
         fxRate={fxRate}
-        ignoredCount={ignoredCount}
       />
 
       {/* Floating bulk bar — rendered before table so DOM order puts it first for a11y queries */}
@@ -402,19 +401,19 @@ export function Transactions({
         />
       )}
 
-      {/* Filters */}
-      <TransactionFilters
-        filters={filters}
-        hasActiveFilters={filtered}
-        dateRange={dateRange}
-        availableCategories={availableCategories}
-        onChange={updateFilters}
-        onDateBoundChange={setDateBound}
-        onClearAll={clearFilters}
-      />
-
-      {/* Table */}
+      {/* Table, with the filters as its header */}
       <TransactionTable
+        filters={
+          <TransactionFilters
+            filters={filters}
+            hasActiveFilters={filtered}
+            dateRange={dateRange}
+            availableCategories={availableCategories}
+            onChange={updateFilters}
+            onDateBoundChange={setDateBound}
+            onClearAll={clearFilters}
+          />
+        }
         paginatedTransactions={paginatedTransactions}
         selectedTransactionIds={selectedTransactionIds}
         allPageSelected={allPageSelected}

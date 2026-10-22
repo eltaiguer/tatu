@@ -2,7 +2,6 @@ import { useId, useRef, useState } from 'react'
 import { Filter, Search, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from './ui/utils'
-import { Card } from './ui/card'
 import { Input } from './ui/input'
 import { SegmentedToggle } from './ui/segmented-toggle'
 import { resolveCategory } from '../services/categories/category-registry'
@@ -215,7 +214,8 @@ export function TransactionFilters({
   }
 
   return (
-    <Card className="p-4 space-y-3">
+    // No card of its own: it heads the movements card it filters.
+    <div className="space-y-3 border-b border-[var(--border)] p-4">
       {/* Row 1: Search + Category + Account + Type + Currency + Monto */}
       <div className="flex flex-wrap items-center gap-[8px]">
         <div className="relative w-full sm:flex-1">
@@ -369,6 +369,6 @@ export function TransactionFilters({
         onChange={(event) => onDateBoundChange('to', event.target.value)}
         className="hidden"
       />
-    </Card>
+    </div>
   )
 }
