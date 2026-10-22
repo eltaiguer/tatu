@@ -90,8 +90,8 @@ export function MonthlySpendChart({
       <ResponsiveContainer width="100%" height={220}>
         <BarChart
           data={monthlyTrend}
-          barGap={-22}
-          barCategoryGap="28%"
+          // Same width + negative gap: the spend bar sits on its ghost.
+          barGap={-20}
           margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
         >
           <CartesianGrid
@@ -123,10 +123,10 @@ export function MonthlySpendChart({
             fill="var(--pos)"
             fillOpacity={0.18}
             radius={[3, 3, 0, 0]}
-            maxBarSize={22}
+            barSize={20}
             isAnimationActive={false}
           />
-          <Bar dataKey="gastos" radius={[3, 3, 0, 0]} maxBarSize={22}>
+          <Bar dataKey="gastos" radius={[3, 3, 0, 0]} barSize={20}>
             {monthlyTrend.map((entry) => (
               <Cell
                 key={entry.key}
