@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ArrowUpDown, Eye, EyeOff, Search } from 'lucide-react'
 import { Button } from './ui/button'
 import { EmptyState } from './EmptyState'
@@ -12,6 +13,8 @@ import { TransactionCard } from './transactions/TransactionCard'
 export { getAccountLabel } from './transactions/transaction-row-parts'
 
 interface TransactionTableProps {
+  // The filter bar, drawn as this card's header.
+  filters?: ReactNode
   paginatedTransactions: Transaction[]
   selectedTransactionIds: string[]
   allPageSelected: boolean
@@ -39,6 +42,7 @@ interface TransactionTableProps {
 }
 
 export function TransactionTable({
+  filters,
   paginatedTransactions,
   selectedTransactionIds,
   allPageSelected,
@@ -65,7 +69,14 @@ export function TransactionTable({
   onUnsplit,
 }: TransactionTableProps) {
   return (
-    <Card className="overflow-hidden gap-0">
+    <Card
+      role="region"
+      aria-label="Movimientos"
+      // No overflow-hidden here: the filter dropdowns in the header must
+      // overlay the rows. Only the body below clips to the card's corners.
+      className="gap-0"
+    >
+      {filters}
       {/* Toolbar row: selection count + transfers toggle */}
       <div className="flex items-center justify-between gap-[12px] border-b border-[var(--border)] px-[16px] py-[10px]">
         <span
@@ -79,9 +90,10 @@ export function TransactionTable({
         </span>
         <button
           onClick={() => onShowIgnoredChange(!showIgnored)}
+          aria-pressed={showIgnored}
           disabled={ignoredCount === 0}
           title="Las transferencias se ignoran de los totales"
-          className={`inline-flex h-[32px] items-center gap-[6px] rounded-[8px] border bg-transparent px-[10px] py-0 text-[13px] font-medium ${
+          className={`inline-flex h-[32px] shrink-0 items-center gap-[6px] rounded-[8px] border bg-transparent px-[10px] py-0 text-[13px] font-medium ${
             showIgnored
               ? 'border-[var(--brand)] text-[color:var(--brand-text,var(--brand))]'
               : 'border-[var(--border)] text-[color:var(--text-muted)]'
@@ -92,7 +104,23 @@ export function TransactionTable({
           }`}
         >
           {showIgnored ? <Eye size={14} /> : <EyeOff size={14} />}
-          {showIgnored ? 'Ocultar' : 'Mostrar'} transferencias ignoradas
+          {/* Short on phones. The hidden span drops out of the accessible
+              name, so the name always matches what is shown. */}
+          {ignoredCount === 0 ? (
+            <>
+              <span className="hidden sm:inline">
+                Sin transferencias ignoradas
+              </span>
+              <span className="sm:hidden">Sin transferencias</span>
+            </>
+          ) : (
+            <>
+              <span className="hidden sm:inline">
+                {showIgnored ? 'Ocultar' : 'Mostrar'} transferencias ignoradas
+              </span>
+              <span className="sm:hidden">Transferencias</span>
+            </>
+          )}
           {ignoredCount > 0 && (
             <span className="font-[family-name:var(--font-mono)] text-[11px] text-[color:var(--text-muted)]">
               · {ignoredCount}
@@ -101,199 +129,201 @@ export function TransactionTable({
         </button>
       </div>
 
-      {/* Desktop table */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-muted/50 border-b border-border">
-            <tr>
-              <th className="px-3.5 py-3 w-10">
-                <Checkbox
-                  aria-label="Seleccionar todas"
-                  checked={
-                    allPageSelected
-                      ? true
-                      : somePageSelected
-                        ? 'indeterminate'
-                        : false
-                  }
-                  onCheckedChange={(checked) =>
-                    onHeaderCheckboxChange(checked === true)
-                  }
-                  disabled={paginatedTransactions.length === 0 || isBusy}
-                />
-              </th>
-              <th
-                className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
-                aria-sort={
-                  sortField === 'date'
-                    ? sortDirection === 'asc'
-                      ? 'ascending'
-                      : 'descending'
-                    : 'none'
-                }
-              >
-                <button
-                  onClick={() => onSort('date')}
-                  className="flex items-center gap-2 text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
-                >
-                  Fecha
-                  {sortField === 'date' && <ArrowUpDown size={14} />}
-                </button>
-              </th>
-              <th
-                className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
-                aria-sort={
-                  sortField === 'description'
-                    ? sortDirection === 'asc'
-                      ? 'ascending'
-                      : 'descending'
-                    : 'none'
-                }
-              >
-                <button
-                  onClick={() => onSort('description')}
-                  className="flex items-center gap-2 text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
-                >
-                  Descripción
-                  {sortField === 'description' && <ArrowUpDown size={14} />}
-                </button>
-              </th>
-              <th
-                className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
-                aria-sort={
-                  sortField === 'category'
-                    ? sortDirection === 'asc'
-                      ? 'ascending'
-                      : 'descending'
-                    : 'none'
-                }
-              >
-                <button
-                  onClick={() => onSort('category')}
-                  className="flex items-center gap-2 text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
-                >
-                  Categoría
-                  {sortField === 'category' && <ArrowUpDown size={14} />}
-                </button>
-              </th>
-              <th className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground">
-                Cuenta
-              </th>
-              <th
-                className="text-right px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
-                aria-sort={
-                  sortField === 'amount'
-                    ? sortDirection === 'asc'
-                      ? 'ascending'
-                      : 'descending'
-                    : 'none'
-                }
-              >
-                <button
-                  onClick={() => onSort('amount')}
-                  className="flex items-center gap-2 ml-auto text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
-                >
-                  Monto
-                  {sortField === 'amount' && <ArrowUpDown size={14} />}
-                </button>
-              </th>
-              <th className="text-center px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground w-36">
-                Acción
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedTransactions.length === 0 && hasActiveFilters && (
+      <div className="overflow-hidden rounded-b-xl">
+        {/* Desktop table */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-muted/50 border-b border-border">
               <tr>
-                <td colSpan={7}>
-                  <EmptyState
-                    compact
-                    tone="neutral"
-                    icon={Search}
-                    title="Sin resultados"
-                    description="Ningún movimiento coincide con estos filtros. Probá ampliar el rango o limpiarlos."
-                    action={
-                      <Button size="sm" onClick={onClearFilters}>
-                        Limpiar filtros
-                      </Button>
+                <th className="px-3.5 py-3 w-10">
+                  <Checkbox
+                    aria-label="Seleccionar todas"
+                    checked={
+                      allPageSelected
+                        ? true
+                        : somePageSelected
+                          ? 'indeterminate'
+                          : false
                     }
+                    onCheckedChange={(checked) =>
+                      onHeaderCheckboxChange(checked === true)
+                    }
+                    disabled={paginatedTransactions.length === 0 || isBusy}
                   />
-                </td>
+                </th>
+                <th
+                  className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                  aria-sort={
+                    sortField === 'date'
+                      ? sortDirection === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                >
+                  <button
+                    onClick={() => onSort('date')}
+                    className="flex items-center gap-2 text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  >
+                    Fecha
+                    {sortField === 'date' && <ArrowUpDown size={14} />}
+                  </button>
+                </th>
+                <th
+                  className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                  aria-sort={
+                    sortField === 'description'
+                      ? sortDirection === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                >
+                  <button
+                    onClick={() => onSort('description')}
+                    className="flex items-center gap-2 text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  >
+                    Descripción
+                    {sortField === 'description' && <ArrowUpDown size={14} />}
+                  </button>
+                </th>
+                <th
+                  className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                  aria-sort={
+                    sortField === 'category'
+                      ? sortDirection === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                >
+                  <button
+                    onClick={() => onSort('category')}
+                    className="flex items-center gap-2 text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  >
+                    Categoría
+                    {sortField === 'category' && <ArrowUpDown size={14} />}
+                  </button>
+                </th>
+                <th className="text-left px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground">
+                  Cuenta
+                </th>
+                <th
+                  className="text-right px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground"
+                  aria-sort={
+                    sortField === 'amount'
+                      ? sortDirection === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                >
+                  <button
+                    onClick={() => onSort('amount')}
+                    className="flex items-center gap-2 ml-auto text-label font-bold uppercase tracking-[0.05em] hover:text-primary transition-colors"
+                  >
+                    Monto
+                    {sortField === 'amount' && <ArrowUpDown size={14} />}
+                  </button>
+                </th>
+                <th className="text-center px-3.5 py-3 text-label font-bold uppercase tracking-[0.05em] text-muted-foreground w-36">
+                  Acción
+                </th>
               </tr>
-            )}
-            {paginatedTransactions.map((transaction) => (
-              <TransactionRow
-                key={transaction.id}
-                transaction={transaction}
-                selectedTransactionIds={selectedTransactionIds}
-                isBusy={isBusy}
-                pendingTransactionIds={pendingTransactionIds}
-                homeCurrency={homeCurrency}
-                fxRate={fxRate}
-                onToggleSelect={onToggleSelect}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                onSplit={onSplit}
-                onUnsplit={onUnsplit}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {paginatedTransactions.length === 0 && hasActiveFilters && (
+                <tr>
+                  <td colSpan={7}>
+                    <EmptyState
+                      compact
+                      tone="neutral"
+                      icon={Search}
+                      title="Sin resultados"
+                      description="Ningún movimiento coincide con estos filtros. Probá ampliar el rango o limpiarlos."
+                      action={
+                        <Button size="sm" onClick={onClearFilters}>
+                          Limpiar filtros
+                        </Button>
+                      }
+                    />
+                  </td>
+                </tr>
+              )}
+              {paginatedTransactions.map((transaction) => (
+                <TransactionRow
+                  key={transaction.id}
+                  transaction={transaction}
+                  selectedTransactionIds={selectedTransactionIds}
+                  isBusy={isBusy}
+                  pendingTransactionIds={pendingTransactionIds}
+                  homeCurrency={homeCurrency}
+                  fxRate={fxRate}
+                  onToggleSelect={onToggleSelect}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  onSplit={onSplit}
+                  onUnsplit={onUnsplit}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      {/* Mobile card list */}
-      <div className="md:hidden divide-y divide-border">
-        {paginatedTransactions.length > 0 && (
-          <div className="p-4 flex items-center gap-3 bg-muted/30">
-            <Checkbox
-              aria-label="Seleccionar todas"
-              checked={
-                allPageSelected
-                  ? true
-                  : somePageSelected
-                    ? 'indeterminate'
-                    : false
+        {/* Mobile card list */}
+        <div className="md:hidden divide-y divide-border">
+          {paginatedTransactions.length > 0 && (
+            <div className="p-4 flex items-center gap-3 bg-muted/30">
+              <Checkbox
+                aria-label="Seleccionar todas"
+                checked={
+                  allPageSelected
+                    ? true
+                    : somePageSelected
+                      ? 'indeterminate'
+                      : false
+                }
+                onCheckedChange={(checked) =>
+                  onHeaderCheckboxChange(checked === true)
+                }
+                disabled={isBusy}
+              />
+              <span className="text-sm text-muted-foreground">
+                Seleccionar todas
+              </span>
+            </div>
+          )}
+          {paginatedTransactions.length === 0 && hasActiveFilters && (
+            <EmptyState
+              compact
+              tone="neutral"
+              icon={Search}
+              title="Sin resultados"
+              description="Ningún movimiento coincide con estos filtros. Probá ampliar el rango o limpiarlos."
+              action={
+                <Button size="sm" onClick={onClearFilters}>
+                  Limpiar filtros
+                </Button>
               }
-              onCheckedChange={(checked) =>
-                onHeaderCheckboxChange(checked === true)
-              }
-              disabled={isBusy}
             />
-            <span className="text-sm text-muted-foreground">
-              Seleccionar todas
-            </span>
-          </div>
-        )}
-        {paginatedTransactions.length === 0 && hasActiveFilters && (
-          <EmptyState
-            compact
-            tone="neutral"
-            icon={Search}
-            title="Sin resultados"
-            description="Ningún movimiento coincide con estos filtros. Probá ampliar el rango o limpiarlos."
-            action={
-              <Button size="sm" onClick={onClearFilters}>
-                Limpiar filtros
-              </Button>
-            }
-          />
-        )}
-        {paginatedTransactions.map((transaction) => (
-          <TransactionCard
-            key={transaction.id}
-            transaction={transaction}
-            selectedTransactionIds={selectedTransactionIds}
-            isBusy={isBusy}
-            pendingTransactionIds={pendingTransactionIds}
-            homeCurrency={homeCurrency}
-            fxRate={fxRate}
-            onToggleSelect={onToggleSelect}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onSplit={onSplit}
-            onUnsplit={onUnsplit}
-          />
-        ))}
+          )}
+          {paginatedTransactions.map((transaction) => (
+            <TransactionCard
+              key={transaction.id}
+              transaction={transaction}
+              selectedTransactionIds={selectedTransactionIds}
+              isBusy={isBusy}
+              pendingTransactionIds={pendingTransactionIds}
+              homeCurrency={homeCurrency}
+              fxRate={fxRate}
+              onToggleSelect={onToggleSelect}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onSplit={onSplit}
+              onUnsplit={onUnsplit}
+            />
+          ))}
+        </div>
       </div>
     </Card>
   )

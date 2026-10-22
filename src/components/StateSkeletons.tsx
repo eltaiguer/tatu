@@ -101,16 +101,14 @@ export function TransactionTableSkeleton({ rows = 8 }: { rows?: number }) {
         <Skeleton className="h-9 w-28 rounded-md" />
       </div>
 
-      <Card className="p-4">
-        <div className="flex flex-wrap gap-2.5">
+      {/* One card: the filters head the movements, as in the view. */}
+      <Card className="overflow-hidden gap-0">
+        <div className="flex flex-wrap gap-2.5 border-b border-border p-4">
           <Skeleton className="h-9 flex-1 min-w-[240px] rounded-md" />
           <Skeleton className="h-9 w-28 rounded-md" />
           <Skeleton className="h-9 w-28 rounded-md" />
           <Skeleton className="h-9 w-44 rounded-md" />
         </div>
-      </Card>
-
-      <Card className="overflow-hidden">
         <div className="border-b border-border bg-muted/40 px-4 py-3 hidden md:flex gap-4">
           {['w-4', 'w-16', 'w-40', 'w-24', 'w-16', 'w-10', 'w-16'].map(
             (w, i) => (
