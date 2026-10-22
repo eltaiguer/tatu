@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { userErrorMessage } from '../utils/user-error'
 import { Plus } from 'lucide-react'
 import { Button } from './ui/button'
+import { Section } from './ui/section'
 import type { Currency, Transaction, TransactionsFilter } from '../models'
 import { getCategoryDefinitions } from '../services/categories/category-registry'
 import {
@@ -199,10 +200,9 @@ export function Categories({
   })
 
   return (
-    <div>
+    <div className="space-y-8">
       {/* Page header */}
       <PageHeader
-        className="mb-7"
         title="Categorías y reglas"
         subtitle="Personalizá cómo Tatú clasifica tus movimientos"
         actions={
@@ -217,7 +217,6 @@ export function Categories({
       />
 
       {/* New / Edit category form */}
-      {/* New / Edit category form */}
       {showForm && (
         <CategoryForm
           form={form}
@@ -228,12 +227,8 @@ export function Categories({
         />
       )}
 
-      {/* Category grid */}
-      <div className="mb-[24px] rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-[24px] py-[20px]">
-        <h3 className="mb-[16px] text-[15px] font-semibold text-[var(--text)]">
-          Tus categorías
-        </h3>
-
+      {/* Category grid: tiles straight on the page, no wrapping card */}
+      <Section title="Tus categorías">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
           {categoryCards.map((cat) => (
             <CategoryCard
@@ -252,7 +247,7 @@ export function Categories({
             />
           ))}
         </div>
-      </div>
+      </Section>
 
       {/* Pattern rules */}
       <PatternRulesCard
