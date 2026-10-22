@@ -1,10 +1,10 @@
-// Gasto por mes — one bar per month with data (spend), income as a ghost bar
-// behind it. Bars, not a curve: months without data are not drawn between.
+// Gasto por mes — one bar per month with data (spend), income as a lighter
+// bar behind it. Bars, not a curve: months without data are not drawn
+// between. Each bar opens its month's expenses; the income bar its income.
 
 import {
   BarChart,
   Bar,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -19,7 +19,21 @@ import type {
 import type { Currency } from '../../models'
 import type { MonthlyTrendRow } from '../../services/charts/dashboard-rows'
 import { formatCurrency, formatCurrencyShort } from '../../utils/formatting'
+import { todayAsUtcDate } from '../../utils/date-utils'
 import { Card } from '../ui/card'
+import { MonthButtons } from './MonthButtons'
+
+// Average spend of the months that are over and had any: a month with only a
+// salary, or the month still running, would pull it down.
+export function averageMonthlySpend(
+  monthlyTrend: MonthlyTrendRow[],
+  today: Date = todayAsUtcDate()
+): number | null {
+  const current = today.toISOString().slice(0, 7)
+  const months = monthlyTrend.filter((m) => m.gastos > 0 && m.key !== current)
+  if (months.length === 0) return null
+  return Math.round(months.reduce((s, m) => s + m.gastos, 0) / months.length)
+}
 
 interface MonthlySpendChartProps {
   monthlyTrend: MonthlyTrendRow[]
@@ -33,13 +47,7 @@ export function MonthlySpendChart({
   homeCurrency,
   openMonth,
 }: MonthlySpendChartProps) {
-  // Averaged over the months that have data, like every Resumen trend.
-  const avgMonthly =
-    monthlyTrend.length > 0
-      ? Math.round(
-          monthlyTrend.reduce((s, m) => s + m.gastos, 0) / monthlyTrend.length
-        )
-      : 0
+  const avgMonthly = averageMonthlySpend(monthlyTrend)
 
   const tooltip = ({
     active,
@@ -75,23 +83,23 @@ export function MonthlySpendChart({
         <div>
           <h3 className="m-0 text-title font-semibold">Gasto por mes</h3>
           <p className="mx-0 mt-[2px] mb-0 text-caption text-[var(--text-faint)]">
-            Ingresos detrás, en verde claro
+            La barra más clara detrás de cada mes son tus ingresos
           </p>
         </div>
-        <div className="text-right">
-          <div className="text-label text-muted-foreground">
-            Promedio por mes con datos
+        {avgMonthly !== null && (
+          <div className="text-right">
+            <div className="text-label text-muted-foreground">
+              Promedio por mes con gastos
+            </div>
+            <div className="font-mono text-subhead tabular-nums">
+              {formatCurrency(avgMonthly, homeCurrency)}
+            </div>
           </div>
-          <div className="font-mono text-subhead tabular-nums">
-            {formatCurrency(avgMonthly, homeCurrency)}
-          </div>
-        </div>
+        )}
       </div>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart
           data={monthlyTrend}
-          // Same width + negative gap: the spend bar sits on its ghost.
-          barGap={-20}
           margin={{ top: 4, right: 4, left: 0, bottom: 0 }}
         >
           <CartesianGrid
@@ -106,6 +114,9 @@ export function MonthlySpendChart({
             axisLine={false}
             tickLine={false}
           />
+          {/* A second, hidden axis over the same months: each bar gets its
+              own band, so income sits behind spend at any width. */}
+          <XAxis dataKey="month" xAxisId="ghost" hide />
           <YAxis
             stroke="var(--text-faint)"
             tick={{ fontSize: 11 }}
@@ -120,42 +131,47 @@ export function MonthlySpendChart({
           />
           <Bar
             dataKey="ingresos"
+            xAxisId="ghost"
             fill="var(--pos)"
-            fillOpacity={0.18}
+            fillOpacity={0.2}
             radius={[3, 3, 0, 0]}
-            barSize={20}
+            maxBarSize={26}
             isAnimationActive={false}
+            cursor={openMonth ? 'pointer' : undefined}
+            onClick={(row: { key?: string }) =>
+              row.key && openMonth?.(row.key, 'credit')
+            }
           />
-          <Bar dataKey="gastos" radius={[3, 3, 0, 0]} barSize={20}>
-            {monthlyTrend.map((entry) => (
-              <Cell
-                key={entry.key}
-                fill="var(--neg)"
-                fillOpacity={0.78}
-                cursor={openMonth ? 'pointer' : undefined}
-                onClick={() => openMonth?.(entry.key, 'debit')}
-              />
-            ))}
-          </Bar>
+          <Bar
+            dataKey="gastos"
+            fill="var(--neg)"
+            fillOpacity={0.78}
+            radius={[3, 3, 0, 0]}
+            maxBarSize={14}
+            isAnimationActive={false}
+            cursor={openMonth ? 'pointer' : undefined}
+            onClick={(row: { key?: string }) =>
+              row.key && openMonth?.(row.key, 'debit')
+            }
+          />
         </BarChart>
       </ResponsiveContainer>
-      {/* Keyboard equivalent of clicking a bar; visible when focused. */}
       {openMonth && (
-        <nav
-          aria-label="Gastos por mes"
-          className="sr-only focus-within:not-sr-only focus-within:flex focus-within:flex-wrap focus-within:gap-1"
-        >
-          {monthlyTrend.map((m) => (
-            <button
-              key={m.key}
-              type="button"
-              onClick={() => openMonth(m.key, 'debit')}
-              className="rounded border border-border px-2 py-0.5 text-xs"
-            >
-              Ver los gastos de {m.month}
-            </button>
-          ))}
-        </nav>
+        <MonthButtons
+          label="Gastos e ingresos por mes"
+          buttons={monthlyTrend.flatMap((m) => [
+            {
+              key: `${m.key}-debit`,
+              text: `Ver los gastos de ${m.month}`,
+              onClick: () => openMonth(m.key, 'debit'),
+            },
+            {
+              key: `${m.key}-credit`,
+              text: `Ver los ingresos de ${m.month}`,
+              onClick: () => openMonth(m.key, 'credit'),
+            },
+          ])}
+        />
       )}
     </Card>
   )

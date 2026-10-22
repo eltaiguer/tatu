@@ -54,12 +54,11 @@ export function MonthHero({
             {formatCurrency(monthSummary.expense, homeCurrency)}
           </span>
         </h2>
-        {!monthSummary.isCurrentMonth && (
-          <p className="mt-1.5 mb-0 text-small text-[var(--text-faint)]">
-            Último mes con movimientos · importá tu extracto más reciente para
-            ver este mes.
-          </p>
-        )}
+        <p className="mt-1.5 mb-0 text-small text-[var(--text-faint)]">
+          {!monthSummary.isCurrentMonth &&
+            'Último mes con movimientos · importá tu extracto más reciente para ver este mes. '}
+          Combina tus movimientos en US$ y $U usando el tipo de cambio.
+        </p>
       </div>
       <div className="grid max-w-[720px] grid-cols-1 gap-2 sm:grid-cols-3">
         <DrillTarget

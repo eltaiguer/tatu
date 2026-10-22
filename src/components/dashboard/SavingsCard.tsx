@@ -21,6 +21,7 @@ import { summarizeSavings, niceTicks } from '../../services/charts/chart-data'
 import type { MonthlyTrendRow } from '../../services/charts/dashboard-rows'
 import { formatCurrency, formatCurrencyShort } from '../../utils/formatting'
 import { Card } from '../ui/card'
+import { MonthButtons } from './MonthButtons'
 
 interface SavingsCardProps {
   monthlyTrend: MonthlyTrendRow[]
@@ -178,23 +179,15 @@ export function SavingsCard({
             </Bar>
           </BarChart>
         </ResponsiveContainer>
-        {/* Keyboard equivalent of clicking a bar; visible when focused. */}
         {openMonth && (
-          <nav
-            aria-label="Movimientos por mes"
-            className="sr-only focus-within:not-sr-only focus-within:mt-2 focus-within:flex focus-within:flex-wrap focus-within:gap-1"
-          >
-            {monthlyTrend.map((m) => (
-              <button
-                key={m.key}
-                type="button"
-                onClick={() => openMonth(m.key)}
-                className="rounded border border-border px-2 py-0.5 text-xs"
-              >
-                Ver movimientos de {m.month}
-              </button>
-            ))}
-          </nav>
+          <MonthButtons
+            label="Movimientos por mes"
+            buttons={monthlyTrend.map((m) => ({
+              key: m.key,
+              text: `Ver movimientos de ${m.month}`,
+              onClick: () => openMonth(m.key),
+            }))}
+          />
         )}
       </div>
     </Card>

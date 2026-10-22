@@ -23,7 +23,6 @@ interface CategorySpendCardProps {
   // Category ids folded into the "Otros" slice.
   otherCategoryIds: string[]
   totalExpenses: number
-  periodRange: string | null
   homeCurrency: Currency
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
 }
@@ -32,7 +31,6 @@ export function CategorySpendCard({
   donutData,
   otherCategoryIds,
   totalExpenses,
-  periodRange,
   homeCurrency,
   onNavigateToTransactions,
 }: CategorySpendCardProps) {
@@ -88,11 +86,6 @@ export function CategorySpendCard({
           <h3 className="m-0 font-[family-name:var(--font-sans)] text-[16px] font-semibold">
             Gasto por categoría
           </h3>
-          {periodRange && (
-            <p className="mx-0 mt-[2px] mb-0 text-[11px] text-[var(--text-faint)]">
-              {periodRange}
-            </p>
-          )}
         </div>
         {onNavigateToTransactions && (
           <button

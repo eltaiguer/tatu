@@ -509,6 +509,51 @@ describe('Dashboard', () => {
     expect(screen.queryByText('Tasa de ahorro')).not.toBeInTheDocument()
   })
 
+  it('names a single month of data in the singular', () => {
+    render(<Dashboard transactions={[makeTransaction({ id: 'only' })]} />)
+
+    expect(screen.getByText(/El único mes con datos/)).toBeInTheDocument()
+    expect(screen.queryByText(/Últimos 1 meses/)).not.toBeInTheDocument()
+  })
+
+  it('averages monthly spend over finished months that had spend', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-03-15T12:00:00.000Z'))
+    render(
+      <Dashboard
+        homeCurrency="USD"
+        transactions={[
+          makeTransaction({
+            id: 'jan',
+            date: new Date('2026-01-10T00:00:00.000Z'),
+            currency: 'USD',
+            amount: 100,
+          }),
+          // February: salary only, no spend.
+          makeTransaction({
+            id: 'feb',
+            date: new Date('2026-02-01T00:00:00.000Z'),
+            currency: 'USD',
+            type: 'credit',
+            category: Category.Income,
+            amount: 500,
+          }),
+          // March is still running: a few days of spend.
+          makeTransaction({
+            id: 'mar',
+            date: new Date('2026-03-02T00:00:00.000Z'),
+            currency: 'USD',
+            amount: 10,
+          }),
+        ]}
+      />
+    )
+    vi.useRealTimers()
+
+    const label = screen.getByText('Promedio por mes con gastos')
+    expect(label.parentElement).toHaveTextContent('US$ 100,00')
+  })
+
   it("says the month's spend as one sentence", () => {
     render(
       <Dashboard
@@ -718,6 +763,17 @@ describe('Dashboard', () => {
       expect(go).toHaveBeenCalledWith({
         period: { mode: 'month', y: 2026, m: 2 },
         type: 'debit',
+      })
+    })
+
+    it("monthly income ghost bars → that month's income", () => {
+      const go = setup()
+      fireEvent.click(
+        screen.getByRole('button', { name: /Ver los ingresos de mar/ })
+      )
+      expect(go).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2026, m: 2 },
+        type: 'credit',
       })
     })
 

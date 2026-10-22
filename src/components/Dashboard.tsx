@@ -120,14 +120,12 @@ export function Dashboard({
     [transactions, homeCurrency, fxRate]
   )
 
-  // Uncategorized expenses: same rows and conversion as the category list,
-  // so the tile's numbers equal the rows its link opens.
+  // Uncategorized expenses: the category list's own row, so the nudge's
+  // numbers equal the rows its link opens.
   const uncategorizedSpend = useMemo(
     () =>
-      buildCategorySpendingConverted(transactions, homeCurrency, fxRate).find(
-        (row) => row.category === Category.Uncategorized
-      ),
-    [transactions, homeCurrency, fxRate]
+      categorySpending.find((row) => row.category === Category.Uncategorized),
+    [categorySpending]
   )
 
   const totalExpenses = categoryData.reduce((s, c) => s + c.value, 0)
@@ -149,7 +147,7 @@ export function Dashboard({
   )
 
   // Opens exactly one month's rows (optionally only income or expenses), as
-  // summed by the savings and income/expense charts.
+  // summed by the savings and monthly spend charts.
   const openMonth = onNavigateToTransactions
     ? (key: string, type?: 'credit' | 'debit') => {
         const [y, m] = key.split('-').map(Number)
@@ -261,7 +259,6 @@ export function Dashboard({
               donutData={donutData}
               otherCategoryIds={otherCategoryIds}
               totalExpenses={totalExpenses}
-              periodRange={null}
               homeCurrency={homeCurrency}
               onNavigateToTransactions={onNavigateToTransactions}
             />
@@ -269,7 +266,6 @@ export function Dashboard({
               {topMerchants.length > 0 && (
                 <TopMerchantsCard
                   topMerchants={topMerchants}
-                  periodRange={null}
                   homeCurrency={homeCurrency}
                   onNavigateToTransactions={onNavigateToTransactions}
                 />
@@ -283,23 +279,27 @@ export function Dashboard({
             </div>
           </ResumenSection>
 
-          <ResumenSection
-            title="Mes a mes"
-            period={`Últimos ${monthlyTrend.length} meses con datos · combinado en ${curWord}`}
-          >
-            {monthlyTrend.length > 0 && (
+          {monthlyTrend.length > 0 && (
+            <ResumenSection
+              title="Mes a mes"
+              period={`${
+                monthlyTrend.length === 1
+                  ? 'El único mes con datos'
+                  : `Últimos ${monthlyTrend.length} meses con datos`
+              } · combinado en ${curWord}`}
+            >
               <SavingsCard
                 monthlyTrend={monthlyTrend}
                 homeCurrency={homeCurrency}
                 openMonth={openMonth}
               />
-            )}
-            <MonthlySpendChart
-              monthlyTrend={monthlyTrend}
-              homeCurrency={homeCurrency}
-              openMonth={openMonth}
-            />
-          </ResumenSection>
+              <MonthlySpendChart
+                monthlyTrend={monthlyTrend}
+                homeCurrency={homeCurrency}
+                openMonth={openMonth}
+              />
+            </ResumenSection>
+          )}
 
           <ResumenSection title="Tus cuentas" period={periodRange}>
             <AccountCards
