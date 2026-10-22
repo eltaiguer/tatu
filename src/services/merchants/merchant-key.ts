@@ -42,6 +42,8 @@ const GENERIC_KEYS = new Set([
   'sq',
   'tst',
   'compra con tarjeta debito',
+  'debito operacion en banca digital',
+  'debito operacion en banca digital trf. plaza',
   'debito operacion en supernet o sms',
   'debito operacion en supernet o sms trf. plaza',
   'credito por operacion en supernet',
@@ -139,7 +141,8 @@ const EDGE_PUNCTUATION = /^[\s,.;:/-]+|[\s,.;:/-]+$/g
 
 // Drops NRR references, the card mask and a trailing ", PLACE"; with
 // `dropDigits`, also every token containing a digit — except numbers after
-// "NRO", which tell payees apart ("NRO FAMILIA 5506").
+// "NRO", which tell payees apart ("NRO FAMILIA 5506") — keeping a name glued
+// to a code by "/" ("12345/HARGUINDEGUY" → "harguindeguy").
 function denoise(folded: string, dropDigits: boolean): string {
   const cardPurchase = /\btarj:/.test(folded)
   let afterNro = false
@@ -149,10 +152,11 @@ function denoise(folded: string, dropDigits: boolean): string {
     // Commas stand alone, so dropping "7SEVEN," keeps the ", CITY" boundary.
     .replace(/,/g, ' , ')
     .split(/\s+/)
-    .filter((token) => {
-      if (token === '') return false
+    .flatMap((token) => {
+      if (token === '') return []
       if (token === 'nro') afterNro = true
-      return !dropDigits || afterNro || !/\d/.test(token)
+      if (!dropDigits || afterNro || !/\d/.test(token)) return [token]
+      return token.split('/').filter((part) => part && !/\d/.test(part))
     })
   return stripTrailingPlace(
     tokens.join(' ').replace(/ ,/g, ',').replace(EDGE_PUNCTUATION, ''),
