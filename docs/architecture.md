@@ -566,8 +566,10 @@ rows. Never group by `description` or `getDisplayDescription` directly.
   mask, and a trailing `, PLACE` (any short place in the debit-card shape that
   has a `TARJ:` mask; otherwise only a known Uruguayan place that is not also
   a common name, and never on transfer/Supernet rows, which end in a person's
-  name); then folds. If that leaves nothing, a bare processor/bank prefix
-  (`GENERIC_KEYS`) or one word under 4 letters that is not a known short
+  name); then folds. A name glued to a code by `/` keeps the name
+  ("12345/HARGUINDEGUY" → "harguindeguy", #227). If that leaves nothing, a
+  bare processor/bank prefix (`GENERIC_KEYS`, e.g. a nameless Supernet or
+  Banca Digital debit) or one word under 4 letters that is not a known short
   merchant (`KNOWN_SHORT_MERCHANTS`: UTE, OSE, BPS, DGI, KFC…), the digits are
   kept instead.
 - `merchantLabelFor(rows)`: what the user sees and the Insights model echoes —
