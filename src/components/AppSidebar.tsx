@@ -46,7 +46,9 @@ interface SidebarInnerProps extends AppSidebarProps {
 // Keyboard focus: a brand ring offset from the sidebar surface so it reads on
 // the filled Importar button and the tinted active item alike.
 const FOCUS_RING =
-  'outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]'
+  // outline-hidden, not outline-none: a transparent outline that forced-colors
+  // (high-contrast) mode turns visible, since it drops box-shadow rings.
+  'outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]'
 
 export function BrandMark() {
   return (
@@ -138,7 +140,7 @@ export function SidebarInner({
           onImport()
           onClose?.()
         }}
-        className={`flex w-full cursor-pointer items-center justify-center gap-[8px] rounded-[var(--radius-md)] border-none bg-[var(--brand)] px-[14px] py-[11px] font-[family-name:var(--font-sans)] text-[14px] font-semibold text-[var(--primary-foreground)] shadow-[var(--shadow-sm)] [transition:background_0.15s,translate_0.06s] hover:bg-[var(--brand-hover)] active:translate-y-px ${FOCUS_RING}`}
+        className={`flex w-full cursor-pointer items-center justify-center gap-[8px] rounded-[var(--radius-md)] border-none bg-[var(--brand)] px-[14px] py-[11px] font-[family-name:var(--font-sans)] text-[14px] font-semibold text-[var(--primary-foreground)] shadow-[var(--shadow-sm)] [transition:background_0.15s,translate_0.06s] hover:bg-brand-hover active:translate-y-px ${FOCUS_RING}`}
       >
         <span aria-hidden="true">
           <Upload size={15} strokeWidth={2.2} />
@@ -165,8 +167,8 @@ export function SidebarInner({
                 aria-current={isActive ? 'page' : undefined}
                 className={`relative flex w-full cursor-pointer items-center gap-[11px] rounded-[var(--radius-sm)] border-none px-[10px] py-[9px] text-left font-[family-name:var(--font-sans)] text-[14px] [transition:background_0.13s,color_0.13s] ${FOCUS_RING} ${
                   isActive
-                    ? 'bg-[var(--brand-soft)] font-semibold text-[var(--brand-text)]'
-                    : 'bg-transparent font-medium text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+                    ? 'bg-brand-soft font-semibold text-brand-text'
+                    : 'font-medium text-text-muted hover:bg-surface-2 hover:text-text'
                 } ${i > 0 ? 'mt-[2px]' : 'mt-0'}`}
               >
                 {isActive && (
@@ -207,7 +209,7 @@ export function SidebarInner({
 
       {/* Footer user row: flat under a hairline, not a box (one surface). */}
       <div className="mt-auto pt-[16px]">
-        <div className="flex items-center gap-[10px] border-t border-t-[var(--border)] px-[10px] pt-[14px]">
+        <div className="flex items-center gap-[10px] border-t px-[10px] pt-[14px]">
           <span className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[8px] bg-[var(--accent-soft)] text-[13px] font-bold text-[var(--accent)]">
             {avatarInitial}
           </span>

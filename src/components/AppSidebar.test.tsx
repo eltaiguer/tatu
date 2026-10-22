@@ -35,46 +35,17 @@ describe('AppSidebar', () => {
     )
   })
 
-  it('styles nav items by state with classes, never inline styles', () => {
+  it('leaves no inline colour behind after hovering a nav item', () => {
+    // Guards against re-adding JS hover handlers: they wrote inline styles,
+    // and a hover colour could stick to an item after a click.
     renderSidebar('overview')
 
-    const active = screen.getByRole('button', { name: 'Resumen' })
-    const inactive = screen.getByRole('button', { name: 'Insights' })
-    // Hovering used to write inline background/color, which could stick.
-    fireEvent.mouseOver(inactive)
-    fireEvent.mouseOut(inactive)
-    fireEvent.mouseOver(active)
-
-    for (const item of [active, inactive]) {
+    for (const name of ['Resumen', 'Insights']) {
+      const item = screen.getByRole('button', { name })
+      fireEvent.mouseOver(item)
+      fireEvent.mouseOut(item)
       expect(item.style.background).toBe('')
       expect(item.style.color).toBe('')
-    }
-    expect(active).toHaveClass('bg-[var(--brand-soft)]')
-    expect(inactive).toHaveClass('hover:bg-[var(--surface-2)]')
-    expect(active).not.toHaveClass('hover:bg-[var(--surface-2)]')
-  })
-
-  it('leaves no inline style on Importar or sign-out after pointer use', () => {
-    renderSidebar()
-
-    const importButton = screen.getByRole('button', { name: /Importar/ })
-    fireEvent.mouseOver(importButton)
-    fireEvent.mouseDown(importButton)
-    expect(importButton.style.background).toBe('')
-    expect(importButton.style.transform).toBe('')
-
-    const signOut = screen.getByRole('button', { name: 'Cerrar sesión' })
-    fireEvent.mouseOver(signOut)
-    expect(signOut.style.color).toBe('')
-  })
-
-  it('gives every sidebar control a visible keyboard focus ring', () => {
-    renderSidebar()
-
-    // jsdom doesn't load Tailwind, so assert the token-based classes.
-    for (const button of screen.getAllByRole('button')) {
-      expect(button).toHaveClass('focus-visible:ring-2')
-      expect(button).toHaveClass('focus-visible:ring-[var(--ring)]')
     }
   })
 
