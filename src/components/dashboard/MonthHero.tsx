@@ -43,7 +43,7 @@ export function MonthHero({
     <div className="space-y-5">
       <div>
         <h2 className="m-0">
-          <span className="block text-label font-semibold tracking-[0.06em] text-[var(--text-faint)] uppercase">
+          <span className="block font-sans text-label font-semibold tracking-[0.06em] text-[var(--text-faint)] uppercase">
             {monthSummary.isCurrentMonth
               ? 'Este mes'
               : capitalize(monthSummary.monthLabel)}{' '}
