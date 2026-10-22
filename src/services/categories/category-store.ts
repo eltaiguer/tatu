@@ -9,7 +9,7 @@ export type CategoryRepository = Pick<
   'userId' | 'upsertCustomCategory' | 'archiveCustomCategory'
 >
 
-export const DEFAULT_CATEGORY_COLOR = '#0ea5e9'
+export const DEFAULT_CATEGORY_COLOR = '#3179b7'
 
 export interface CustomCategory {
   /** The id rows are grouped under: always normalizeCategoryId(stored id). */
