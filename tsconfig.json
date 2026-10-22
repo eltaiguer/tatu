@@ -23,6 +23,8 @@
     /* Testing */
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src"],
+  "include": ["src", "scripts"],
+  // doc-paths.test.ts imports an untyped .mjs; vitest still runs it.
+  "exclude": ["scripts/doc-paths.test.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
