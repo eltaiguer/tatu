@@ -25,9 +25,9 @@ export function TopMerchantsCard({
   return (
     <Card className="p-6">
       <div className="mb-[14px]">
-        <h2 className="m-0 font-[family-name:var(--font-sans)] text-[15px] font-semibold">
+        <h3 className="m-0 font-[family-name:var(--font-sans)] text-[15px] font-semibold">
           Mayores comercios
-        </h2>
+        </h3>
         {periodRange && (
           <p className="mx-0 mt-[2px] mb-0 text-[11px] text-[var(--text-faint)]">
             {periodRange}

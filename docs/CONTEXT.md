@@ -12,14 +12,14 @@ The brand is written **Tatú** in UI strings (page titles are
 
 ## Views
 
-| View (UI label) | `View` id      | URL path         | What it is                                                                                      |
-| --------------- | -------------- | ---------------- | ----------------------------------------------------------------------------------------------- |
-| Resumen         | `overview`     | `/`              | Dashboard: "Qué cambió", account cards, "Este mes", category list, charts, "Mayores comercios". |
-| Transacciones   | `transactions` | `/transacciones` | Filterable transaction table with edit, split, delete and bulk actions.                         |
-| Insights        | `insights`     | `/insights`      | AI-written spending insights over the whole history.                                            |
-| Categorías      | `categories`   | `/categorias`    | Page title "Categorías y reglas": category grid plus "Reglas de auto-categorización".           |
-| Configuración   | `settings`     | `/configuracion` | Theme, "Moneda principal", "Tipo de cambio", AI key, data management.                           |
-| Importar        | (not a view)   | (none)           | Sidebar button that opens the CSV import dialog (`ImportCSV`). Import is a dialog, not a route. |
+| View (UI label) | `View` id      | URL path         | What it is                                                                                                                                                                                                              |
+| --------------- | -------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Resumen         | `overview`     | `/`              | Dashboard: "Qué cambió", the month in one sentence ("Gastaste …"), then "¿A dónde se fue la plata?" (sin categoría, categories, "Mayores comercios", recientes), "Mes a mes" (savings, spend per month), "Tus cuentas". |
+| Transacciones   | `transactions` | `/transacciones` | Filterable transaction table with edit, split, delete and bulk actions.                                                                                                                                                 |
+| Insights        | `insights`     | `/insights`      | AI-written spending insights over the whole history.                                                                                                                                                                    |
+| Categorías      | `categories`   | `/categorias`    | Page title "Categorías y reglas": category grid plus "Reglas de auto-categorización".                                                                                                                                   |
+| Configuración   | `settings`     | `/configuracion` | Theme, "Moneda principal", "Tipo de cambio", AI key, data management.                                                                                                                                                   |
+| Importar        | (not a view)   | (none)           | Sidebar button that opens the CSV import dialog (`ImportCSV`). Import is a dialog, not a route.                                                                                                                         |
 
 `View` lives in `AppSidebar.tsx`; paths and page titles live in
 `src/routes.ts` (`pathForView`, `viewFromPath`, `titleForView`). Unknown paths

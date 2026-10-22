@@ -94,14 +94,10 @@ export function SavingsCard({
       <div className="grid grid-cols-1 lg:grid-cols-[258px_1fr] gap-8 items-center">
         {/* Verdict text */}
         <div>
-          <div className="mb-[10px] flex items-baseline gap-[10px]">
-            <h2 className="m-0 font-[family-name:var(--font-sans)] text-[16px] font-semibold">
-              ¿Estás ahorrando?
-            </h2>
-            <span className="text-[11px] text-[var(--text-faint)]">
-              Últimos 12 meses
-            </span>
-          </div>
+          {/* The section heading above names the months covered. */}
+          <h3 className="m-0 mb-[10px] text-title font-semibold">
+            ¿Estás ahorrando?
+          </h3>
           <div className="text-[12px] font-medium text-muted-foreground">
             Mes típico (mediana de ingresos − gastos)
           </div>

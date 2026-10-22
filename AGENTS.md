@@ -57,7 +57,7 @@ src/
     ui/                    # Radix primitives (shadcn/ui style) + app ones: page-header, segmented-toggle (a radiogroup), icon-tile, native-select; use-return-focus (dialogs return focus to their opener on close), option-list (arrow keys in popover picker lists)
     AppSidebar.tsx         # Fixed 252px sidebar, navigation, user footer
     Dashboard.tsx          # Resumen view — owns the data memos; charts live here, not a separate view
-    dashboard/             # Resumen sub-components: AccountCards, MonthSummaryCard, KpiTiles, SavingsCard, CategorySpendCard (donut), CurrencySplitCard, IncomeExpenseChart, RecentTransactionsCard, TopMerchantsCard, EmptyStates, DrillTarget
+    dashboard/             # Resumen sub-components: MonthHero (the month as one sentence), ResumenSection (a question heading + period, a named region), UncategorizedNudge, CategorySpendCard (donut), TopMerchantsCard, RecentTransactionsCard, SavingsCard, MonthlySpendChart (spend bars, income ghost), AccountCards, CurrencySplitCard, EmptyStates, DrillTarget
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
     transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state)
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
@@ -148,7 +148,7 @@ type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 - **General**: Resumen (`overview`), Transacciones (`transactions`), Insights (`insights`)
 - **Gestión**: Categorías (`categories`), Configuración (`settings`)
 - Import is a Radix `Dialog` overlay triggered from the sidebar and from Settings — not a view.
-- Charts/KPIs (donut, area chart, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view.
+- Charts (donut, savings bars, monthly spend bars, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view. Resumen reads top-down: "Qué cambió" → the month hero → three `ResumenSection`s ("¿A dónde se fue la plata?", "Mes a mes", "Tus cuentas"), each labelled with the period its numbers cover.
 - Views load lazily (`lazy-views.tsx`) inside `ViewErrorBoundary` + `Suspense` in `App.tsx`.
 
 ### Routing
