@@ -602,7 +602,7 @@ describe('Dashboard', () => {
       screen.getByText('2 de 2 meses completos en positivo')
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/No cuenta mar. 2026, importado a medias/)
+      screen.getByText(/No cuenta mar. 2026: le faltan datos de alguna cuenta/)
     ).toBeInTheDocument()
   })
 
@@ -624,7 +624,9 @@ describe('Dashboard', () => {
     )
 
     expect(
-      screen.getByText('No cuentan ene. 2026 y mar. 2026, importados a medias.')
+      screen.getByText(
+        'No cuentan ene. 2026 y mar. 2026: les faltan datos de alguna cuenta.'
+      )
     ).toBeInTheDocument()
   })
 

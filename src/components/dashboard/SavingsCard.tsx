@@ -156,8 +156,8 @@ export function SavingsCard({
           {completeMonths.length > 0 && partialMonths.length > 0 && (
             <p className="mt-[4px] mb-0 text-[12px] text-muted-foreground">
               {partialMonths.length === 1
-                ? `No cuenta ${partialMonths[0]}, importado a medias.`
-                : `No cuentan ${partialMonths.slice(0, -1).join(', ')} y ${partialMonths[partialMonths.length - 1]}, importados a medias.`}
+                ? `No cuenta ${partialMonths[0]}: le faltan datos de alguna cuenta.`
+                : `No cuentan ${partialMonths.slice(0, -1).join(', ')} y ${partialMonths[partialMonths.length - 1]}: les faltan datos de alguna cuenta.`}
             </p>
           )}
         </div>

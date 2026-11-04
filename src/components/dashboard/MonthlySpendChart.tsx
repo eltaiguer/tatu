@@ -68,7 +68,7 @@ export function MonthlySpendChart({
         </p>
         {!d.complete && (
           <p className="mx-0 mt-[6px] mb-0 text-[12px] text-[var(--text-faint)]">
-            Mes incompleto: no entra en el promedio
+            Le faltan datos de alguna cuenta: no entra en el promedio
           </p>
         )}
       </div>

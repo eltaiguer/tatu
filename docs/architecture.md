@@ -513,7 +513,10 @@ Resumen passes today's month.
   from `buildMonthlyTrendRows`): faded bars, "(mes incompleto)" on their
   buttons. The savings verdict ("Mes típico", "N de M meses completos en
   positivo") and "Promedio por mes completo con gastos" use complete months
-  only, and the verdict names the months left out (#244).
+  only, and the verdict names the months left out (#244). The rule can't tell
+  "not imported" from "the account didn't exist yet or was quiet", so the
+  copy says only what is always true: those months lack data from some
+  account. Importing the missing statements brings them back.
 
 ## What a category id means
 
