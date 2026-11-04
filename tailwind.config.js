@@ -129,18 +129,6 @@ export default {
           5: 'var(--chart-5)',
           6: 'var(--chart-6)',
         },
-        // Category colors for transactions
-        category: {
-          food: 'var(--category-food)',
-          transport: 'var(--category-transport)',
-          utilities: 'var(--category-utilities)',
-          entertainment: 'var(--category-entertainment)',
-          shopping: 'var(--category-shopping)',
-          health: 'var(--category-health)',
-          education: 'var(--category-education)',
-          income: 'var(--category-income)',
-          other: 'var(--category-other)',
-        },
       },
       spacing: {
         1: 'var(--space-1)',

@@ -119,6 +119,32 @@ describe('rawMerchantKey', () => {
     ).toBe('compra con tarjeta debito 7seven')
   })
 
+  it('keeps the digits of a nameless Banca Digital debit, instead of merging every payee into one merchant', () => {
+    expect(
+      rawMerchantKey('DEBITO OPERACION EN BANCA DIGITAL 526741TT55770545')
+    ).toBe('debito operacion en banca digital 526741tt55770545')
+    expect(
+      rawMerchantKey('DEBITO OPERACION EN BANCA DIGITAL 526741TT TRF. PLAZA-')
+    ).toBe('debito operacion en banca digital 526741tt trf. plaza')
+  })
+
+  it('keeps a name glued to a code by "/", dropping only the code', () => {
+    expect(
+      rawMerchantKey(
+        'CREDITO POR OPERACION EN SUPERNET 12345/HARGUINDEGUY MARIA'
+      )
+    ).toBe('credito por operacion en supernet harguindeguy maria')
+    expect(
+      rawMerchantKey('CREDITO POR OPERACION EN SUPERNET 67890/PEREZ MARIA')
+    ).toBe('credito por operacion en supernet perez maria')
+    // A "/" without a code stays: it is part of the name.
+    expect(
+      rawMerchantKey(
+        'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY MARIA'
+      )
+    ).toBe('credito por operacion en supernet tairtags/harguindeguy maria')
+  })
+
   it('keeps the digits when a one short word is all that is left', () => {
     expect(rawMerchantKey('AB 1234')).toBe('ab 1234')
     expect(rawMerchantKey('AB 5678')).toBe('ab 5678')
@@ -310,6 +336,10 @@ describe('merchantLabelFor on transfers', () => {
       'TAIRTAGS/HARGUINDEGUY MARIA CONSTANZA · Crédito Supernet',
     ],
     [
+      'CREDITO POR OPERACION EN SUPERNET 12345/HARGUINDEGUY MARIA',
+      'HARGUINDEGUY MARIA · Crédito Supernet',
+    ],
+    [
       'DEBITO OPERACION EN SUPERNET O SMS PAGO A GOMEZ, ROCHA',
       'PAGO A GOMEZ, ROCHA · Débito Supernet',
     ],
@@ -401,6 +431,11 @@ describe('merchantLabelFor on transfers', () => {
       'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA /GAZZANO DE MARCO, FEDERICO J',
       'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA GAZZANO DE MARCO, FEDERICO J',
       'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA',
+      'DEBITO OPERACION EN BANCA DIGITAL 526741TT55770545',
+      'DEBITO OPERACION EN BANCA DIGITAL 999999TT11111111',
+      'DEBITO OPERACION EN BANCA DIGITAL 526741TT TRF. PLAZA-',
+      'CREDITO POR OPERACION EN SUPERNET 12345/HARGUINDEGUY MARIA',
+      'CREDITO POR OPERACION EN SUPERNET 67890/PEREZ MARIA',
     ]
     const keyByLabel = new Map<string, string>()
     for (const description of descriptions) {

@@ -1,6 +1,7 @@
 import * as React from 'react'
 
 import { cn } from './utils'
+import { Section } from './section'
 
 function Card({ className, ...props }: React.ComponentProps<'div'>) {
   return (
@@ -81,19 +82,21 @@ function CardFooter({ className, ...props }: React.ComponentProps<'div'>) {
   )
 }
 
+// A Section whose rows sit in one card: the h2 is above the card, the card
+// holds only the rows.
 function SectionCard({
   title,
   children,
   className,
-  ...props
-}: { title: string; children: React.ReactNode } & React.ComponentProps<'div'>) {
+}: {
+  title: string
+  children: React.ReactNode
+  className?: string
+}) {
   return (
-    <Card className={cn('overflow-hidden mb-4', className)} {...props}>
-      <div className="px-6 py-4 border-b border-border">
-        <h3 className="text-[15px] font-semibold">{title}</h3>
-      </div>
-      <div>{children}</div>
-    </Card>
+    <Section title={title} className={className}>
+      <Card className="gap-0 overflow-hidden">{children}</Card>
+    </Section>
   )
 }
 

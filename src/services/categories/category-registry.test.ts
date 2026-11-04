@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  DEFAULT_CATEGORY_COLOR,
   removeCustomCategory,
   replaceCustomCategories,
   type CustomCategory,
@@ -11,7 +10,7 @@ import {
   resolveCategory,
 } from './category-registry'
 import { normalizeCategoryId } from './category-aliases'
-import { Category } from '../../models'
+import { CATEGORY_COLORS, Category, DEFAULT_CATEGORY_COLOR } from '../../models'
 
 // The registry reads the real in-memory store: tests load it the way the app
 // does on sign-in (replaceCustomCategories) instead of mocking it.
@@ -25,6 +24,51 @@ afterEach(() => {
 })
 
 const isIgnored = (id?: string | null) => resolveCategory(id).isIgnored
+
+describe('built-in colours after the palette change', () => {
+  it('draws an override that still carries the old default colour in the current palette', () => {
+    // Editing a built-in once saved its then-default colour with the label.
+    loadCustom([
+      {
+        id: Category.InternalTransfer,
+        label: 'Entre mis cuentas',
+        color: '#0284c7',
+      },
+      { id: Category.Groceries, label: 'Súper', color: '#22c55e' },
+    ])
+
+    expect(resolveCategory(Category.InternalTransfer).color).toBe(
+      CATEGORY_COLORS[Category.InternalTransfer]
+    )
+    expect(resolveCategory(Category.Groceries).color).toBe(
+      CATEGORY_COLORS[Category.Groceries]
+    )
+    expect(resolveCategory(Category.Groceries).label).toBe('Súper')
+  })
+
+  it('draws a custom category saved with the old default colour in the new default', () => {
+    loadCustom([{ id: 'mascotas', label: 'Mascotas', color: '#0ea5e9' }])
+
+    expect(resolveCategory('mascotas').color).toBe(DEFAULT_CATEGORY_COLOR)
+  })
+
+  it('repairs rows the old override fallback wrote: slate colour, raw-id label', () => {
+    loadCustom([
+      { id: Category.Groceries, label: 'groceries', color: '#94a3b8' },
+    ])
+
+    expect(resolveCategory(Category.Groceries).color).toBe(
+      CATEGORY_COLORS[Category.Groceries]
+    )
+    expect(resolveCategory(Category.Groceries).label).toBe('Alimentación')
+  })
+
+  it('keeps a colour the user picked', () => {
+    loadCustom([{ id: Category.Groceries, label: 'Súper', color: '#123456' }])
+
+    expect(resolveCategory(Category.Groceries).color).toBe('#123456')
+  })
+})
 
 describe('getCategoryDefinitions', () => {
   it('returns all 18 built-in categories', () => {

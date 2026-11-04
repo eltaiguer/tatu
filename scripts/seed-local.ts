@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { createClient } from '@supabase/supabase-js'
 import type { Transaction } from '../src/models'
 import { categorizeParsedData } from '../src/services/categorizer/import-categorization'
+import { emptyUserRules } from '../src/services/categorizer/user-rules'
 import { classifyImport } from '../src/services/dedup/import-dedup'
 import { parseCSV } from '../src/services/parsers'
 import { decodeCsvBytes } from '../src/services/parsers/decode-csv'
@@ -63,7 +64,9 @@ function parseSamples(): Transaction[] {
   for (const name of files) {
     // Same two steps as ImportCSV: pure parse, then import categorization.
     const result = categorizeParsedData(
-      parseCSV(decodeCsvBytes(readFileSync(join(SAMPLES_DIR, name))), name)
+      parseCSV(decodeCsvBytes(readFileSync(join(SAMPLES_DIR, name))), name),
+      // A freshly seeded dev user has written no rules yet.
+      emptyUserRules()
     )
     console.log(
       `parsed ${name}: ${result.transactions.length} rows (${result.fileType})`
@@ -104,11 +107,11 @@ async function main() {
   const transactions = parseSamples()
   const { added, repaired } = classifyImport(
     transactions,
-    await findImportCandidates(session, transactions)
+    await findImportCandidates(session.user.id, transactions)
   )
-  await persistTransactions(session, added)
+  await persistTransactions(session.user.id, added)
   for (const tx of repaired) {
-    await updateTransactionsByIds(session, [tx.id], {
+    await updateTransactionsByIds(session.user.id, [tx.id], {
       description: tx.description,
       rawData: tx.rawData,
     })

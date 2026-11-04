@@ -73,6 +73,50 @@ describe('Transactions', () => {
     }
   })
 
+  it('keeps the filters with the movements they filter, in one region', () => {
+    render(<Transactions transactions={[makeTransaction(0)]} />)
+
+    const movements = screen.getByRole('region', { name: 'Movimientos' })
+    expect(
+      within(movements).getByPlaceholderText(/Buscar por comercio/)
+    ).toBeInTheDocument()
+    expect(within(movements).getByRole('table')).toBeInTheDocument()
+  })
+
+  it('counts ignored transfers on their toggle, not as a fourth total', () => {
+    render(
+      <Transactions
+        transactions={[
+          makeTransaction(0),
+          {
+            ...makeTransaction(1, 'Transferencia a mi cuenta'),
+            category: 'internal_transfer',
+          },
+        ]}
+      />
+    )
+
+    const totals = screen.getByRole('group', { name: 'Totales del período' })
+    expect(
+      within(totals)
+        .getAllByText(/^(Ingresos|Gastos|Balance|Transferencias)$/)
+        .map((el) => el.textContent)
+    ).toEqual(['Ingresos', 'Gastos', 'Balance'])
+    const toggle = screen.getByRole('button', {
+      name: /transferencias ignoradas/,
+    })
+    expect(toggle).toHaveTextContent('· 1')
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('says there are no ignored transfers instead of a blank disabled toggle', () => {
+    render(<Transactions transactions={[makeTransaction(0)]} />)
+
+    expect(
+      screen.getByRole('button', { name: /Sin transferencias ignoradas/ })
+    ).toBeDisabled()
+  })
+
   it('flags only categories worth reviewing, without a confidence column', () => {
     render(
       <Transactions

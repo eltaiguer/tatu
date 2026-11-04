@@ -63,6 +63,28 @@ describe('Categories', () => {
     expect(screen.getByText('Transporte')).toBeInTheDocument()
   })
 
+  it('titles the grid, the rules and the category form as level-2 sections', () => {
+    render(<Categories repository={repo} transactions={[]} />)
+
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Tus categorías' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: 'Tus categorías' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Reglas de auto-categorización',
+      })
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Nueva categoría' })
+    ).toBeInTheDocument()
+  })
+
   it("shows each category's spend and how many expenses make it up", () => {
     const txs = [
       makeTx({ id: '1', category: 'groceries', amount: 100, currency: 'USD' }),

@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import Papa from 'papaparse'
 import type { Transaction } from '../src/models'
 import { categorizeParsedData } from '../src/services/categorizer/import-categorization'
+import { emptyUserRules } from '../src/services/categorizer/user-rules'
 import { parseCSV } from '../src/services/parsers'
 
 export function csvFiles(path: string): string[] {
@@ -50,7 +51,8 @@ function loadFile(file: string): Transaction[] {
   const content = readFileSync(file, 'utf-8')
   return isTatuExport(content)
     ? fromTatuExport(content, file)
-    : categorizeParsedData(parseCSV(content, file)).transactions
+    : categorizeParsedData(parseCSV(content, file), emptyUserRules())
+        .transactions
 }
 
 /** Every row of every CSV under `paths` (default: samples/). */

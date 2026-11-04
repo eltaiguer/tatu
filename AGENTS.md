@@ -54,17 +54,17 @@ Node 20 (`.nvmrc`). CI runs `tdd:verify` then `build`; `build`'s `tsc` type-chec
 ```
 src/
   components/              # React UI components
-    ui/                    # Radix primitives (shadcn/ui style) + app ones: page-header, segmented-toggle (a radiogroup), icon-tile, native-select; use-return-focus (dialogs return focus to their opener on close), option-list (arrow keys in popover picker lists)
+    ui/                    # Radix primitives (shadcn/ui style) + app ones: page-header, section (Section: display-font h2 above a named region, for Configuración/Categorías; card.tsx's SectionCard puts its rows in one card below the h2), segmented-toggle (a radiogroup), icon-tile, native-select; use-return-focus (dialogs return focus to their opener on close), option-list (arrow keys in popover picker lists)
     AppSidebar.tsx         # Fixed 252px sidebar, navigation, user footer
     Dashboard.tsx          # Resumen view — owns the data memos; charts live here, not a separate view
-    dashboard/             # Resumen sub-components: AccountCards, MonthSummaryCard, KpiTiles, SavingsCard, CategorySpendCard (donut), CurrencySplitCard, IncomeExpenseChart, RecentTransactionsCard, TopMerchantsCard, EmptyStates, DrillTarget
+    dashboard/             # Resumen sub-components: MonthHero (the month as one sentence), ResumenSection (a question heading + period, a named region), UncategorizedNudge, CategorySpendCard (donut), TopMerchantsCard, RecentTransactionsCard, SavingsCard, MonthlySpendChart (spend bars, income ghost), MonthButtons (keyboard equivalent of a chart's bars), AccountCards, CurrencySplitCard, EmptyStates, DrillTarget
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
     transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state)
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
-    Categories.tsx         # Categorías view — category grid + auto-categorization rules
+    Categories.tsx         # Categorías view — "Tus categorías" tile grid (no wrapping card) + auto-categorization rules, each an h2 Section
     categories/            # Categorías sub-components: CategoryForm, CategoryCard, PatternRulesCard (rules form + list, owns its state)
     settings/              # Configuración sub-components: DuplicatesReview ("Buscar posibles duplicados" row + review dialog, #167)
-    Settings.tsx           # Configuración view — theme, currency, account, data management
+    Settings.tsx           # Configuración view — theme, currency, AI, account, data management (one SectionCard each); dev panels in one closed "Herramientas de desarrollo" <details> (DEV builds only)
     ImportCSV.tsx          # CSV import dialog (Radix Dialog, not a view): picks the file, hands its bytes to importStatement via a required handler, stays open on a summary of counts (#202)
     CategoryBreakdownList.tsx  # Ranked category list with progress bars
     FxChip.tsx             # Editable FX rate chip (click to edit inline)
@@ -107,7 +107,7 @@ src/
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     merchants/             # merchant-key.ts: THE merchant key + label (Mayores comercios, its drill-through, Insights, recurring) — never group by description
-    charts/                # Home-currency aggregation (chart-data.ts: totals, categories, merchants); category-changes.ts feeds CategoryChangesCard; dashboard-rows.ts shapes Resumen rows (donut, trend, period label)
+    charts/                # Home-currency aggregation (chart-data.ts: totals, categories, merchants); complete-months.ts = THE "is this month fully imported" rule (completeMonths); category-changes.ts feeds CategoryChangesCard; dashboard-rows.ts shapes Resumen rows (donut, trend with each month's `complete` flag, period label)
     currency/              # convert(amount, from, to, rate) + Currency type
     suggestions/           # suggestions.ts: category/tag suggestion lists + search filters shared by the edit dialogs
     descriptions/          # Description override management
@@ -129,7 +129,7 @@ src/
     fonts.css              # Google Fonts: Spectral, Hanken Grotesk, JetBrains Mono
     tailwind.css           # Tailwind 4 import + sources
     theme.css              # CSS custom properties — light + dark tokens
-                           # (+ theme.test.ts / typography.test.ts) — category colours live in the category registry
+                           # (+ theme.test.ts / typography.test.ts) — category colours: `CATEGORY_COLORS` in `models/category.ts` (resolved per category by the registry; `category-palette.test.ts` guards contrast + distinctness)
   utils/                   # account-display (ACCOUNT_LABELS: the three accounts' names, accountOf), date-utils (newestDate / newestDataMonth = the newest month with data; pass only the rows that count where that matters), formatting, memo, transaction-display, user-display, user-error, auth-errors, sha256 (import file checksum)
   test/                    # Vitest setup + console guard (unexpected console.error/warn fails a test; user-event is wired into RTL's act()); csv-download.ts captures an exported CSV; fake-claude-client.ts records Claude requests and scripts answers; fake-backend.ts = in-memory auth + one in-memory repository per user, for the App suites; user-rules.ts builds a UserRules literal keyed like the stores
 supabase/
@@ -148,7 +148,7 @@ type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 - **General**: Resumen (`overview`), Transacciones (`transactions`), Insights (`insights`)
 - **Gestión**: Categorías (`categories`), Configuración (`settings`)
 - Import is a Radix `Dialog` overlay triggered from the sidebar and from Settings — not a view.
-- Charts/KPIs (donut, area chart, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view.
+- Charts (donut, savings bars, monthly spend bars, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view. Resumen reads top-down: "Qué cambió" → the month hero → three `ResumenSection`s ("¿A dónde se fue la plata?", "Mes a mes", "Tus cuentas"), each labelled with the period its numbers cover.
 - Views load lazily (`lazy-views.tsx`) inside `ViewErrorBoundary` + `Suspense` in `App.tsx`.
 
 ### Routing
@@ -229,7 +229,7 @@ A task is done only when:
 - **Language**: UI copy is Spanish (rioplatense); code, comments and identifiers are English. User-facing errors go through `utils/user-error.ts` (`UserFacingError`, `userErrorMessage`) so raw Supabase/English text never reaches a toast.
 - **Error reporting**: `userErrorMessage` reports unexpected errors to Sentry. An error you log but don't pass to it needs `captureError(error, area)` (`services/monitoring/error-reporting.ts`). Quote user data in error messages (`"${value}"`) so the scrubber redacts it.
 - **Categories**: `Category` enum with Spanish labels, emoji icons, and hex colors
-- **Typography**: Spectral (display/greeting only), Hanken Grotesk (all UI), JetBrains Mono (all amounts). Defined once in `src/styles/fonts.css` + `theme.css` — do not add other font sources.
+- **Typography**: Spectral (display: page titles, the greeting/hero and section headings), Hanken Grotesk (all UI), JetBrains Mono (all amounts). Defined once in `src/styles/fonts.css` + `theme.css` — do not add other font sources.
 - **Amounts/numbers**: always use `.amt` CSS class or `font-mono` Tailwind class + `tabular-nums`
 
 ## Key domain concepts

@@ -30,7 +30,7 @@ export function CategoryCard({
   onDelete,
 }: CategoryCardProps) {
   return (
-    <div className="relative flex items-center gap-[10px] rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--bg)] px-[14px] py-[12px]">
+    <div className="relative flex items-center gap-[10px] rounded-[var(--radius-md)] border border-[var(--border)] bg-[var(--surface)] px-[14px] py-[12px]">
       {/* Icon tile */}
       <span
         className="grid h-[36px] w-[36px] shrink-0 place-items-center rounded-[10px] text-[18px]"

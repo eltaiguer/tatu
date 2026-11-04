@@ -358,3 +358,15 @@ export function niceTicks(min: number, max: number, count = 5): number[] {
   for (let i = first; i <= last; i++) ticks.push(i * step)
   return ticks
 }
+
+// Average monthly spend over the months that had any: a month with only a
+// salary would pull it down. Callers pass only complete months
+// (completeMonths), like the savings verdict. Unrounded — round at the edge.
+// null when no month had spend.
+export function averageSpendOfMonthsWithSpend(
+  monthlyExpenses: number[]
+): number | null {
+  const months = monthlyExpenses.filter((e) => e > 0)
+  if (months.length === 0) return null
+  return months.reduce((s, e) => s + e, 0) / months.length
+}

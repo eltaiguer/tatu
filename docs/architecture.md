@@ -496,6 +496,30 @@ The home currency (`preferredCurrency` from `useUserWorkspace`, passed down as
 `homeCurrency`) and `fxRate` (default 40.5) come from `user_preferences`.
 Which rows the totals add up is decided in one place, described next.
 
+## Complete months
+
+A month's totals only mean something once every account's rows for it are
+imported. `completeMonths(transactions, currentMonth)`
+(`src/services/charts/complete-months.ts`) is the one rule: a month is
+complete when every account (card, USD, UYU) has data from within its first
+3 days and either runs past it or reaches its last 3 days. Months between an
+account's first and last are covered even without rows, an account silent
+for 45 days before a month is dormant and doesn't constrain it, and
+`currentMonth` and later are never complete. The caller picks the clock:
+Resumen passes today's month; Insights (`categoryChangesBefore`) passes the
+month after its history ends, so its hashed input never reads the clock.
+
+- "Qué cambió" (`categoryChanges`) and Insights' `categoryChanges` compare
+  only complete months.
+- "Mes a mes" draws every month but marks partial ones (`MonthlyTrendRow.complete`,
+  from `buildMonthlyTrendRows`): faded bars, "(mes incompleto)" on their
+  buttons. The savings verdict ("Mes típico", "N de M meses completos en
+  positivo") and "Promedio por mes completo con gastos" use complete months
+  only, and the verdict names the months left out (#244). The rule can't tell
+  "not imported" from "the account didn't exist yet or was quiet", so the
+  copy says only what is always true: those months lack data from some
+  account. Importing the missing statements brings them back.
+
 ## What a category id means
 
 A transaction stores a category id string. `resolveCategory(id)`
@@ -524,13 +548,13 @@ collapsed rows disagree, each load logs one `console.warn` naming them. No
 schema change, no migration. The registry therefore does a plain lookup by
 id; it no longer resolves aliases or breaks ties itself.
 
-| Stored id                                   | Resolves to                                                                                                                 |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| missing, `''`                               | Sin categoría (and follows its ignore flag, like a row stored as `uncategorized`)                                           |
-| built-in, any casing, or a pre-rename alias | the current built-in, with the user's label / colour / icon / ignore override if any                                        |
-| a loaded custom category                    | its stored name, colour, icon and ignore flag                                                                               |
-| `ignored` (written by "Ignorar")            | "Ignorada", left out of totals; a legacy custom row keyed `ignored` supplies its label and can only un-ignore it explicitly |
-| anything else (usually a deleted category)  | itself: label derived from the id, neutral colour, 🏷️, counted in totals, `known: false` — never Sin categoría              |
+| Stored id                                   | Resolves to                                                                                                                                                                              |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| missing, `''`                               | Sin categoría (and follows its ignore flag, like a row stored as `uncategorized`)                                                                                                        |
+| built-in, any casing, or a pre-rename alias | the current built-in, with the user's label / colour / icon / ignore override if any (a stored colour equal to a shipped default — `PAST_CATEGORY_COLORS` — follows the current palette) |
+| a loaded custom category                    | its stored name, colour (one equal to a past or current `DEFAULT_CATEGORY_COLOR` follows the current default), icon and ignore flag                                                      |
+| `ignored` (written by "Ignorar")            | "Ignorada", left out of totals; a legacy custom row keyed `ignored` supplies its label and can only un-ignore it explicitly                                                              |
+| anything else (usually a deleted category)  | itself: label derived from the id, neutral colour, 🏷️, counted in totals, `known: false` — never Sin categoría                                                                           |
 
 Deleting a custom category archives its row and stops loading it, so the
 stored name of a deleted category is not available; its rows keep the id and
@@ -566,8 +590,10 @@ rows. Never group by `description` or `getDisplayDescription` directly.
   mask, and a trailing `, PLACE` (any short place in the debit-card shape that
   has a `TARJ:` mask; otherwise only a known Uruguayan place that is not also
   a common name, and never on transfer/Supernet rows, which end in a person's
-  name); then folds. If that leaves nothing, a bare processor/bank prefix
-  (`GENERIC_KEYS`) or one word under 4 letters that is not a known short
+  name); then folds. A name glued to a code by `/` keeps the name
+  ("12345/HARGUINDEGUY" → "harguindeguy", #227). If that leaves nothing, a
+  bare processor/bank prefix (`GENERIC_KEYS`, e.g. a nameless Supernet or
+  Banca Digital debit) or one word under 4 letters that is not a known short
   merchant (`KNOWN_SHORT_MERCHANTS`: UTE, OSE, BPS, DGI, KFC…), the digits are
   kept instead.
 - `merchantLabelFor(rows)`: what the user sees and the Insights model echoes —

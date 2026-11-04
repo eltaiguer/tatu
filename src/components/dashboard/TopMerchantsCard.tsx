@@ -11,28 +11,21 @@ import { DrillTarget } from './DrillTarget'
 
 interface TopMerchantsCardProps {
   topMerchants: MerchantSpendDatum[]
-  periodRange: string | null
   homeCurrency: Currency
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
 }
 
 export function TopMerchantsCard({
   topMerchants,
-  periodRange,
   homeCurrency,
   onNavigateToTransactions,
 }: TopMerchantsCardProps) {
   return (
     <Card className="p-6">
       <div className="mb-[14px]">
-        <h2 className="m-0 font-[family-name:var(--font-sans)] text-[15px] font-semibold">
+        <h3 className="m-0 font-[family-name:var(--font-sans)] text-[15px] font-semibold">
           Mayores comercios
-        </h2>
-        {periodRange && (
-          <p className="mx-0 mt-[2px] mb-0 text-[11px] text-[var(--text-faint)]">
-            {periodRange}
-          </p>
-        )}
+        </h3>
       </div>
       <div className="flex flex-col">
         {topMerchants.map((m, i) => {

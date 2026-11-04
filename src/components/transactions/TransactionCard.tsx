@@ -121,67 +121,70 @@ export function TransactionCard({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <CategoryBadge
-          categoryId={transaction.category || Category.Uncategorized}
-          size="sm"
-        />
-        {needsCategoryReview(transaction) && <ReviewMarker />}
-        {(transaction.tags ?? []).map((tag) => (
-          <span
-            key={`${transaction.id}-${tag}`}
-            className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs"
-          >
-            #{tag}
+      {/* One row: what it is on the left, what you can do on the right. */}
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          <CategoryBadge
+            categoryId={transaction.category || Category.Uncategorized}
+            size="sm"
+          />
+          {needsCategoryReview(transaction) && <ReviewMarker />}
+          {(transaction.tags ?? []).map((tag) => (
+            <span
+              key={`${transaction.id}-${tag}`}
+              className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs"
+            >
+              #{tag}
+            </span>
+          ))}
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            {getAccountIcon(transaction.source)}
+            {getAccountLabel(transaction.source, transaction.currency)}
           </span>
-        ))}
-        <span className="text-xs text-muted-foreground flex items-center gap-1">
-          {getAccountIcon(transaction.source)}
-          {getAccountLabel(transaction.source, transaction.currency)}
-        </span>
-      </div>
-      <div className="flex items-center gap-1 justify-end">
-        {isSplitParentM && onUnsplit && (
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {isSplitParentM && onUnsplit && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Restaurar ${displayDescription}`}
+              disabled={pendingTransactionIds.has(transaction.id)}
+              onClick={() => onUnsplit(transaction)}
+            >
+              <Undo2 size={16} />
+            </Button>
+          )}
+          {!isSplitParentM && !isSplitChildM && onSplit && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Dividir ${displayDescription}`}
+              disabled={pendingTransactionIds.has(transaction.id)}
+              onClick={() => onSplit(transaction)}
+            >
+              <Scissors size={16} />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
-            aria-label={`Restaurar ${displayDescription}`}
+            aria-label={`Editar ${displayDescription}`}
             disabled={pendingTransactionIds.has(transaction.id)}
-            onClick={() => onUnsplit(transaction)}
+            onClick={() => onEdit(transaction)}
           >
-            <Undo2 size={16} />
+            <Pencil size={16} />
           </Button>
-        )}
-        {!isSplitParentM && !isSplitChildM && onSplit && (
           <Button
             variant="ghost"
             size="icon"
-            aria-label={`Dividir ${displayDescription}`}
+            aria-label={`Eliminar ${displayDescription}`}
+            className="text-destructive hover:text-destructive"
             disabled={pendingTransactionIds.has(transaction.id)}
-            onClick={() => onSplit(transaction)}
+            onClick={() => onDelete(transaction)}
           >
-            <Scissors size={16} />
+            <Trash2 size={16} />
           </Button>
-        )}
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={`Editar ${displayDescription}`}
-          disabled={pendingTransactionIds.has(transaction.id)}
-          onClick={() => onEdit(transaction)}
-        >
-          <Pencil size={16} />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={`Eliminar ${displayDescription}`}
-          className="text-destructive hover:text-destructive"
-          disabled={pendingTransactionIds.has(transaction.id)}
-          onClick={() => onDelete(transaction)}
-        >
-          <Trash2 size={16} />
-        </Button>
+        </div>
       </div>
     </div>
   )

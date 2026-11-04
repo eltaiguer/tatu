@@ -5,6 +5,7 @@ import type { Currency, Transaction } from '../../models'
 import { resolveCategory } from '../categories/category-registry'
 import { buildMonthlyTrendsConverted } from './chart-data'
 import type { CategorySpendingDatum } from './chart-data'
+import { completeMonths } from './complete-months'
 
 // Id of the synthetic "Otros" row/slice (categories beyond the top 7).
 export const OTHER_ROW_ID = '__other__'
@@ -24,6 +25,9 @@ export interface MonthlyTrendRow {
   ingresos: number
   gastos: number
   neto: number
+  // Every imported account covers the whole month (completeMonths). A
+  // partial month is still drawn, but stays out of averages and verdicts.
+  complete: boolean
 }
 
 // Labels each category's spend for the donut/list, with its share of the
@@ -93,8 +97,11 @@ export function buildDonutRows(
 export function buildMonthlyTrendRows(
   transactions: Transaction[],
   homeCurrency: Currency,
-  fxRate: number
+  fxRate: number,
+  // Today's month, 'YYYY-MM': it and later months are never complete.
+  currentMonth: string
 ): MonthlyTrendRow[] {
+  const complete = completeMonths(transactions, currentMonth)
   return buildMonthlyTrendsConverted(transactions, homeCurrency, fxRate)
     .slice(-12)
     .map((m) => ({
@@ -107,5 +114,6 @@ export function buildMonthlyTrendRows(
       ingresos: m.income,
       gastos: m.expense,
       neto: m.net,
+      complete: complete.has(m.month),
     }))
 }

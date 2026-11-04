@@ -173,16 +173,7 @@
   --neutral-800: oklch(0.28 0.01 65);
   --neutral-900: oklch(0.2 0.008 65);
 
-  /* Category colors (kept from existing palette) */
-  --category-food: #f97316;
-  --category-transport: #3b82f6;
-  --category-utilities: #f59e0b;
-  --category-entertainment: #8b5cf6;
-  --category-shopping: #ec4899;
-  --category-health: #22c55e;
-  --category-education: #06b6d4;
-  --category-income: oklch(0.53 0.12 153);
-  --category-other: oklch(0.66 0.01 70);
+  /* Category colours live in CATEGORY_COLORS (src/models/category.ts). */
 
   /* Sidebar tokens */
   --sidebar: var(--surface);

@@ -5,7 +5,7 @@ import { requireRepository } from '../services/repository/repository'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import { Download, X } from 'lucide-react'
 import { Button } from './ui/button'
-import { Category } from '../models'
+import { Category, DEFAULT_CATEGORY_COLOR } from '../models'
 import type { Transaction } from '../models'
 import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
 import { EditTransactionDialog } from './EditTransactionDialog'
@@ -16,10 +16,7 @@ import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
 import { newestDataMonth, todayAsUtcDate } from '../utils/date-utils'
 import { exportTransactions } from '../services/export/export'
-import {
-  addCustomCategoryWithSync,
-  DEFAULT_CATEGORY_COLOR,
-} from '../services/categories/category-store'
+import { addCustomCategoryWithSync } from '../services/categories/category-store'
 import {
   buildCategorySuggestions,
   buildTagSuggestions,
@@ -374,7 +371,6 @@ export function Transactions({
         rows={allFilteredTransactions}
         homeCurrency={homeCurrency}
         fxRate={fxRate}
-        ignoredCount={ignoredCount}
       />
 
       {/* Floating bulk bar — rendered before table so DOM order puts it first for a11y queries */}
@@ -405,19 +401,19 @@ export function Transactions({
         />
       )}
 
-      {/* Filters */}
-      <TransactionFilters
-        filters={filters}
-        hasActiveFilters={filtered}
-        dateRange={dateRange}
-        availableCategories={availableCategories}
-        onChange={updateFilters}
-        onDateBoundChange={setDateBound}
-        onClearAll={clearFilters}
-      />
-
-      {/* Table */}
+      {/* Table, with the filters as its header */}
       <TransactionTable
+        filters={
+          <TransactionFilters
+            filters={filters}
+            hasActiveFilters={filtered}
+            dateRange={dateRange}
+            availableCategories={availableCategories}
+            onChange={updateFilters}
+            onDateBoundChange={setDateBound}
+            onClearAll={clearFilters}
+          />
+        }
         paginatedTransactions={paginatedTransactions}
         selectedTransactionIds={selectedTransactionIds}
         allPageSelected={allPageSelected}
