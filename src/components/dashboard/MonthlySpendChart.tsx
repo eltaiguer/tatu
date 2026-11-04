@@ -5,6 +5,7 @@
 import {
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -35,8 +36,10 @@ export function MonthlySpendChart({
   homeCurrency,
   openMonth,
 }: MonthlySpendChartProps) {
+  // Partial months are drawn but not averaged: ten days of a statement
+  // would read as a cheap month.
   const avgMonthly = averageSpendOfMonthsWithSpend(
-    monthlyTrend.map((m) => m.gastos)
+    monthlyTrend.filter((m) => m.complete).map((m) => m.gastos)
   )
 
   const tooltip = ({
@@ -63,6 +66,11 @@ export function MonthlySpendChart({
             {formatCurrency(d.ingresos, homeCurrency)}
           </span>
         </p>
+        {!d.complete && (
+          <p className="mx-0 mt-[6px] mb-0 text-[12px] text-[var(--text-faint)]">
+            Le faltan datos de alguna cuenta: no entra en el promedio
+          </p>
+        )}
       </div>
     )
   }
@@ -79,7 +87,7 @@ export function MonthlySpendChart({
         {avgMonthly !== null && (
           <div className="sm:text-right">
             <div className="text-label text-muted-foreground">
-              Promedio por mes con gastos
+              Promedio por mes completo con gastos
             </div>
             <div className="font-mono text-subhead tabular-nums">
               {formatCurrency(avgMonthly, homeCurrency)}
@@ -131,7 +139,11 @@ export function MonthlySpendChart({
             onClick={(row: { key?: string }) =>
               row.key && openMonth?.(row.key, 'credit')
             }
-          />
+          >
+            {monthlyTrend.map((m) => (
+              <Cell key={m.key} fillOpacity={m.complete ? 0.2 : 0.1} />
+            ))}
+          </Bar>
           <Bar
             dataKey="gastos"
             fill="var(--neg)"
@@ -143,7 +155,11 @@ export function MonthlySpendChart({
             onClick={(row: { key?: string }) =>
               row.key && openMonth?.(row.key, 'debit')
             }
-          />
+          >
+            {monthlyTrend.map((m) => (
+              <Cell key={m.key} fillOpacity={m.complete ? 0.78 : 0.35} />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
       {openMonth && (
@@ -152,12 +168,12 @@ export function MonthlySpendChart({
           buttons={monthlyTrend.flatMap((m) => [
             {
               key: `${m.key}-debit`,
-              text: `Ver los gastos de ${m.month}`,
+              text: `Ver los gastos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
               onClick: () => openMonth(m.key, 'debit'),
             },
             {
               key: `${m.key}-credit`,
-              text: `Ver los ingresos de ${m.month}`,
+              text: `Ver los ingresos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
               onClick: () => openMonth(m.key, 'credit'),
             },
           ])}

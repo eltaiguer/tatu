@@ -35,7 +35,7 @@ import { SavingsCard } from './dashboard/SavingsCard'
 import { ResumenSection } from './dashboard/ResumenSection'
 import { TopMerchantsCard } from './dashboard/TopMerchantsCard'
 import { UncategorizedNudge } from './dashboard/UncategorizedNudge'
-import { newestDate, todayAsUtcDate } from '../utils/date-utils'
+import { newestDate, todayAsUtcDate, toMonthKey } from '../utils/date-utils'
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -115,9 +115,15 @@ export function Dashboard({
   // changing. One resolveCategory per category is cheap.
   const categoryData = toCategorySpendRows(categorySpending)
 
+  // Today's month (a string, so memos hold): it is never complete. Both
+  // "Qué cambió" and "Mes a mes" recompute when it rolls over.
+  const currentMonth = toMonthKey(todayAsUtcDate())
+
   const changes = useMemo(
     () => categoryChanges(transactions, homeCurrency, fxRate),
-    [transactions, homeCurrency, fxRate]
+    // currentMonth: categoryChanges reads the clock itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [transactions, homeCurrency, fxRate, currentMonth]
   )
 
   // Uncategorized expenses: the category list's own row, so the nudge's
@@ -140,10 +146,11 @@ export function Dashboard({
     [categoryData]
   )
 
-  // Monthly trend — last 12 months
+  // Monthly trend — last 12 months; partial months are drawn, not averaged.
   const monthlyTrend = useMemo(
-    () => buildMonthlyTrendRows(transactions, homeCurrency, fxRate),
-    [transactions, homeCurrency, fxRate]
+    () =>
+      buildMonthlyTrendRows(transactions, homeCurrency, fxRate, currentMonth),
+    [transactions, homeCurrency, fxRate, currentMonth]
   )
 
   // Opens exactly one month's rows (optionally only income or expenses), as

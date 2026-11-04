@@ -107,7 +107,7 @@ src/
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
     merchants/             # merchant-key.ts: THE merchant key + label (Mayores comercios, its drill-through, Insights, recurring) — never group by description
-    charts/                # Home-currency aggregation (chart-data.ts: totals, categories, merchants); category-changes.ts feeds CategoryChangesCard; dashboard-rows.ts shapes Resumen rows (donut, trend, period label)
+    charts/                # Home-currency aggregation (chart-data.ts: totals, categories, merchants); complete-months.ts = THE "is this month fully imported" rule (completeMonths); category-changes.ts feeds CategoryChangesCard; dashboard-rows.ts shapes Resumen rows (donut, trend with each month's `complete` flag, period label)
     currency/              # convert(amount, from, to, rate) + Currency type
     suggestions/           # suggestions.ts: category/tag suggestion lists + search filters shared by the edit dialogs
     descriptions/          # Description override management
