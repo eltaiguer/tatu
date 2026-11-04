@@ -139,7 +139,11 @@ export function MonthlySpendChart({
             onClick={(row: { key?: string }) =>
               row.key && openMonth?.(row.key, 'credit')
             }
-          />
+          >
+            {monthlyTrend.map((m) => (
+              <Cell key={m.key} fillOpacity={m.complete ? 0.2 : 0.1} />
+            ))}
+          </Bar>
           <Bar
             dataKey="gastos"
             fill="var(--neg)"

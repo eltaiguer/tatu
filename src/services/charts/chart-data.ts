@@ -360,9 +360,9 @@ export function niceTicks(min: number, max: number, count = 5): number[] {
 }
 
 // Average monthly spend over the months that had any: a month with only a
-// salary would pull it down. The same months the spend bars draw; a partial
-// latest month counts, as it does in the savings verdict. Unrounded — round
-// at the edge. null when no month had spend.
+// salary would pull it down. Callers pass only complete months
+// (completeMonths), like the savings verdict. Unrounded — round at the edge.
+// null when no month had spend.
 export function averageSpendOfMonthsWithSpend(
   monthlyExpenses: number[]
 ): number | null {

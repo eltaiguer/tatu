@@ -13,8 +13,8 @@ import { countsAsRow } from '../spending/spending-rules'
 // imported", and doesn't constrain it. The current month (and anything
 // later) is never complete.
 //
-// `currentMonth` is passed in ('YYYY-MM') so callers choose the clock:
-// Resumen passes today's month, Insights one derived from the history.
+// `currentMonth` is passed in ('YYYY-MM') so callers choose the clock;
+// Resumen passes today's month.
 
 const EDGE_DAYS = 3
 // Longer than a statement cycle plus import delay.

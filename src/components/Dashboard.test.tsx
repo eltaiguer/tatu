@@ -586,7 +586,7 @@ describe('Dashboard', () => {
         transactions={[
           tx('jan-in', '01-01', 'credit', 1500),
           tx('jan', '01-10', 'debit', 1000),
-          tx('feb-in', '02-01', 'credit', 2000),
+          tx('feb-in', '02-01', 'credit', 1800),
           tx('feb', '02-10', 'debit', 1500),
           // March stops on the 5th: one bill, no salary yet.
           tx('mar', '03-05', 'debit', 800),
@@ -594,11 +594,37 @@ describe('Dashboard', () => {
       />
     )
 
+    // Median of +500 and +300; with March's −800 it would be +300.
+    expect(screen.getByText(/Mes típico/).nextElementSibling).toHaveTextContent(
+      '+US$ 400,00'
+    )
     expect(
       screen.getByText('2 de 2 meses completos en positivo')
     ).toBeInTheDocument()
     expect(
       screen.getByText(/No cuenta mar. 2026, importado a medias/)
+    ).toBeInTheDocument()
+  })
+
+  it('names every partial month it leaves out', () => {
+    const tx = (id: string, day: string) =>
+      makeTransaction({
+        id,
+        date: new Date(`2026-${day}T00:00:00.000Z`),
+        currency: 'USD',
+        category: Category.Groceries,
+      })
+
+    render(
+      <Dashboard
+        homeCurrency="USD"
+        // Imported from Jan 20 to Mar 5: only February is whole.
+        transactions={[tx('a', '01-20'), tx('b', '02-15'), tx('c', '03-05')]}
+      />
+    )
+
+    expect(
+      screen.getByText('No cuentan ene. 2026 y mar. 2026, importados a medias.')
     ).toBeInTheDocument()
   })
 

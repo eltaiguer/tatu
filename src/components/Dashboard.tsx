@@ -115,9 +115,15 @@ export function Dashboard({
   // changing. One resolveCategory per category is cheap.
   const categoryData = toCategorySpendRows(categorySpending)
 
+  // Today's month (a string, so memos hold): it is never complete. Both
+  // "Qué cambió" and "Mes a mes" recompute when it rolls over.
+  const currentMonth = toMonthKey(todayAsUtcDate())
+
   const changes = useMemo(
     () => categoryChanges(transactions, homeCurrency, fxRate),
-    [transactions, homeCurrency, fxRate]
+    // currentMonth: categoryChanges reads the clock itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [transactions, homeCurrency, fxRate, currentMonth]
   )
 
   // Uncategorized expenses: the category list's own row, so the nudge's
@@ -140,9 +146,7 @@ export function Dashboard({
     [categoryData]
   )
 
-  // Monthly trend — last 12 months. Today's month (a string, so the memo
-  // holds) is never complete: its bar is drawn but not averaged.
-  const currentMonth = toMonthKey(todayAsUtcDate())
+  // Monthly trend — last 12 months; partial months are drawn, not averaged.
   const monthlyTrend = useMemo(
     () =>
       buildMonthlyTrendRows(transactions, homeCurrency, fxRate, currentMonth),
