@@ -28,6 +28,26 @@ const baseInput: InsightInput = {
     },
   ],
   monthlyTrend: [{ month: '2026-06', income: 1000, expense: 300 }],
+  categoryChanges: {
+    referenceMonth: '2026-05',
+    baselineMonths: ['2026-02', '2026-03', '2026-04'],
+    increases: [
+      {
+        category: 'restaurants',
+        current: 75.5,
+        median: 40.25,
+        delta: 35.25,
+        pctChange: 87.58,
+      },
+    ],
+    decrease: {
+      category: 'groceries',
+      current: 10,
+      median: 30,
+      delta: -20,
+      pctChange: -66.67,
+    },
+  },
 }
 
 describe('parseInsightsResponse', () => {
@@ -122,6 +142,104 @@ describe('parseInsightsResponse', () => {
     const result = parseInsightsResponse(text, baseInput)
     expect(result.insights[0].amount).toBe(12)
     expect(result.insights[0].merchant).toBe('Spotify')
+  })
+
+  it.each([75.5, 40.25, 35.25, -20])(
+    'accepts an amount echoed from categoryChanges (%s)',
+    (amount) => {
+      const text = JSON.stringify({
+        insights: [
+          {
+            type: 'bleeding_money',
+            title: 'Restaurantes subió',
+            narrative: 'Gastaste más en restaurantes que en un mes típico.',
+            amount,
+            category: 'restaurants',
+            severity: 'high',
+          },
+        ],
+      })
+
+      expect(parseInsightsResponse(text, baseInput).insights[0].amount).toBe(
+        amount
+      )
+    }
+  )
+
+  it('accepts a drop quoted without its minus sign', () => {
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'trend',
+          title: 'Alimentación bajó',
+          narrative: 'Gastaste menos en alimentación que en un mes típico.',
+          amount: 20,
+          category: 'groceries',
+          severity: 'low',
+        },
+      ],
+    })
+
+    expect(parseInsightsResponse(text, baseInput).insights[0].amount).toBe(20)
+  })
+
+  it('does not accept 0, a categoryChanges median or current with no spend', () => {
+    const input: InsightInput = {
+      ...baseInput,
+      categoryChanges: {
+        referenceMonth: '2026-05',
+        baselineMonths: ['2026-03', '2026-04'],
+        increases: [
+          {
+            category: 'restaurants',
+            current: 50,
+            median: 0,
+            delta: 50,
+            pctChange: null,
+          },
+        ],
+        decrease: null,
+      },
+    }
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'anomaly',
+          title: 'Nuevo gasto',
+          narrative: 'Antes no gastabas en restaurantes.',
+          amount: 0,
+          severity: 'low',
+        },
+      ],
+    })
+
+    expect(parseInsightsResponse(text, input).insights[0].amount).toBe(
+      undefined
+    )
+  })
+
+  it('does not accept a percentage from categoryChanges as an amount', () => {
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'bleeding_money',
+          title: 'Restaurantes subió',
+          narrative: 'Gastaste más en restaurantes que en un mes típico.',
+          amount: 87.58,
+          severity: 'high',
+        },
+      ],
+    })
+
+    expect(parseInsightsResponse(text, baseInput).insights[0].amount).toBe(
+      undefined
+    )
+  })
+
+  it('tells the model it may now say a category grew, from categoryChanges', () => {
+    const prompt = buildInsightSystemPrompt()
+    expect(prompt).toContain('categoryChanges')
+    expect(prompt).not.toContain('Do not claim a specific category grew')
   })
 
   it('matches a merchant the model echoed with other accents, case or separator', () => {

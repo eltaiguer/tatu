@@ -486,7 +486,7 @@ All conversion happens in the browser, at render or aggregation time, with
 | Caller                                                                                                                                                                                  | What it converts                                                                                                    |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `buildCurrencySplit`, `spendByAccount`, `buildMerchantSpendingConverted`) | Resumen totals, charts, account cards and "Mayores comercios" (also Insights' `topMerchants`), in the home currency |
-| `category-changes.ts` (`categoryChanges`)                                                                                                                                               | "Qué cambió" month comparisons and its US$ 10 noise floor                                                           |
+| `category-changes.ts` (`categoryChanges`, `categoryChangesBefore`)                                                                                                                      | "Qué cambió" month comparisons (also Insights' `categoryChanges`) and its US$ 10 noise floor                        |
 | `insight-data.ts` (`buildInsightInput`)                                                                                                                                                 | Every number handed to the Insights model, rounded to cents                                                         |
 | `Dashboard.tsx`                                                                                                                                                                         | Recent rows                                                                                                         |
 | `Transactions.tsx`                                                                                                                                                                      | Filtered-set totals                                                                                                 |
@@ -506,9 +506,11 @@ complete when every account (card, USD, UYU) has data from within its first
 account's first and last are covered even without rows, an account silent
 for 45 days before a month is dormant and doesn't constrain it, and
 `currentMonth` and later are never complete. The caller picks the clock:
-Resumen passes today's month.
+Resumen passes today's month; Insights (`categoryChangesBefore`) passes the
+month after its history ends, so its hashed input never reads the clock.
 
-- "Qué cambió" (`categoryChanges`) compares only complete months.
+- "Qué cambió" (`categoryChanges`) and Insights' `categoryChanges` compare
+  only complete months.
 - "Mes a mes" draws every month but marks partial ones (`MonthlyTrendRow.complete`,
   from `buildMonthlyTrendRows`): faded bars, "(mes incompleto)" on their
   buttons. The savings verdict ("Mes típico", "N de M meses completos en
@@ -620,6 +622,18 @@ rise doesn't read as a lapse. `npx vite-node scripts/recurring-diff.ts
 [--home UYU|USD] [--fx 40.5] [paths…]` prints, per merchant key, what the old
 rules (main; #120) and the current one detect on a Santander CSV or Tatu export
 (`scripts/fixtures/recurring-12mo.csv` is a synthetic 12-month example).
+
+**Category changes** (Insights' `categoryChanges`, #239): the same numbers
+as Resumen's "Qué cambió" card — `categoryChangesBefore` in
+`category-changes.ts`, rounded to cents — so Insights can say a category grew
+or shrank. Resumen reads "this month" off the clock; `buildInsightInput`
+passes the month after the history's last one instead, because its output is
+hashed for the insights cache and must depend on the rows alone. The two agree
+except when the history's last month is the real current month and every
+account already covers it to within 3 days of its end. The model may quote
+`current`, `median` and `delta` (`isKnownAmount` accepts them; a drop's
+`delta` also without its minus sign, never 0), not `pctChange`. `delta` is
+computed from the rounded `current` and `median`, so the three always agree.
 
 **Export** (`services/export/export.ts`) writes exactly the rows it is given
 and returns how many it wrote. Configuración exports every row (a full

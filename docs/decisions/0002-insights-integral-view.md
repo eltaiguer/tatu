@@ -94,6 +94,16 @@ The hash also folds in `INSIGHT_PROMPT_VERSION` (`insight-prompt.ts`) and
 `INSIGHTS_MODEL`, so a prompt or model change marks cached insights stale
 once (#176) — bump `INSIGHT_PROMPT_VERSION` whenever the prompt changes.
 
+_Amended by #239 (2026-10):_ `InsightInput` gains `categoryChanges`, the
+same latest-complete-month vs. baseline-median comparison as Resumen's "Qué
+cambió" card (top 3 increases and the biggest decrease, US$ 10 noise floor),
+so `bleeding_money` / `anomaly` insights can again point at spend that
+_spiked_, not only spend that dominates. Its "current month" is the month
+after the history's last one, not the clock, so the hashed input stays a
+function of the rows. The model may echo its `current`, `median` and `delta`
+as amounts. `INSIGHT_PROMPT_VERSION` is 2. A full `categoryTotals × month`
+matrix (long-run growth) is still open.
+
 ## New Field: `monthsSinceLastSeen`
 
 Without a lookback window, nothing ages a recurring charge out once

@@ -262,6 +262,6 @@ Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip
 
 **AI Insights (shipped**, ADR-0001 + ADR-0002, `docs/decisions/000{1,2}-*.md`): Claude-generated spending insights over the user's **entire transaction history** (no period navigation — ADR-0002), using the stronger `INSIGHTS_MODEL`, cached in Supabase (`ai_insights`, one row per user — requires a manual `schema.sql` apply, see `supabase/README.md`).
 
-**Next initiative**: per-category cross-period comparisons for Insights — `InsightInput.categoryTotals` is still all-time only, so add a `categoryTotals × month` breakdown and let `bleeding_money` insights detect spend that's _growing_, not just spend that _dominates_ (ADR-0002 trade-offs; Resumen's `CategoryChangesCard` already does a month-vs-median view). Anomaly/spike detection fits the same breakdown. Then better AI categorization accuracy and confidence scores on top of what ships today.
+**Next initiative**: per-category cross-period comparisons for Insights. Step one (#239): `InsightInput.categoryChanges` carries Resumen's "Qué cambió" numbers (latest complete month vs. the median of the months before it), so `bleeding_money` / `anomaly` insights can name spend that _spiked_. Still open: a full `categoryTotals × month` breakdown for long-run growth. Then better AI categorization accuracy and confidence scores on top of what ships today.
 
 **Icebox** (not planned; GitHub issues are the source of truth for work): live FX rates from an exchange-rate API, category budgets with alerts, mobile / PWA.

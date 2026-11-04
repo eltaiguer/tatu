@@ -38,7 +38,7 @@ export type CategoryChanges =
 const NOISE_FLOOR_USD = 10
 const BASELINE_MONTHS = 3
 
-function shiftMonth(key: string, by: number): string {
+export function shiftMonth(key: string, by: number): string {
   const [y, m] = key.split('-').map(Number)
   const d = new Date(Date.UTC(y, m - 1 + by, 1))
   return toMonthKey(d)
@@ -59,7 +59,24 @@ export function categoryChanges(
   now: Date = new Date()
 ): CategoryChanges {
   // Today's month where the user is (todayAsUtcDate reads the local day).
-  const complete = completeMonths(transactions, toMonthKey(todayAsUtcDate(now)))
+  return categoryChangesBefore(
+    transactions,
+    homeCurrency,
+    fxRate,
+    toMonthKey(todayAsUtcDate(now))
+  )
+}
+
+// The same comparison with the in-progress month given as a 'YYYY-MM' key
+// instead of read off the clock, so a caller whose output must not depend on
+// the date (Insights, whose input is hashed) can anchor it to its data.
+export function categoryChangesBefore(
+  transactions: Transaction[],
+  homeCurrency: Currency,
+  fxRate: number,
+  currentMonth: string
+): CategoryChanges {
+  const complete = completeMonths(transactions, currentMonth)
   if (complete.size === 0) {
     return { kind: 'insufficient' }
   }
