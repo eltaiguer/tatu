@@ -516,14 +516,15 @@ describe('Dashboard', () => {
     expect(screen.queryByText(/Últimos 1 meses/)).not.toBeInTheDocument()
   })
 
-  it('averages monthly spend over the months that had spend, to the cent', () => {
+  it('averages monthly spend over the complete months that had spend, to the cent', () => {
     render(
       <Dashboard
         homeCurrency="USD"
+        onNavigateToTransactions={vi.fn()}
         transactions={[
           makeTransaction({
             id: 'jan',
-            date: new Date('2026-01-10T00:00:00.000Z'),
+            date: new Date('2026-01-01T00:00:00.000Z'),
             currency: 'USD',
             amount: 100,
           }),
@@ -542,13 +543,87 @@ describe('Dashboard', () => {
             currency: 'USD',
             amount: 15.5,
           }),
+          // April is imported only up to the 5th: drawn, not averaged.
+          makeTransaction({
+            id: 'apr',
+            date: new Date('2026-04-05T00:00:00.000Z'),
+            currency: 'USD',
+            amount: 300,
+          }),
         ]}
       />
     )
 
-    // (100 + 15,50) / 2 — February had no spend, so it doesn't pull it down.
-    const label = screen.getByText('Promedio por mes con gastos')
+    // (100 + 15,50) / 2 — February had no spend, April is partial.
+    const label = screen.getByText('Promedio por mes completo con gastos')
     expect(label.parentElement).toHaveTextContent('US$ 57,75')
+    expect(
+      screen.getByRole('button', {
+        name: 'Ver los gastos de abr. 2026 (mes incompleto)',
+      })
+    ).toBeInTheDocument()
+  })
+
+  it('leaves a partially imported month out of the savings verdict, and says so', () => {
+    const tx = (
+      id: string,
+      day: string,
+      type: 'debit' | 'credit',
+      amount: number
+    ) =>
+      makeTransaction({
+        id,
+        date: new Date(`2026-${day}T00:00:00.000Z`),
+        currency: 'USD',
+        type,
+        amount,
+        category: type === 'credit' ? Category.Income : Category.Groceries,
+      })
+
+    render(
+      <Dashboard
+        homeCurrency="USD"
+        transactions={[
+          tx('jan-in', '01-01', 'credit', 1500),
+          tx('jan', '01-10', 'debit', 1000),
+          tx('feb-in', '02-01', 'credit', 2000),
+          tx('feb', '02-10', 'debit', 1500),
+          // March stops on the 5th: one bill, no salary yet.
+          tx('mar', '03-05', 'debit', 800),
+        ]}
+      />
+    )
+
+    expect(
+      screen.getByText('2 de 2 meses completos en positivo')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/No cuenta mar. 2026, importado a medias/)
+    ).toBeInTheDocument()
+  })
+
+  it('gives no savings verdict or average before any month is complete', () => {
+    render(
+      <Dashboard
+        homeCurrency="USD"
+        transactions={[
+          makeTransaction({
+            id: 'mid',
+            date: new Date('2026-03-15T00:00:00.000Z'),
+            currency: 'USD',
+          }),
+        ]}
+      />
+    )
+
+    expect(screen.getByText('¿Estás ahorrando?')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Todavía no tenés ningún mes importado entero/)
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Mes típico/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Promedio por mes completo con gastos')
+    ).not.toBeInTheDocument()
   })
 
   it("says the month's spend as one sentence", () => {
@@ -591,19 +666,19 @@ describe('Dashboard', () => {
     ) =>
       makeTransaction({
         id,
-        date: new Date(`2026-${month}-10T00:00:00.000Z`),
+        date: new Date(`2026-${month}T00:00:00.000Z`),
         currency: 'USD',
         type,
         amount,
         category: type === 'credit' ? Category.Income : Category.Groceries,
       })
     // Three losing months and one with a 35k inflow: the mean is positive,
-    // the typical month is not.
+    // the typical month is not. Data runs Jan 1 → Apr 30: all complete.
     const transactions = [
-      tx('jan', '01', 'debit', 1000),
-      tx('feb', '02', 'debit', 1200),
-      tx('mar-in', '03', 'credit', 35000),
-      tx('apr', '04', 'debit', 900),
+      tx('jan', '01-01', 'debit', 1000),
+      tx('feb', '02-10', 'debit', 1200),
+      tx('mar-in', '03-10', 'credit', 35000),
+      tx('apr', '04-30', 'debit', 900),
     ]
 
     render(
@@ -617,7 +692,9 @@ describe('Dashboard', () => {
       screen.getByText(/Gastás más de lo que ingresás la mayoría de los meses/)
     ).toBeInTheDocument()
     expect(screen.getByText(/está inflado por/)).toBeInTheDocument()
-    expect(screen.getByText('1 de 4 meses en positivo')).toBeInTheDocument()
+    expect(
+      screen.getByText('1 de 4 meses completos en positivo')
+    ).toBeInTheDocument()
   })
 
   it('names the month instead of saying "Este mes" when data stops last month', () => {

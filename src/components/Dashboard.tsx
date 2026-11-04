@@ -35,7 +35,7 @@ import { SavingsCard } from './dashboard/SavingsCard'
 import { ResumenSection } from './dashboard/ResumenSection'
 import { TopMerchantsCard } from './dashboard/TopMerchantsCard'
 import { UncategorizedNudge } from './dashboard/UncategorizedNudge'
-import { newestDate, todayAsUtcDate } from '../utils/date-utils'
+import { newestDate, todayAsUtcDate, toMonthKey } from '../utils/date-utils'
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -140,10 +140,13 @@ export function Dashboard({
     [categoryData]
   )
 
-  // Monthly trend — last 12 months
+  // Monthly trend — last 12 months. Today's month (a string, so the memo
+  // holds) is never complete: its bar is drawn but not averaged.
+  const currentMonth = toMonthKey(todayAsUtcDate())
   const monthlyTrend = useMemo(
-    () => buildMonthlyTrendRows(transactions, homeCurrency, fxRate),
-    [transactions, homeCurrency, fxRate]
+    () =>
+      buildMonthlyTrendRows(transactions, homeCurrency, fxRate, currentMonth),
+    [transactions, homeCurrency, fxRate, currentMonth]
   )
 
   // Opens exactly one month's rows (optionally only income or expenses), as

@@ -36,9 +36,15 @@ export function SavingsCard({
   openMonth,
 }: SavingsCardProps) {
   // ¿Estás ahorrando? values — headline is the median month so a single
-  // one-off inflow can't make a mostly-losing year read as "saving".
+  // one-off inflow can't make a mostly-losing year read as "saving". Only
+  // complete months count: a statement imported up to the 10th would read
+  // as a month with spend and no salary.
+  const completeMonths = monthlyTrend.filter((m) => m.complete)
+  const partialMonths = monthlyTrend
+    .filter((m) => !m.complete)
+    .map((m) => m.month)
   const savings = summarizeSavings(
-    monthlyTrend.map((m) => ({ month: m.month, net: m.neto }))
+    completeMonths.map((m) => ({ month: m.month, net: m.neto }))
   )
   const typicalNet = Math.round(savings.typicalNet)
   const saving = typicalNet >= 0
@@ -99,40 +105,61 @@ export function SavingsCard({
           <h3 className="m-0 mb-[10px] text-title font-semibold">
             ¿Estás ahorrando?
           </h3>
-          <div className="text-[12px] font-medium text-muted-foreground">
-            Mes típico (mediana de ingresos − gastos)
-          </div>
-          <div
-            className="font-mono mt-[4px] text-[30px] font-semibold"
-            style={{ color: saving ? 'var(--pos)' : 'var(--neg)' }}
-          >
-            {saving ? '+' : '−'}
-            {formatCurrency(Math.abs(typicalNet), homeCurrency)}
-          </div>
-          <p className="mt-[12px] text-[14px] leading-[1.5]">
-            {positiveMonths > negativeMonths
-              ? 'Te queda dinero la mayoría de los meses.'
-              : positiveMonths < negativeMonths
-                ? 'Gastás más de lo que ingresás la mayoría de los meses.'
-                : 'La mitad de los meses te queda dinero y la otra mitad no.'}
-            {savings.outlier && (
-              <>
-                {' '}
-                El promedio (
-                <strong>
-                  {savings.meanNet >= 0 ? '+' : '−'}
-                  {formatCurrency(Math.abs(savings.meanNet), homeCurrency)}
-                </strong>
-                ) está {savings.meanNet >= 0 ? 'inflado' : 'hundido'} por{' '}
-                {savings.outlier.month} ({savings.outlier.net >= 0 ? '+' : '−'}
-                {formatCurrency(Math.abs(savings.outlier.net), homeCurrency)}
-                ).
-              </>
-            )}
-          </p>
-          <div className="mt-[8px] text-[12px] text-muted-foreground">
-            {positiveMonths} de {monthlyTrend.length} meses en positivo
-          </div>
+          {completeMonths.length === 0 ? (
+            <p className="mt-[4px] text-[14px] leading-[1.5]">
+              Todavía no tenés ningún mes importado entero en todas tus cuentas,
+              así que no hay un mes típico para comparar.
+            </p>
+          ) : (
+            <>
+              <div className="text-[12px] font-medium text-muted-foreground">
+                Mes típico (mediana de ingresos − gastos)
+              </div>
+              <div
+                className="font-mono mt-[4px] text-[30px] font-semibold"
+                style={{ color: saving ? 'var(--pos)' : 'var(--neg)' }}
+              >
+                {saving ? '+' : '−'}
+                {formatCurrency(Math.abs(typicalNet), homeCurrency)}
+              </div>
+              <p className="mt-[12px] text-[14px] leading-[1.5]">
+                {positiveMonths > negativeMonths
+                  ? 'Te queda dinero la mayoría de los meses.'
+                  : positiveMonths < negativeMonths
+                    ? 'Gastás más de lo que ingresás la mayoría de los meses.'
+                    : 'La mitad de los meses te queda dinero y la otra mitad no.'}
+                {savings.outlier && (
+                  <>
+                    {' '}
+                    El promedio (
+                    <strong>
+                      {savings.meanNet >= 0 ? '+' : '−'}
+                      {formatCurrency(Math.abs(savings.meanNet), homeCurrency)}
+                    </strong>
+                    ) está {savings.meanNet >= 0 ? 'inflado' : 'hundido'} por{' '}
+                    {savings.outlier.month} (
+                    {savings.outlier.net >= 0 ? '+' : '−'}
+                    {formatCurrency(
+                      Math.abs(savings.outlier.net),
+                      homeCurrency
+                    )}
+                    ).
+                  </>
+                )}
+              </p>
+              <div className="mt-[8px] text-[12px] text-muted-foreground">
+                {positiveMonths} de {completeMonths.length} meses completos en
+                positivo
+              </div>
+            </>
+          )}
+          {completeMonths.length > 0 && partialMonths.length > 0 && (
+            <p className="mt-[4px] mb-0 text-[12px] text-muted-foreground">
+              {partialMonths.length === 1
+                ? `No cuenta ${partialMonths[0]}, importado a medias.`
+                : `No cuentan ${partialMonths.slice(0, -1).join(', ')} y ${partialMonths[partialMonths.length - 1]}, importados a medias.`}
+            </p>
+          )}
         </div>
 
         {/* Diverging net bars */}
@@ -171,7 +198,7 @@ export function SavingsCard({
                 <Cell
                   key={i}
                   fill={entry.neto >= 0 ? 'var(--pos)' : 'var(--neg)'}
-                  fillOpacity={0.8}
+                  fillOpacity={entry.complete ? 0.8 : 0.35}
                   cursor={openMonth ? 'pointer' : undefined}
                   onClick={() => openMonth?.(entry.key)}
                 />
@@ -184,7 +211,7 @@ export function SavingsCard({
             label="Movimientos por mes"
             buttons={monthlyTrend.map((m) => ({
               key: m.key,
-              text: `Ver movimientos de ${m.month}`,
+              text: `Ver movimientos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
               onClick: () => openMonth(m.key),
             }))}
           />

@@ -496,6 +496,25 @@ The home currency (`preferredCurrency` from `useUserWorkspace`, passed down as
 `homeCurrency`) and `fxRate` (default 40.5) come from `user_preferences`.
 Which rows the totals add up is decided in one place, described next.
 
+## Complete months
+
+A month's totals only mean something once every account's rows for it are
+imported. `completeMonths(transactions, currentMonth)`
+(`src/services/charts/complete-months.ts`) is the one rule: a month is
+complete when every account (card, USD, UYU) has data from within its first
+3 days and either runs past it or reaches its last 3 days. Months between an
+account's first and last are covered even without rows, an account silent
+for 45 days before a month is dormant and doesn't constrain it, and
+`currentMonth` and later are never complete. The caller picks the clock:
+Resumen passes today's month.
+
+- "Qué cambió" (`categoryChanges`) compares only complete months.
+- "Mes a mes" draws every month but marks partial ones (`MonthlyTrendRow.complete`,
+  from `buildMonthlyTrendRows`): faded bars, "(mes incompleto)" on their
+  buttons. The savings verdict ("Mes típico", "N de M meses completos en
+  positivo") and "Promedio por mes completo con gastos" use complete months
+  only, and the verdict names the months left out (#244).
+
 ## What a category id means
 
 A transaction stores a category id string. `resolveCategory(id)`
