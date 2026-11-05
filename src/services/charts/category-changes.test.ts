@@ -225,7 +225,7 @@ describe('categoryChanges', () => {
     const result = categoryChanges(txs, 'USD', 40, NOW)
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
-    // Median baseline ≈ 0.5, Sep ≈ 0.5: no "Bajaste en viajes −US$ 666".
+    // Median baseline ≈ 0.5, Sep ≈ 0.5: no −US$ 666 decrease for viajes.
     expect(result.decrease).toBeUndefined()
   })
 
