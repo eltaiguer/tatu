@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react'
 import { Card } from './ui/card'
 import type { Currency, TransactionsFilter } from '../models'
@@ -39,6 +40,13 @@ function signed(amount: number, currency: Currency): string {
   return `${amount >= 0 ? '+' : '−'}${formatCurrency(Math.abs(amount), currency)}`
 }
 
+function signedPct(pct: number): string {
+  return `(${pct >= 0 ? '+' : '−'}${Math.round(Math.abs(pct) * 100)}%)`
+}
+
+// Every row shares the list's column tracks (subgrid), so the deltas and
+// amounts line up: name | delta | the month over its baseline once the card
+// is wide enough; narrower, the two links wrap under the name and delta.
 function ChangeRow({
   change,
   down,
@@ -57,62 +65,75 @@ function ChangeRow({
   onOpen?: (filter: TransactionsFilter) => void
 }) {
   const display = resolveCategory(change.category)
+  const byMonthId = useId()
   const open = (filter: TransactionsFilter) => () => onOpen?.(filter)
   const base = {
     categories: [change.category],
     type: 'debit' as const,
   }
+  const byMonth = baseline
+    .map(
+      (m, i) =>
+        `${monthName(m, 'short')} ${formatCurrency(
+          change.baselineByMonth[i],
+          homeCurrency
+        )}`
+    )
+    .join(' · ')
+  const Arrow = down ? ArrowDownRight : ArrowUpRight
   return (
-    <li className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-0.5 border-b border-border py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1.4fr)_auto_auto]">
+    <li className="col-span-full grid grid-cols-subgrid items-center gap-y-1 border-b border-border py-2.5 last:border-b-0">
       <span className="flex min-w-0 items-center gap-2 text-body font-medium">
         <span aria-hidden>{display.icon}</span>
-        <span className="truncate">
-          {down ? `Bajaste en ${display.label}` : display.label}
+        <span className="truncate">{display.label}</span>
+      </span>
+      <span className="flex items-center justify-self-end gap-1.5">
+        <Arrow
+          aria-hidden
+          size={14}
+          className={
+            down ? 'text-[color:var(--pos)]' : 'text-[color:var(--neg)]'
+          }
+        />
+        <span className="sr-only">{down ? 'Bajó' : 'Subió'}</span>
+        <span className="font-mono text-body font-semibold tabular-nums">
+          {signed(change.delta, homeCurrency)}
+        </span>
+        {/* A fixed slot, empty without a %, keeps the deltas' right edge. */}
+        <span className="w-[8ch] text-right font-mono text-label tabular-nums text-muted-foreground">
+          {change.pct !== null && signedPct(change.pct)}
         </span>
       </span>
-      <span className="flex items-center gap-1 justify-self-end font-mono text-small">
-        {down ? (
-          <ArrowDownRight size={14} className="text-[color:var(--pos)]" />
-        ) : (
-          <ArrowUpRight size={14} className="text-[color:var(--neg)]" />
-        )}
-        {signed(change.delta, homeCurrency)}
-        {change.pct !== null && (
-          <span className="text-muted-foreground">
-            ({change.pct >= 0 ? '+' : ''}
-            {Math.round(change.pct * 100)}%)
-          </span>
-        )}
-      </span>
-      <span className="col-span-2 flex flex-wrap items-center gap-x-3 text-label text-muted-foreground sm:col-span-1 sm:justify-self-end">
+      <span className="col-span-full flex flex-wrap items-baseline gap-x-3 @xl:col-span-1 @xl:flex-col @xl:items-end @xl:gap-0">
         <button
           type="button"
           disabled={!onOpen}
           onClick={open({ ...base, period: monthPeriod(reference) })}
-          className="font-mono text-label text-[color:var(--text)] underline-offset-2 hover:underline disabled:no-underline"
+          className="text-label text-[color:var(--text)] underline-offset-2 hover:underline disabled:no-underline"
           aria-label={`Ver los gastos en ${display.label} de ${monthName(reference)}`}
         >
-          {formatCurrency(change.current, homeCurrency)} en{' '}
-          {monthName(reference, 'short')}
+          <span className="font-mono tabular-nums">
+            {formatCurrency(change.current, homeCurrency)}
+          </span>{' '}
+          en {monthName(reference, 'short')}
         </button>
         <button
           type="button"
           disabled={!onOpen}
           onClick={open({ ...base, period: rangePeriod(baseline) })}
-          className="font-mono text-caption underline-offset-2 hover:underline disabled:no-underline"
+          className="text-caption text-muted-foreground underline-offset-2 hover:underline disabled:no-underline"
           aria-label={`Ver los gastos en ${display.label} de ${baselineLabel}`}
-          title={`Mediana de ${baselineLabel}: ${formatCurrency(change.median, homeCurrency)}`}
+          aria-describedby={byMonthId}
+          title={byMonth}
         >
-          {baseline
-            .map(
-              (m, i) =>
-                `${monthName(m, 'short')} ${formatCurrency(
-                  change.baselineByMonth[i],
-                  homeCurrency
-                )}`
-            )
-            .join(' · ')}
+          mediana{' '}
+          <span className="font-mono tabular-nums">
+            {formatCurrency(change.median, homeCurrency)}
+          </span>
         </button>
+        <span id={byMonthId} hidden>
+          {byMonth}
+        </span>
       </span>
     </li>
   )
@@ -152,7 +173,7 @@ export function CategoryChangesCard({
   )}`
 
   return (
-    <Card className="gap-2 p-5">
+    <Card className="@container gap-2 p-5">
       <div>
         <h2 className="text-ui font-semibold">
           Qué cambió en {monthName(reference)}
@@ -167,7 +188,7 @@ export function CategoryChangesCard({
           Ninguna categoría cambió más de lo habitual.
         </p>
       ) : (
-        <ul>
+        <ul className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 @xl:grid-cols-[minmax(0,1fr)_auto_auto] @xl:gap-x-6">
           {increases.map((change) => (
             <ChangeRow
               key={change.category}
