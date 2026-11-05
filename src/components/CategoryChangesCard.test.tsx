@@ -64,6 +64,22 @@ describe('CategoryChangesCard', () => {
     expect(within(rowOf('Transporte')).queryByText(/%/)).toBeNull()
   })
 
+  it('says a move under 1% is under 1%, not 0%', () => {
+    render(
+      <CategoryChangesCard
+        changes={{
+          ...changes,
+          increases: [{ ...changes.increases[0], pct: 0.004 }],
+          decrease: { ...changes.decrease!, pct: -0.004 },
+        }}
+        homeCurrency="USD"
+      />
+    )
+
+    expect(within(rowOf('Entretenimiento')).getByText('(+<1%)')).toBeVisible()
+    expect(within(rowOf('Restaurantes')).getByText('(−<1%)')).toBeVisible()
+  })
+
   it("sums up the baseline as its median, each month's amount as the description", () => {
     render(<CategoryChangesCard changes={changes} homeCurrency="USD" />)
 

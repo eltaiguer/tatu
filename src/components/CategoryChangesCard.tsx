@@ -41,7 +41,9 @@ function signed(amount: number, currency: Currency): string {
 }
 
 function signedPct(pct: number): string {
-  return `(${pct >= 0 ? '+' : '−'}${Math.round(Math.abs(pct) * 100)}%)`
+  const points = Math.round(Math.abs(pct) * 100)
+  // A change listed here is real, so it never reads as 0%.
+  return `(${pct >= 0 ? '+' : '−'}${points === 0 ? '<1' : points}%)`
 }
 
 // Every row shares the list's column tracks (subgrid), so the deltas and
@@ -100,7 +102,7 @@ function ChangeRow({
           {signed(change.delta, homeCurrency)}
         </span>
         {/* A fixed slot, empty without a %, keeps the deltas' right edge. */}
-        <span className="w-[8ch] text-right font-mono text-label tabular-nums text-muted-foreground">
+        <span className="min-w-[8ch] text-right font-mono text-label tabular-nums text-muted-foreground">
           {change.pct !== null && signedPct(change.pct)}
         </span>
       </span>
