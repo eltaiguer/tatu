@@ -984,6 +984,35 @@ export async function bulkTag(
 }
 
 /**
+ * Sets (true/false) or clears (null = follow the category) the household
+ * choice on each row. Rows already at that value are left alone and not
+ * counted. One function for a single row and for a bulk selection.
+ */
+export async function setHousehold(
+  repo: Repository,
+  transactionIds: string[],
+  household: boolean | null
+): Promise<{ updated: number }> {
+  assertOwner(repo)
+  const ids = new Set(transactionIds)
+  // Rows already at the value are left alone and not counted.
+  const targets = store().transactions.filter(
+    (tx) => ids.has(tx.id) && (tx.household ?? null) !== household
+  )
+  if (targets.length === 0) return { updated: 0 }
+
+  const outcome = await writePatches(
+    repo,
+    new Map(targets.map((tx) => [tx.id, { household }]))
+  )
+  settle(outcome, {
+    message: updatedMessage,
+    retry: (failed) => setHousehold(repo, failed, household),
+  })
+  return { updated: outcome.saved.length }
+}
+
+/**
  * Re-runs the categorizer with context (temporal patterns, categorized
  * merchants) on the selected rows and writes the results that aren't
  * `uncategorized` — one request per (category, confidence) per 100 rows.
