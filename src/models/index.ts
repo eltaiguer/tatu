@@ -44,7 +44,11 @@ export interface TransactionsFilter {
   period?: UrlPeriod
 }
 export type { CustomCategoryRecord } from './custom-category'
-export type { Scope, ResolvedScopeValue } from './scope'
+export type {
+  HouseholdStatus,
+  HouseholdResolution,
+  CategoryHousehold,
+} from './household'
 
 // Category system
 export {
