@@ -225,6 +225,8 @@ export interface Repository {
     color: string
     icon?: string
     isIgnored?: boolean
+    /** Absent = untouched; null = clear (the seeded default applies). */
+    isHousehold?: boolean | null
     isArchived?: boolean
   }): Promise<void>
   archiveCustomCategory(id: string): Promise<void>

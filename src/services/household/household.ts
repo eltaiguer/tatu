@@ -1,6 +1,11 @@
 import { Category } from '../../models'
 import type { CategoryHousehold, HouseholdResolution } from '../../models'
 import { normalizeCategoryId } from '../categories/category-aliases'
+import {
+  listCustomCategories,
+  type CustomCategory,
+} from '../categories/category-store'
+import { memoizeByReference } from '../../utils/memo'
 
 // THE answer to "is this a household expense?" (Hogar sí / no / Sin
 // definir). Every surface (the row toggle, the Hogar filter, the Resumen
@@ -66,6 +71,24 @@ export function resolveHousehold(
     isOverride: false,
   }
 }
+
+/** The signed-in user's category defaults, from the category store. */
+export function currentCategoryHousehold(): CategoryHousehold {
+  return categoryHouseholdOf(listCustomCategories())
+}
+
+// The category store replaces its array on every change (category-registry
+// relies on it too), so the array's identity is the cache key.
+const categoryHouseholdOf = memoizeByReference(
+  (categories: CustomCategory[]): CategoryHousehold =>
+    buildCategoryHousehold(
+      categories.flatMap((c) =>
+        typeof c.isHousehold === 'boolean'
+          ? [[c.id, c.isHousehold] as const]
+          : []
+      )
+    )
+)
 
 function statusOf(household: boolean): HouseholdResolution['status'] {
   return household ? 'household' : 'not_household'

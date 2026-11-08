@@ -153,6 +153,11 @@ create table if not exists public.custom_categories (
   primary key (user_id, id)
 );
 
+-- Household default (#251, ADR-0005): null = the seeded default
+-- (SEEDED_HOUSEHOLD_CATEGORIES); built-ins use their per-user override row.
+alter table public.custom_categories
+  add column if not exists is_household boolean;
+
 alter table public.custom_categories
   add column if not exists is_ignored boolean not null default false,
   add column if not exists is_archived boolean not null default false,

@@ -31,6 +31,7 @@ import { listMerchantCategoryOverrides } from '../services/categorizer/category-
 import { listDescriptionOverrides } from '../services/descriptions/description-overrides'
 import { listCustomPatterns } from '../services/categorizer/custom-patterns'
 import { listCustomCategories } from '../services/categories/category-store'
+import { currentCategoryHousehold } from '../services/household/household'
 import { UserFacingError } from '../utils/user-error'
 import {
   createInMemoryAuth,
@@ -175,6 +176,42 @@ describe('workspace store', () => {
     teardownWorkspace()
 
     expect(snapshot()).toEqual(EMPTY)
+  })
+
+  it('loads a category’s household default and teardown forgets it (#251)', async () => {
+    const stored = (id: string, isHousehold?: boolean) => ({
+      id,
+      label: id,
+      color: '#112233',
+      isHousehold,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+    })
+    await signIn(
+      createInMemoryRepository({
+        userId: 'a',
+        customCategories: [
+          stored('restaurants', true),
+          stored('groceries', false),
+          stored('mascotas', true),
+          stored('viajes'),
+        ],
+      })
+    )
+
+    const map = currentCategoryHousehold()
+    expect(
+      listCustomCategories().find((c) => c.id === 'groceries')
+    ).toMatchObject({ isHousehold: false })
+    expect(map.get('groceries')).toBe(false)
+    expect(map.get('restaurants')).toBe(true)
+    expect(map.get('mascotas')).toBe(true)
+    expect(map.has('viajes')).toBe(false)
+
+    teardownWorkspace()
+
+    expect(currentCategoryHousehold().size).toBe(0)
   })
 
   it('gives a user without a preferences row the defaults, not the previous user’s', async () => {
