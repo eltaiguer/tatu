@@ -689,14 +689,15 @@ and skip their rollback after a switch.
 
 ## Persistence boundaries
 
-| Data                                                                          | Store of record                                                                                 | In memory                                                                                    |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Transactions                                                                  | Supabase `transactions` (soft delete via `is_deleted` / `deleted_at`; split parts hard-deleted) | Zustand `transactionStore`, no persist middleware                                            |
-| Description overrides, merchant overrides, custom patterns, custom categories | Supabase `description_overrides`, `category_overrides`, `custom_patterns`, `custom_categories`  | Module-level state in their services, replaced on sync; edits also write through to Supabase |
-| Preferences, including the Claude API key                                     | Supabase `user_preferences`                                                                     | `workspaceStore` preferences; the AI config in `ai-config.ts`, derived from them             |
-| Import audit                                                                  | Supabase `import_runs`                                                                          | Not loaded                                                                                   |
-| Insights cache                                                                | Supabase `ai_insights`, one row per user, via `repository.loadInsights` / `saveInsights`        | `Insights.tsx` state                                                                         |
-| Auth session                                                                  | Supabase Auth                                                                                   | Cached in `localStorage` under `tatu:supabase:session` (`src/services/supabase/client.ts`)   |
+| Data                                                                          | Store of record                                                                                                                    | In memory                                                                                                        |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Transactions                                                                  | Supabase `transactions` (soft delete via `is_deleted` / `deleted_at`; split parts hard-deleted)                                    | Zustand `transactionStore`, no persist middleware                                                                |
+| Description overrides, merchant overrides, custom patterns, custom categories | Supabase `description_overrides`, `category_overrides`, `custom_patterns`, `custom_categories`                                     | Module-level state in their services, replaced on sync; edits also write through to Supabase                     |
+| Household choice, per row and per category                                    | Supabase `transactions.household` and `custom_categories.is_household` (nullable: null = follow the category / the seeded default) | Row: `Transaction.household` in `transactionStore`; category: `CustomCategory.isHousehold` in the category store |
+| Preferences, including the Claude API key                                     | Supabase `user_preferences`                                                                                                        | `workspaceStore` preferences; the AI config in `ai-config.ts`, derived from them                                 |
+| Import audit                                                                  | Supabase `import_runs`                                                                                                             | Not loaded                                                                                                       |
+| Insights cache                                                                | Supabase `ai_insights`, one row per user, via `repository.loadInsights` / `saveInsights`                                           | `Insights.tsx` state                                                                                             |
+| Auth session                                                                  | Supabase Auth                                                                                                                      | Cached in `localStorage` under `tatu:supabase:session` (`src/services/supabase/client.ts`)                       |
 
 - **Supabase is required.** There is no offline mode or local fallback;
   without a session the app shows the sign-in screen.
@@ -714,6 +715,16 @@ and skip their rollback after a switch.
   `aiErrorMessage` shows an `AiError`'s message and "error inesperado del
   servicio de IA" for anything else; a batch loop stops at the first failure
   that is not `retryable` (`auth`, `billing`, `stale_chunk`).
+- **The household flag** is resolved by `resolveHousehold`
+  (`services/household/household.ts`: the row's own choice, else the user's
+  default for its category from `currentCategoryHousehold()`, else the seeded
+  default; ADR-0005). It is not part of "which rows count"
+  (`services/spending/spending-rules.ts`): callers combine the two. Writes are
+  `setHousehold` (one or many rows, `services/mutations/transaction-mutations.ts`)
+  and `setCategoryHouseholdWithSync` (a category's default; a built-in's lives
+  in its override row, as its ignore flag does). Both columns are only written
+  when there is a value to save, so imports and category edits keep working on
+  a database that has not got them yet.
 - **Derived state is not persisted:** inferred transfer categories, converted
   amounts, learned patterns and temporal patterns are recomputed from the
   stored data.

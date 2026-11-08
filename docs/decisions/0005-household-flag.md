@@ -50,9 +50,12 @@ Implemented in this ADR's first PR:
 - The flag says nothing about whether a row counts toward totals; callers
   combine it with `services/spending/spending-rules.ts`.
 
+Implemented in step 2 of #251: persistence of the row choice
+(`transactions.household`) and of the per-category defaults
+(`custom_categories.is_household`), with the write paths and no UI yet.
+
 Planned for the later PRs of #251:
 
-- Persistence of the row choice and of the per-category defaults.
 - A one-click house toggle per row (dimmed when it comes from the category),
   in the edit dialog (with "Según categoría" to clear the row's choice) and
   as a bulk action, and the per-category default in Categorías.
