@@ -80,6 +80,25 @@ describe('classifyWithJev', () => {
     })
   })
 
+  // Review round 1, item 3
+  it('keeps a built-in’s own description when the user has an override row for it', async () => {
+    fetchMock.mockResolvedValueOnce(okResponse({}))
+
+    await classifyWithJev([input('tx1', 'BAR')], config, [
+      {
+        id: 'restaurants',
+        label: 'restaurants',
+        color: '#000000',
+        isHousehold: true,
+      },
+    ]).catch(() => {})
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.questions.tx1.criteria.restaurants).toContain(
+      'Restaurants, bars'
+    )
+  })
+
   it('accepts an answer in any case or spacing, never a prototype name (review of #226)', async () => {
     fetchMock
       .mockResolvedValueOnce(

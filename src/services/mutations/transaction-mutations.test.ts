@@ -1515,8 +1515,46 @@ describe('transaction-mutations — household choice (#251)', () => {
     const repo = signedIn(abc())
 
     expect((await setHousehold(repo, [], true)).updated).toBe(0)
-    expect((await setHousehold(repo, ['zzz'], true)).updated).toBe(0)
     expect(repo.requests.update).toBeUndefined()
+  })
+
+  // Review round 1, item 8b
+  it('refuses when none of the rows exists any more, instead of reporting success', async () => {
+    const repo = signedIn(abc())
+
+    await expect(setHousehold(repo, ['zzz'], true)).rejects.toThrow(
+      UserFacingError
+    )
+    expect(repo.requests.update).toBeUndefined()
+  })
+
+  it('still reports 0 for rows that exist and are already at the value', async () => {
+    const repo = signedIn([makeTransaction('a', { household: true })])
+
+    expect((await setHousehold(repo, ['a'], true)).updated).toBe(0)
+  })
+
+  // Review round 1, item 8a: a split parent is out of every total, and its
+  // parts took the choice when it was split.
+  it('leaves a split parent alone and counts only the parts', async () => {
+    const repo = signedIn([makeTransaction('parent', { amount: 1000 })])
+    await splitTransaction(repo, 'parent', [
+      { description: 'Comida', amount: 600, category: 'groceries' },
+      { description: 'Bebida', amount: 400, category: 'restaurants' },
+    ])
+
+    const result = await setHousehold(
+      repo,
+      ['parent', 'parent_split_0', 'parent_split_1'],
+      true
+    )
+
+    expect(result.updated).toBe(2)
+    for (const read of [stored, repo.row]) {
+      expect(read('parent')).not.toHaveProperty('household')
+      expect(read('parent_split_0')?.household).toBe(true)
+      expect(read('parent_split_1')?.household).toBe(true)
+    }
   })
 
   it('applies exactly the chunks that saved and retries only the rest', async () => {

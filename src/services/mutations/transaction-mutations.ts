@@ -11,7 +11,7 @@
 // - After every await, before touching in-memory state, the workspace owner
 //   is checked: if another user signed in meanwhile, nothing lands in their
 //   store and a WorkspaceChangedError is thrown instead.
-import type { Transaction } from '../../models'
+import { isSplitParentTx, type Transaction } from '../../models'
 import { transactionStore } from '../../stores/transaction-store'
 import { isWorkspaceOwner } from '../../stores/workspace-state'
 import {
@@ -994,10 +994,16 @@ export async function setHousehold(
   household: boolean | null
 ): Promise<{ updated: number }> {
   assertOwner(repo)
+  if (transactionIds.length === 0) return { updated: 0 }
   const ids = new Set(transactionIds)
-  // Rows already at the value are left alone and not counted.
-  const targets = store().transactions.filter(
-    (tx) => ids.has(tx.id) && (tx.household ?? null) !== household
+  const selected = store().transactions.filter((tx) => ids.has(tx.id))
+  // A retry after the rows vanished must not report success.
+  if (selected.length === 0) throw MISSING_TRANSACTION
+  // Rows already at the value are left alone and not counted. A split parent
+  // is out of every total and its parts took the choice when it was split, so
+  // setting it would change nothing that counts.
+  const targets = selected.filter(
+    (tx) => !isSplitParentTx(tx) && (tx.household ?? null) !== household
   )
   if (targets.length === 0) return { updated: 0 }
 

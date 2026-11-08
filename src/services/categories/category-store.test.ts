@@ -21,6 +21,7 @@ import { workspaceStore } from '../../stores/workspace-state'
 import { CATEGORY_COLORS, CATEGORY_LABELS, Category } from '../../models'
 import { UserFacingError } from '../../utils/user-error'
 import { resolveCategory } from './category-registry'
+import { currentCategoryHousehold } from '../household/household'
 
 describe('Custom category store', () => {
   beforeEach(() => {
@@ -387,12 +388,17 @@ describe('rows that collapse into one category', () => {
 describe('upsertBuiltinOverride', () => {
   afterEach(() => replaceCustomCategories([]))
 
-  it("keeps the built-in's own label when only the ignore flag changes", () => {
+  it("keeps following the built-in's own label when only the ignore flag changes", () => {
     upsertBuiltinOverride(Category.Groceries, { isIgnored: true })
 
+    // The row stores the raw id as its label ("not typed by the user"), so a
+    // later rename of the built-in still reaches this user.
     expect(
       listCustomCategories().find((c) => c.id === Category.Groceries)?.label
-    ).toBe(CATEGORY_LABELS[Category.Groceries])
+    ).toBe(Category.Groceries)
+    expect(resolveCategory(Category.Groceries).label).toBe(
+      CATEGORY_LABELS[Category.Groceries]
+    )
   })
 
   it("keeps the built-in's own colour when only the label changes", () => {
@@ -419,16 +425,123 @@ describe('household default of a category (#251, ADR-0005)', () => {
     await setCategoryHouseholdWithSync(repo, Category.Restaurants, true)
 
     expect(byId(Category.Restaurants)).toMatchObject({
-      label: CATEGORY_LABELS[Category.Restaurants],
       color: CATEGORY_COLORS[Category.Restaurants],
       isHousehold: true,
     })
     expect(repo.customCategories.get(Category.Restaurants)).toMatchObject({
-      label: CATEGORY_LABELS[Category.Restaurants],
       color: CATEGORY_COLORS[Category.Restaurants],
       isHousehold: true,
       isIgnored: false,
     })
+    expect(resolveCategory(Category.Restaurants)).toMatchObject({
+      label: CATEGORY_LABELS[Category.Restaurants],
+      isIgnored: false,
+    })
+  })
+
+  // Review round 1, item 2
+  it('stores the raw id as the label, so the built-in label keeps following the app', async () => {
+    await setCategoryHouseholdWithSync(repo, Category.Restaurants, true)
+
+    expect(repo.customCategories.get(Category.Restaurants)?.label).toBe(
+      Category.Restaurants
+    )
+    expect(resolveCategory(Category.Restaurants).label).toBe(
+      CATEGORY_LABELS[Category.Restaurants]
+    )
+  })
+
+  // Review round 1, item 1: the row is NOT NULL on is_ignored, so a row created
+  // only for the household default must carry the default ignore rule.
+  it.each([Category.ExternalTransfer, Category.InternalTransfer])(
+    'keeps %s out of the totals after a household default is saved and reloaded',
+    async (id) => {
+      await setCategoryHouseholdWithSync(repo, id, true)
+
+      replaceCustomCategories(Array.from(repo.customCategories.values()))
+
+      expect(resolveCategory(id).isIgnored).toBe(true)
+      expect(repo.customCategories.get(id)?.isIgnored).toBe(true)
+    }
+  )
+
+  it('leaves a category that counts by default counting after a reload', async () => {
+    await setCategoryHouseholdWithSync(repo, Category.Restaurants, true)
+
+    replaceCustomCategories(Array.from(repo.customCategories.values()))
+
+    expect(resolveCategory(Category.Restaurants).isIgnored).toBe(false)
+  })
+
+  // Review round 1, item 4
+  it('does not bring back the default of a deleted category with the same name', async () => {
+    const archived = {
+      id: 'mascotas',
+      label: 'Mascotas',
+      color: '#112233',
+      isHousehold: true,
+      isArchived: true,
+      createdAt: '',
+      updatedAt: '',
+    }
+    repo = createInMemoryRepository({ customCategories: [archived] })
+    workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+
+    const created = await addCustomCategoryWithSync(repo, {
+      label: 'Mascotas',
+      color: '#112233',
+    })
+
+    expect(created.id).toBe('mascotas')
+    expect(repo.customCategories.get('mascotas')?.isHousehold).toBeUndefined()
+    replaceCustomCategories(
+      Array.from(repo.customCategories.values()).filter((c) => !c.isArchived)
+    )
+    expect(currentCategoryHousehold().has('mascotas')).toBe(false)
+  })
+
+  // Review round 1, item 5
+  it('converges rows that name one category and disagree on the default', async () => {
+    const stored = (id: string, isHousehold?: boolean) => ({
+      id,
+      label: 'Alimentación',
+      color: '#111111',
+      isHousehold,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+    })
+    repo = createInMemoryRepository({
+      customCategories: [stored('groceries'), stored('food', false)],
+    })
+    workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    replaceCustomCategories(Array.from(repo.customCategories.values()))
+
+    await updateCustomCategoryWithSync(repo, 'groceries', {
+      label: 'Súper',
+    })
+
+    expect(repo.customCategories.get('groceries')?.isHousehold).toBeUndefined()
+    expect(repo.customCategories.get('food')?.isHousehold).toBeUndefined()
+  })
+
+  // Review round 1, item 7
+  it('writes nothing when the default is already what was asked', async () => {
+    const created = await addCustomCategoryWithSync(repo, {
+      label: 'Mascotas',
+      color: '#112233',
+    })
+    const writes = () => repo.requests.upsertCustomCategory ?? 0
+    const before = writes()
+
+    await setCategoryHouseholdWithSync(repo, created.id, null)
+    expect(writes()).toBe(before)
+
+    await setCategoryHouseholdWithSync(repo, created.id, true)
+    expect(writes()).toBe(before + 1)
+    await setCategoryHouseholdWithSync(repo, created.id, true)
+    expect(writes()).toBe(before + 1)
   })
 
   it('keeps following the shipped default colour after the override row is created', async () => {
@@ -545,19 +658,6 @@ describe('household default of a category (#251, ADR-0005)', () => {
       label: 'Perro',
       isHousehold: true,
     })
-  })
-
-  it('does not write a household value on a plain category edit', async () => {
-    const created = await addCustomCategoryWithSync(repo, {
-      label: 'Mascotas',
-      color: '#112233',
-    })
-    const saved = vi.spyOn(repo, 'upsertCustomCategory')
-
-    await updateCustomCategoryWithSync(repo, created.id, { label: 'Perro' })
-
-    // Absent, not null: a database without the column keeps accepting edits.
-    expect(saved.mock.calls[0][0]).not.toHaveProperty('isHousehold')
   })
 
   it('treats stored rows that disagree on the default as different settings', () => {
