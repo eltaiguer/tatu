@@ -76,6 +76,11 @@ alter table public.transactions
   add column if not exists is_split_parent boolean not null default false,
   add column if not exists split_parent_id text;
 
+-- Household flag (#251, ADR-0005): the row's own choice; null = follow its
+-- category's default.
+alter table public.transactions
+  add column if not exists household boolean;
+
 alter table public.transactions
   alter column amount type numeric(14,2),
   alter column balance type numeric(14,2),
