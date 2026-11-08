@@ -722,9 +722,11 @@ and skip their rollback after a switch.
   (`services/spending/spending-rules.ts`): callers combine the two. Writes are
   `setHousehold` (one or many rows, `services/mutations/transaction-mutations.ts`)
   and `setCategoryHouseholdWithSync` (a category's default; a built-in's lives
-  in its override row, as its ignore flag does). Both columns are only written
-  when there is a value to save, so imports and category edits keep working on
-  a database that has not got them yet.
+  in its override row, as its ignore flag does). Imports and plain edits of a
+  single-row category write neither column, so they keep working on a database
+  that has not got them yet; creating a category writes `is_household`, and
+  setting a household choice writes either, so apply `schema.sql` before the
+  next deploy.
 - **Derived state is not persisted:** inferred transfer categories, converted
   amounts, learned patterns and temporal patterns are recomputed from the
   stored data.

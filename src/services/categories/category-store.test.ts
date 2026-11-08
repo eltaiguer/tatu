@@ -526,6 +526,30 @@ describe('household default of a category (#251, ADR-0005)', () => {
     expect(repo.customCategories.get('food')?.isHousehold).toBeUndefined()
   })
 
+  // Review round 2, item 4
+  it('still converges rows that name one category when the winner already has the value', async () => {
+    const stored = (id: string, isHousehold: boolean) => ({
+      id,
+      label: 'Alimentación',
+      color: '#111111',
+      isHousehold,
+      isArchived: false,
+      createdAt: '',
+      updatedAt: '',
+    })
+    repo = createInMemoryRepository({
+      customCategories: [stored('groceries', true), stored('food', false)],
+    })
+    workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    replaceCustomCategories(Array.from(repo.customCategories.values()))
+
+    await setCategoryHouseholdWithSync(repo, 'groceries', true)
+
+    expect(repo.customCategories.get('groceries')?.isHousehold).toBe(true)
+    expect(repo.customCategories.get('food')?.isHousehold).toBe(true)
+  })
+
   // Review round 1, item 7
   it('writes nothing when the default is already what was asked', async () => {
     const created = await addCustomCategoryWithSync(repo, {

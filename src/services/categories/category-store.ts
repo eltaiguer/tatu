@@ -191,7 +191,8 @@ function requireOwner(repo: CategoryRepository): void {
 /**
  * Saves a category's row(s). `household` is the value to write for the
  * household default: true / false saves it, null clears it, undefined leaves
- * the stored value (and a database without the column) alone.
+ * the stored value alone (so a plain single-row edit works on a database
+ * that has not got the column yet; creating a category always writes it).
  */
 async function pushCategory(
   repo: CategoryRepository,
@@ -347,11 +348,14 @@ export async function setCategoryHouseholdWithSync(
     throw new UserFacingError('Esa categoría ya no existe. Recargá la página.')
   }
   // Already what was asked (no row, or a row without a default, counts as
-  // none): no write, and no override row created to hold nothing.
-  if ((previous?.isHousehold ?? null) === household) return
+  // none): no write, and no override row created to hold nothing. Rows that
+  // name one category are always written, so they converge.
+  const rows = previous ? serverIds(previous).length : 0
+  if (rows <= 1 && (previous?.isHousehold ?? null) === household) return
 
-  // A built-in without a row gets one with its current label and colour; an
-  // `undefined` here clears the local value (the spread overwrites it).
+  // A built-in without a row gets one holding only this setting (its label is
+  // the raw id and its colour the current default, so both keep following the
+  // app); an `undefined` here clears the local value (the spread overwrites it).
   upsertBuiltinOverride(id, { isHousehold: household ?? undefined })
   try {
     await pushCategory(repo, id, household)

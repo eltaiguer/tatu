@@ -1534,9 +1534,9 @@ describe('transaction-mutations — household choice (#251)', () => {
     expect((await setHousehold(repo, ['a'], true)).updated).toBe(0)
   })
 
-  // Review round 1, item 8a: a split parent is out of every total, and its
-  // parts took the choice when it was split.
-  it('leaves a split parent alone and counts only the parts', async () => {
+  // Review round 2, item 3: a split parent is written like any row, so a
+  // choice made on a split group survives an unsplit (as bulkCategorize does).
+  it('writes a split parent too, so the choice survives an unsplit', async () => {
     const repo = signedIn([makeTransaction('parent', { amount: 1000 })])
     await splitTransaction(repo, 'parent', [
       { description: 'Comida', amount: 600, category: 'groceries' },
@@ -1549,11 +1549,11 @@ describe('transaction-mutations — household choice (#251)', () => {
       true
     )
 
-    expect(result.updated).toBe(2)
+    expect(result.updated).toBe(3)
+    await unsplitTransaction(repo, 'parent')
     for (const read of [stored, repo.row]) {
-      expect(read('parent')).not.toHaveProperty('household')
-      expect(read('parent_split_0')?.household).toBe(true)
-      expect(read('parent_split_1')?.household).toBe(true)
+      expect(read('parent')?.household).toBe(true)
+      expect(read('parent')?.isSplitParent).toBeFalsy()
     }
   })
 

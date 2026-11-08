@@ -11,7 +11,7 @@
 // - After every await, before touching in-memory state, the workspace owner
 //   is checked: if another user signed in meanwhile, nothing lands in their
 //   store and a WorkspaceChangedError is thrown instead.
-import { isSplitParentTx, type Transaction } from '../../models'
+import type { Transaction } from '../../models'
 import { transactionStore } from '../../stores/transaction-store'
 import { isWorkspaceOwner } from '../../stores/workspace-state'
 import {
@@ -1000,11 +1000,9 @@ export async function setHousehold(
   // A retry after the rows vanished must not report success.
   if (selected.length === 0) throw MISSING_TRANSACTION
   // Rows already at the value are left alone and not counted. A split parent
-  // is out of every total and its parts took the choice when it was split, so
-  // setting it would change nothing that counts.
-  const targets = selected.filter(
-    (tx) => !isSplitParentTx(tx) && (tx.household ?? null) !== household
-  )
+  // is written like any row (as bulkCategorize does), so a choice made on a
+  // split group is still there after an unsplit.
+  const targets = selected.filter((tx) => (tx.household ?? null) !== household)
   if (targets.length === 0) return { updated: 0 }
 
   const outcome = await writePatches(

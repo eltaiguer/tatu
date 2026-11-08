@@ -92,8 +92,9 @@ export async function upsertCustomCategory(
       is_ignored: category.isIgnored ?? false,
       // Written only when given (#251): an upsert that omits a column leaves
       // it as it was, so editing a label never resets the household default,
-      // and a database without the column keeps accepting category edits.
-      // is_household is nullable: null clears it.
+      // and a plain edit of a single-row category keeps working on a database
+      // that has not got the column yet (creating a category writes it, so the
+      // SQL must be applied). is_household is nullable: null clears it.
       ...(category.isHousehold !== undefined
         ? { is_household: category.isHousehold }
         : {}),
