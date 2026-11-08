@@ -984,6 +984,39 @@ export async function bulkTag(
 }
 
 /**
+ * Sets (true/false) or clears (null = follow the category) the household
+ * choice on each row. Rows already at that value are left alone and not
+ * counted. One function for a single row and for a bulk selection.
+ */
+export async function setHousehold(
+  repo: Repository,
+  transactionIds: string[],
+  household: boolean | null
+): Promise<{ updated: number }> {
+  assertOwner(repo)
+  if (transactionIds.length === 0) return { updated: 0 }
+  const ids = new Set(transactionIds)
+  const selected = store().transactions.filter((tx) => ids.has(tx.id))
+  // A retry after the rows vanished must not report success.
+  if (selected.length === 0) throw MISSING_TRANSACTION
+  // Rows already at the value are left alone and not counted. A split parent
+  // is written like any row (as bulkCategorize does), so a choice made on a
+  // split group is still there after an unsplit.
+  const targets = selected.filter((tx) => (tx.household ?? null) !== household)
+  if (targets.length === 0) return { updated: 0 }
+
+  const outcome = await writePatches(
+    repo,
+    new Map(targets.map((tx) => [tx.id, { household }]))
+  )
+  settle(outcome, {
+    message: updatedMessage,
+    retry: (failed) => setHousehold(repo, failed, household),
+  })
+  return { updated: outcome.saved.length }
+}
+
+/**
  * Re-runs the categorizer with context (temporal patterns, categorized
  * merchants) on the selected rows and writes the results that aren't
  * `uncategorized` — one request per (category, confidence) per 100 rows.

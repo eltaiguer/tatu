@@ -252,6 +252,7 @@ function applyLoaded(loaded: WorkspaceSnapshot) {
       color: category.color,
       icon: category.icon,
       isIgnored: category.isIgnored,
+      isHousehold: category.isHousehold,
     }))
   )
   // No row: this user has never saved preferences — defaults, never whatever

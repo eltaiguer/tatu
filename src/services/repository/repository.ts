@@ -36,6 +36,11 @@ export interface TransactionPatch {
    */
   description?: string
   rawData?: Transaction['rawData']
+  /**
+   * The row's own household choice (#251): true / false sets it, null goes
+   * back to following the category.
+   */
+  household?: boolean | null
 }
 
 const PATCH_KEYS = [
@@ -45,6 +50,7 @@ const PATCH_KEYS = [
   'tags',
   'description',
   'rawData',
+  'household',
 ] as const
 
 /** The store side of a patch: same keys, same clear-with-null rule. */
@@ -219,6 +225,8 @@ export interface Repository {
     color: string
     icon?: string
     isIgnored?: boolean
+    /** Absent = untouched; null = clear (the seeded default applies). */
+    isHousehold?: boolean | null
     isArchived?: boolean
   }): Promise<void>
   archiveCustomCategory(id: string): Promise<void>

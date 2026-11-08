@@ -316,6 +316,27 @@ describe('enrichTransactionsWithAi', () => {
     expect(client.requests[0].system).toContain('coffee — Coffee')
   })
 
+  // Review round 1, item 3: a built-in's override row (it holds its household
+  // default) is not a second category.
+  it('lists a built-in once even when the user has an override row for it', async () => {
+    answers([{ id: 'tx1', displayDescription: 'Bar', category: 'restaurants' }])
+    await enrich([input('tx1', 'BAR')], {
+      ...emptyContext,
+      customCategories: [
+        {
+          id: 'restaurants',
+          label: 'restaurants',
+          color: '#000000',
+          isHousehold: true,
+        },
+      ],
+    })
+
+    const system = client.requests[0].system
+    expect(system).not.toContain('restaurants — restaurants')
+    expect(system.match(/^restaurants — /gm)).toHaveLength(1)
+  })
+
   it('coerces invalid category to uncategorized', async () => {
     answers([
       {

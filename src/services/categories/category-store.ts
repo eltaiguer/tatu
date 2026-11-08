@@ -1,10 +1,10 @@
+import { Category, CATEGORY_COLORS, DEFAULT_CATEGORY_COLOR } from '../../models'
 import {
-  CATEGORY_COLORS,
-  CATEGORY_LABELS,
-  DEFAULT_CATEGORY_COLOR,
-  type Category,
-} from '../../models'
-import { isReservedCategoryId, normalizeCategoryId } from './category-aliases'
+  isBuiltinCategoryId,
+  isIgnoredByDefault,
+  isReservedCategoryId,
+  normalizeCategoryId,
+} from './category-aliases'
 import { UserFacingError } from '../../utils/user-error'
 import type { Repository } from '../repository/repository'
 import { isWorkspaceOwner } from '../../stores/workspace-state'
@@ -30,7 +30,18 @@ export interface CustomCategory {
   color: string
   icon?: string
   isIgnored?: boolean
+  /**
+   * The user's household default for this category (ADR-0005). Absent = the
+   * seeded default (SEEDED_HOUSEHOLD_CATEGORIES).
+   */
+  isHousehold?: boolean
 }
+
+/** What a category's settings can change: everything but its id. */
+export type CategorySettings = Pick<
+  CustomCategory,
+  'label' | 'color' | 'icon' | 'isIgnored' | 'isHousehold'
+>
 
 let _customCategories: CustomCategory[] = []
 
@@ -79,7 +90,8 @@ function sameSettings(a: CustomCategory, b: CustomCategory): boolean {
     a.label === b.label &&
     a.color === b.color &&
     (a.icon ?? '') === (b.icon ?? '') &&
-    (a.isIgnored ?? false) === (b.isIgnored ?? false)
+    (a.isIgnored ?? false) === (b.isIgnored ?? false) &&
+    (a.isHousehold ?? null) === (b.isHousehold ?? null)
   )
 }
 
@@ -131,6 +143,7 @@ export function addCustomCategory(input: {
   color: string
   icon?: string
   isIgnored?: boolean
+  isHousehold?: boolean
 }): CustomCategory {
   const existingIds = new Set(_customCategories.map((c) => c.id))
   const baseId = slugifyLabel(input.label) || 'custom-category'
@@ -141,6 +154,7 @@ export function addCustomCategory(input: {
     color: input.color,
     icon: input.icon,
     isIgnored: input.isIgnored,
+    isHousehold: input.isHousehold,
   }
   _customCategories = [..._customCategories, next]
   return next
@@ -148,9 +162,7 @@ export function addCustomCategory(input: {
 
 export function updateCustomCategory(
   id: string,
-  updates: Partial<
-    Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
-  >
+  updates: Partial<CategorySettings>
 ): void {
   _customCategories = _customCategories.map((c) =>
     c.id === id ? { ...c, ...updates } : c
@@ -176,9 +188,16 @@ function requireOwner(repo: CategoryRepository): void {
   }
 }
 
+/**
+ * Saves a category's row(s). `household` is the value to write for the
+ * household default: true / false saves it, null clears it, undefined leaves
+ * the stored value alone (so a plain single-row edit works on a database
+ * that has not got the column yet; creating a category always writes it).
+ */
 async function pushCategory(
   repo: CategoryRepository,
-  id: string
+  id: string,
+  household: boolean | null | undefined
 ): Promise<void> {
   const category = _customCategories.find((c) => c.id === id)
   if (!category) return
@@ -189,9 +208,21 @@ async function pushCategory(
       color: category.color,
       icon: category.icon,
       isIgnored: category.isIgnored,
+      ...(household !== undefined ? { isHousehold: household } : {}),
       isArchived: false,
     })
   }
+}
+
+// What a plain edit writes for the household default: the current one, and
+// for rows that name one category, always a value (null when there is none),
+// so rows that disagree converge like every other setting.
+function householdToWrite(id: string): boolean | null | undefined {
+  const category = _customCategories.find((c) => c.id === id)
+  if (!category) return undefined
+  return (
+    category.isHousehold ?? (serverIds(category).length > 1 ? null : undefined)
+  )
 }
 
 function restoreCategory(
@@ -216,12 +247,16 @@ export async function addCustomCategoryWithSync(
     color: string
     icon?: string
     isIgnored?: boolean
+    isHousehold?: boolean
   }
 ): Promise<CustomCategory> {
   requireOwner(repo)
   const created = addCustomCategory(input)
   try {
-    await pushCategory(repo, created.id)
+    // A new category has no default: write that explicitly, so a deleted
+    // category's slug (reused: archived rows are not loaded) can't bring its
+    // old default back.
+    await pushCategory(repo, created.id, input.isHousehold ?? null)
   } catch (error) {
     restoreCategory(repo, created.id, undefined)
     throw error
@@ -232,16 +267,14 @@ export async function addCustomCategoryWithSync(
 export async function updateCustomCategoryWithSync(
   repo: CategoryRepository,
   id: string,
-  updates: Partial<
-    Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
-  >
+  updates: Partial<CategorySettings>
 ): Promise<void> {
   requireOwner(repo)
   const previous = _customCategories.find((c) => c.id === id)
   if (!previous) return
   updateCustomCategory(id, updates)
   try {
-    await pushCategory(repo, id)
+    await pushCategory(repo, id, householdToWrite(id))
   } catch (error) {
     restoreCategory(repo, id, previous)
     throw error
@@ -250,9 +283,7 @@ export async function updateCustomCategoryWithSync(
 
 export function upsertBuiltinOverride(
   id: string,
-  updates: Partial<
-    Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
-  >
+  updates: Partial<CategorySettings>
 ): void {
   const existing = _customCategories.find((c) => c.id === id)
   if (existing) {
@@ -264,12 +295,18 @@ export function upsertBuiltinOverride(
       ..._customCategories,
       {
         id,
-        label: updates.label ?? CATEGORY_LABELS[id as Category] ?? id,
+        // No typed label: store the raw id, which the registry reads as "not
+        // typed by the user", so the built-in's label keeps following the app.
+        label: updates.label ?? id,
         color:
           updates.color ??
           CATEGORY_COLORS[id as Category] ??
           DEFAULT_CATEGORY_COLOR,
-        isIgnored: updates.isIgnored,
+        // is_ignored is NOT NULL, so a row saved without a choice would read
+        // back false: start from the default rule instead (a transfer row
+        // created for another setting must stay out of the totals).
+        isIgnored: updates.isIgnored ?? isIgnoredByDefault(id),
+        isHousehold: updates.isHousehold,
       },
     ]
   }
@@ -278,15 +315,50 @@ export function upsertBuiltinOverride(
 export async function upsertBuiltinOverrideWithSync(
   repo: CategoryRepository,
   id: string,
-  updates: Partial<
-    Pick<CustomCategory, 'label' | 'color' | 'icon' | 'isIgnored'>
-  >
+  updates: Partial<CategorySettings>
 ): Promise<void> {
   requireOwner(repo)
   const previous = _customCategories.find((c) => c.id === id)
   upsertBuiltinOverride(id, updates)
   try {
-    await pushCategory(repo, id)
+    await pushCategory(repo, id, householdToWrite(id))
+  } catch (error) {
+    restoreCategory(repo, id, previous)
+    throw error
+  }
+}
+
+/**
+ * The user's household default for a category (true/false), or null to go
+ * back to the seeded default. Built-ins are stored as an override row, the
+ * way their ignore flag is. Sin categoría cannot have one.
+ */
+export async function setCategoryHouseholdWithSync(
+  repo: CategoryRepository,
+  categoryId: string,
+  household: boolean | null
+): Promise<void> {
+  requireOwner(repo)
+  const id = normalizeCategoryId(categoryId)
+  if (id === Category.Uncategorized) {
+    throw new UserFacingError('Sin categoría no puede marcarse como del hogar.')
+  }
+  const previous = _customCategories.find((c) => c.id === id)
+  if (!previous && !isBuiltinCategoryId(id)) {
+    throw new UserFacingError('Esa categoría ya no existe. Recargá la página.')
+  }
+  // Already what was asked (no row, or a row without a default, counts as
+  // none): no write, and no override row created to hold nothing. Rows that
+  // name one category are always written, so they converge.
+  const rows = previous ? serverIds(previous).length : 0
+  if (rows <= 1 && (previous?.isHousehold ?? null) === household) return
+
+  // A built-in without a row gets one holding only this setting (its label is
+  // the raw id and its colour the current default, so both keep following the
+  // app); an `undefined` here clears the local value (the spread overwrites it).
+  upsertBuiltinOverride(id, { isHousehold: household ?? undefined })
+  try {
+    await pushCategory(repo, id, household)
   } catch (error) {
     restoreCategory(repo, id, previous)
     throw error

@@ -476,6 +476,11 @@ export function createInMemoryRepository(
         color: input.color,
         icon: input.icon,
         isIgnored: input.isIgnored ?? false,
+        // As the column behaves: absent keeps what is stored, null clears.
+        isHousehold:
+          input.isHousehold === undefined
+            ? repo.customCategories.get(input.id)?.isHousehold
+            : (input.isHousehold ?? undefined),
         isArchived: input.isArchived ?? false,
         createdAt: now,
         updatedAt: now,

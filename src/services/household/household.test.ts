@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { Category } from '../../models'
-import { buildCategoryHousehold, resolveHousehold } from './household'
+import {
+  buildCategoryHousehold,
+  currentCategoryHousehold,
+  resolveHousehold,
+} from './household'
+import { replaceCustomCategories } from '../categories/category-store'
 
 const NONE = buildCategoryHousehold([])
 
@@ -173,5 +178,61 @@ describe('resolveHousehold', () => {
         buildCategoryHousehold([[Category.Restaurants, garbage]])
       ).status
     ).toBe('not_household')
+  })
+})
+
+describe('currentCategoryHousehold', () => {
+  afterEach(() => replaceCustomCategories([]))
+
+  const row = (id: string, isHousehold?: boolean) => ({
+    id,
+    label: id,
+    color: '#112233',
+    isHousehold,
+  })
+
+  it('is empty for a user who set no default', () => {
+    replaceCustomCategories([row('restaurants')])
+
+    expect(currentCategoryHousehold().size).toBe(0)
+  })
+
+  it('reflects the category store: built-in and custom rows, true and false', () => {
+    replaceCustomCategories([
+      row('restaurants', true),
+      row('groceries', false),
+      row('mascotas', true),
+      row('viajes'),
+    ])
+
+    const map = currentCategoryHousehold()
+
+    expect(map.get('restaurants')).toBe(true)
+    expect(map.get('groceries')).toBe(false)
+    expect(map.get('mascotas')).toBe(true)
+    expect(map.has('viajes')).toBe(false)
+  })
+
+  it('applies a default stored under an old id (food → groceries)', () => {
+    replaceCustomCategories([row('food', false)])
+
+    const map = currentCategoryHousehold()
+
+    expect(map.get('groceries')).toBe(false)
+    expect(resolveHousehold({ category: 'groceries' }, map).status).toBe(
+      'not_household'
+    )
+  })
+
+  it('returns the same Map until the store changes', () => {
+    replaceCustomCategories([row('restaurants', true)])
+
+    const first = currentCategoryHousehold()
+    expect(currentCategoryHousehold()).toBe(first)
+
+    replaceCustomCategories([row('restaurants', false)])
+    const second = currentCategoryHousehold()
+    expect(second).not.toBe(first)
+    expect(second.get('restaurants')).toBe(false)
   })
 })

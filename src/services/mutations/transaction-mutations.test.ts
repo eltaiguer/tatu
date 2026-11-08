@@ -49,6 +49,7 @@ import {
   editTransaction,
   importTransactions,
   restoreDeleted,
+  setHousehold,
   splitTransaction,
   unsplitTransaction,
   type DeleteResult,
@@ -1445,6 +1446,221 @@ describe('transaction-mutations — bulk operations (#60)', () => {
     expect(repo.row('fee')?.category).toBe('fees')
     expect(stored('fee2')?.category).toBe('fees')
     expect(repo.row('none')?.category).toBeUndefined()
+  })
+})
+
+describe('transaction-mutations — household choice (#251)', () => {
+  const abc = () => [
+    makeTransaction('a'),
+    makeTransaction('b'),
+    makeTransaction('c'),
+  ]
+
+  it('sets the choice on both sides and counts the rows', async () => {
+    const repo = signedIn(abc())
+
+    const result = await setHousehold(repo, ['a', 'b'], true)
+
+    expect(result.updated).toBe(2)
+    for (const read of [stored, repo.row]) {
+      expect(read('a')?.household).toBe(true)
+      expect(read('b')?.household).toBe(true)
+      expect(read('c')?.household).toBeUndefined()
+    }
+  })
+
+  it('keeps false as a choice of its own', async () => {
+    const repo = signedIn(abc())
+
+    await setHousehold(repo, ['a'], false)
+
+    expect(stored('a')?.household).toBe(false)
+    expect(repo.row('a')?.household).toBe(false)
+  })
+
+  it('clears the choice with null: the row follows its category again', async () => {
+    const repo = signedIn([
+      makeTransaction('a', { household: true }),
+      makeTransaction('b', { household: false }),
+    ])
+
+    const result = await setHousehold(repo, ['a', 'b'], null)
+
+    expect(result.updated).toBe(2)
+    for (const read of [stored, repo.row]) {
+      expect(read('a')).not.toHaveProperty('household')
+      expect(read('b')).not.toHaveProperty('household')
+    }
+  })
+
+  it('leaves rows already at the value alone and does not count them', async () => {
+    const repo = signedIn([
+      makeTransaction('a', { household: true }),
+      makeTransaction('b'),
+      makeTransaction('c', { household: false }),
+    ])
+
+    const result = await setHousehold(repo, ['a', 'b', 'c'], true)
+
+    expect(result.updated).toBe(2)
+    expect(repo.requests.update).toBe(1)
+
+    const cleared = await setHousehold(repo, ['b'], null)
+    expect(cleared.updated).toBe(1)
+    const again = await setHousehold(repo, ['b'], null)
+    expect(again.updated).toBe(0)
+  })
+
+  it('does nothing when the selection is empty or unknown', async () => {
+    const repo = signedIn(abc())
+
+    expect((await setHousehold(repo, [], true)).updated).toBe(0)
+    expect(repo.requests.update).toBeUndefined()
+  })
+
+  // Review round 1, item 8b
+  it('refuses when none of the rows exists any more, instead of reporting success', async () => {
+    const repo = signedIn(abc())
+
+    await expect(setHousehold(repo, ['zzz'], true)).rejects.toThrow(
+      UserFacingError
+    )
+    expect(repo.requests.update).toBeUndefined()
+  })
+
+  it('still reports 0 for rows that exist and are already at the value', async () => {
+    const repo = signedIn([makeTransaction('a', { household: true })])
+
+    expect((await setHousehold(repo, ['a'], true)).updated).toBe(0)
+  })
+
+  // Review round 2, item 3: a split parent is written like any row, so a
+  // choice made on a split group survives an unsplit (as bulkCategorize does).
+  it('writes a split parent too, so the choice survives an unsplit', async () => {
+    const repo = signedIn([makeTransaction('parent', { amount: 1000 })])
+    await splitTransaction(repo, 'parent', [
+      { description: 'Comida', amount: 600, category: 'groceries' },
+      { description: 'Bebida', amount: 400, category: 'restaurants' },
+    ])
+
+    const result = await setHousehold(
+      repo,
+      ['parent', 'parent_split_0', 'parent_split_1'],
+      true
+    )
+
+    expect(result.updated).toBe(3)
+    await unsplitTransaction(repo, 'parent')
+    for (const read of [stored, repo.row]) {
+      expect(read('parent')?.household).toBe(true)
+      expect(read('parent')?.isSplitParent).toBeFalsy()
+    }
+  })
+
+  it('applies exactly the chunks that saved and retries only the rest', async () => {
+    const repo = signedIn(many(300))
+    repo.failOn('update', {
+      when: (chunk) => chunk.includes('tx-150'),
+      times: 1,
+    })
+    const ids = many(300).map((t) => t.id)
+
+    const error = (await setHousehold(repo, ids, true).catch(
+      (e: unknown) => e
+    )) as PartialWriteError
+
+    expect(error).toBeInstanceOf(PartialWriteError)
+    expect(error.message).toBe('Se actualizaron 200 de 300')
+    expect(stored('tx-099')?.household).toBe(true)
+    expect(stored('tx-150')?.household).toBeUndefined()
+    expect(repo.row('tx-150')?.household).toBeUndefined()
+
+    const before = repo.requests.update ?? 0
+    const retried = (await error.retry!()) as { updated: number }
+
+    expect(retried.updated).toBe(100)
+    expect((repo.requests.update ?? 0) - before).toBe(1)
+    expect(stored('tx-150')?.household).toBe(true)
+    expect(repo.row('tx-299')?.household).toBe(true)
+  })
+
+  it('rejects and leaves the store alone when every write fails', async () => {
+    const repo = signedIn(abc())
+    repo.failOn('update', { error: new Error('timeout') })
+
+    await expect(setHousehold(repo, ['a'], true)).rejects.toThrow('timeout')
+    expect(stored('a')?.household).toBeUndefined()
+  })
+
+  it('refuses when another user is signed in', async () => {
+    const repo = signedIn(abc())
+    workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+
+    await expect(setHousehold(repo, ['a'], true)).rejects.toThrow(
+      UserFacingError
+    )
+    expect(repo.requests.update).toBeUndefined()
+    expect(repo.row('a')?.household).toBeUndefined()
+  })
+
+  describe('splits copy only the parent’s own choice', () => {
+    const parts = [
+      { description: 'Comida', amount: 600, category: 'groceries' },
+      { description: 'Bebida', amount: 400, category: 'restaurants' },
+    ]
+
+    it('gives the parts the parent’s choice', async () => {
+      const repo = signedIn([
+        makeTransaction('parent', { amount: 1000, household: true }),
+      ])
+
+      await splitTransaction(repo, 'parent', parts)
+
+      for (const read of [stored, repo.row]) {
+        expect(read('parent_split_0')?.household).toBe(true)
+        expect(read('parent_split_1')?.household).toBe(true)
+      }
+    })
+
+    it('gives the parts no choice when the parent has none', async () => {
+      const repo = signedIn([makeTransaction('parent', { amount: 1000 })])
+
+      await splitTransaction(repo, 'parent', parts)
+
+      for (const read of [stored, repo.row]) {
+        expect(read('parent_split_0')).not.toHaveProperty('household')
+        expect(read('parent_split_1')).not.toHaveProperty('household')
+      }
+    })
+
+    it('keeps the parent’s choice when it is unsplit', async () => {
+      const repo = signedIn([
+        makeTransaction('parent', { amount: 1000, household: false }),
+      ])
+      await splitTransaction(repo, 'parent', parts)
+
+      await unsplitTransaction(repo, 'parent')
+
+      for (const read of [stored, repo.row]) {
+        expect(read('parent')?.household).toBe(false)
+        expect(read('parent')?.isSplitParent).toBeFalsy()
+      }
+    })
+  })
+
+  it('an import stores rows without any choice', async () => {
+    const repo = signedIn()
+
+    await importTransactions(
+      repo,
+      [makeTransaction('a'), makeTransaction('b')],
+      makeImportContext()
+    )
+
+    for (const read of [stored, repo.row]) {
+      expect(read('a')).not.toHaveProperty('household')
+      expect(read('b')).not.toHaveProperty('household')
+    }
   })
 })
 

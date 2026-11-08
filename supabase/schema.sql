@@ -76,6 +76,11 @@ alter table public.transactions
   add column if not exists is_split_parent boolean not null default false,
   add column if not exists split_parent_id text;
 
+-- Household flag (#251, ADR-0005): the row's own choice; null = follow its
+-- category's default.
+alter table public.transactions
+  add column if not exists household boolean;
+
 alter table public.transactions
   alter column amount type numeric(14,2),
   alter column balance type numeric(14,2),
@@ -147,6 +152,11 @@ create table if not exists public.custom_categories (
   updated_at timestamptz not null default timezone('utc', now()),
   primary key (user_id, id)
 );
+
+-- Household default (#251, ADR-0005): null = the seeded default
+-- (SEEDED_HOUSEHOLD_CATEGORIES); built-ins use their per-user override row.
+alter table public.custom_categories
+  add column if not exists is_household boolean;
 
 alter table public.custom_categories
   add column if not exists is_ignored boolean not null default false,

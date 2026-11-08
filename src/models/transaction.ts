@@ -60,6 +60,12 @@ export interface Transaction {
   splitParentId?: string
 
   /**
+   * The user's own answer to "is this a household expense?" for this row.
+   * Absent = follow its category (resolveHousehold, ADR-0005).
+   */
+  household?: boolean
+
+  /**
    * The import run that stored this row (`transactions.import_id`). Absent for
    * rows stored before import runs were recorded, and for split parts.
    * Read-only provenance: never written back by an edit.
