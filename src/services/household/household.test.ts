@@ -91,6 +91,18 @@ describe('resolveHousehold', () => {
     ).toBe('not_household')
   })
 
+  it('uses the later default when two stored ids name one category', () => {
+    expect(
+      resolveHousehold(
+        { category: Category.Restaurants },
+        buildCategoryHousehold([
+          ['restaurant', true],
+          ['restaurants', false],
+        ])
+      ).status
+    ).toBe('not_household')
+  })
+
   it('leaves uncategorized rows without a choice of their own as Sin definir', () => {
     for (const category of [
       undefined,

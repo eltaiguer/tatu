@@ -42,8 +42,8 @@ Implemented in this ADR's first PR:
 - An uncategorized row without a choice of its own is `unassigned`: it is
   counted on neither side, so household totals are never built on guesses.
   Sin categoría cannot be given a household default.
-- A row's own choice survives a recategorization; only resetting it to "Según
-  categoría" removes it.
+- A row's own choice survives a recategorization; only clearing it (`null`)
+  removes it.
 - Category defaults are looked up by normalized id
   (`buildCategoryHousehold`), and a stored value that is not a yes/no is
   ignored.
@@ -54,8 +54,8 @@ Planned for the later PRs of #251:
 
 - Persistence of the row choice and of the per-category defaults.
 - A one-click house toggle per row (dimmed when it comes from the category),
-  in the edit dialog and as a bulk action, and the per-category default in
-  Categorías.
+  in the edit dialog (with "Según categoría" to clear the row's choice) and
+  as a bulk action, and the per-category default in Categorías.
 - A Hogar filter in Transacciones (Todos / Solo hogar / Sin definir).
 - A Todo / Hogar mode on Resumen, kept in the URL. Hogar mode shows counted
   expenses only, plus the Sin definir amount apart.
