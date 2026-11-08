@@ -13,6 +13,7 @@ stays readable. For how the system works today, see
 | [0002](0002-insights-integral-view.md)             | Insights: integral (all-time) view instead of per-period            | Accepted                                                                 | 2026-07-24 |
 | [0003](0003-repository-port-and-partial-writes.md) | Repository port, one mutation module, and "screen mirrors database" | Proposed                                                                 | 2026-10-04 |
 | [0004](0004-sentry-error-reporting.md)             | Report client errors to Sentry, scrubbed in the browser             | Proposed                                                                 | 2026-10-04 |
+| [0005](0005-household-personal-scope.md)           | Household vs personal as its own dimension (scope)                  | Proposed                                                                 | 2026-11-08 |
 
 ADR-0002 replaced 0001's per-period navigation, per-period cache key and
 `deltaVsPriorPeriod`. ADR-0001's client-side BYO-key pattern, its model choice
@@ -22,7 +23,7 @@ stand.
 ## Adding an ADR
 
 1. Copy [`template.md`](template.md) to `<NNNN>-<short-kebab-title>.md`, using the
-   next free number with four digits (the next one is `0004`).
+   next free number with four digits (the next one is `0006`).
 2. Fill in every section. Start with status `Proposed` and change it to
    `Accepted` when the change merges.
 3. Add a row to the index above in the same PR.

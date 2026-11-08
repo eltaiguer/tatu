@@ -44,6 +44,7 @@ export interface TransactionsFilter {
   period?: UrlPeriod
 }
 export type { CustomCategoryRecord } from './custom-category'
+export type { Scope, ResolvedScopeValue } from './scope'
 
 // Category system
 export {

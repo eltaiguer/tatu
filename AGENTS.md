@@ -106,6 +106,7 @@ src/
     filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; also periodWithDateBound, groupSplitRows (split parts under their parent); url-filters.ts: that state <-> URL query + hasActiveFilters (THE "filtrado" rule: the view, its default period for links, filterToSearch); period-label.ts: a period's Spanish label
     export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
+    scope/                 # scope.ts: resolveScope = THE "Hogar / Personal / Sin definir" answer for a row (row choice → user's category mapping → seeded default; ADR-0005) — never re-derive it
     merchants/             # merchant-key.ts: THE merchant key + label (Mayores comercios, its drill-through, Insights, recurring) — never group by description
     charts/                # Home-currency aggregation (chart-data.ts: totals, categories, merchants); complete-months.ts = THE "is this month fully imported" rule (completeMonths); category-changes.ts feeds CategoryChangesCard; dashboard-rows.ts shapes Resumen rows (donut, trend with each month's `complete` flag, period label)
     currency/              # convert(amount, from, to, rate) + Currency type
