@@ -626,6 +626,16 @@ describe('household default of a category (#251, ADR-0005)', () => {
     expect(repo.customCategories.size).toBe(0)
   })
 
+  it('refuses Ingresos, under its id and its old alias, and writes nothing', async () => {
+    for (const id of [Category.Income, 'salary']) {
+      await expect(
+        setCategoryHouseholdWithSync(repo, id, true)
+      ).rejects.toThrow(UserFacingError)
+    }
+    expect(listCustomCategories()).toEqual([])
+    expect(repo.customCategories.size).toBe(0)
+  })
+
   it('refuses a category that does not exist', async () => {
     await expect(
       setCategoryHouseholdWithSync(repo, 'no-such-category', true)

@@ -1,5 +1,6 @@
 import { Category, CATEGORY_COLORS, DEFAULT_CATEGORY_COLOR } from '../../models'
 import {
+  canHaveHouseholdDefault,
   isBuiltinCategoryId,
   isIgnoredByDefault,
   isReservedCategoryId,
@@ -52,7 +53,7 @@ export type CategoryUpdate = Partial<Omit<CategorySettings, 'isHousehold'>> & {
 }
 
 // The local patch of an update: null clears the value, absent keeps it.
-function localPatch(updates: CategoryUpdate): Partial<CategorySettings> {
+function toLocalSettings(updates: CategoryUpdate): Partial<CategorySettings> {
   const { isHousehold, ...rest } = updates
   if (isHousehold === undefined) return rest
   return { ...rest, isHousehold: isHousehold ?? undefined }
@@ -292,7 +293,7 @@ export async function updateCustomCategoryWithSync(
   requireOwner(repo)
   const previous = _customCategories.find((c) => c.id === id)
   if (!previous) return
-  updateCustomCategory(id, localPatch(updates))
+  updateCustomCategory(id, toLocalSettings(updates))
   try {
     await pushCategory(repo, id, householdToWrite(id, updates.isHousehold))
   } catch (error) {
@@ -339,7 +340,7 @@ export async function upsertBuiltinOverrideWithSync(
 ): Promise<void> {
   requireOwner(repo)
   const previous = _customCategories.find((c) => c.id === id)
-  upsertBuiltinOverride(id, localPatch(updates))
+  upsertBuiltinOverride(id, toLocalSettings(updates))
   try {
     await pushCategory(repo, id, householdToWrite(id, updates.isHousehold))
   } catch (error) {
@@ -360,8 +361,12 @@ export async function setCategoryHouseholdWithSync(
 ): Promise<void> {
   requireOwner(repo)
   const id = normalizeCategoryId(categoryId)
-  if (id === Category.Uncategorized) {
-    throw new UserFacingError('Sin categoría no puede marcarse como del hogar.')
+  if (!canHaveHouseholdDefault(id)) {
+    throw new UserFacingError(
+      id === Category.Uncategorized
+        ? 'Sin categoría no puede marcarse como del hogar.'
+        : 'Esta categoría no puede marcarse como del hogar.'
+    )
   }
   const previous = _customCategories.find((c) => c.id === id)
   if (!previous && !isBuiltinCategoryId(id)) {

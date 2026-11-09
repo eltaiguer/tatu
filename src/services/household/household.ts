@@ -97,11 +97,7 @@ export function categoryHouseholdChoice(
   return household === seeded ? null : household
 }
 
-/** Sin categoría and Ingresos (income is never an expense) cannot have one. */
-export function canHaveHouseholdDefault(categoryId: string): boolean {
-  const id = normalizeCategoryId(categoryId)
-  return id !== Category.Uncategorized && id !== Category.Income
-}
+export { canHaveHouseholdDefault } from '../categories/category-aliases'
 
 /** The signed-in user's category defaults, from the category store. */
 export function currentCategoryHousehold(): CategoryHousehold {
