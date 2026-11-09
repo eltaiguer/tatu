@@ -581,16 +581,58 @@ describe('Categories', () => {
       expect(repo.customCategories.get('restaurants')?.isHousehold).toBe(true)
     })
 
-    it('writes no household value when the box is untouched', async () => {
-      const upsert = vi.spyOn(repo, 'upsertCustomCategory')
+    it('an untouched save leaves the stored default alone', async () => {
+      // A default saved from another tab: the store has not loaded it.
+      repo.customCategories.set('healthcare', {
+        id: 'healthcare',
+        label: 'healthcare',
+        color: '#112233',
+        isIgnored: false,
+        isHousehold: true,
+        isArchived: false,
+        createdAt: '',
+        updatedAt: '',
+      })
       render(<Categories repository={repo} transactions={[]} />)
 
       edit('Salud')
       save()
 
       await formClosed()
-      expect(upsert).toHaveBeenCalledTimes(1)
-      expect(upsert.mock.calls[0][0]).not.toHaveProperty('isHousehold')
+      expect(repo.customCategories.get('healthcare')?.isHousehold).toBe(true)
+    })
+
+    it('blocks Guardar while the tile of the open category is saving', async () => {
+      render(<Categories repository={repo} transactions={[]} />)
+      edit('Restaurantes')
+      const held = repo.hold('upsertCustomCategory')
+
+      fireEvent.click(tile('Restaurantes'))
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: 'Guardar cambios' })
+        ).toBeDisabled()
+      )
+      held.release()
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: 'Guardar cambios' })
+        ).toBeEnabled()
+      )
+    })
+
+    it('shows the new value in the open form after a tile flip, and an untouched save keeps it', async () => {
+      render(<Categories repository={repo} transactions={[]} />)
+      edit('Restaurantes')
+      expect(box()).not.toBeChecked()
+
+      fireEvent.click(tile('Restaurantes'))
+
+      await waitFor(() => expect(box()).toBeChecked())
+      save()
+      await formClosed()
+      expect(repo.customCategories.get('restaurants')?.isHousehold).toBe(true)
     })
 
     it('leaves a custom category’s default alone when only its name changes', async () => {

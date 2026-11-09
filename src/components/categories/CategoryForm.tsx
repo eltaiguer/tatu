@@ -35,6 +35,9 @@ interface CategoryFormProps {
   setForm: Dispatch<SetStateAction<CategoryFormState>>
   isEditing: boolean
   canHaveHousehold: boolean
+  // The category's tile is saving a household flip: saving the form now
+  // could be rolled back by that flip failing.
+  saveDisabled?: boolean
   onCancel: () => void
   onSave: () => void
 }
@@ -46,6 +49,7 @@ export function CategoryForm({
   setForm,
   isEditing,
   canHaveHousehold,
+  saveDisabled = false,
   onCancel,
   onSave,
 }: CategoryFormProps) {
@@ -161,7 +165,7 @@ export function CategoryForm({
         </div>
         <Button
           onClick={onSave}
-          disabled={!form.label.trim()}
+          disabled={!form.label.trim() || saveDisabled}
           aria-label={isEditing ? 'Guardar cambios' : 'Guardar categoría'}
         >
           {isEditing ? 'Guardar cambios' : 'Guardar categoría'}

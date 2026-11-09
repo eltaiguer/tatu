@@ -178,6 +178,12 @@ export function Categories({
       )
       // Another user may have signed in while the write was in flight.
       if (!isWorkspaceOwner(repo.userId)) return
+      // The open form's box shows what is stored, unless the user changed it.
+      setForm((f) =>
+        f.id === categoryId && f.isHousehold === f.initialIsHousehold
+          ? { ...f, isHousehold: next, initialIsHousehold: next }
+          : f
+      )
       toast.success(
         next
           ? `${label}: ahora es gasto del hogar`
@@ -271,6 +277,7 @@ export function Categories({
           setForm={setForm}
           isEditing={isEditing}
           canHaveHousehold={canHaveHousehold}
+          saveDisabled={savingHousehold.has(form.id)}
           onCancel={resetForm}
           onSave={() => void handleSave()}
         />
