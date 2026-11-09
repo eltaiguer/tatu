@@ -565,6 +565,34 @@ describe('Categories', () => {
       expect(repo.customCategories.get('restaurants')?.isHousehold).toBe(true)
     })
 
+    it('keeps a tile flip made while the form was open, when the box is untouched', async () => {
+      render(<Categories repository={repo} transactions={[]} />)
+      edit('Restaurantes')
+      expect(box()).not.toBeChecked()
+
+      fireEvent.click(tile('Restaurantes'))
+      await waitFor(() =>
+        expect(repo.customCategories.get('restaurants')?.isHousehold).toBe(true)
+      )
+      save()
+
+      await formClosed()
+      expect(tile('Restaurantes')).toHaveAttribute('aria-pressed', 'true')
+      expect(repo.customCategories.get('restaurants')?.isHousehold).toBe(true)
+    })
+
+    it('writes no household value when the box is untouched', async () => {
+      const upsert = vi.spyOn(repo, 'upsertCustomCategory')
+      render(<Categories repository={repo} transactions={[]} />)
+
+      edit('Salud')
+      save()
+
+      await formClosed()
+      expect(upsert).toHaveBeenCalledTimes(1)
+      expect(upsert.mock.calls[0][0]).not.toHaveProperty('isHousehold')
+    })
+
     it('leaves a custom category’s default alone when only its name changes', async () => {
       const custom = addCustomCategory({
         label: 'Mascotas',
@@ -620,9 +648,7 @@ describe('Categories', () => {
       expect(
         within(
           screen.getByRole('region', { name: 'Tus categorías' })
-        ).getByText(
-          'La casita marca los gastos del hogar. Podés cambiarlo en cada transacción.'
-        )
+        ).getByText('La casita marca los gastos del hogar.')
       ).toBeInTheDocument()
     })
 
@@ -722,7 +748,7 @@ describe('Categories', () => {
     })
 
     it('puts the house back and shows an error when the save fails', async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
       renderWithToasts()
       repo.failOn('upsertCustomCategory', { error: new Error('timeout') })
 
@@ -733,6 +759,29 @@ describe('Categories', () => {
       ).toBeInTheDocument()
       expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'false')
       expect(repo.customCategories.size).toBe(0)
+      expect(logged).toHaveBeenCalledWith(expect.any(Error))
+    })
+
+    it('does not announce a save that finished after another user signed in', async () => {
+      renderWithToasts()
+      const held = repo.hold('upsertCustomCategory')
+
+      fireEvent.click(toggle('Restaurantes'))
+      await waitFor(() =>
+        expect(toggle('Restaurantes')).toHaveAttribute('aria-disabled', 'true')
+      )
+      workspaceStore.setState({ userId: 'someone-else', status: 'ready' })
+      held.release()
+
+      await waitFor(() =>
+        expect(toggle('Restaurantes')).not.toHaveAttribute(
+          'aria-disabled',
+          'true'
+        )
+      )
+      expect(
+        screen.queryByText('Restaurantes: ahora es gasto del hogar')
+      ).not.toBeInTheDocument()
     })
 
     it('blocks the toggle while its save is in flight, without dropping keyboard focus', async () => {

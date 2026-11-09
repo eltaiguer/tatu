@@ -14,7 +14,6 @@ import {
   updateCustomCategoryWithSync,
   upsertBuiltinOverrideWithSync,
 } from '../services/categories/category-store'
-import { DEFAULT_CATEGORY_COLOR } from '../models'
 import { getCategoryTransactionCount } from '../services/categories/category-counts'
 import { resolveCategory } from '../services/categories/category-registry'
 import { buildCategorySpendingConverted } from '../services/charts/chart-data'
@@ -25,8 +24,13 @@ import {
   currentCategoryHousehold,
   isCategoryHousehold,
 } from '../services/household/household'
+import { isWorkspaceOwner } from '../stores/workspace-state'
 import type { CustomPattern } from '../services/categorizer/custom-patterns'
-import { CategoryForm, type CategoryFormState } from './categories/CategoryForm'
+import {
+  CategoryForm,
+  EMPTY_FORM,
+  type CategoryFormState,
+} from './categories/CategoryForm'
 import { CategoryCard } from './categories/CategoryCard'
 import { PatternRulesCard } from './categories/PatternRulesCard'
 import {
@@ -62,14 +66,7 @@ export function Categories({
   const [savingHousehold, setSavingHousehold] = useState<ReadonlySet<string>>(
     new Set()
   )
-  const [form, setForm] = useState<CategoryFormState>({
-    id: '',
-    label: '',
-    color: DEFAULT_CATEGORY_COLOR,
-    icon: '🏷️',
-    isIgnored: false,
-    isHousehold: false,
-  })
+  const [form, setForm] = useState<CategoryFormState>(EMPTY_FORM)
 
   const categoryDefinitions = getCategoryDefinitions()
   // Read on render: memoized on the category store, never cached in state.
@@ -80,39 +77,27 @@ export function Categories({
   const canHaveHousehold = !isEditing || canHaveHouseholdDefault(form.id)
 
   function resetForm() {
-    setForm({
-      id: '',
-      label: '',
-      color: DEFAULT_CATEGORY_COLOR,
-      icon: '🏷️',
-      isIgnored: false,
-      isHousehold: false,
-    })
+    setForm(EMPTY_FORM)
     setShowForm(false)
   }
 
   function openNewForm() {
-    setForm({
-      id: '',
-      label: '',
-      color: DEFAULT_CATEGORY_COLOR,
-      icon: '🏷️',
-      isIgnored: false,
-      isHousehold: false,
-    })
+    setForm(EMPTY_FORM)
     setShowForm(true)
   }
 
   function startEdit(categoryId: string) {
     const cat = categoryDefinitions.find((c) => c.id === categoryId)
     if (!cat) return
+    const household = isCategoryHousehold(cat.id, categoryHousehold)
     setForm({
       id: cat.id,
       label: cat.label,
       color: cat.color,
       icon: cat.icon || '🏷️',
       isIgnored: cat.isIgnored ?? false,
-      isHousehold: isCategoryHousehold(cat.id, categoryHousehold),
+      isHousehold: household,
+      initialIsHousehold: household,
     })
     setShowForm(true)
   }
@@ -123,9 +108,12 @@ export function Categories({
   async function handleSave() {
     if (!form.label.trim()) return
     const label = form.label.trim()
-    // undefined = leave the stored default alone (the form has no say).
+    // One rule: the default is sent only when the box differs from what the
+    // form opened with; otherwise undefined leaves the stored value alone.
+    const householdChanged =
+      canHaveHousehold && form.isHousehold !== form.initialIsHousehold
     const household =
-      isEditing && canHaveHousehold
+      householdChanged && isEditing
         ? categoryHouseholdChoice(form.id, form.isHousehold)
         : undefined
     try {
@@ -163,7 +151,7 @@ export function Categories({
           color: form.color,
           icon: form.icon.trim() || '🏷️',
           isIgnored: form.isIgnored,
-          isHousehold: form.isHousehold ? true : undefined,
+          isHousehold: householdChanged && form.isHousehold ? true : undefined,
         })
         toast.success(`Categoría "${label}" creada`)
       }
@@ -182,11 +170,14 @@ export function Categories({
     const next = !isCategoryHousehold(categoryId, currentCategoryHousehold())
     setSavingHousehold((ids) => new Set(ids).add(categoryId))
     try {
+      const repo = requireRepository(repository)
       await setCategoryHouseholdWithSync(
-        requireRepository(repository),
+        repo,
         categoryId,
         categoryHouseholdChoice(categoryId, next)
       )
+      // Another user may have signed in while the write was in flight.
+      if (!isWorkspaceOwner(repo.userId)) return
       toast.success(
         next
           ? `${label}: ahora es gasto del hogar`
@@ -288,8 +279,7 @@ export function Categories({
       {/* Category grid: tiles straight on the page, no wrapping card */}
       <Section title="Tus categorías">
         <p className="text-[13px] text-[var(--text-faint)]">
-          La casita marca los gastos del hogar. Podés cambiarlo en cada
-          transacción.
+          La casita marca los gastos del hogar.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
           {categoryCards.map((cat) => (

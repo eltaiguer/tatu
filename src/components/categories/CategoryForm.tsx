@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Checkbox } from '../ui/checkbox'
+import { DEFAULT_CATEGORY_COLOR } from '../../models'
 
 export interface CategoryFormState {
   id: string
@@ -13,6 +14,20 @@ export interface CategoryFormState {
   // The household default (ADR-0005); the box is hidden when the category
   // cannot have one (Sin categoría, Ingresos).
   isHousehold: boolean
+  // What the box held when the form opened: the household default is sent
+  // only when the box differs from it, so a save never overwrites a change
+  // (a tile flip) the form did not see.
+  initialIsHousehold: boolean
+}
+
+export const EMPTY_FORM: CategoryFormState = {
+  id: '',
+  label: '',
+  color: DEFAULT_CATEGORY_COLOR,
+  icon: '🏷️',
+  isIgnored: false,
+  isHousehold: false,
+  initialIsHousehold: false,
 }
 
 interface CategoryFormProps {
@@ -138,8 +153,7 @@ export function CategoryForm({
               <div>
                 <span className="text-[13px] font-medium">Gasto del hogar</span>
                 <span className="ml-[6px] text-[12px] text-[var(--text-faint)]">
-                  Sus transacciones cuentan como gastos del hogar, salvo las que
-                  cambies a mano.
+                  Sus transacciones cuentan como gastos del hogar.
                 </span>
               </div>
             </label>
