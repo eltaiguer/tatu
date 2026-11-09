@@ -6,8 +6,11 @@ import {
   categoryHouseholdChoice,
   currentCategoryHousehold,
   isCategoryHousehold,
+  nextHouseholdChoice,
   resolveHousehold,
+  rowHouseholdView,
 } from './household'
+import type { Transaction } from '../../models'
 import { replaceCustomCategories } from '../categories/category-store'
 
 const NONE = buildCategoryHousehold([])
@@ -313,5 +316,87 @@ describe('canHaveHouseholdDefault', () => {
     ]) {
       expect(canHaveHouseholdDefault(id)).toBe(true)
     }
+  })
+})
+
+function expense(overrides: Partial<Transaction> = {}): Transaction {
+  return {
+    id: 'tx',
+    date: new Date('2026-03-10T00:00:00.000Z'),
+    description: 'row',
+    amount: 100,
+    currency: 'UYU',
+    type: 'debit',
+    source: 'bank_account',
+    category: Category.Groceries,
+    ...overrides,
+  } as Transaction
+}
+
+describe('rowHouseholdView / nextHouseholdChoice', () => {
+  it('shows a counted expense following its category', () => {
+    const tx = expense()
+    expect(rowHouseholdView(tx, NONE)).toEqual({
+      status: 'household',
+      isOverride: false,
+      categoryHousehold: true,
+    })
+    // Following Alimentación (household): a click says "no".
+    expect(nextHouseholdChoice(tx, NONE)).toBe(false)
+  })
+
+  it('shows a row set by hand and sends it back to its category when the click matches it', () => {
+    const tx = expense({ category: Category.Restaurants, household: true })
+    expect(rowHouseholdView(tx, NONE)).toEqual({
+      status: 'household',
+      isOverride: true,
+      categoryHousehold: false,
+    })
+    // Restaurantes is not household: unmarking equals the category → null.
+    expect(nextHouseholdChoice(tx, NONE)).toBeNull()
+  })
+
+  it('marks a row that follows a non-household category as household by hand', () => {
+    const tx = expense({ category: Category.Restaurants })
+    expect(nextHouseholdChoice(tx, NONE)).toBe(true)
+  })
+
+  it('writes the boolean when it differs from the category', () => {
+    const tx = expense({ household: false })
+    // Alimentación is household, row says no: a click → household = category.
+    expect(nextHouseholdChoice(tx, NONE)).toBeNull()
+    const own = expense({ household: true, category: Category.Groceries })
+    expect(nextHouseholdChoice(own, NONE)).toBe(false)
+  })
+
+  it('follows the user’s category default', () => {
+    const map = buildCategoryHousehold([[Category.Restaurants, true]])
+    const tx = expense({ category: Category.Restaurants })
+    expect(rowHouseholdView(tx, map)?.categoryHousehold).toBe(true)
+    expect(nextHouseholdChoice(tx, map)).toBe(false)
+  })
+
+  it('an uncategorized expense is Sin definir and a click makes it household', () => {
+    const tx = expense({ category: Category.Uncategorized })
+    expect(rowHouseholdView(tx, NONE)).toEqual({
+      status: 'unassigned',
+      isOverride: false,
+      categoryHousehold: null,
+    })
+    expect(nextHouseholdChoice(tx, NONE)).toBe(true)
+  })
+
+  it('an uncategorized row set to household goes to not household, never back to null', () => {
+    const tx = expense({ category: Category.Uncategorized, household: true })
+    expect(nextHouseholdChoice(tx, NONE)).toBe(false)
+  })
+
+  it('has no view for income, ignored rows and split parents', () => {
+    expect(rowHouseholdView(expense({ type: 'credit' }), NONE)).toBeNull()
+    expect(
+      rowHouseholdView(expense({ category: Category.InternalTransfer }), NONE)
+    ).toBeNull()
+    expect(rowHouseholdView(expense({ isSplitParent: true }), NONE)).toBeNull()
+    expect(nextHouseholdChoice(expense({ type: 'credit' }), NONE)).toBeNull()
   })
 })
