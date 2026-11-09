@@ -46,9 +46,10 @@ export function HouseToggle({
       aria-label={`Gasto del hogar: ${description}`}
       aria-pressed={household}
       title={title}
+      data-origin={view.isOverride ? 'hand' : 'category'}
       disabled={disabled}
       onClick={() => onToggle(transaction)}
-      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--brand-text)] disabled:opacity-50 ${
+      className={`relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--brand-text)] disabled:opacity-50 ${
         view.isOverride
           ? 'text-[color:var(--brand-text)]'
           : household
@@ -58,6 +59,15 @@ export function HouseToggle({
             : 'text-[color:var(--text-faint)]'
       }`}
     >
+      {view.isOverride && (
+        // Set by hand: a small dot as well as the colour, so the difference
+        // does not rest on hue alone.
+        <span
+          data-hand-mark
+          aria-hidden="true"
+          className="absolute right-[1px] bottom-[2px] size-[5px] rounded-full bg-current ring-[1.5px] ring-[var(--surface)]"
+        />
+      )}
       <House
         size={size}
         aria-hidden="true"

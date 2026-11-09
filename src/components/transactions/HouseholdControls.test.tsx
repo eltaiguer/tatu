@@ -680,4 +680,70 @@ describe('review round 1 of step 4 (#251)', () => {
       )
     ).toBeInTheDocument()
   })
+
+  it('an old Reintentar does not overwrite what a bulk write saved', async () => {
+    seed([tx('Cena', { category: 'restaurants' })])
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    repo.failOn('update', { error: new Error('boom'), times: 1 })
+    await act(async () => {
+      fireEvent.click(house('Cena'))
+    })
+    const stale = await screen.findByRole('button', { name: 'Reintentar' })
+
+    select('Cena')
+    await choose('Marcar como no hogar')
+    expect(repo.row('Cena')?.household).toBe(false)
+
+    await act(async () => {
+      fireEvent.click(stale)
+    })
+
+    expect(repo.row('Cena')?.household).toBe(false)
+  })
+
+  it('says the edit saved even when the choice fails with an explained error', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <>
+        <Transactions
+          transactions={[tx('Devoto')]}
+          onUpdateTransaction={() => Promise.resolve({ affected: 1 })}
+          onSetHousehold={() =>
+            Promise.reject(new UserFacingError('La transacción ya no existe.'))
+          }
+        />
+        <Toaster />
+      </>
+    )
+    await openEdit('Devoto')
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto Centro' },
+    })
+    fireEvent.click(screen.getByLabelText('No'))
+    await saveDialog()
+
+    expect(
+      await screen.findByText(
+        /Se guardaron los cambios, pero no el gasto del hogar\..*La transacción ya no existe/
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Cambios guardados')).toBeNull()
+  })
+
+  it('tells a hand-set house from one following its category by more than colour', () => {
+    seed([
+      tx('Devoto'),
+      tx('Cena', { category: 'restaurants' }),
+      tx('Luz', { category: 'utilities', household: true }),
+      tx('Taxi', { category: 'transport', household: false }),
+    ])
+
+    expect(house('Devoto')).toHaveAttribute('data-origin', 'category')
+    expect(house('Cena')).toHaveAttribute('data-origin', 'category')
+    expect(house('Luz')).toHaveAttribute('data-origin', 'hand')
+    expect(house('Taxi')).toHaveAttribute('data-origin', 'hand')
+    // The cue is a mark in the button itself, not just a colour.
+    expect(house('Luz').querySelector('[data-hand-mark]')).not.toBeNull()
+    expect(house('Devoto').querySelector('[data-hand-mark]')).toBeNull()
+  })
 })

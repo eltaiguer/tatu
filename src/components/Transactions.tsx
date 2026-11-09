@@ -47,6 +47,9 @@ import {
 } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
 import { getDisplayDescription } from '../utils/transaction-display'
+import { UserFacingError } from '../utils/user-error'
+
+const AFTER_EDIT = 'Se guardaron los cambios, pero no el gasto del hogar'
 
 const sameTags = (a: string[], b: string[]) =>
   a.length === b.length && a.every((tag, i) => tag === b[i])
@@ -145,6 +148,11 @@ export function Transactions({
   // The newest household write started per row, so an old toast's retry can
   // tell it has been superseded.
   const householdWrites = useRef(new Map<string, number>())
+  // The latest rows, to see whether a row changed after a failed write.
+  const transactionsRef = useRef(transactions)
+  transactionsRef.current = transactions
+  const rowChoice = (id: string) =>
+    transactionsRef.current.find((tx) => tx.id === id)?.household ?? null
 
   /* ---- Edit state ---- */
   // Rows with a mutation in flight. A set, not a single id, so two
@@ -295,9 +303,7 @@ export function Transactions({
       const saved = await writeHousehold(
         editingId,
         draft.household,
-        message
-          ? 'Se guardaron los cambios, pero no el gasto del hogar'
-          : 'No se pudo guardar el gasto del hogar'
+        message ? AFTER_EDIT : 'No se pudo guardar el gasto del hogar'
       )
       if (!saved && !message) {
         // Nothing saved at all: keep the dialog open to try again.
@@ -379,8 +385,11 @@ export function Transactions({
   }
 
   // Writes one row's choice; true when it saved. A failure that saved nothing
-  // offers the same write again, but only if no newer write on that row has
-  // started since: a newer choice is never overwritten by an old toast.
+  // offers the same write again, but only if nothing else touched the row
+  // since: no newer write of this view started (the counter) and the saved
+  // row still holds what it did when this one failed (which also covers bulk
+  // writes and the dialog). A newer choice is never overwritten by an old
+  // toast.
   async function writeHousehold(
     id: string,
     household: boolean | null,
@@ -394,8 +403,17 @@ export function Transactions({
       await onSetHousehold([id], household)
       return true
     } catch (error) {
-      reportError(error, failure, '', () => {
-        if (householdWrites.current.get(id) === seq) {
+      const heldWhenFailed = rowChoice(id)
+      // After a saved edit, say so even when the error brings its own words.
+      const prefix =
+        failure === AFTER_EDIT && error instanceof UserFacingError
+          ? `${AFTER_EDIT}. `
+          : ''
+      reportError(error, failure, prefix, () => {
+        if (
+          householdWrites.current.get(id) === seq &&
+          rowChoice(id) === heldWhenFailed
+        ) {
           void writeHousehold(id, household, failure)
         }
       })

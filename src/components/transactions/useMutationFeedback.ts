@@ -82,7 +82,7 @@ export function useMutationFeedback({
       return
     }
     toast.error(
-      userErrorMessage(error, fallback, 'write'),
+      prefix + userErrorMessage(error, fallback, 'write'),
       // An explained error (the row is gone, another account signed in) is
       // not fixed by trying the same write again: reload instead.
       retry && !(error instanceof UserFacingError)
