@@ -32,6 +32,7 @@ function baseProps(overrides: Partial<DialogProps> = {}): DialogProps {
     onCreateCategory: vi.fn(async () => undefined),
     onSave: vi.fn(),
     onClose: vi.fn(),
+    canSetHousehold: true,
     ...overrides,
   }
 }
@@ -445,5 +446,53 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       )
       unmount()
     }
+  })
+
+  it('hides the group when the picked category is ignored, and writes no choice', () => {
+    const props = baseProps({
+      transaction: { ...transaction, household: true },
+    })
+    render(<EditTransactionDialog {...props} />)
+    expect(screen.getByLabelText('Sí')).toBeChecked()
+
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: resolveCategory('internal_transfer').label,
+      })
+    )
+
+    expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
+    save()
+    // The row's own choice is left as it was: nothing to write.
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ household: true })
+    )
+  })
+
+  it('shows the group once an ignored row is given a counted category', () => {
+    const props = baseProps({
+      transaction: { ...transaction, category: 'internal_transfer' },
+    })
+    render(<EditTransactionDialog {...props} />)
+    expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.click(
+      screen.getByRole('button', { name: resolveCategory('groceries').label })
+    )
+
+    expect(screen.getByLabelText('Según categoría (sí)')).toBeChecked()
+    fireEvent.click(screen.getByLabelText('No'))
+    save()
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ household: false })
+    )
+  })
+
+  it('has no group without a way to save it', () => {
+    render(<EditTransactionDialog {...baseProps({ canSetHousehold: false })} />)
+
+    expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
   })
 })

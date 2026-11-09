@@ -104,11 +104,6 @@ export function categoryHouseholdChoice(
   return household === seeded ? null : household
 }
 
-export interface RowHouseholdView extends HouseholdResolution {
-  /** What the row's category alone says; null for an uncategorized row. */
-  categoryHousehold: boolean | null
-}
-
 /**
  * What a transaction row shows for the household control, or null when the
  * row has none: only counted expenses can be household (income, ignored rows
@@ -118,12 +113,9 @@ export interface RowHouseholdView extends HouseholdResolution {
 export function rowHouseholdView(
   tx: Transaction,
   categoryHousehold: CategoryHousehold
-): RowHouseholdView | null {
+): HouseholdResolution | null {
   if (!isCountedExpense(tx)) return null
-  return {
-    ...resolveHousehold(tx, categoryHousehold),
-    categoryHousehold: categoryDefault(tx.category, categoryHousehold),
-  }
+  return resolveHousehold(tx, categoryHousehold)
 }
 
 /**
@@ -153,7 +145,9 @@ export function nextHouseholdChoice(
   const view = rowHouseholdView(tx, categoryHousehold)
   if (!view) return null
   const target = view.status !== 'household'
-  return target === view.categoryHousehold ? null : target
+  return target === categoryDefault(tx.category, categoryHousehold)
+    ? null
+    : target
 }
 
 export { canHaveHouseholdDefault } from '../categories/category-aliases'

@@ -4,7 +4,7 @@ import { useStore } from 'zustand'
 import userEvent from '@testing-library/user-event'
 import { Toaster } from 'sonner'
 import { Transactions } from '../Transactions'
-import { PartialWriteError } from '../../utils/user-error'
+import { PartialWriteError, UserFacingError } from '../../utils/user-error'
 import type { Transaction } from '../../models'
 import {
   editTransaction,
@@ -64,6 +64,22 @@ function house(description: string, which = 0) {
   })[which]
 }
 
+function select(...descriptions: string[]) {
+  for (const description of descriptions) {
+    fireEvent.click(
+      screen.getAllByRole('checkbox', {
+        name: `Seleccionar ${description}`,
+      })[0]
+    )
+  }
+}
+async function choose(option: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Hogar' }))
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: option }))
+  })
+}
+
 describe('house toggle on rows and cards (#251)', () => {
   beforeEach(() => {
     replaceCustomCategories([])
@@ -76,6 +92,7 @@ describe('house toggle on rows and cards (#251)', () => {
       tx('Sueldo', { type: 'credit', category: 'income' }),
       tx('Pago tarjeta', { category: 'internal_transfer' }),
       tx('Madre', { isSplitParent: true }),
+      tx('Parte', { splitParentId: 'Madre', category: 'restaurants' }),
       tx('Misterio', { category: 'uncategorized' }),
     ])
 
@@ -98,6 +115,11 @@ describe('house toggle on rows and cards (#251)', () => {
         screen.queryByRole('button', { name: `Gasto del hogar: ${none}` })
       ).toBeNull()
     }
+    // The split parent is on screen (above its part), and the part has one.
+    expect(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Madre' })
+    ).not.toHaveLength(0)
+    expect(house('Parte')).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('marks a row by hand, then goes back to the category on the next click', async () => {
@@ -295,22 +317,6 @@ describe('bulk Hogar menu (#251)', () => {
     replaceCustomCategories([])
   })
 
-  function select(...descriptions: string[]) {
-    for (const description of descriptions) {
-      fireEvent.click(
-        screen.getAllByRole('checkbox', {
-          name: `Seleccionar ${description}`,
-        })[0]
-      )
-    }
-  }
-  async function choose(option: string) {
-    fireEvent.click(screen.getByRole('button', { name: 'Hogar' }))
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: option }))
-    })
-  }
-
   it('marks the selected expenses and says what it skipped', async () => {
     seed([
       tx('Cena', { category: 'restaurants' }),
@@ -328,7 +334,7 @@ describe('bulk Hogar menu (#251)', () => {
     expect(repo.row('Sueldo')?.household ?? null).toBeNull()
     expect(
       await screen.findByText(
-        '3 marcadas como hogar, 1 no es gasto, sin cambios'
+        '3 marcadas como hogar, 1 no cuenta como gasto, sin cambios'
       )
     ).toBeInTheDocument()
     // The selection is cleared like after the other bulk actions.
@@ -389,7 +395,7 @@ describe('bulk Hogar menu (#251)', () => {
 
     expect(
       await screen.findByText(
-        '1 vuelve a seguir su categoría, 1 no es gasto, sin cambios'
+        '1 vuelve a seguir su categoría, 1 no cuenta como gasto, sin cambios'
       )
     ).toBeInTheDocument()
   })
@@ -402,10 +408,10 @@ describe('bulk Hogar menu (#251)', () => {
 
     expect(
       await screen.findByText(
-        'Ninguna de las seleccionadas es un gasto, sin cambios'
+        'Ninguna de las seleccionadas cuenta como gasto, sin cambios'
       )
     ).toBeInTheDocument()
-    expect(repo.requests.update).toBeUndefined()
+    expect(repo.row('Sueldo')).not.toHaveProperty('household')
   })
 
   it('reports a partial write and offers to retry the rest', async () => {
@@ -478,5 +484,200 @@ describe('bulk Hogar menu (#251)', () => {
       screen.queryByRole('button', { name: 'Marcar como no hogar' })
     ).toBeNull()
     expect(trigger).toHaveFocus()
+  })
+})
+
+describe('review round 1 of step 4 (#251)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  async function openEdit(description: string) {
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole('button', { name: `Editar ${description}` })[0]
+      )
+    })
+  }
+  async function saveDialog() {
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    })
+  }
+
+  it('a household-only edit leaves the category as the categorizer left it', async () => {
+    seed([tx('Devoto', { categoryConfidence: 0.6 })])
+    await openEdit('Devoto')
+
+    fireEvent.click(screen.getByLabelText('No'))
+    await saveDialog()
+
+    await waitFor(() => expect(repo.row('Devoto')?.household).toBe(false))
+    expect(repo.row('Devoto')?.categoryConfidence).toBe(0.6)
+    expect(repo.row('Devoto')?.category).toBe('groceries')
+    expect(screen.queryByText('Cambios guardados')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('reports one outcome when the edit and the choice both save', async () => {
+    seed([tx('Devoto')])
+    await openEdit('Devoto')
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto Centro' },
+    })
+    fireEvent.click(screen.getByLabelText('No'))
+    await saveDialog()
+
+    expect(await screen.findAllByText('Cambios guardados')).toHaveLength(1)
+    expect(repo.row('Devoto')?.household).toBe(false)
+  })
+
+  it('says the edit saved when only the choice failed', async () => {
+    seed([tx('Devoto')])
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await openEdit('Devoto')
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto Centro' },
+    })
+    fireEvent.click(screen.getByLabelText('No'))
+    let seen = 0
+    repo.failOn('update', { error: new Error('boom'), when: () => ++seen > 1 })
+    await saveDialog()
+
+    expect(
+      await screen.findByText(
+        'Se guardaron los cambios, pero no el gasto del hogar'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Cambios guardados')).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Reintentar' })).toHaveLength(
+      1
+    )
+    expect(logged).toHaveBeenCalled()
+  })
+
+  it('an old Reintentar does not overwrite a newer choice', async () => {
+    seed([tx('Cena', { category: 'restaurants' })])
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    repo.failOn('update', { error: new Error('boom'), times: 1 })
+    await act(async () => {
+      fireEvent.click(house('Cena'))
+    })
+    const stale = await screen.findByRole('button', { name: 'Reintentar' })
+    // The user clicks again and this time it saves: household = true.
+    await act(async () => {
+      fireEvent.click(house('Cena'))
+    })
+    expect(repo.row('Cena')?.household).toBe(true)
+    // Another click puts it back to following the category.
+    await act(async () => {
+      fireEvent.click(house('Cena'))
+    })
+    expect(repo.row('Cena')?.household ?? null).toBeNull()
+
+    await act(async () => {
+      fireEvent.click(stale)
+    })
+
+    expect(repo.row('Cena')?.household ?? null).toBeNull()
+    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('keeps "Recargar" for an error a retry cannot fix', async () => {
+    const onReload = vi.fn()
+    render(
+      <>
+        <Transactions
+          transactions={[tx('Cena', { category: 'restaurants' })]}
+          onReload={onReload}
+          onSetHousehold={() =>
+            Promise.reject(new UserFacingError('La transacción ya no existe.'))
+          }
+        />
+        <Toaster />
+      </>
+    )
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await act(async () => {
+      fireEvent.click(house('Cena'))
+    })
+
+    expect(
+      await screen.findByRole('button', { name: 'Recargar' })
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull()
+  })
+
+  it('opening the Hogar menu closes the Categorizar one', async () => {
+    seed([tx('Cena', { category: 'restaurants' })])
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Cena' })[0]
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
+    expect(screen.getByRole('button', { name: 'Alimentación' })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hogar' }))
+
+    expect(screen.queryByRole('button', { name: 'Alimentación' })).toBeNull()
+    expect(
+      screen.getByRole('button', { name: 'Marcar como hogar' })
+    ).toBeVisible()
+    // ...and the other way round.
+    fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
+    expect(
+      screen.queryByRole('button', { name: 'Marcar como hogar' })
+    ).toBeNull()
+  })
+
+  it('does not start a second bulk write while one is saving', async () => {
+    seed([tx('Cena', { category: 'restaurants' })])
+    fireEvent.click(
+      screen.getAllByRole('checkbox', { name: 'Seleccionar Cena' })[0]
+    )
+    const gate = repo.hold('update')
+    await choose('Marcar como hogar')
+
+    expect(screen.getByRole('button', { name: 'Hogar' })).toBeDisabled()
+
+    await act(async () => {
+      gate.release()
+    })
+    expect(repo.row('Cena')?.household).toBe(true)
+  })
+
+  it('says a split parent does not count as an expense', async () => {
+    seed([
+      tx('Cena', { category: 'restaurants' }),
+      tx('Madre', { isSplitParent: true }),
+      tx('Parte', { splitParentId: 'Madre', category: 'restaurants' }),
+    ])
+    select('Cena', 'Madre')
+
+    await choose('Marcar como hogar')
+
+    expect(
+      await screen.findByText(
+        '1 marcada como hogar, 1 no cuenta como gasto, sin cambios'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('says several skipped rows do not count as expenses', async () => {
+    seed([
+      tx('Cena', { category: 'restaurants' }),
+      tx('Sueldo', { type: 'credit', category: 'income' }),
+      tx('Madre', { isSplitParent: true }),
+      tx('Parte', { splitParentId: 'Madre', category: 'restaurants' }),
+    ])
+    select('Cena', 'Sueldo', 'Madre')
+
+    await choose('Marcar como hogar')
+
+    expect(
+      await screen.findByText(
+        '1 marcada como hogar, 2 no cuentan como gasto, sin cambios'
+      )
+    ).toBeInTheDocument()
   })
 })

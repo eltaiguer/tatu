@@ -3,6 +3,7 @@ import type { Transaction } from '../../models'
 import {
   NeedsConfirmationError,
   PartialWriteError,
+  UserFacingError,
   userErrorMessage,
 } from '../../utils/user-error'
 import { useConfirm } from '../ConfirmDialog'
@@ -40,7 +41,8 @@ export function useMutationFeedback({
   ) => Promise<{ restored: number }>
 }) {
   // `retry` is for a failure that saved nothing: there is no partial result
-  // to resume, so the toast offers to run the same write again.
+  // to resume, so the toast offers to run the same write again (unless the
+  // error is one a retry cannot fix).
   function reportError(
     error: unknown,
     fallback: string,
@@ -81,7 +83,9 @@ export function useMutationFeedback({
     }
     toast.error(
       userErrorMessage(error, fallback, 'write'),
-      retry
+      // An explained error (the row is gone, another account signed in) is
+      // not fixed by trying the same write again: reload instead.
+      retry && !(error instanceof UserFacingError)
         ? { action: { label: 'Reintentar', onClick: retry } }
         : onReload
           ? { action: { label: 'Recargar', onClick: onReload } }

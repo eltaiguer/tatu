@@ -339,7 +339,6 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     expect(rowHouseholdView(tx, NONE)).toEqual({
       status: 'household',
       isOverride: false,
-      categoryHousehold: true,
     })
     // Following Alimentación (household): a click says "no".
     expect(nextHouseholdChoice(tx, NONE)).toBe(false)
@@ -350,7 +349,6 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     expect(rowHouseholdView(tx, NONE)).toEqual({
       status: 'household',
       isOverride: true,
-      categoryHousehold: false,
     })
     // Restaurantes is not household: unmarking equals the category → null.
     expect(nextHouseholdChoice(tx, NONE)).toBeNull()
@@ -372,7 +370,6 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
   it('follows the user’s category default', () => {
     const map = buildCategoryHousehold([[Category.Restaurants, true]])
     const tx = expense({ category: Category.Restaurants })
-    expect(rowHouseholdView(tx, map)?.categoryHousehold).toBe(true)
     expect(nextHouseholdChoice(tx, map)).toBe(false)
   })
 
@@ -381,7 +378,6 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     expect(rowHouseholdView(tx, NONE)).toEqual({
       status: 'unassigned',
       isOverride: false,
-      categoryHousehold: null,
     })
     expect(nextHouseholdChoice(tx, NONE)).toBe(true)
   })

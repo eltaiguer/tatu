@@ -7,7 +7,7 @@ import {
   currentCategoryHousehold,
   rowHouseholdView,
 } from '../../services/household/household'
-import { workspaceStore } from '../../stores/workspace-state'
+import { isWorkspaceOwner, workspaceStore } from '../../stores/workspace-state'
 import {
   runBulkSteps,
   type BulkStep,
@@ -124,7 +124,13 @@ export function useBulkActions({
   // the others are skipped and said so. Rows already at the value count as
   // done: the toast reports the eligible rows, not how many were written.
   async function handleBulkHousehold(household: boolean | null) {
-    if (!onSetHousehold || selectedTransactionIds.length === 0) return
+    if (
+      !onSetHousehold ||
+      selectedTransactionIds.length === 0 ||
+      isBulkOperating
+    ) {
+      return
+    }
     const selected = new Set(selectedTransactionIds)
     const map = currentCategoryHousehold()
     const eligible = transactions.filter(
@@ -132,7 +138,7 @@ export function useBulkActions({
     )
     const skipped = selected.size - eligible.length
     if (eligible.length === 0) {
-      toast.info('Ninguna de las seleccionadas es un gasto, sin cambios')
+      toast.info('Ninguna de las seleccionadas cuenta como gasto, sin cambios')
       return
     }
     const owner = workspaceStore.getState().userId
@@ -143,7 +149,7 @@ export function useBulkActions({
         household
       )
       // Another user signed in meanwhile: this selection is not theirs.
-      if (workspaceStore.getState().userId !== owner) return
+      if (owner && !isWorkspaceOwner(owner)) return
       setSelectedTransactionIds([])
       const n = eligible.length
       const done =
@@ -155,7 +161,7 @@ export function useBulkActions({
       toast.success(
         skipped > 0
           ? `${done}, ${skipped} ${
-              skipped === 1 ? 'no es gasto' : 'no son gastos'
+              skipped === 1 ? 'no cuenta como gasto' : 'no cuentan como gasto'
             }, sin cambios`
           : done
       )

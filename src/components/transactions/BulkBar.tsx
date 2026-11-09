@@ -84,49 +84,53 @@ export function BulkBar({
           role="group"
           aria-label="Acciones"
           className="relative flex gap-[4px] max-md:order-last max-md:w-full max-md:flex-wrap"
-          ref={catRef}
         >
           {/* Quick categorize */}
-          <button
-            onClick={() => setCatOpen((o) => !o)}
-            disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
-          >
-            <Tag size={13} />
-            Categorizar
-          </button>
+          <div ref={catRef} className="relative">
+            <button
+              onClick={() => {
+                setHouseOpen(false)
+                setCatOpen((o) => !o)
+              }}
+              disabled={isBusy}
+              className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
+            >
+              <Tag size={13} />
+              Categorizar
+            </button>
 
-          {catOpen && (
-            <div className="absolute bottom-[calc(100%+10px)] left-0 z-[80] max-h-[280px] w-[220px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[6px] shadow-[var(--shadow-lg)]">
-              {categorySuggestions.map((cat) => {
-                const { label, color } = resolveCategory(cat)
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => {
-                      onCategorize(cat)
-                      setCatOpen(false)
-                    }}
-                    className="flex w-full cursor-pointer items-center gap-[9px] rounded-[7px] border-none bg-transparent px-[9px] py-[7px] [font:inherit] text-[13px]! text-[var(--text)]"
-                    onMouseEnter={(e) =>
-                      ((e.currentTarget as HTMLElement).style.background =
-                        'var(--muted)')
-                    }
-                    onMouseLeave={(e) =>
-                      ((e.currentTarget as HTMLElement).style.background =
-                        'transparent')
-                    }
-                  >
-                    <span
-                      className="h-[8px] w-[8px] shrink-0 rounded-[3px]"
-                      style={{ background: color }}
-                    />
-                    {label}
-                  </button>
-                )
-              })}
-            </div>
-          )}
+            {catOpen && (
+              <div className="absolute bottom-[calc(100%+10px)] left-0 z-[80] max-h-[280px] w-[220px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[6px] shadow-[var(--shadow-lg)]">
+                {categorySuggestions.map((cat) => {
+                  const { label, color } = resolveCategory(cat)
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => {
+                        onCategorize(cat)
+                        setCatOpen(false)
+                      }}
+                      className="flex w-full cursor-pointer items-center gap-[9px] rounded-[7px] border-none bg-transparent px-[9px] py-[7px] [font:inherit] text-[13px]! text-[var(--text)]"
+                      onMouseEnter={(e) =>
+                        ((e.currentTarget as HTMLElement).style.background =
+                          'var(--muted)')
+                      }
+                      onMouseLeave={(e) =>
+                        ((e.currentTarget as HTMLElement).style.background =
+                          'transparent')
+                      }
+                    >
+                      <span
+                        className="h-[8px] w-[8px] shrink-0 rounded-[3px]"
+                        style={{ background: color }}
+                      />
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Gasto del hogar: a yes / no / back-to-category for the selection */}
           {onHousehold && (
@@ -145,7 +149,10 @@ export function BulkBar({
                 ref={houseTriggerRef}
                 type="button"
                 aria-expanded={houseOpen}
-                onClick={() => setHouseOpen((o) => !o)}
+                onClick={() => {
+                  setCatOpen(false)
+                  setHouseOpen((o) => !o)
+                }}
                 disabled={isBusy}
                 className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
               >
@@ -164,6 +171,7 @@ export function BulkBar({
                     <button
                       key={label}
                       type="button"
+                      disabled={isBusy}
                       onClick={() => {
                         onHousehold(value)
                         setHouseOpen(false)

@@ -68,6 +68,9 @@ interface EditTransactionDialogProps {
   // Tags already in use, offered as suggestions.
   knownTags: string[]
   isSaving: boolean
+  // Whether the view can save a household choice; without it the group is
+  // not offered.
+  canSetHousehold: boolean
   // Persists a new category; resolves with it, or undefined when it could
   // not be created (the caller reports why).
   onCreateCategory: (label: string) => Promise<{ id: string } | undefined>
@@ -128,6 +131,7 @@ function EditTransactionForm({
   countSimilar,
   knownTags,
   isSaving,
+  canSetHousehold,
   onCreateCategory,
   onSave,
   onClose,
@@ -203,8 +207,14 @@ function EditTransactionForm({
   // copied into state) so the label follows the category picker above and a
   // default changed in Categorías.
   const categoryHousehold = currentCategoryHousehold()
+  // Judged on the category being picked, not the saved one: an ignored
+  // category has no house, and an ignored row given a counted one gets it.
   const showHousehold =
-    rowHouseholdView(transaction, categoryHousehold) !== null
+    canSetHousehold &&
+    rowHouseholdView(
+      { ...transaction, category: category.trim() || undefined },
+      categoryHousehold
+    ) !== null
   const categoryDefaultLabel = (() => {
     const says = categoryDefault(category, categoryHousehold)
     return says === null ? 'sin definir' : says ? 'sí' : 'no'
