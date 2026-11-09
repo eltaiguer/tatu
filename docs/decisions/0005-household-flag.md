@@ -83,9 +83,26 @@ split parents).
   says how many were skipped ("no cuenta(n) como gasto").
 - Split parts keep the parent's own choice (they spread the parent).
 
+Implemented in step 5 of #251: the Hogar filter in Transacciones and the
+`hogar` export column.
+
+- A "Hogar" group in the filter bar (Todos · Hogar · Sin definir), URL
+  `?hogar=si` / `?hogar=sin-definir`, counted by `hasActiveFilters`. It is
+  part of `filterTransactions`: Hogar keeps counted expenses that resolve to
+  household, Sin definir those that resolve to unassigned
+  (`rowHouseholdView`), so income, ignored rows (even with "show ignored" on)
+  and split parents never match. There is no "not household" value. Picking
+  one while "Ingresos" is on sets the type back to Todos. Split parts are
+  filtered one by one, as the category filter does: the parent shows above
+  the parts that match.
+- Under either value the totals strip is one tile: "Gastos del hogar" or
+  "Sin definir" (with "Categorizalas o marcalas con la casita."), the
+  home-currency total and the number of expenses.
+- A `hogar` column after `cuenta_en_totales` in the CSV and the PDF report:
+  `si` / `no` / `sin_definir` for counted expenses, empty for every other row.
+
 Planned for the later PRs of #251:
 
-- A Hogar filter in Transacciones (Todos / Solo hogar / Sin definir).
 - A Todo / Hogar mode on Resumen, kept in the URL. Hogar mode shows counted
   expenses only, plus the Sin definir amount apart.
 - Household-aware Insights.

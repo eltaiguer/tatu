@@ -437,7 +437,12 @@ a reload all agree. Split parents never match; rows that don't count toward
 totals match only with `showIgnored`; categories are compared through
 `normalizeCategoryId`, the merchant by its exact merchant key (`merchantKeyOf`,
 see Merchant key below), amounts by absolute value, search over display name +
-raw description + tags. `sortTransactions` orders the result.
+raw description + tags. The Hogar filter (`household`: `all` / `household` /
+`unassigned`, `?hogar=si` / `?hogar=sin-definir`) keeps the counted expenses
+whose `rowHouseholdView` status is that value; it takes the user's category
+defaults as `options.categoryHousehold` (callers pass
+`currentCategoryHousehold()`; `useTransactionFiltering` reads it at render, so
+a changed default re-filters). `sortTransactions` orders the result.
 
 `useTransactionFiltering` holds that state in React as one value (seeded once
 from the URL; the view fills in its default period first): it returns
@@ -627,7 +632,10 @@ backup, split parents and ignored rows included); Transacciones exports the
 rows on screen (`filteredTransactions`, so ignored rows only with "show
 ignored" on). Both CSV and PDF end with a `cuenta_en_totales` column (`1` /
 `0`, from `countsTowardTotals`): summing the `1` rows gives the app's totals,
-because a split parent is `0` and its parts are `1`. PDF prints an HTML
+because a split parent is `0` and its parts are `1`. After it comes `hogar`
+(`si` / `no` / `sin_definir` from `rowHouseholdView`, empty for rows that are
+not counted expenses); the callers pass the user's category defaults
+(`currentCategoryHousehold()`). PDF prints an HTML
 report (every interpolated string HTML-escaped) from a hidden same-origin
 iframe, not a popup — `window.open` with `noopener` returns `null` (#179). If
 the frame can't be written or printed, the export throws a `UserFacingError`
