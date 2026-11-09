@@ -74,11 +74,13 @@ split parents).
   saved row comes back; a failure offers "Reintentar".
 - A "Gasto del hogar" group in the edit dialog: "Según categoría (sí / no / sin
   definir)" (follows the dialog's own category picker), "Sí", "No". It is this
-  transaction's own choice, not part of the apply-scope, and is written after
-  the edit it came with, only when it changed.
+  transaction's own choice, not part of the apply-scope. It is offered only
+  while the picked category counts as an expense, and written after the edit it
+  came with, only when it changed; a household-only save does not rewrite the
+  category (no confidence-1 write).
 - A "Hogar" menu in the bulk bar: "Marcar como hogar", "Marcar como no hogar",
   "Según categoría". It applies to the selected rows that count as expenses and
-  says how many were skipped.
+  says how many were skipped ("no cuenta(n) como gasto").
 - Split parts keep the parent's own choice (they spread the parent).
 
 Planned for the later PRs of #251:
