@@ -120,15 +120,24 @@ export function rowHouseholdView(
   categoryHousehold: CategoryHousehold
 ): RowHouseholdView | null {
   if (!isCountedExpense(tx)) return null
-  const resolution = resolveHousehold(tx, categoryHousehold)
-  const id = normalizeCategoryId(tx.category)
   return {
-    ...resolution,
-    categoryHousehold:
-      id === Category.Uncategorized
-        ? null
-        : isCategoryHousehold(id, categoryHousehold),
+    ...resolveHousehold(tx, categoryHousehold),
+    categoryHousehold: categoryDefault(tx.category, categoryHousehold),
   }
+}
+
+/**
+ * What a category alone says: true / false, or null for Sin categoría (it has
+ * no default, so a row there is Sin definir until chosen by hand).
+ */
+export function categoryDefault(
+  categoryId: string | null | undefined,
+  categoryHousehold: CategoryHousehold
+): boolean | null {
+  const id = normalizeCategoryId(categoryId)
+  return id === Category.Uncategorized
+    ? null
+    : isCategoryHousehold(id, categoryHousehold)
 }
 
 /**

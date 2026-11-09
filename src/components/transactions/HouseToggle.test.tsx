@@ -4,7 +4,10 @@ import { useStore } from 'zustand'
 import { Toaster } from 'sonner'
 import { Transactions } from '../Transactions'
 import type { Transaction } from '../../models'
-import { setHousehold } from '../../services/mutations/transaction-mutations'
+import {
+  editTransaction,
+  setHousehold,
+} from '../../services/mutations/transaction-mutations'
 import {
   createInMemoryRepository,
   type InMemoryRepository,
@@ -37,6 +40,7 @@ function Harness() {
     <>
       <Transactions
         transactions={transactions}
+        onUpdateTransaction={(id, edit) => editTransaction(repo, id, edit)}
         onSetHousehold={(ids, household) => setHousehold(repo, ids, household)}
       />
       <Toaster />
@@ -195,5 +199,91 @@ describe('house toggle on rows and cards (#251)', () => {
     expect(house('Cena', 1)).toHaveAttribute('aria-pressed', 'true')
     expect(house('Cena', 0)).toHaveAttribute('aria-pressed', 'true')
     expect(repo.row('Cena')?.household).toBe(true)
+  })
+})
+
+describe('household choice in the edit dialog (#251)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  async function openEdit(description: string) {
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole('button', { name: `Editar ${description}` })[0]
+      )
+    })
+  }
+  async function save() {
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  }
+
+  it('saves a hand choice with the rest of the edit', async () => {
+    seed([tx('Devoto')])
+    await openEdit('Devoto')
+    expect(screen.getByLabelText('Según categoría (sí)')).toBeChecked()
+
+    fireEvent.click(screen.getByLabelText('No'))
+    await save()
+
+    await waitFor(() => expect(repo.row('Devoto')?.household).toBe(false))
+    expect(house('Devoto')).toHaveAttribute(
+      'title',
+      'No es del hogar · elegido a mano'
+    )
+  })
+
+  it('goes back to following the category', async () => {
+    seed([tx('Cena', { category: 'restaurants', household: true })])
+    await openEdit('Cena')
+    expect(screen.getByLabelText('Sí')).toBeChecked()
+
+    fireEvent.click(screen.getByLabelText('Según categoría (no)'))
+    await save()
+
+    await waitFor(() => expect(repo.row('Cena')?.household ?? null).toBeNull())
+    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('does not write the household choice when it was not touched', async () => {
+    // The saved row has a choice the screen does not know about yet: an
+    // untouched Guardar must not overwrite it.
+    seed([tx('Devoto')])
+    await repo.updateTransactions(new Map([['Devoto', { household: true }]]))
+    await openEdit('Devoto')
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto Centro' },
+    })
+    await save()
+
+    expect(repo.row('Devoto')?.household).toBe(true)
+  })
+
+  it('says so when the choice fails to save after the edit did', async () => {
+    seed([tx('Devoto')])
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await openEdit('Devoto')
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto Centro' },
+    })
+    fireEvent.click(screen.getByLabelText('No'))
+    // The edit's own write goes first; the choice's write is the next one.
+    let seen = 0
+    repo.failOn('update', {
+      error: new Error('boom'),
+      when: () => ++seen > 1,
+    })
+    await save()
+
+    expect(
+      await screen.findByRole('button', { name: 'Reintentar' })
+    ).toBeInTheDocument()
+    expect(repo.row('Devoto')?.displayDescription).toBe('Devoto Centro')
+    expect(repo.row('Devoto')?.household ?? null).toBeNull()
+    expect(logged).toHaveBeenCalled()
   })
 })

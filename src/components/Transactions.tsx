@@ -245,6 +245,9 @@ export function Transactions({
   async function handleSaveEditTransaction(draft: EditTransactionDraft) {
     if (!onUpdateTransaction || !editingTransaction) return
     const editingId = editingTransaction.id
+    const householdChanged =
+      draft.household !== (editingTransaction.household ?? null)
+    let edited = false
     setPending(editingId, true)
     try {
       const { affected } = await onUpdateTransaction(editingId, {
@@ -259,11 +262,17 @@ export function Transactions({
           : 'Cambios guardados'
       )
       setEditingTransaction(null)
+      edited = true
     } catch (error) {
       // The dialog stays open so the user can retry.
       reportError(error, 'No se pudieron guardar los cambios')
     } finally {
       setPending(editingId, false)
+    }
+    // The choice is this row's own, written after the edit it came with. If
+    // it fails the edit stays saved and the toast offers the choice again.
+    if (edited && householdChanged) {
+      await saveHousehold(editingId, draft.household)
     }
   }
 
