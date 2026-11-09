@@ -120,12 +120,16 @@ export function CategoryCard({
         {onToggleHousehold && (
           <button
             type="button"
-            onClick={() => onToggleHousehold(cat.id)}
-            disabled={householdSaving}
+            // aria-disabled, not disabled: a disabled button drops keyboard
+            // focus to <body> while it saves.
+            onClick={() => {
+              if (!householdSaving) onToggleHousehold(cat.id)
+            }}
+            aria-disabled={householdSaving || undefined}
             aria-pressed={household}
             aria-label={`Gasto del hogar: ${cat.label}`}
             title={household ? 'Gasto del hogar' : 'No es gasto del hogar'}
-            className={`grid cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--brand)] disabled:cursor-default disabled:opacity-50 ${
+            className={`grid cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--brand)] aria-disabled:cursor-default aria-disabled:opacity-50 ${
               household
                 ? 'text-[color:var(--brand-text)]'
                 : 'text-[var(--text-faint)]'

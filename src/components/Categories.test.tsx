@@ -735,17 +735,30 @@ describe('Categories', () => {
       expect(repo.customCategories.size).toBe(0)
     })
 
-    it('disables the toggle while its save is in flight', async () => {
+    it('blocks the toggle while its save is in flight, without dropping keyboard focus', async () => {
       renderWithToasts()
       const held = repo.hold('upsertCustomCategory')
+      toggle('Restaurantes').focus()
 
       fireEvent.click(toggle('Restaurantes'))
 
-      await waitFor(() => expect(toggle('Restaurantes')).toBeDisabled())
-      expect(toggle('Servicios')).toBeEnabled()
+      await waitFor(() =>
+        expect(toggle('Restaurantes')).toHaveAttribute('aria-disabled', 'true')
+      )
+      expect(toggle('Restaurantes')).toHaveFocus()
+      expect(toggle('Servicios')).not.toHaveAttribute('aria-disabled', 'true')
+      // A second click while saving writes nothing more.
+      fireEvent.click(toggle('Restaurantes'))
       held.release()
-      await waitFor(() => expect(toggle('Restaurantes')).toBeEnabled())
+      await waitFor(() =>
+        expect(toggle('Restaurantes')).not.toHaveAttribute(
+          'aria-disabled',
+          'true'
+        )
+      )
       expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'true')
+      expect(toggle('Restaurantes')).toHaveFocus()
+      expect(repo.requests.upsertCustomCategory).toBe(1)
     })
   })
 })
