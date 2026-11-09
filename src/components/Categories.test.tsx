@@ -487,6 +487,17 @@ describe('Categories', () => {
         ).not.toBeInTheDocument()
       )
 
+    it('says a change by hand wins over the category in the form helper', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+      fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
+
+      expect(
+        screen.getByText(
+          'Sus transacciones cuentan como gastos del hogar, salvo las que cambies a mano.'
+        )
+      ).toBeInTheDocument()
+    })
+
     it('creates a household category from the form', async () => {
       render(<Categories repository={repo} transactions={[]} />)
       fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
@@ -690,7 +701,9 @@ describe('Categories', () => {
       expect(
         within(
           screen.getByRole('region', { name: 'Tus categorías' })
-        ).getByText('La casita marca los gastos del hogar.')
+        ).getByText(
+          'La casita marca los gastos del hogar. Podés cambiarlo en cada transacción.'
+        )
       ).toBeInTheDocument()
     })
 

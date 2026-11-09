@@ -721,7 +721,10 @@ and skip their rollback after a switch.
   default; ADR-0005). It is not part of "which rows count"
   (`services/spending/spending-rules.ts`): callers combine the two. Writes are
   `setHousehold` (one or many rows, `services/mutations/transaction-mutations.ts`)
-  and `setCategoryHouseholdWithSync` (a category's default, from the tile
+  (the row's house, the edit dialog and the bulk "Hogar" menu all call it
+  through `useTransactionHandlers.handleSetHousehold`; what a row shows and what
+  a click writes come from `rowHouseholdView` / `nextHouseholdChoice`, so the
+  three agree) and `setCategoryHouseholdWithSync` (a category's default, from the tile
   toggle in Categorías; a built-in's lives in its override row, as its ignore
   flag does; a value, or null = back to the seeded default; Sin categoría and
   Ingresos are refused, `canHaveHouseholdDefault`). The category form saves

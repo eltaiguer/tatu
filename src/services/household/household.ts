@@ -9,6 +9,8 @@ import {
   type CustomCategory,
 } from '../categories/category-store'
 import { memoizeByReference } from '../../utils/memo'
+import { isCountedExpense } from '../spending/spending-rules'
+import type { Transaction } from '../../models'
 
 // THE answer to "is this a household expense?" (Hogar sí / no / Sin
 // definir). Every surface (the row toggle, the Hogar filter, the Resumen
@@ -100,6 +102,52 @@ export function categoryHouseholdChoice(
     normalizeCategoryId(categoryId)
   )
   return household === seeded ? null : household
+}
+
+/**
+ * What a transaction row shows for the household control, or null when the
+ * row has none: only counted expenses can be household (income, ignored rows
+ * and split parents get no control). The row toggle, the edit dialog and the
+ * bulk action all read this, so they agree.
+ */
+export function rowHouseholdView(
+  tx: Transaction,
+  categoryHousehold: CategoryHousehold
+): HouseholdResolution | null {
+  if (!isCountedExpense(tx)) return null
+  return resolveHousehold(tx, categoryHousehold)
+}
+
+/**
+ * What a category alone says: true / false, or null for Sin categoría (it has
+ * no default, so a row there is Sin definir until chosen by hand).
+ */
+export function categoryDefault(
+  categoryId: string | null | undefined,
+  categoryHousehold: CategoryHousehold
+): boolean | null {
+  const id = normalizeCategoryId(categoryId)
+  return id === Category.Uncategorized
+    ? null
+    : isCategoryHousehold(id, categoryHousehold)
+}
+
+/**
+ * What a click on the row's house writes: the opposite of what the row is
+ * now (Sin definir goes to household). When that equals what the category
+ * alone says, null: the row goes back to following its category. Null also
+ * for a row with no control; callers never write it.
+ */
+export function nextHouseholdChoice(
+  tx: Transaction,
+  categoryHousehold: CategoryHousehold
+): boolean | null {
+  const view = rowHouseholdView(tx, categoryHousehold)
+  if (!view) return null
+  const target = view.status !== 'household'
+  return target === categoryDefault(tx.category, categoryHousehold)
+    ? null
+    : target
 }
 
 export { canHaveHouseholdDefault } from '../categories/category-aliases'

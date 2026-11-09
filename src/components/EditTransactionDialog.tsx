@@ -24,6 +24,19 @@ import {
   filterTagSuggestions,
 } from '../services/suggestions/suggestions'
 import { getAccountLabel } from './TransactionTable'
+import {
+  categoryDefault,
+  currentCategoryHousehold,
+  rowHouseholdView,
+} from '../services/household/household'
+
+type HouseholdChoice = 'category' | 'yes' | 'no'
+
+const choiceOf = (household: boolean | null | undefined): HouseholdChoice =>
+  household === true ? 'yes' : household === false ? 'no' : 'category'
+
+const householdOf = (choice: HouseholdChoice): boolean | null =>
+  choice === 'yes' ? true : choice === 'no' ? false : null
 
 export type ApplyScope =
   | 'single'
@@ -38,6 +51,10 @@ export interface EditTransactionDraft {
   category: string | null
   tags: string[]
   applyScope: ApplyScope
+  // This transaction's own "gasto del hogar" choice; null follows the
+  // category. Never part of the apply-scope. Unchanged (the row's own) for a
+  // row that cannot be household.
+  household: boolean | null
 }
 
 interface EditTransactionDialogProps {
@@ -51,6 +68,9 @@ interface EditTransactionDialogProps {
   // Tags already in use, offered as suggestions.
   knownTags: string[]
   isSaving: boolean
+  // Whether the view can save a household choice; without it the group is
+  // not offered.
+  canSetHousehold: boolean
   // Persists a new category; resolves with it, or undefined when it could
   // not be created (the caller reports why).
   onCreateCategory: (label: string) => Promise<{ id: string } | undefined>
@@ -111,6 +131,7 @@ function EditTransactionForm({
   countSimilar,
   knownTags,
   isSaving,
+  canSetHousehold,
   onCreateCategory,
   onSave,
   onClose,
@@ -123,6 +144,9 @@ function EditTransactionForm({
   const [category, setCategory] = useState(transaction.category ?? '')
   const [tags, setTags] = useState<string[]>(transaction.tags ?? [])
   const [applyScope, setApplyScope] = useState<ApplyScope>('single')
+  const [householdChoice, setHouseholdChoice] = useState<HouseholdChoice>(() =>
+    choiceOf(transaction.household)
+  )
   const [error, setError] = useState('')
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
@@ -179,6 +203,23 @@ function EditTransactionForm({
     setTags((current) => current.filter((value) => value !== tag))
   }
 
+  // Only counted expenses can be household. Read while rendering (never
+  // copied into state) so the label follows the category picker above and a
+  // default changed in Categorías.
+  const categoryHousehold = currentCategoryHousehold()
+  // Judged on the category being picked, not the saved one: an ignored
+  // category has no house, and an ignored row given a counted one gets it.
+  const showHousehold =
+    canSetHousehold &&
+    rowHouseholdView(
+      { ...transaction, category: category.trim() || undefined },
+      categoryHousehold
+    ) !== null
+  const categoryDefaultLabel = (() => {
+    const says = categoryDefault(category, categoryHousehold)
+    return says === null ? 'sin definir' : says ? 'sí' : 'no'
+  })()
+
   function handleSave() {
     const trimmed = description.trim()
     if (!trimmed) {
@@ -191,6 +232,9 @@ function EditTransactionForm({
       category: category.trim() || null,
       tags,
       applyScope,
+      household: showHousehold
+        ? householdOf(householdChoice)
+        : (transaction.household ?? null),
     })
   }
 
@@ -324,6 +368,30 @@ function EditTransactionForm({
             },
           ]}
         />
+
+        {showHousehold && (
+          <RadioGroup
+            legend={
+              <>
+                Gasto del hogar{' '}
+                <span className="font-normal text-muted-foreground">
+                  · solo esta transacción
+                </span>
+              </>
+            }
+            name="household"
+            value={householdChoice}
+            onChange={setHouseholdChoice}
+            options={[
+              {
+                value: 'category',
+                label: `Según categoría (${categoryDefaultLabel})`,
+              },
+              { value: 'yes', label: 'Sí' },
+              { value: 'no', label: 'No' },
+            ]}
+          />
+        )}
 
         <div>
           <label className="text-sm font-medium">

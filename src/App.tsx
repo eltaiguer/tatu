@@ -274,6 +274,7 @@ function App({ auth, createRepository }: AppProps) {
     handleDeleteTransaction,
     handleRestoreTransactions,
     handleSplitTransaction,
+    handleSetHousehold,
     handleUnsplitTransaction,
     handleBulkCategorizeTransactions,
     handleBulkDeleteTransactions,
@@ -492,6 +493,7 @@ function App({ auth, createRepository }: AppProps) {
                     onBulkTag={handleBulkTagTransactions}
                     onSplitTransaction={handleSplitTransaction}
                     onUnsplitTransaction={handleUnsplitTransaction}
+                    onSetHousehold={handleSetHousehold}
                   />
                 )}
                 {currentView === 'insights' && repository && (

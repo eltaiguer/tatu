@@ -61,11 +61,30 @@ Sin categoría, Ingresos and deleted categories get neither. Choosing the
 seeded default stores nothing (null), so the category keeps following the app;
 only a different choice is stored.
 
+Implemented in step 4 of #251: the household control on transactions, only on
+counted expenses (`rowHouseholdView` is null for income, ignored rows and
+split parents).
+
+- A house next to the category badge on every row and card (`HouseToggle`),
+  always visible. Faint when the row follows its category, solid brand colour
+  when it was set by hand; filled = household, outline = not, dashed = Sin
+  definir. A click flips it; when the new value is what the category alone says
+  it writes null (back to following the category), else the boolean
+  (`nextHouseholdChoice`). Quiet: no success toast, the house moves when the
+  saved row comes back; a failure offers "Reintentar".
+- A "Gasto del hogar" group in the edit dialog: "Según categoría (sí / no / sin
+  definir)" (follows the dialog's own category picker), "Sí", "No". It is this
+  transaction's own choice, not part of the apply-scope. It is offered only
+  while the picked category counts as an expense, and written after the edit it
+  came with, only when it changed; a household-only save does not rewrite the
+  category (no confidence-1 write).
+- A "Hogar" menu in the bulk bar: "Marcar como hogar", "Marcar como no hogar",
+  "Según categoría". It applies to the selected rows that count as expenses and
+  says how many were skipped ("no cuenta(n) como gasto").
+- Split parts keep the parent's own choice (they spread the parent).
+
 Planned for the later PRs of #251:
 
-- A one-click house toggle per row (dimmed when it comes from the category),
-  in the edit dialog (with "Según categoría" to clear the row's choice) and
-  as a bulk action.
 - A Hogar filter in Transacciones (Todos / Solo hogar / Sin definir).
 - A Todo / Hogar mode on Resumen, kept in the URL. Hogar mode shows counted
   expenses only, plus the Sin definir amount apart.

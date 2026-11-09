@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
@@ -41,7 +41,18 @@ import { TransactionsPagination } from './transactions/TransactionsPagination'
 import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
+import {
+  currentCategoryHousehold,
+  nextHouseholdChoice,
+} from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
+import { getDisplayDescription } from '../utils/transaction-display'
+import { UserFacingError } from '../utils/user-error'
+
+const AFTER_EDIT = 'Se guardaron los cambios, pero no el gasto del hogar'
+
+const sameTags = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((tag, i) => tag === b[i])
 
 export function Transactions({
   transactions,
@@ -57,6 +68,7 @@ export function Transactions({
   onBulkTag,
   onSplitTransaction,
   onUnsplitTransaction,
+  onSetHousehold,
   onRestoreTransactions,
   onReload,
   repository,
@@ -133,6 +145,15 @@ export function Transactions({
   // `newestRowDate` is null only without rows.
   const newestForNav = newestRowDate ?? todayAsUtcDate()
 
+  // The newest household write started per row, so an old toast's retry can
+  // tell it has been superseded.
+  const householdWrites = useRef(new Map<string, number>())
+  // The latest rows, to see whether a row changed after a failed write.
+  const transactionsRef = useRef(transactions)
+  transactionsRef.current = transactions
+  const rowChoice = (id: string) =>
+    transactionsRef.current.find((tx) => tx.id === id)?.household ?? null
+
   /* ---- Edit state ---- */
   // Rows with a mutation in flight. A set, not a single id, so two
   // overlapping deletes don't re-enable each other's buttons.
@@ -179,18 +200,21 @@ export function Transactions({
     handleAutoCategorizeSelected,
     handleBulkCategorizeSelected,
     handleBulkIgnore,
+    handleBulkHousehold,
     handleBulkDelete,
     openBulkEdit,
     closeBulkEdit,
     handleBulkEditSave,
     bulkEdit,
   } = useBulkActions({
+    transactions,
     selectedTransactionIds,
     setSelectedTransactionIds,
     onAutoCategorizeTransactions,
     onBulkCategorize,
     onBulkTag,
     onBulkDelete,
+    onSetHousehold,
     onReload,
     reportError,
     reportDeleted,
@@ -239,27 +263,58 @@ export function Transactions({
 
   async function handleSaveEditTransaction(draft: EditTransactionDraft) {
     if (!onUpdateTransaction || !editingTransaction) return
-    const editingId = editingTransaction.id
+    const editing = editingTransaction
+    const editingId = editing.id
+    const householdChanged =
+      Boolean(onSetHousehold) && draft.household !== (editing.household ?? null)
+    // A household-only save must not re-write the category as the user's own
+    // confirmed one (confidence 1): nothing about name, category or tags
+    // changed, and no apply-scope rule was asked for.
+    const unchanged =
+      draft.applyScope === 'single' &&
+      draft.description === getDisplayDescription(editing) &&
+      draft.category === ((editing.category ?? '').trim() || null) &&
+      sameTags(draft.tags, editing.tags ?? [])
+    let message: string | null = null
     setPending(editingId, true)
     try {
-      const { affected } = await onUpdateTransaction(editingId, {
-        displayDescription: draft.description,
-        category: draft.category,
-        tags: draft.tags,
-        applyScope: draft.applyScope,
-      })
-      toast.success(
-        affected > 1
-          ? `Cambios aplicados a ${affected} transacciones`
-          : 'Cambios guardados'
-      )
-      setEditingTransaction(null)
+      if (!(unchanged && householdChanged)) {
+        const { affected } = await onUpdateTransaction(editingId, {
+          displayDescription: draft.description,
+          category: draft.category,
+          tags: draft.tags,
+          applyScope: draft.applyScope,
+        })
+        message =
+          affected > 1
+            ? `Cambios aplicados a ${affected} transacciones`
+            : 'Cambios guardados'
+      }
     } catch (error) {
       // The dialog stays open so the user can retry.
       reportError(error, 'No se pudieron guardar los cambios')
-    } finally {
       setPending(editingId, false)
+      return
     }
+    // The choice is this row's own, written after the edit it came with. One
+    // outcome is reported: the success only once everything saved, or one
+    // error that says what did.
+    if (householdChanged) {
+      const saved = await writeHousehold(
+        editingId,
+        draft.household,
+        message ? AFTER_EDIT : 'No se pudo guardar el gasto del hogar'
+      )
+      if (!saved && !message) {
+        // Nothing saved at all: keep the dialog open to try again.
+        setPending(editingId, false)
+        return
+      }
+      if (!saved) message = null
+    }
+    if (message) toast.success(message)
+    setEditingTransaction(null)
+    setPending(editingId, false)
   }
 
   async function handleDeleteTransaction(transaction: Transaction) {
@@ -316,6 +371,55 @@ export function Transactions({
       reportError(error, 'No se pudo restaurar la transacción')
     } finally {
       setPending(transaction.id, false)
+    }
+  }
+
+  // One click flips the row's house. Quiet on success: the house moves when
+  // the saved row comes back from the store.
+  function handleToggleHousehold(transaction: Transaction) {
+    void writeHousehold(
+      transaction.id,
+      nextHouseholdChoice(transaction, currentCategoryHousehold()),
+      'No se pudo guardar el gasto del hogar'
+    )
+  }
+
+  // Writes one row's choice; true when it saved. A failure that saved nothing
+  // offers the same write again, but only if nothing else touched the row
+  // since: no newer write of this view started (the counter) and the saved
+  // row still holds what it did when this one failed (which also covers bulk
+  // writes and the dialog). A newer choice is never overwritten by an old
+  // toast.
+  async function writeHousehold(
+    id: string,
+    household: boolean | null,
+    failure: string
+  ): Promise<boolean> {
+    if (!onSetHousehold) return false
+    const seq = (householdWrites.current.get(id) ?? 0) + 1
+    householdWrites.current.set(id, seq)
+    setPending(id, true)
+    try {
+      await onSetHousehold([id], household)
+      return true
+    } catch (error) {
+      const heldWhenFailed = rowChoice(id)
+      // After a saved edit, say so even when the error brings its own words.
+      const prefix =
+        failure === AFTER_EDIT && error instanceof UserFacingError
+          ? `${AFTER_EDIT}. `
+          : ''
+      reportError(error, failure, prefix, () => {
+        if (
+          householdWrites.current.get(id) === seq &&
+          rowChoice(id) === heldWhenFailed
+        ) {
+          void writeHousehold(id, household, failure)
+        }
+      })
+      return false
+    } finally {
+      setPending(id, false)
     }
   }
 
@@ -383,6 +487,13 @@ export function Transactions({
           onCategorize={(category) => {
             void handleBulkCategorizeSelected(category)
           }}
+          onHousehold={
+            onSetHousehold
+              ? (household) => {
+                  void handleBulkHousehold(household)
+                }
+              : undefined
+          }
           onEdit={openBulkEdit}
           onAuto={() => {
             void handleAutoCategorizeSelected()
@@ -450,12 +561,14 @@ export function Transactions({
               }
             : undefined
         }
+        onToggleHousehold={onSetHousehold ? handleToggleHousehold : undefined}
       />
 
       <EditTransactionDialog
         transaction={editingTransaction}
         countSimilar={countSimilar}
         knownTags={tagSuggestions}
+        canSetHousehold={Boolean(onSetHousehold)}
         isSaving={
           editingTransaction !== null &&
           pendingTransactionIds.has(editingTransaction.id)

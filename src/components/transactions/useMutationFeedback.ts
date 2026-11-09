@@ -3,6 +3,7 @@ import type { Transaction } from '../../models'
 import {
   NeedsConfirmationError,
   PartialWriteError,
+  UserFacingError,
   userErrorMessage,
 } from '../../utils/user-error'
 import { useConfirm } from '../ConfirmDialog'
@@ -39,7 +40,15 @@ export function useMutationFeedback({
     transactions: Transaction[]
   ) => Promise<{ restored: number }>
 }) {
-  function reportError(error: unknown, fallback: string, prefix = '') {
+  // `retry` is for a failure that saved nothing: there is no partial result
+  // to resume, so the toast offers to run the same write again (unless the
+  // error is one a retry cannot fix).
+  function reportError(
+    error: unknown,
+    fallback: string,
+    prefix = '',
+    retry?: () => void
+  ) {
     // Some rows saved and are already shown (#60): say how many, offer to
     // retry just the rest, and keep the undo for what a delete did remove.
     if (error instanceof PartialWriteError) {
@@ -47,15 +56,15 @@ export function useMutationFeedback({
       if (isDeleteResult(error.result) && error.result.removed.length > 0) {
         reportDeleted(error.result)
       }
-      const retry = error.retry
+      const resume = error.retry
       toast.error(
-        prefix + (retry ? `${error.message} — reintentar` : error.message),
-        retry
+        prefix + (resume ? `${error.message} — reintentar` : error.message),
+        resume
           ? {
               action: {
                 label: 'Reintentar',
                 onClick: () => {
-                  retry().then(
+                  resume().then(
                     // Rows a retried delete removed get their own undo.
                     (result) =>
                       isDeleteResult(result)
@@ -73,8 +82,14 @@ export function useMutationFeedback({
       return
     }
     toast.error(
-      userErrorMessage(error, fallback, 'write'),
-      onReload ? { action: { label: 'Recargar', onClick: onReload } } : {}
+      prefix + userErrorMessage(error, fallback, 'write'),
+      // An explained error (the row is gone, another account signed in) is
+      // not fixed by trying the same write again: reload instead.
+      retry && !(error instanceof UserFacingError)
+        ? { action: { label: 'Reintentar', onClick: retry } }
+        : onReload
+          ? { action: { label: 'Recargar', onClick: onReload } }
+          : {}
     )
   }
 

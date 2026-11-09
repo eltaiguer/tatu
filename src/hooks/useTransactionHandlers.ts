@@ -12,6 +12,7 @@ import {
   deleteTransactions,
   editTransaction,
   restoreDeleted,
+  setHousehold,
   splitTransaction,
   unsplitTransaction,
   type DeleteResult,
@@ -100,6 +101,10 @@ export function useTransactionHandlers({
     handleBulkTagTransactions: run(
       (repo, transactionIds: string[], tag: string) =>
         bulkTag(repo, transactionIds, tag)
+    ),
+    handleSetHousehold: run(
+      (repo, transactionIds: string[], household: boolean | null) =>
+        setHousehold(repo, transactionIds, household)
     ),
     handleAutoCategorizeTransactions: run((repo, transactionIds: string[]) =>
       autoCategorize(repo, transactionIds)

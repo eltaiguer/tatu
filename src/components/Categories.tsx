@@ -286,7 +286,8 @@ export function Categories({
       {/* Category grid: tiles straight on the page, no wrapping card */}
       <Section title="Tus categorías">
         <p className="text-[13px] text-[var(--text-faint)]">
-          La casita marca los gastos del hogar.
+          La casita marca los gastos del hogar. Podés cambiarlo en cada
+          transacción.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
           {categoryCards.map((cat) => (
