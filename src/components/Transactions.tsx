@@ -184,18 +184,21 @@ export function Transactions({
     handleAutoCategorizeSelected,
     handleBulkCategorizeSelected,
     handleBulkIgnore,
+    handleBulkHousehold,
     handleBulkDelete,
     openBulkEdit,
     closeBulkEdit,
     handleBulkEditSave,
     bulkEdit,
   } = useBulkActions({
+    transactions,
     selectedTransactionIds,
     setSelectedTransactionIds,
     onAutoCategorizeTransactions,
     onBulkCategorize,
     onBulkTag,
     onBulkDelete,
+    onSetHousehold,
     onReload,
     reportError,
     reportDeleted,
@@ -424,6 +427,13 @@ export function Transactions({
           onCategorize={(category) => {
             void handleBulkCategorizeSelected(category)
           }}
+          onHousehold={
+            onSetHousehold
+              ? (household) => {
+                  void handleBulkHousehold(household)
+                }
+              : undefined
+          }
           onEdit={openBulkEdit}
           onAuto={() => {
             void handleAutoCategorizeSelected()

@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { toast } from 'sonner'
+import type { Transaction } from '../../models'
 import { PartialWriteError, userErrorMessage } from '../../utils/user-error'
+import {
+  currentCategoryHousehold,
+  rowHouseholdView,
+} from '../../services/household/household'
+import { workspaceStore } from '../../stores/workspace-state'
 import {
   runBulkSteps,
   type BulkStep,
@@ -17,17 +23,20 @@ type MutationFeedback = ReturnType<typeof useMutationFeedback>
  * dialog's draft + save. Clears the selection after a successful change.
  */
 export function useBulkActions({
+  transactions,
   selectedTransactionIds,
   setSelectedTransactionIds,
   onAutoCategorizeTransactions,
   onBulkCategorize,
   onBulkTag,
   onBulkDelete,
+  onSetHousehold,
   onReload,
   reportError,
   reportDeleted,
   deleteWithConfirmation,
 }: {
+  transactions: Transaction[]
   selectedTransactionIds: string[]
   setSelectedTransactionIds: Dispatch<SetStateAction<string[]>>
   onAutoCategorizeTransactions?: (
@@ -45,6 +54,10 @@ export function useBulkActions({
     transactionIds: string[],
     options?: { allowIrreversible?: boolean }
   ) => Promise<DeleteResult>
+  onSetHousehold?: (
+    transactionIds: string[],
+    household: boolean | null
+  ) => Promise<{ updated: number }>
   onReload?: () => void
 } & Pick<
   MutationFeedback,
@@ -102,6 +115,52 @@ export function useBulkActions({
       toast.success(txDone(updated, 'categorizad'))
     } catch (error) {
       reportError(error, 'No se pudieron categorizar las transacciones')
+    } finally {
+      setIsBulkOperating(false)
+    }
+  }
+
+  // Only the selected rows that count as expenses get a household choice;
+  // the others are skipped and said so. Rows already at the value count as
+  // done: the toast reports the eligible rows, not how many were written.
+  async function handleBulkHousehold(household: boolean | null) {
+    if (!onSetHousehold || selectedTransactionIds.length === 0) return
+    const selected = new Set(selectedTransactionIds)
+    const map = currentCategoryHousehold()
+    const eligible = transactions.filter(
+      (tx) => selected.has(tx.id) && rowHouseholdView(tx, map) !== null
+    )
+    const skipped = selected.size - eligible.length
+    if (eligible.length === 0) {
+      toast.info('Ninguna de las seleccionadas es un gasto, sin cambios')
+      return
+    }
+    const owner = workspaceStore.getState().userId
+    setIsBulkOperating(true)
+    try {
+      await onSetHousehold(
+        eligible.map((tx) => tx.id),
+        household
+      )
+      // Another user signed in meanwhile: this selection is not theirs.
+      if (workspaceStore.getState().userId !== owner) return
+      setSelectedTransactionIds([])
+      const n = eligible.length
+      const done =
+        household === null
+          ? `${n} ${n === 1 ? 'vuelve' : 'vuelven'} a seguir su categoría`
+          : `${n} ${n === 1 ? 'marcada' : 'marcadas'} como ${
+              household ? 'hogar' : 'no hogar'
+            }`
+      toast.success(
+        skipped > 0
+          ? `${done}, ${skipped} ${
+              skipped === 1 ? 'no es gasto' : 'no son gastos'
+            }, sin cambios`
+          : done
+      )
+    } catch (error) {
+      reportError(error, 'No se pudo guardar el gasto del hogar')
     } finally {
       setIsBulkOperating(false)
     }
@@ -235,6 +294,7 @@ export function useBulkActions({
     handleAutoCategorizeSelected,
     handleBulkCategorizeSelected,
     handleBulkIgnore,
+    handleBulkHousehold,
     handleBulkDelete,
     openBulkEdit,
     closeBulkEdit,

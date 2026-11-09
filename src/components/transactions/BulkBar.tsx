@@ -1,5 +1,13 @@
 import { useRef, useState } from 'react'
-import { Loader2, Pencil, Slash, Sparkles, Tag, Trash2 } from 'lucide-react'
+import {
+  House,
+  Loader2,
+  Pencil,
+  Slash,
+  Sparkles,
+  Tag,
+  Trash2,
+} from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { resolveCategory } from '../../services/categories/category-registry'
 
@@ -10,6 +18,7 @@ export function BulkBar({
   onSelectAll,
   onClear,
   onCategorize,
+  onHousehold,
   onEdit,
   onAuto,
   onIgnore,
@@ -23,6 +32,8 @@ export function BulkBar({
   onSelectAll: () => void
   onClear: () => void
   onCategorize: (category: string) => void
+  // Absent when the view cannot save the household choice.
+  onHousehold?: (household: boolean | null) => void
   onEdit: () => void
   onAuto: () => void
   onIgnore: () => void
@@ -34,6 +45,10 @@ export function BulkBar({
   const [catOpen, setCatOpen] = useState(false)
   const catRef = useRef<HTMLDivElement>(null)
   useClickOutside(catRef, () => setCatOpen(false))
+  const [houseOpen, setHouseOpen] = useState(false)
+  const houseRef = useRef<HTMLDivElement>(null)
+  const houseTriggerRef = useRef<HTMLButtonElement>(null)
+  useClickOutside(houseRef, () => setHouseOpen(false))
 
   return (
     <div
@@ -110,6 +125,56 @@ export function BulkBar({
                   </button>
                 )
               })}
+            </div>
+          )}
+
+          {/* Gasto del hogar: a yes / no / back-to-category for the selection */}
+          {onHousehold && (
+            <div
+              ref={houseRef}
+              className="relative"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && houseOpen) {
+                  e.stopPropagation()
+                  setHouseOpen(false)
+                  houseTriggerRef.current?.focus()
+                }
+              }}
+            >
+              <button
+                ref={houseTriggerRef}
+                type="button"
+                aria-expanded={houseOpen}
+                onClick={() => setHouseOpen((o) => !o)}
+                disabled={isBusy}
+                className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
+              >
+                <House size={13} aria-hidden="true" />
+                Hogar
+              </button>
+              {houseOpen && (
+                <div className="absolute bottom-[calc(100%+10px)] left-0 z-[80] w-[200px] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[6px] shadow-[var(--shadow-lg)]">
+                  {(
+                    [
+                      ['Marcar como hogar', true],
+                      ['Marcar como no hogar', false],
+                      ['Según categoría', null],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        onHousehold(value)
+                        setHouseOpen(false)
+                      }}
+                      className="flex w-full cursor-pointer items-center rounded-[7px] border-none bg-transparent px-[9px] py-[7px] [font:inherit] text-[13px]! text-[var(--text)] hover:bg-[var(--muted)]"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

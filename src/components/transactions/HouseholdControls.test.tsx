@@ -1,8 +1,10 @@
 import { beforeEach, vi, describe, expect, it } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useStore } from 'zustand'
+import userEvent from '@testing-library/user-event'
 import { Toaster } from 'sonner'
 import { Transactions } from '../Transactions'
+import { PartialWriteError } from '../../utils/user-error'
 import type { Transaction } from '../../models'
 import {
   editTransaction,
@@ -285,5 +287,196 @@ describe('household choice in the edit dialog (#251)', () => {
     expect(repo.row('Devoto')?.displayDescription).toBe('Devoto Centro')
     expect(repo.row('Devoto')?.household ?? null).toBeNull()
     expect(logged).toHaveBeenCalled()
+  })
+})
+
+describe('bulk Hogar menu (#251)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  function select(...descriptions: string[]) {
+    for (const description of descriptions) {
+      fireEvent.click(
+        screen.getAllByRole('checkbox', {
+          name: `Seleccionar ${description}`,
+        })[0]
+      )
+    }
+  }
+  async function choose(option: string) {
+    fireEvent.click(screen.getByRole('button', { name: 'Hogar' }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: option }))
+    })
+  }
+
+  it('marks the selected expenses and says what it skipped', async () => {
+    seed([
+      tx('Cena', { category: 'restaurants' }),
+      tx('Taxi', { category: 'transport' }),
+      tx('Cine', { category: 'entertainment' }),
+      tx('Sueldo', { type: 'credit', category: 'income' }),
+    ])
+    select('Cena', 'Taxi', 'Cine', 'Sueldo')
+
+    await choose('Marcar como hogar')
+
+    for (const id of ['Cena', 'Taxi', 'Cine']) {
+      expect(repo.row(id)?.household).toBe(true)
+    }
+    expect(repo.row('Sueldo')?.household ?? null).toBeNull()
+    expect(
+      await screen.findByText(
+        '3 marcadas como hogar, 1 no es gasto, sin cambios'
+      )
+    ).toBeInTheDocument()
+    // The selection is cleared like after the other bulk actions.
+    expect(
+      screen.queryByRole('region', { name: 'Acciones de selección' })
+    ).toBeNull()
+  })
+
+  it('marks as not household', async () => {
+    seed([tx('Devoto'), tx('Luz', { category: 'utilities' })])
+    select('Devoto', 'Luz')
+
+    await choose('Marcar como no hogar')
+
+    expect(repo.row('Devoto')?.household).toBe(false)
+    expect(repo.row('Luz')?.household).toBe(false)
+    expect(
+      await screen.findByText('2 marcadas como no hogar')
+    ).toBeInTheDocument()
+  })
+
+  it('sends rows back to following their category', async () => {
+    seed([
+      tx('Cena', { category: 'restaurants', household: true }),
+      tx('Devoto', { household: false }),
+    ])
+    select('Cena', 'Devoto')
+
+    await choose('Según categoría')
+
+    expect(repo.row('Cena')?.household ?? null).toBeNull()
+    expect(repo.row('Devoto')?.household ?? null).toBeNull()
+    expect(
+      await screen.findByText('2 vuelven a seguir su categoría')
+    ).toBeInTheDocument()
+  })
+
+  it('counts rows already at the value as done, not skipped', async () => {
+    seed([
+      tx('Devoto', { household: true }),
+      tx('Luz', { category: 'utilities', household: true }),
+    ])
+    select('Devoto', 'Luz')
+
+    await choose('Marcar como hogar')
+
+    expect(await screen.findByText('2 marcadas como hogar')).toBeInTheDocument()
+  })
+
+  it('uses singular forms', async () => {
+    seed([
+      tx('Cena', { category: 'restaurants' }),
+      tx('Sueldo', { type: 'credit', category: 'income' }),
+    ])
+    select('Cena', 'Sueldo')
+
+    await choose('Según categoría')
+
+    expect(
+      await screen.findByText(
+        '1 vuelve a seguir su categoría, 1 no es gasto, sin cambios'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('has nothing to do when no selected row is an expense', async () => {
+    seed([tx('Sueldo', { type: 'credit', category: 'income' })])
+    select('Sueldo')
+
+    await choose('Marcar como hogar')
+
+    expect(
+      await screen.findByText(
+        'Ninguna de las seleccionadas es un gasto, sin cambios'
+      )
+    ).toBeInTheDocument()
+    expect(repo.requests.update).toBeUndefined()
+  })
+
+  it('reports a partial write and offers to retry the rest', async () => {
+    // Which rows fail is the mutation's business (its own suite); here the
+    // view must report it like the other bulk actions and keep the selection.
+    const retry = vi.fn().mockResolvedValue({ updated: 1 })
+    const rows = [
+      tx('Cena', { category: 'restaurants' }),
+      tx('Taxi', { category: 'transport' }),
+    ]
+    render(
+      <>
+        <Transactions
+          transactions={rows}
+          onSetHousehold={() =>
+            Promise.reject(
+              new PartialWriteError('Se actualizaron 1 de 2', 1, 2, retry)
+            )
+          }
+        />
+        <Toaster />
+      </>
+    )
+    select('Cena', 'Taxi')
+
+    await choose('Marcar como hogar')
+
+    expect(
+      await screen.findByText('Se actualizaron 1 de 2 — reintentar')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: 'Acciones de selección' })
+    ).toBeVisible()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+    })
+    expect(retry).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens and picks by keyboard', async () => {
+    const user = userEvent.setup()
+    seed([tx('Cena', { category: 'restaurants' })])
+    select('Cena')
+
+    screen.getByRole('button', { name: 'Hogar' }).focus()
+    await user.keyboard('{Enter}')
+    await user.tab()
+    expect(
+      screen.getByRole('button', { name: 'Marcar como hogar' })
+    ).toHaveFocus()
+    await user.keyboard('{Enter}')
+
+    expect(await screen.findByText('1 marcada como hogar')).toBeInTheDocument()
+    expect(repo.row('Cena')?.household).toBe(true)
+  })
+
+  it('closes on Escape and gives focus back to its button', async () => {
+    const user = userEvent.setup()
+    seed([tx('Cena', { category: 'restaurants' })])
+    select('Cena')
+    const trigger = screen.getByRole('button', { name: 'Hogar' })
+    await user.click(trigger)
+    expect(
+      screen.getByRole('button', { name: 'Marcar como no hogar' })
+    ).toBeVisible()
+
+    await user.keyboard('{Escape}')
+
+    expect(
+      screen.queryByRole('button', { name: 'Marcar como no hogar' })
+    ).toBeNull()
+    expect(trigger).toHaveFocus()
   })
 })
