@@ -68,12 +68,16 @@ export function Categories({
     color: DEFAULT_CATEGORY_COLOR,
     icon: '🏷️',
     isIgnored: false,
+    isHousehold: false,
   })
 
   const categoryDefinitions = getCategoryDefinitions()
   // Read on render: memoized on the category store, never cached in state.
   const categoryHousehold = currentCategoryHousehold()
   const isEditing = form.id.length > 0
+  // A new category can always have one; an edited one unless it is Sin
+  // categoría or Ingresos.
+  const canHaveHousehold = !isEditing || canHaveHouseholdDefault(form.id)
 
   function resetForm() {
     setForm({
@@ -82,6 +86,7 @@ export function Categories({
       color: DEFAULT_CATEGORY_COLOR,
       icon: '🏷️',
       isIgnored: false,
+      isHousehold: false,
     })
     setShowForm(false)
   }
@@ -93,6 +98,7 @@ export function Categories({
       color: DEFAULT_CATEGORY_COLOR,
       icon: '🏷️',
       isIgnored: false,
+      isHousehold: false,
     })
     setShowForm(true)
   }
@@ -106,6 +112,7 @@ export function Categories({
       color: cat.color,
       icon: cat.icon || '🏷️',
       isIgnored: cat.isIgnored ?? false,
+      isHousehold: isCategoryHousehold(cat.id, categoryHousehold),
     })
     setShowForm(true)
   }
@@ -116,6 +123,11 @@ export function Categories({
   async function handleSave() {
     if (!form.label.trim()) return
     const label = form.label.trim()
+    // undefined = leave the stored default alone (the form has no say).
+    const household =
+      isEditing && canHaveHousehold
+        ? categoryHouseholdChoice(form.id, form.isHousehold)
+        : undefined
     try {
       if (isEditing) {
         const cat = categoryDefinitions.find((c) => c.id === form.id)
@@ -128,6 +140,7 @@ export function Categories({
               color: form.color,
               icon: form.icon.trim() || '🏷️',
               isIgnored: form.isIgnored,
+              isHousehold: household,
             }
           )
         } else {
@@ -139,6 +152,7 @@ export function Categories({
               color: form.color,
               icon: form.icon.trim() || undefined,
               isIgnored: form.isIgnored,
+              isHousehold: household,
             }
           )
         }
@@ -149,6 +163,7 @@ export function Categories({
           color: form.color,
           icon: form.icon.trim() || '🏷️',
           isIgnored: form.isIgnored,
+          isHousehold: form.isHousehold ? true : undefined,
         })
         toast.success(`Categoría "${label}" creada`)
       }
@@ -264,6 +279,7 @@ export function Categories({
           form={form}
           setForm={setForm}
           isEditing={isEditing}
+          canHaveHousehold={canHaveHousehold}
           onCancel={resetForm}
           onSave={() => void handleSave()}
         />

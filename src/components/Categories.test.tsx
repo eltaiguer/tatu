@@ -14,6 +14,7 @@ import {
   addCustomCategory,
   listCustomCategories,
   replaceCustomCategories,
+  setCategoryHouseholdWithSync,
 } from '../services/categories/category-store'
 import {
   addCustomPattern,
@@ -161,7 +162,9 @@ describe('Categories', () => {
         name: 'Editar categoría Transferencias externas',
       })
     )
-    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /Ignorar en totales/ })
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 
     expect(await screen.findByText(/US\$ 9,00 · 1 gasto/)).toBeInTheDocument()
@@ -465,6 +468,137 @@ describe('Categories', () => {
     expect(
       within(group).getByRole('radio', { name: 'Pasadas y futuras' })
     ).toBeChecked()
+  })
+
+  describe('household checkbox in the category form (#251)', () => {
+    const tile = (label: string) =>
+      screen.getByRole('button', { name: `Gasto del hogar: ${label}` })
+    const box = () => screen.getByRole('checkbox', { name: /Gasto del hogar/ })
+    const edit = (label: string) =>
+      fireEvent.click(
+        screen.getByRole('button', { name: `Editar categoría ${label}` })
+      )
+    const save = () =>
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    const formClosed = () =>
+      waitFor(() =>
+        expect(
+          screen.queryByLabelText('Nombre de categoría')
+        ).not.toBeInTheDocument()
+      )
+
+    it('creates a household category from the form', async () => {
+      render(<Categories repository={repo} transactions={[]} />)
+      fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
+      expect(box()).not.toBeChecked()
+      fireEvent.change(screen.getByLabelText('Nombre de categoría'), {
+        target: { value: 'Mascotas' },
+      })
+
+      fireEvent.click(box())
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar categoría' }))
+
+      await formClosed()
+      expect(tile('Mascotas')).toHaveAttribute('aria-pressed', 'true')
+      expect(repo.customCategories.get('mascotas')?.isHousehold).toBe(true)
+    })
+
+    it('prefills the box from the effective default', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+
+      edit('Alimentación')
+      expect(box()).toBeChecked()
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+      edit('Restaurantes')
+      expect(box()).not.toBeChecked()
+    })
+
+    it('unchecks a seeded household category (false), and checking it again goes back to the app default (null)', async () => {
+      render(<Categories repository={repo} transactions={[]} />)
+
+      edit('Alimentación')
+      fireEvent.click(box())
+      save()
+      await formClosed()
+      expect(tile('Alimentación')).toHaveAttribute('aria-pressed', 'false')
+      expect(repo.customCategories.get('groceries')?.isHousehold).toBe(false)
+
+      edit('Alimentación')
+      expect(box()).not.toBeChecked()
+      fireEvent.click(box())
+      save()
+      await formClosed()
+      expect(tile('Alimentación')).toHaveAttribute('aria-pressed', 'true')
+      expect(
+        repo.customCategories.get('groceries')?.isHousehold
+      ).toBeUndefined()
+    })
+
+    it('has no household box for Sin categoría or Ingresos', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+
+      for (const label of ['Sin categoría', 'Ingresos']) {
+        edit(label)
+        expect(
+          screen.getByRole('checkbox', { name: /Ignorar en totales/ })
+        ).toBeInTheDocument()
+        expect(
+          screen.queryByRole('checkbox', { name: /Gasto del hogar/ })
+        ).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+      }
+    })
+
+    it('leaves the stored default as it was when the box is not touched', async () => {
+      await setCategoryHouseholdWithSync(repo, 'groceries', false)
+      await setCategoryHouseholdWithSync(repo, 'restaurants', true)
+      render(<Categories repository={repo} transactions={[]} />)
+
+      edit('Alimentación')
+      save()
+      await formClosed()
+      edit('Restaurantes')
+      save()
+      await formClosed()
+
+      expect(repo.customCategories.get('groceries')?.isHousehold).toBe(false)
+      expect(repo.customCategories.get('restaurants')?.isHousehold).toBe(true)
+    })
+
+    it('leaves a custom category’s default alone when only its name changes', async () => {
+      const custom = addCustomCategory({
+        label: 'Mascotas',
+        color: '#112233',
+        isHousehold: true,
+      })
+      await setCategoryHouseholdWithSync(repo, custom.id, true)
+      render(<Categories repository={repo} transactions={[]} />)
+
+      edit('Mascotas')
+      expect(box()).toBeChecked()
+      fireEvent.change(screen.getByLabelText('Nombre de categoría'), {
+        target: { value: 'Perro' },
+      })
+      save()
+
+      await formClosed()
+      expect(tile('Perro')).toHaveAttribute('aria-pressed', 'true')
+      expect(repo.customCategories.get(custom.id)?.isHousehold).toBe(true)
+    })
+
+    it('clears a custom category’s default when unchecked', async () => {
+      const custom = addCustomCategory({ label: 'Mascotas', color: '#112233' })
+      await setCategoryHouseholdWithSync(repo, custom.id, true)
+      render(<Categories repository={repo} transactions={[]} />)
+
+      edit('Mascotas')
+      fireEvent.click(box())
+      save()
+
+      await formClosed()
+      expect(tile('Mascotas')).toHaveAttribute('aria-pressed', 'false')
+      expect(repo.customCategories.get(custom.id)?.isHousehold).toBeUndefined()
+    })
   })
 
   describe('household toggle on each tile (#251)', () => {

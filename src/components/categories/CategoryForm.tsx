@@ -10,12 +10,16 @@ export interface CategoryFormState {
   color: string
   icon: string
   isIgnored: boolean
+  // The household default (ADR-0005); the box is hidden when the category
+  // cannot have one (Sin categoría, Ingresos).
+  isHousehold: boolean
 }
 
 interface CategoryFormProps {
   form: CategoryFormState
   setForm: Dispatch<SetStateAction<CategoryFormState>>
   isEditing: boolean
+  canHaveHousehold: boolean
   onCancel: () => void
   onSave: () => void
 }
@@ -26,6 +30,7 @@ export function CategoryForm({
   form,
   setForm,
   isEditing,
+  canHaveHousehold,
   onCancel,
   onSave,
 }: CategoryFormProps) {
@@ -95,25 +100,51 @@ export function CategoryForm({
         </div>
       </div>
 
-      <div className="mt-[4px] flex items-center justify-between">
-        <label
-          htmlFor="cat-ignored"
-          className="flex cursor-pointer items-center gap-[8px] select-none"
-        >
-          <Checkbox
-            id="cat-ignored"
-            checked={form.isIgnored}
-            onCheckedChange={(checked) =>
-              setForm((f) => ({ ...f, isIgnored: checked === true }))
-            }
-          />
-          <div>
-            <span className="text-[13px] font-medium">Ignorar en totales</span>
-            <span className="ml-[6px] text-[12px] text-[var(--text-faint)]">
-              Las transacciones de esta categoría no suman en gastos ni ingresos
-            </span>
-          </div>
-        </label>
+      <div className="mt-[4px] flex items-end justify-between gap-3">
+        <div className="space-y-[10px]">
+          <label
+            htmlFor="cat-ignored"
+            className="flex cursor-pointer items-center gap-[8px] select-none"
+          >
+            <Checkbox
+              id="cat-ignored"
+              checked={form.isIgnored}
+              onCheckedChange={(checked) =>
+                setForm((f) => ({ ...f, isIgnored: checked === true }))
+              }
+            />
+            <div>
+              <span className="text-[13px] font-medium">
+                Ignorar en totales
+              </span>
+              <span className="ml-[6px] text-[12px] text-[var(--text-faint)]">
+                Las transacciones de esta categoría no suman en gastos ni
+                ingresos
+              </span>
+            </div>
+          </label>
+          {canHaveHousehold && (
+            <label
+              htmlFor="cat-household"
+              className="flex cursor-pointer items-center gap-[8px] select-none"
+            >
+              <Checkbox
+                id="cat-household"
+                checked={form.isHousehold}
+                onCheckedChange={(checked) =>
+                  setForm((f) => ({ ...f, isHousehold: checked === true }))
+                }
+              />
+              <div>
+                <span className="text-[13px] font-medium">Gasto del hogar</span>
+                <span className="ml-[6px] text-[12px] text-[var(--text-faint)]">
+                  Sus transacciones cuentan como gastos del hogar, salvo las que
+                  cambies a mano.
+                </span>
+              </div>
+            </label>
+          )}
+        </div>
         <Button
           onClick={onSave}
           disabled={!form.label.trim()}
