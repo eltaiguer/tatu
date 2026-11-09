@@ -1,5 +1,12 @@
 import { beforeEach, vi, describe, expect, it } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { useStore } from 'zustand'
 import userEvent from '@testing-library/user-event'
 import { Toaster } from 'sonner'
@@ -14,6 +21,7 @@ import {
   createInMemoryRepository,
   type InMemoryRepository,
 } from '../../services/repository/in-memory-repository'
+import { DEFAULT_URL_FILTERS } from '../../services/filters/url-filters'
 import { transactionStore } from '../../stores/transaction-store'
 import { workspaceStore } from '../../stores/workspace-state'
 import { replaceCustomCategories } from '../../services/categories/category-store'
@@ -36,12 +44,18 @@ function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
 let repo: InMemoryRepository
 
 // The view reads the store like App does, so a write shows once it is saved.
-function Harness() {
+function Harness({
+  onFiltersChange,
+}: {
+  onFiltersChange?: (search: string) => void
+}) {
   const transactions = useStore(transactionStore, (s) => s.transactions)
   return (
     <>
       <Transactions
         transactions={transactions}
+        onFiltersChange={onFiltersChange}
+        initialFilters={{ ...DEFAULT_URL_FILTERS, period: { mode: 'all' } }}
         onUpdateTransaction={(id, edit) => editTransaction(repo, id, edit)}
         onSetHousehold={(ids, household) => setHousehold(repo, ids, household)}
       />
@@ -50,11 +64,11 @@ function Harness() {
   )
 }
 
-function seed(rows: Transaction[]) {
+function seed(rows: Transaction[], onFiltersChange?: (s: string) => void) {
   repo = createInMemoryRepository({ transactions: rows })
   transactionStore.getState().setTransactions(rows)
   workspaceStore.setState({ userId: repo.userId, status: 'ready' })
-  render(<Harness />)
+  render(<Harness onFiltersChange={onFiltersChange} />)
 }
 
 // Both the desktop row and the mobile card render; [0] is the row.
@@ -745,5 +759,92 @@ describe('review round 1 of step 4 (#251)', () => {
     // The cue is a mark in the button itself, not just a colour.
     expect(house('Luz').querySelector('[data-hand-mark]')).not.toBeNull()
     expect(house('Devoto').querySelector('[data-hand-mark]')).toBeNull()
+  })
+})
+
+describe('Hogar filter in Transacciones (#251)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  const rows = () => [
+    tx('Devoto'),
+    tx('Cena', { category: 'restaurants' }),
+    tx('Sueldo', { type: 'credit', category: 'income' }),
+    tx('Misterio', { category: 'uncategorized' }),
+  ]
+  const pick = (option: string) =>
+    fireEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
+        'radio',
+        { name: option }
+      )
+    )
+  const listed = (description: string) =>
+    screen.queryAllByText(description, { selector: 'td *, td' }).length > 0
+
+  it('Hogar shows only household expenses and writes ?hogar=si', () => {
+    const urls: string[] = []
+    seed(rows(), (search) => urls.push(search))
+    pick('Hogar')
+
+    expect(listed('Devoto')).toBe(true)
+    expect(listed('Cena')).toBe(false)
+    expect(listed('Sueldo')).toBe(false)
+    expect(listed('Misterio')).toBe(false)
+    expect(urls[urls.length - 1]).toBe('hogar=si&periodo=todo')
+  })
+
+  it('Sin definir shows only the uncategorized expenses', () => {
+    const urls: string[] = []
+    seed(rows(), (search) => urls.push(search))
+    pick('Sin definir')
+
+    expect(listed('Misterio')).toBe(true)
+    expect(listed('Devoto')).toBe(false)
+    expect(urls[urls.length - 1]).toBe('hogar=sin-definir&periodo=todo')
+  })
+
+  it('picking Hogar while Ingresos is chosen goes back to Todos', () => {
+    seed(rows())
+    fireEvent.click(
+      within(
+        screen.getByRole('radiogroup', { name: 'Tipo de transacción' })
+      ).getByRole('radio', { name: 'Ingresos' })
+    )
+    expect(listed('Sueldo')).toBe(true)
+    pick('Hogar')
+
+    expect(
+      within(
+        screen.getByRole('radiogroup', { name: 'Tipo de transacción' })
+      ).getByRole('radio', { name: 'Todos' })
+    ).toBeChecked()
+    expect(listed('Devoto')).toBe(true)
+  })
+
+  it('Limpiar todo brings Hogar back to Todos', () => {
+    seed(rows())
+    pick('Hogar')
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar todo' }))
+
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
+        'radio',
+        { name: 'Todos' }
+      )
+    ).toBeChecked()
+    expect(listed('Cena')).toBe(true)
+  })
+
+  it("flipping a row's house off removes it from the list", async () => {
+    seed(rows())
+    pick('Hogar')
+    expect(listed('Devoto')).toBe(true)
+
+    await act(async () => {
+      fireEvent.click(house('Devoto'))
+    })
+    await waitFor(() => expect(listed('Devoto')).toBe(false))
   })
 })

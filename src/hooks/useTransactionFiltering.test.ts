@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { Transaction } from '../models'
 import { DEFAULT_URL_FILTERS } from '../services/filters/url-filters'
 import { hasActiveFilters } from '../services/filters/url-filters'
+import { replaceCustomCategories } from '../services/categories/category-store'
 import {
   ITEMS_PER_PAGE,
   useTransactionFiltering,
@@ -837,5 +838,47 @@ describe('useTransactionFiltering — every edit sticks', () => {
     expect(result.current.filters.accounts).not.toBe(
       DEFAULT_URL_FILTERS.accounts
     )
+  })
+})
+
+describe('useTransactionFiltering — Hogar', () => {
+  const transactions = [
+    makeTransaction('super', { category: 'groceries' }),
+    makeTransaction('cena', { category: 'restaurants' }),
+    makeTransaction('misterio', { category: 'uncategorized' }),
+  ]
+  const idsOf = (rows: Transaction[]) => rows.map((tx) => tx.id)
+
+  afterEach(() => replaceCustomCategories([]))
+
+  it('filters by the household flag and clears with the rest', () => {
+    const { result } = setup(transactions)
+    act(() => result.current.update({ household: 'household' }))
+    expect(idsOf(result.current.filteredTransactions)).toEqual(['super'])
+    act(() => result.current.update({ household: 'unassigned' }))
+    expect(idsOf(result.current.filteredTransactions)).toEqual(['misterio'])
+    act(() => result.current.clear())
+    expect(result.current.filters.household).toBe('all')
+    expect(result.current.filteredTransactions).toHaveLength(3)
+  })
+
+  it('re-filters when a category default changes, rows unchanged', () => {
+    const { result, rerender } = setup(transactions)
+    act(() => result.current.update({ household: 'household' }))
+    expect(idsOf(result.current.filteredTransactions)).toEqual(['super'])
+
+    replaceCustomCategories([
+      {
+        id: 'restaurants',
+        label: 'Restaurantes',
+        color: '#c0392b',
+        isHousehold: true,
+      },
+    ])
+    rerender()
+    expect(idsOf(result.current.filteredTransactions)).toEqual([
+      'super',
+      'cena',
+    ])
   })
 })

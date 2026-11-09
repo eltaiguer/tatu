@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from 'react'
-import { Filter, Search, X } from 'lucide-react'
+import { Filter, House, Search, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from './ui/utils'
 import { Input } from './ui/input'
@@ -173,6 +173,7 @@ export function TransactionFilters({
     accounts,
     currency,
     type,
+    household,
     min: minAmount,
     max: maxAmount,
   } = filters
@@ -204,6 +205,12 @@ export function TransactionFilters({
     chips.push({
       label: type === 'credit' ? 'Ingresos' : 'Gastos',
       onClear: () => onChange({ type: 'all' }),
+    })
+  }
+  if (household !== 'all') {
+    chips.push({
+      label: household === 'household' ? 'Hogar' : 'Sin definir',
+      onClear: () => onChange({ household: 'all' }),
     })
   }
   if (minAmount || maxAmount) {
@@ -259,6 +266,33 @@ export function TransactionFilters({
           size="sm"
           aria-label="Tipo de transacción"
         />
+
+        {/* Household filter. Income has no household answer, so picking
+            one while "Ingresos" is on would list nothing: back to Todos. */}
+        <div className="inline-flex items-center gap-[6px]">
+          <House
+            size={14}
+            aria-hidden="true"
+            className="shrink-0 text-[var(--text-muted)]"
+          />
+          <SegmentedToggle
+            options={[
+              { value: 'all' as const, label: 'Todos' },
+              { value: 'household' as const, label: 'Hogar' },
+              { value: 'unassigned' as const, label: 'Sin definir' },
+            ]}
+            value={household}
+            onChange={(next) =>
+              onChange(
+                next !== 'all' && type === 'credit'
+                  ? { household: next, type: 'all' }
+                  : { household: next }
+              )
+            }
+            size="sm"
+            aria-label="Hogar"
+          />
+        </div>
 
         {/* Currency filter */}
         <SegmentedToggle

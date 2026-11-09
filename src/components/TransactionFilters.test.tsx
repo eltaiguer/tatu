@@ -255,4 +255,44 @@ describe('TransactionFilters', () => {
       expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
     })
   })
+
+  describe('Hogar', () => {
+    it('is a group of Todos / Hogar / Sin definir that sets the filter', () => {
+      const props = renderFilters()
+      const group = screen.getByRole('radiogroup', { name: 'Hogar' })
+      expect(
+        within(group)
+          .getAllByRole('radio')
+          .map((r) => r.getAttribute('aria-label') ?? r.textContent)
+      ).toEqual(['Todos', 'Hogar', 'Sin definir'])
+
+      fireEvent.click(segment('Hogar', 'Hogar'))
+      expect(props.onChange).toHaveBeenCalledWith({ household: 'household' })
+      fireEvent.click(segment('Hogar', 'Sin definir'))
+      expect(props.onChange).toHaveBeenCalledWith({ household: 'unassigned' })
+    })
+
+    it('puts the type back to Todos when income would leave nothing', () => {
+      const props = renderFilters({ type: 'credit' })
+      fireEvent.click(segment('Hogar', 'Hogar'))
+      expect(props.onChange).toHaveBeenCalledWith({
+        household: 'household',
+        type: 'all',
+      })
+    })
+
+    it('keeps the type when going back to Todos', () => {
+      const props = renderFilters({ type: 'credit', household: 'household' })
+      fireEvent.click(segment('Hogar', 'Todos'))
+      expect(props.onChange).toHaveBeenCalledWith({ household: 'all' })
+    })
+
+    it('shows a chip that clears it', () => {
+      const props = renderFilters({ household: 'unassigned' })
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Quitar filtro Sin definir' })
+      )
+      expect(props.onChange).toHaveBeenCalledWith({ household: 'all' })
+    })
+  })
 })
