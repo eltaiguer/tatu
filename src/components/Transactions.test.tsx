@@ -1432,6 +1432,34 @@ describe('Transactions', () => {
     })
   })
 
+  it('exports only the household rows, marked si, under the Hogar filter', async () => {
+    const csv = captureCsvDownload()
+    try {
+      render(
+        <Transactions
+          transactions={[
+            { ...makeTransaction(0, 'devoto'), category: 'groceries' },
+            { ...makeTransaction(1, 'cena'), category: 'restaurants' },
+            { ...makeTransaction(2, 'misterio'), category: 'uncategorized' },
+          ]}
+          initialFilters={{
+            ...DEFAULT_URL_FILTERS,
+            period: { mode: 'all' },
+            household: 'household',
+          }}
+        />
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Exportar' }))
+      const [header, ...data] = await csv.rows()
+      expect(data.map((row) => row[header.indexOf('Description')])).toEqual([
+        'devoto',
+      ])
+      expect(data.map((row) => row[header.indexOf('hogar')])).toEqual(['si'])
+    } finally {
+      csv.restore()
+    }
+  })
+
   // #194: the floating selection bar was a single 864px row centred on the
   // screen, so on a 390px phone Ignorar/Eliminar/× sat off-screen, and its
   // z-[70] put it above the dialog overlay (z-50). jsdom has no layout, so

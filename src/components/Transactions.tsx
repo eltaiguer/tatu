@@ -447,7 +447,10 @@ export function Transactions({
               variant="outline"
               size="sm"
               onClick={() =>
-                exportTransactions(filteredTransactions, { format: 'csv' })
+                exportTransactions(filteredTransactions, {
+                  format: 'csv',
+                  categoryHousehold: currentCategoryHousehold(),
+                })
               }
               className="gap-[6px]"
             >

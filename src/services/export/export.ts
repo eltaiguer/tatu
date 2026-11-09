@@ -1,4 +1,5 @@
-import type { Transaction } from '../../models'
+import type { CategoryHousehold, Transaction } from '../../models'
+import { rowHouseholdView } from '../household/household'
 import { resolveCategory } from '../categories/category-registry'
 import { countsTowardTotals } from '../spending/spending-rules'
 import { UserFacingError } from '../../utils/user-error'
@@ -8,9 +9,13 @@ export type ExportFormat = 'csv' | 'pdf'
 export interface ExportOptions {
   format: ExportFormat
   fileName?: string
+  // The user's category defaults (currentCategoryHousehold()), for the
+  // hogar column.
+  categoryHousehold: CategoryHousehold
 }
 
 export interface PdfReportOptions {
+  categoryHousehold: CategoryHousehold
   title?: string
   generatedAt?: Date
 }
@@ -29,6 +34,25 @@ function countsLabel(tx: Transaction): string {
   return countsTowardTotals(tx) ? '1' : '0'
 }
 
+// Whether the expense was for the household: si / no / sin_definir, empty
+// for rows that are not counted expenses (income, ignored, split parents),
+// so filtering the column on "si" gives the Hogar total.
+export const HOUSEHOLD_HEADER = 'hogar'
+
+const HOUSEHOLD_LABELS = {
+  household: 'si',
+  not_household: 'no',
+  unassigned: 'sin_definir',
+} as const
+
+function householdLabel(
+  tx: Transaction,
+  categoryHousehold: CategoryHousehold
+): string {
+  const view = rowHouseholdView(tx, categoryHousehold)
+  return view ? HOUSEHOLD_LABELS[view.status] : ''
+}
+
 // Every string interpolated into the PDF report goes through this:
 // descriptions and custom category names are user data and print as text.
 function escapeHtml(value: string): string {
@@ -44,7 +68,10 @@ function csvEscape(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
-export function buildCsv(transactions: Transaction[]): string {
+export function buildCsv(
+  transactions: Transaction[],
+  categoryHousehold: CategoryHousehold
+): string {
   const header = [
     'Date',
     'Description',
@@ -53,6 +80,7 @@ export function buildCsv(transactions: Transaction[]): string {
     'Type',
     'Category',
     COUNTS_TOWARD_TOTALS_HEADER,
+    HOUSEHOLD_HEADER,
   ]
   const rows = transactions.map((tx) => [
     tx.date.toISOString().slice(0, 10),
@@ -62,6 +90,7 @@ export function buildCsv(transactions: Transaction[]): string {
     tx.type,
     getExportCategoryLabel(tx.category),
     countsLabel(tx),
+    householdLabel(tx, categoryHousehold),
   ])
 
   return [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n')
@@ -69,7 +98,7 @@ export function buildCsv(transactions: Transaction[]): string {
 
 export function buildPdfReportHtml(
   transactions: Transaction[],
-  options: PdfReportOptions = {}
+  options: PdfReportOptions
 ): string {
   const title = escapeHtml(options.title ?? 'Tatu Export Report')
   const generatedAt = escapeHtml(
@@ -87,6 +116,7 @@ export function buildPdfReportHtml(
           <td>${escapeHtml(tx.type)}</td>
           <td>${escapeHtml(getExportCategoryLabel(tx.category))}</td>
           <td>${escapeHtml(countsLabel(tx))}</td>
+          <td>${escapeHtml(householdLabel(tx, options.categoryHousehold))}</td>
         </tr>
       `
     )
@@ -120,6 +150,7 @@ export function buildPdfReportHtml(
               <th>Type</th>
               <th>Category</th>
               <th>${COUNTS_TOWARD_TOTALS_HEADER}</th>
+              <th>${HOUSEHOLD_HEADER}</th>
             </tr>
           </thead>
           <tbody>
@@ -197,9 +228,14 @@ export function exportTransactions(
   const fileName = options.fileName ?? 'tatu-export'
 
   if (options.format === 'csv') {
-    downloadCsv(buildCsv(transactions), fileName)
+    downloadCsv(buildCsv(transactions, options.categoryHousehold), fileName)
   } else {
-    printReport(buildPdfReportHtml(transactions, { title: fileName }))
+    printReport(
+      buildPdfReportHtml(transactions, {
+        title: fileName,
+        categoryHousehold: options.categoryHousehold,
+      })
+    )
   }
   return transactions.length
 }

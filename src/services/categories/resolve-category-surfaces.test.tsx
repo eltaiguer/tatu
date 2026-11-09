@@ -4,6 +4,7 @@ import type { Transaction } from '../../models'
 import { removeCustomCategory, replaceCustomCategories } from './category-store'
 import { CategoryBadge } from '../../components/CategoryBadge'
 import { buildCsv } from '../export/export'
+import { buildCategoryHousehold } from '../household/household'
 import { toCategorySpendRows } from '../charts/dashboard-rows'
 import { buildCategorySpendingConverted } from '../charts/chart-data'
 import { filterTransactions } from '../filters/transaction-filter'
@@ -60,7 +61,7 @@ describe('a row in an archived custom category, on every surface', () => {
       value: 120,
     })
 
-    const csv = buildCsv([row]).split('\n')[1]
+    const csv = buildCsv([row], buildCategoryHousehold([])).split('\n')[1]
     expect(csv).toContain('"Viajes familia"')
   })
 
@@ -92,7 +93,9 @@ describe("a row marked with Ignorar ('ignored')", () => {
     render(<CategoryBadge categoryId={row.category} />)
 
     expect(screen.getByText('Ignorada')).toBeInTheDocument()
-    expect(buildCsv([row]).split('\n')[1]).toContain('"Ignorada"')
+    expect(
+      buildCsv([row], buildCategoryHousehold([])).split('\n')[1]
+    ).toContain('"Ignorada"')
     expect(countsTowardTotals(row)).toBe(false)
   })
 })

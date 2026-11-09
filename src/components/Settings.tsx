@@ -18,6 +18,7 @@ import { IconTile } from './ui/icon-tile'
 import { SegmentedToggle } from './ui/segmented-toggle'
 import { useConfirm } from './ConfirmDialog'
 import { CATEGORIZATION_MODELS } from '../services/ai/models'
+import { currentCategoryHousehold } from '../services/household/household'
 import { DuplicatesReview } from './settings/DuplicatesReview'
 import type { DeleteResult } from '../services/mutations/transaction-mutations'
 
@@ -135,7 +136,10 @@ export function Settings({
   function handleExport(format: 'csv' | 'pdf') {
     let written: number
     try {
-      written = exportTransactions(transactions, { format })
+      written = exportTransactions(transactions, {
+        format,
+        categoryHousehold: currentCategoryHousehold(),
+      })
     } catch (error) {
       toast.error(userErrorMessage(error, 'No se pudo exportar'))
       return
