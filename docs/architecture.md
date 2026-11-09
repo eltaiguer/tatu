@@ -727,10 +727,12 @@ and skip their rollback after a switch.
   Ingresos are refused, `canHaveHouseholdDefault`). The category form saves
   through `updateCustomCategoryWithSync` / `upsertBuiltinOverrideWithSync`,
   whose `CategoryUpdate.isHousehold` is a value, null (clear) or absent
-  (unchanged); the form sends it only when its box was changed. Imports and
-  plain edits of a single-row category write neither column, so they keep
-  working on a database that has not got them yet; creating a category writes
-  `is_household`, and setting a household choice writes either, so apply
+  (unchanged); the form sends it only when its box was changed. Imports write
+  neither column. A plain edit of a single-row category re-sends `is_household`
+  only when the store already holds a value (rows that name one category
+  always send it, so they converge), so edits keep working on a database that
+  has not got the column yet while no default was ever set; creating a category
+  writes `is_household`, and setting a household choice writes either, so apply
   `schema.sql` before the next deploy.
 - **Derived state is not persisted:** inferred transfer categories, converted
   amounts, learned patterns and temporal patterns are recomputed from the
