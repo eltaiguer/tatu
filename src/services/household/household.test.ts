@@ -125,6 +125,15 @@ describe('resolveHousehold', () => {
     }
   })
 
+  it('cannot give Ingresos a household default, under any alias', () => {
+    const mapping = buildCategoryHousehold([[Category.Income, true]])
+    for (const category of [Category.Income, 'salary']) {
+      expect(resolveHousehold({ category }, mapping).status).toBe(
+        'not_household'
+      )
+    }
+  })
+
   it('cannot give Sin categoría a household default', () => {
     expect(
       resolveHousehold(

@@ -1,6 +1,9 @@
 import { Category } from '../../models'
 import type { CategoryHousehold, HouseholdResolution } from '../../models'
-import { normalizeCategoryId } from '../categories/category-aliases'
+import {
+  canHaveHouseholdDefault,
+  normalizeCategoryId,
+} from '../categories/category-aliases'
 import {
   listCustomCategories,
   type CustomCategory,
@@ -64,10 +67,12 @@ export function resolveHousehold(
   if (id === Category.Uncategorized) {
     return { status: 'unassigned', isOverride: false }
   }
+  // Ingresos cannot have a default: a stray stored one is ignored.
+  const stored = canHaveHouseholdDefault(id)
+    ? categoryHousehold.get(id)
+    : undefined
   return {
-    status: statusOf(
-      categoryHousehold.get(id) ?? SEEDED_HOUSEHOLD_CATEGORIES.has(id)
-    ),
+    status: statusOf(stored ?? SEEDED_HOUSEHOLD_CATEGORIES.has(id)),
     isOverride: false,
   }
 }
