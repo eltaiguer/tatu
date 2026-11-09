@@ -42,6 +42,12 @@ interface BaseTransactionsProps {
     parts: Array<{ description: string; amount: number; category?: string }>
   ) => Promise<{ parts: number }>
   onUnsplitTransaction?: (transactionId: string) => Promise<void>
+  // The household choice of rows: true / false, or null to follow the
+  // category again (setHousehold). Resolves with how many rows changed.
+  onSetHousehold?: (
+    transactionIds: string[],
+    household: boolean | null
+  ) => Promise<{ updated: number }>
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void
   // The signed-in user's repository: a category created inline saves there.

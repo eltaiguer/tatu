@@ -3,6 +3,7 @@ import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
 import { IconTile } from '../ui/icon-tile'
 import { CategoryBadge } from '../CategoryBadge'
+import { HouseToggle } from './HouseToggle'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency, Transaction } from '../../models'
 import {
@@ -34,6 +35,7 @@ export interface TransactionRowProps {
   onDelete: (transaction: Transaction) => void
   onSplit?: (transaction: Transaction) => void
   onUnsplit?: (transaction: Transaction) => void
+  onToggleHousehold?: (transaction: Transaction) => void
 }
 
 // One transaction as a desktop table row.
@@ -49,6 +51,7 @@ export function TransactionRow({
   onDelete,
   onSplit,
   onUnsplit,
+  onToggleHousehold,
 }: TransactionRowProps) {
   const displayDescription = getDisplayDescription(transaction)
   const hasFriendlyOverride = displayDescription !== transaction.description
@@ -156,6 +159,14 @@ export function TransactionRow({
             size="sm"
           />
           {needsCategoryReview(transaction) && <ReviewMarker />}
+          {onToggleHousehold && (
+            <HouseToggle
+              transaction={transaction}
+              description={displayDescription}
+              disabled={pendingTransactionIds.has(transaction.id)}
+              onToggle={onToggleHousehold}
+            />
+          )}
         </div>
       </td>
       <td className="px-3.5 py-1.5">

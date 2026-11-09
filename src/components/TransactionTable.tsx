@@ -39,6 +39,7 @@ interface TransactionTableProps {
   onDelete: (transaction: Transaction) => void
   onSplit?: (transaction: Transaction) => void
   onUnsplit?: (transaction: Transaction) => void
+  onToggleHousehold?: (transaction: Transaction) => void
 }
 
 export function TransactionTable({
@@ -67,6 +68,7 @@ export function TransactionTable({
   onDelete,
   onSplit,
   onUnsplit,
+  onToggleHousehold,
 }: TransactionTableProps) {
   return (
     <Card
@@ -264,6 +266,7 @@ export function TransactionTable({
                   onDelete={onDelete}
                   onSplit={onSplit}
                   onUnsplit={onUnsplit}
+                  onToggleHousehold={onToggleHousehold}
                 />
               ))}
             </tbody>
@@ -321,6 +324,7 @@ export function TransactionTable({
               onDelete={onDelete}
               onSplit={onSplit}
               onUnsplit={onUnsplit}
+              onToggleHousehold={onToggleHousehold}
             />
           ))}
         </div>

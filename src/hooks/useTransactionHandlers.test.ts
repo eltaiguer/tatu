@@ -217,6 +217,7 @@ describe('useTransactionHandlers — the view error', () => {
       'handleBulkTagTransactions',
       { write: (h) => h.handleBulkTagTransactions(['a'], 'viaje') },
     ],
+    ['handleSetHousehold', { write: (h) => h.handleSetHousehold(['a'], true) }],
     [
       'handleAutoCategorizeTransactions',
       { write: (h) => h.handleAutoCategorizeTransactions(['a']) },

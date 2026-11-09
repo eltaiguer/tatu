@@ -41,6 +41,10 @@ import { TransactionsPagination } from './transactions/TransactionsPagination'
 import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
+import {
+  currentCategoryHousehold,
+  nextHouseholdChoice,
+} from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
 
 export function Transactions({
@@ -57,6 +61,7 @@ export function Transactions({
   onBulkTag,
   onSplitTransaction,
   onUnsplitTransaction,
+  onSetHousehold,
   onRestoreTransactions,
   onReload,
   repository,
@@ -319,6 +324,33 @@ export function Transactions({
     }
   }
 
+  // One click flips the row's house. Quiet on success: the house moves when
+  // the saved row comes back from the store.
+  function handleToggleHousehold(transaction: Transaction) {
+    void saveHousehold(
+      transaction.id,
+      nextHouseholdChoice(transaction, currentCategoryHousehold())
+    )
+  }
+
+  async function saveHousehold(id: string, household: boolean | null) {
+    if (!onSetHousehold) return
+    setPending(id, true)
+    try {
+      await onSetHousehold([id], household)
+    } catch (error) {
+      reportError(
+        error,
+        'No se pudo guardar el gasto del hogar',
+        '',
+        // Nothing saved: offer the same write again.
+        () => void saveHousehold(id, household)
+      )
+    } finally {
+      setPending(id, false)
+    }
+  }
+
   const periodLabelText = getPeriodLabel(period)
 
   return (
@@ -450,6 +482,7 @@ export function Transactions({
               }
             : undefined
         }
+        onToggleHousehold={onSetHousehold ? handleToggleHousehold : undefined}
       />
 
       <EditTransactionDialog
