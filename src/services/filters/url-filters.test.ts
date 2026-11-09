@@ -20,6 +20,7 @@ describe('url filters', () => {
       min: '100',
       max: '5000',
       showIgnored: true,
+      household: 'unassigned',
       period: { mode: 'month', y: 2026, m: 2 },
     }
 
@@ -95,6 +96,36 @@ function filters(overrides: Partial<UrlFilterState> = {}): UrlFilterState {
   return { ...DEFAULT_URL_FILTERS, ...overrides }
 }
 
+describe('url filters — Hogar', () => {
+  it('reads ?hogar=si and ?hogar=sin-definir, anything else is all', () => {
+    expect(parseFilterParams('hogar=si').household).toBe('household')
+    expect(parseFilterParams('hogar=sin-definir').household).toBe('unassigned')
+    expect(parseFilterParams('hogar=x').household).toBe('all')
+    expect(parseFilterParams('').household).toBe('all')
+  })
+
+  it('writes the values back and leaves the default out', () => {
+    expect(
+      serializeFilterParams({ ...DEFAULT_URL_FILTERS, household: 'household' })
+    ).toBe('hogar=si')
+    expect(
+      serializeFilterParams({ ...DEFAULT_URL_FILTERS, household: 'unassigned' })
+    ).toBe('hogar=sin-definir')
+    expect(
+      serializeFilterParams({ ...DEFAULT_URL_FILTERS, household: 'all' })
+    ).toBe('')
+  })
+
+  it('builds a deep link that filters all time', () => {
+    expect(filterToSearch({ household: 'household' })).toBe(
+      'hogar=si&periodo=todo'
+    )
+    expect(filterToSearch({ household: 'unassigned' })).toBe(
+      'hogar=sin-definir&periodo=todo'
+    )
+  })
+})
+
 describe('hasActiveFilters', () => {
   it('is false for the defaults', () => {
     expect(hasActiveFilters(filters())).toBe(false)
@@ -109,6 +140,8 @@ describe('hasActiveFilters', () => {
     ['a type', { type: 'debit' }],
     ['a minimum amount', { min: '10' }],
     ['a maximum amount', { max: '10' }],
+    ['the household filter', { household: 'household' }],
+    ['the unassigned household filter', { household: 'unassigned' }],
   ])('is true with %s', (_, overrides) => {
     expect(hasActiveFilters(filters(overrides))).toBe(true)
   })

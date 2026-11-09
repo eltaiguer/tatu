@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Transaction } from '../../models'
 import { DEFAULT_URL_FILTERS, type UrlFilterState } from './url-filters'
+import { buildCategoryHousehold } from '../household/household'
 import {
   filterTransactions,
   groupSplitRows,
@@ -525,5 +526,75 @@ describe('groupSplitRows', () => {
       'part-2',
       'other',
     ])
+  })
+})
+
+describe('filterTransactions — Hogar', () => {
+  const none = buildCategoryHousehold([])
+  const hogar = (
+    rows: Transaction[],
+    household: UrlFilterState['household'],
+    extra: Partial<UrlFilterState> = {},
+    categoryHousehold = none
+  ) =>
+    ids(
+      filterTransactions(rows, filters({ household, ...extra }), {
+        categoryHousehold,
+      })
+    )
+
+  const rows = [
+    tx('groceries', { category: 'groceries' }),
+    tx('restaurants', { category: 'restaurants' }),
+    tx('restaurants-yes', { category: 'restaurants', household: true }),
+    tx('groceries-no', { category: 'groceries', household: false }),
+    tx('income', { category: 'income', type: 'credit' }),
+    tx('transfer', { category: 'transfer' }),
+    tx('uncategorized', { category: 'uncategorized' }),
+    tx('uncategorized-yes', { category: 'uncategorized', household: true }),
+  ]
+
+  it('Solo hogar keeps the counted expenses that resolve to household', () => {
+    expect(hogar(rows, 'household')).toEqual([
+      'groceries',
+      'restaurants-yes',
+      'uncategorized-yes',
+    ])
+  })
+
+  it('Solo hogar drops an ignored transfer even when shown and mapped household', () => {
+    const map = buildCategoryHousehold([['transfer', true]])
+    expect(hogar(rows, 'household', { showIgnored: true }, map)).not.toContain(
+      'transfer'
+    )
+  })
+
+  it('Sin definir keeps only the uncategorized expense without a choice', () => {
+    expect(hogar(rows, 'unassigned')).toEqual(['uncategorized'])
+  })
+
+  it("follows the user's category default", () => {
+    const map = buildCategoryHousehold([['restaurants', true]])
+    expect(hogar(rows, 'household', {}, map)).toContain('restaurants')
+  })
+
+  it('all leaves every row alone', () => {
+    expect(hogar(rows, 'all')).toHaveLength(rows.length - 1)
+  })
+
+  it('shows only the matching parts of a split, like the category filter', () => {
+    const parent = tx('parent', { isSplitParent: true })
+    const split = [
+      parent,
+      tx('p1', { splitParentId: 'parent', category: 'groceries' }),
+      tx('p2', { splitParentId: 'parent', category: 'restaurants' }),
+    ]
+    const matched = filterTransactions(
+      split,
+      filters({ household: 'household' }),
+      { categoryHousehold: none }
+    )
+    expect(ids(matched)).toEqual(['p1'])
+    expect(ids(groupSplitRows(matched, split))).toEqual(['parent', 'p1'])
   })
 })

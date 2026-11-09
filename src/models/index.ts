@@ -41,6 +41,7 @@ export interface TransactionsFilter {
   accountType?: 'all' | 'credit_card' | 'bank_account'
   currency?: 'all' | 'USD' | 'UYU'
   type?: 'credit' | 'debit'
+  household?: 'household' | 'unassigned'
   period?: UrlPeriod
 }
 export type { CustomCategoryRecord } from './custom-category'
