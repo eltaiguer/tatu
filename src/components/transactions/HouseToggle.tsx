@@ -51,7 +51,11 @@ export function HouseToggle({
       className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--brand-text)] disabled:opacity-50 ${
         view.isOverride
           ? 'text-[color:var(--brand-text)]'
-          : 'text-[color:var(--text-faint)]'
+          : household
+            ? // A filled house that follows its category is stronger than the
+              // faint outline, so the two read apart at 14px.
+              'text-[color:var(--text-muted)]'
+            : 'text-[color:var(--text-faint)]'
       }`}
     >
       <House
