@@ -1,5 +1,6 @@
 import { Category, CATEGORY_COLORS, DEFAULT_CATEGORY_COLOR } from '../../models'
 import {
+  canHaveHouseholdDefault,
   isBuiltinCategoryId,
   isIgnoredByDefault,
   isReservedCategoryId,
@@ -42,6 +43,21 @@ export type CategorySettings = Pick<
   CustomCategory,
   'label' | 'color' | 'icon' | 'isIgnored' | 'isHousehold'
 >
+
+/**
+ * What an edit can change. `isHousehold`: true / false saves the default,
+ * null clears it (back to the seeded default), absent leaves it alone.
+ */
+export type CategoryUpdate = Partial<Omit<CategorySettings, 'isHousehold'>> & {
+  isHousehold?: boolean | null
+}
+
+// The local patch of an update: null clears the value, absent keeps it.
+function toLocalSettings(updates: CategoryUpdate): Partial<CategorySettings> {
+  const { isHousehold, ...rest } = updates
+  if (isHousehold === undefined) return rest
+  return { ...rest, isHousehold: isHousehold ?? undefined }
+}
 
 let _customCategories: CustomCategory[] = []
 
@@ -214,10 +230,15 @@ async function pushCategory(
   }
 }
 
-// What a plain edit writes for the household default: the current one, and
-// for rows that name one category, always a value (null when there is none),
-// so rows that disagree converge like every other setting.
-function householdToWrite(id: string): boolean | null | undefined {
+// What an edit writes for the household default: what it asked for (a value,
+// or null to clear), else the current one, and for rows that name one
+// category, always a value (null when there is none), so rows that disagree
+// converge like every other setting.
+function householdToWrite(
+  id: string,
+  requested: boolean | null | undefined
+): boolean | null | undefined {
+  if (requested !== undefined) return requested
   const category = _customCategories.find((c) => c.id === id)
   if (!category) return undefined
   return (
@@ -267,14 +288,14 @@ export async function addCustomCategoryWithSync(
 export async function updateCustomCategoryWithSync(
   repo: CategoryRepository,
   id: string,
-  updates: Partial<CategorySettings>
+  updates: CategoryUpdate
 ): Promise<void> {
   requireOwner(repo)
   const previous = _customCategories.find((c) => c.id === id)
   if (!previous) return
-  updateCustomCategory(id, updates)
+  updateCustomCategory(id, toLocalSettings(updates))
   try {
-    await pushCategory(repo, id, householdToWrite(id))
+    await pushCategory(repo, id, householdToWrite(id, updates.isHousehold))
   } catch (error) {
     restoreCategory(repo, id, previous)
     throw error
@@ -315,13 +336,13 @@ export function upsertBuiltinOverride(
 export async function upsertBuiltinOverrideWithSync(
   repo: CategoryRepository,
   id: string,
-  updates: Partial<CategorySettings>
+  updates: CategoryUpdate
 ): Promise<void> {
   requireOwner(repo)
   const previous = _customCategories.find((c) => c.id === id)
-  upsertBuiltinOverride(id, updates)
+  upsertBuiltinOverride(id, toLocalSettings(updates))
   try {
-    await pushCategory(repo, id, householdToWrite(id))
+    await pushCategory(repo, id, householdToWrite(id, updates.isHousehold))
   } catch (error) {
     restoreCategory(repo, id, previous)
     throw error
@@ -340,8 +361,12 @@ export async function setCategoryHouseholdWithSync(
 ): Promise<void> {
   requireOwner(repo)
   const id = normalizeCategoryId(categoryId)
-  if (id === Category.Uncategorized) {
-    throw new UserFacingError('Sin categoría no puede marcarse como del hogar.')
+  if (!canHaveHouseholdDefault(id)) {
+    throw new UserFacingError(
+      id === Category.Uncategorized
+        ? 'Sin categoría no puede marcarse como del hogar.'
+        : 'Esta categoría no puede marcarse como del hogar.'
+    )
   }
   const previous = _customCategories.find((c) => c.id === id)
   if (!previous && !isBuiltinCategoryId(id)) {

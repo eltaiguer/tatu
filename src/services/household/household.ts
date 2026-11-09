@@ -1,6 +1,9 @@
 import { Category } from '../../models'
 import type { CategoryHousehold, HouseholdResolution } from '../../models'
-import { normalizeCategoryId } from '../categories/category-aliases'
+import {
+  canHaveHouseholdDefault,
+  normalizeCategoryId,
+} from '../categories/category-aliases'
 import {
   listCustomCategories,
   type CustomCategory,
@@ -64,13 +67,42 @@ export function resolveHousehold(
   if (id === Category.Uncategorized) {
     return { status: 'unassigned', isOverride: false }
   }
+  // Ingresos cannot have a default: a stray stored one is ignored.
+  const stored = canHaveHouseholdDefault(id)
+    ? categoryHousehold.get(id)
+    : undefined
   return {
-    status: statusOf(
-      categoryHousehold.get(id) ?? SEEDED_HOUSEHOLD_CATEGORIES.has(id)
-    ),
+    status: statusOf(stored ?? SEEDED_HOUSEHOLD_CATEGORIES.has(id)),
     isOverride: false,
   }
 }
+
+/** The effective household default of a category (false for Sin categoría). */
+export function isCategoryHousehold(
+  categoryId: string,
+  categoryHousehold: CategoryHousehold
+): boolean {
+  return (
+    resolveHousehold({ category: categoryId }, categoryHousehold).status ===
+    'household'
+  )
+}
+
+/**
+ * What to store when the user wants `household` for a category: null (follow
+ * the app's default) when that is already the seeded default, else the value.
+ */
+export function categoryHouseholdChoice(
+  categoryId: string,
+  household: boolean
+): boolean | null {
+  const seeded = SEEDED_HOUSEHOLD_CATEGORIES.has(
+    normalizeCategoryId(categoryId)
+  )
+  return household === seeded ? null : household
+}
+
+export { canHaveHouseholdDefault } from '../categories/category-aliases'
 
 /** The signed-in user's category defaults, from the category store. */
 export function currentCategoryHousehold(): CategoryHousehold {

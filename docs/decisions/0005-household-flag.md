@@ -54,11 +54,18 @@ Implemented in step 2 of #251: persistence of the row choice
 (`transactions.household`) and of the per-category defaults
 (`custom_categories.is_household`), with the write paths and no UI yet.
 
+Implemented in step 3 of #251: the per-category default in Categorías, set
+in two places: a house toggle on each tile of "Tus categorías" (one click,
+saved at once) and a "Gasto del hogar" checkbox in the new/edit category form.
+Sin categoría, Ingresos and deleted categories get neither. Choosing the
+seeded default stores nothing (null), so the category keeps following the app;
+only a different choice is stored.
+
 Planned for the later PRs of #251:
 
 - A one-click house toggle per row (dimmed when it comes from the category),
   in the edit dialog (with "Según categoría" to clear the row's choice) and
-  as a bulk action, and the per-category default in Categorías.
+  as a bulk action.
 - A Hogar filter in Transacciones (Todos / Solo hogar / Sin definir).
 - A Todo / Hogar mode on Resumen, kept in the URL. Hogar mode shows counted
   expenses only, plus the Sin definir amount apart.

@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Category } from '../../models'
 import {
   buildCategoryHousehold,
+  canHaveHouseholdDefault,
+  categoryHouseholdChoice,
   currentCategoryHousehold,
+  isCategoryHousehold,
   resolveHousehold,
 } from './household'
 import { replaceCustomCategories } from '../categories/category-store'
@@ -122,6 +125,15 @@ describe('resolveHousehold', () => {
     }
   })
 
+  it('cannot give Ingresos a household default, under any alias', () => {
+    const mapping = buildCategoryHousehold([[Category.Income, true]])
+    for (const category of [Category.Income, 'salary']) {
+      expect(resolveHousehold({ category }, mapping).status).toBe(
+        'not_household'
+      )
+    }
+  })
+
   it('cannot give Sin categoría a household default', () => {
     expect(
       resolveHousehold(
@@ -234,5 +246,72 @@ describe('currentCategoryHousehold', () => {
     const second = currentCategoryHousehold()
     expect(second).not.toBe(first)
     expect(second.get('restaurants')).toBe(false)
+  })
+})
+
+describe('isCategoryHousehold', () => {
+  it("is the category's effective default", () => {
+    expect(isCategoryHousehold(Category.Groceries, NONE)).toBe(true)
+    expect(isCategoryHousehold(Category.Restaurants, NONE)).toBe(false)
+  })
+
+  it("follows the user's choice over the seeded default", () => {
+    expect(
+      isCategoryHousehold(
+        Category.Groceries,
+        buildCategoryHousehold([[Category.Groceries, false]])
+      )
+    ).toBe(false)
+    expect(
+      isCategoryHousehold(
+        Category.Restaurants,
+        buildCategoryHousehold([[Category.Restaurants, true]])
+      )
+    ).toBe(true)
+  })
+
+  it('reads an old id the way rows do, and is false for Sin categoría', () => {
+    expect(isCategoryHousehold('food', NONE)).toBe(true)
+    expect(isCategoryHousehold(Category.Uncategorized, NONE)).toBe(false)
+  })
+})
+
+describe('categoryHouseholdChoice', () => {
+  it('stores nothing when the wish equals the seeded default', () => {
+    expect(categoryHouseholdChoice(Category.Groceries, true)).toBeNull()
+    expect(categoryHouseholdChoice(Category.Restaurants, false)).toBeNull()
+  })
+
+  it('stores the wish when it differs from the seeded default', () => {
+    expect(categoryHouseholdChoice(Category.Groceries, false)).toBe(false)
+    expect(categoryHouseholdChoice(Category.Restaurants, true)).toBe(true)
+  })
+
+  it('compares against the default of the normalized id', () => {
+    expect(categoryHouseholdChoice('food', true)).toBeNull()
+  })
+})
+
+describe('canHaveHouseholdDefault', () => {
+  it('is false for Sin categoría and Ingresos, under any alias', () => {
+    for (const id of [
+      Category.Uncategorized,
+      'other',
+      Category.Income,
+      'salary',
+    ]) {
+      expect(canHaveHouseholdDefault(id)).toBe(false)
+    }
+  })
+
+  it('is true for every other category, transfers and custom ones included', () => {
+    for (const id of [
+      Category.Restaurants,
+      Category.ExternalTransfer,
+      Category.InternalTransfer,
+      'mascotas',
+    ]) {
+      expect(canHaveHouseholdDefault(id)).toBe(true)
+    }
   })
 })
