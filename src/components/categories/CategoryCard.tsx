@@ -1,4 +1,4 @@
-import { Pencil, Trash } from 'lucide-react'
+import { House, Pencil, Trash } from 'lucide-react'
 import type { Currency, TransactionsFilter } from '../../models'
 import { Category } from '../../models'
 import type { CategoryDefinition } from '../../services/categories/category-registry'
@@ -15,6 +15,11 @@ interface CategoryCardProps {
   count: number
   spend: CategorySpendingDatum | undefined
   homeCurrency: Currency
+  // Whether the category is a household one (ADR-0005); the toggle shows only
+  // when onToggleHousehold is given (not for Sin categoría, Ingresos, orphans).
+  household?: boolean
+  householdSaving?: boolean
+  onToggleHousehold?: (categoryId: string) => void
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
   onEdit: (categoryId: string) => void
   onDelete: (categoryId: string) => void
@@ -25,6 +30,9 @@ export function CategoryCard({
   count,
   spend,
   homeCurrency,
+  household = false,
+  householdSaving = false,
+  onToggleHousehold,
   onNavigateToTransactions,
   onEdit,
   onDelete,
@@ -109,6 +117,27 @@ export function CategoryCard({
 
       {/* Edit (all) / delete (custom only) */}
       <div className={cat.isOrphan ? 'hidden gap-[4px]' : 'flex gap-[4px]'}>
+        {onToggleHousehold && (
+          <button
+            type="button"
+            onClick={() => onToggleHousehold(cat.id)}
+            disabled={householdSaving}
+            aria-pressed={household}
+            aria-label={`Gasto del hogar: ${cat.label}`}
+            title={household ? 'Gasto del hogar' : 'No es gasto del hogar'}
+            className={`grid cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--brand)] disabled:cursor-default disabled:opacity-50 ${
+              household
+                ? 'text-[color:var(--brand-text)]'
+                : 'text-[var(--text-faint)]'
+            }`}
+          >
+            <House
+              size={15}
+              fill={household ? 'currentColor' : 'none'}
+              aria-hidden="true"
+            />
+          </button>
+        )}
         <button
           onClick={() => onEdit(cat.id)}
           aria-label={`Editar categoría ${cat.label}`}

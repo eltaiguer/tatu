@@ -466,4 +466,152 @@ describe('Categories', () => {
       within(group).getByRole('radio', { name: 'Pasadas y futuras' })
     ).toBeChecked()
   })
+
+  describe('household toggle on each tile (#251)', () => {
+    const toggle = (label: string) =>
+      screen.getByRole('button', { name: `Gasto del hogar: ${label}` })
+
+    function renderWithToasts(transactions: Transaction[] = []) {
+      return render(
+        <>
+          <Categories repository={repo} transactions={transactions} />
+          <Toaster />
+        </>
+      )
+    }
+
+    it('explains the house under the section heading', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+
+      expect(
+        within(
+          screen.getByRole('region', { name: 'Tus categorías' })
+        ).getByText(
+          'La casita marca los gastos del hogar. Podés cambiarlo en cada transacción.'
+        )
+      ).toBeInTheDocument()
+    })
+
+    it('puts a toggle on every tile, pressed for the household ones', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+
+      for (const label of ['Alimentación', 'Servicios', 'Vivienda']) {
+        expect(toggle(label)).toHaveAttribute('aria-pressed', 'true')
+      }
+      expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'false')
+      expect(toggle('Transferencias internas')).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      )
+    })
+
+    it('has no toggle on Sin categoría, Ingresos or a deleted category', () => {
+      render(
+        <Categories
+          repository={repo}
+          transactions={[makeTx({ category: 'viajes-familia' })]}
+        />
+      )
+
+      expect(screen.getByText('Viajes familia')).toBeInTheDocument()
+      for (const label of ['Sin categoría', 'Ingresos', 'Viajes familia']) {
+        expect(
+          screen.queryByRole('button', { name: `Gasto del hogar: ${label}` })
+        ).not.toBeInTheDocument()
+      }
+    })
+
+    it('says the state in the tooltip and keeps the name constant', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+
+      expect(toggle('Alimentación')).toHaveAttribute('title', 'Gasto del hogar')
+      expect(toggle('Restaurantes')).toHaveAttribute(
+        'title',
+        'No es gasto del hogar'
+      )
+    })
+
+    it('marks a category as household, saves it, and a second click goes back to the app default', async () => {
+      renderWithToasts()
+
+      fireEvent.click(toggle('Restaurantes'))
+
+      expect(
+        await screen.findByText('Restaurantes: ahora es gasto del hogar')
+      ).toBeInTheDocument()
+      expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'true')
+      expect(repo.customCategories.get('restaurants')?.isHousehold).toBe(true)
+
+      fireEvent.click(toggle('Restaurantes'))
+
+      expect(
+        await screen.findByText('Restaurantes: ya no es gasto del hogar')
+      ).toBeInTheDocument()
+      expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'false')
+      expect(
+        repo.customCategories.get('restaurants')?.isHousehold
+      ).toBeUndefined()
+    })
+
+    it('stores false for a household-by-default category, and clears it on the way back', async () => {
+      renderWithToasts()
+
+      fireEvent.click(toggle('Alimentación'))
+
+      expect(
+        await screen.findByText('Alimentación: ya no es gasto del hogar')
+      ).toBeInTheDocument()
+      expect(toggle('Alimentación')).toHaveAttribute('aria-pressed', 'false')
+      expect(repo.customCategories.get('groceries')?.isHousehold).toBe(false)
+
+      fireEvent.click(toggle('Alimentación'))
+
+      await waitFor(() =>
+        expect(toggle('Alimentación')).toHaveAttribute('aria-pressed', 'true')
+      )
+      expect(
+        repo.customCategories.get('groceries')?.isHousehold
+      ).toBeUndefined()
+    })
+
+    it('starts a custom category unpressed and stores true on its row', async () => {
+      addCustomCategory({ label: 'Mascotas', color: '#112233' })
+      renderWithToasts()
+      expect(toggle('Mascotas')).toHaveAttribute('aria-pressed', 'false')
+
+      fireEvent.click(toggle('Mascotas'))
+
+      await waitFor(() =>
+        expect(toggle('Mascotas')).toHaveAttribute('aria-pressed', 'true')
+      )
+      expect(repo.customCategories.get('mascotas')?.isHousehold).toBe(true)
+    })
+
+    it('puts the house back and shows an error when the save fails', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      renderWithToasts()
+      repo.failOn('upsertCustomCategory', { error: new Error('timeout') })
+
+      fireEvent.click(toggle('Restaurantes'))
+
+      expect(
+        await screen.findByText('No se pudo guardar el cambio')
+      ).toBeInTheDocument()
+      expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'false')
+      expect(repo.customCategories.size).toBe(0)
+    })
+
+    it('disables the toggle while its save is in flight', async () => {
+      renderWithToasts()
+      const held = repo.hold('upsertCustomCategory')
+
+      fireEvent.click(toggle('Restaurantes'))
+
+      await waitFor(() => expect(toggle('Restaurantes')).toBeDisabled())
+      expect(toggle('Servicios')).toBeEnabled()
+      held.release()
+      await waitFor(() => expect(toggle('Restaurantes')).toBeEnabled())
+      expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'true')
+    })
+  })
 })

@@ -10,6 +10,7 @@ import { getCategoryDefinitions } from '../services/categories/category-registry
 import {
   addCustomCategoryWithSync,
   removeCustomCategoryWithSync,
+  setCategoryHouseholdWithSync,
   updateCustomCategoryWithSync,
   upsertBuiltinOverrideWithSync,
 } from '../services/categories/category-store'
@@ -18,6 +19,12 @@ import { getCategoryTransactionCount } from '../services/categories/category-cou
 import { resolveCategory } from '../services/categories/category-registry'
 import { buildCategorySpendingConverted } from '../services/charts/chart-data'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
+import {
+  canHaveHouseholdDefault,
+  categoryHouseholdChoice,
+  currentCategoryHousehold,
+  isCategoryHousehold,
+} from '../services/household/household'
 import type { CustomPattern } from '../services/categorizer/custom-patterns'
 import { CategoryForm, type CategoryFormState } from './categories/CategoryForm'
 import { CategoryCard } from './categories/CategoryCard'
@@ -51,6 +58,10 @@ export function Categories({
 }: CategoriesProps) {
   const [categoriesVersion, setCategoriesVersion] = useState(0)
   const [showForm, setShowForm] = useState(false)
+  // Tiles whose household flip is being saved (their toggle is disabled).
+  const [savingHousehold, setSavingHousehold] = useState<ReadonlySet<string>>(
+    new Set()
+  )
   const [form, setForm] = useState<CategoryFormState>({
     id: '',
     label: '',
@@ -60,6 +71,8 @@ export function Categories({
   })
 
   const categoryDefinitions = getCategoryDefinitions()
+  // Read on render: memoized on the category store, never cached in state.
+  const categoryHousehold = currentCategoryHousehold()
   const isEditing = form.id.length > 0
 
   function resetForm() {
@@ -147,6 +160,35 @@ export function Categories({
     }
   }
 
+  // One click flips the category's household default and saves it. Going to
+  // the app's own default stores nothing (null), so it keeps following it.
+  async function handleToggleHousehold(categoryId: string) {
+    const label = resolveCategory(categoryId).label
+    const next = !isCategoryHousehold(categoryId, currentCategoryHousehold())
+    setSavingHousehold((ids) => new Set(ids).add(categoryId))
+    try {
+      await setCategoryHouseholdWithSync(
+        requireRepository(repository),
+        categoryId,
+        categoryHouseholdChoice(categoryId, next)
+      )
+      toast.success(
+        next
+          ? `${label}: ahora es gasto del hogar`
+          : `${label}: ya no es gasto del hogar`
+      )
+    } catch (error) {
+      toast.error(userErrorMessage(error, 'No se pudo guardar el cambio'))
+    } finally {
+      setSavingHousehold((ids) => {
+        const rest = new Set(ids)
+        rest.delete(categoryId)
+        return rest
+      })
+      setCategoriesVersion((v) => v + 1)
+    }
+  }
+
   async function handleDelete(categoryId: string) {
     const label = resolveCategory(categoryId).label
     try {
@@ -229,6 +271,10 @@ export function Categories({
 
       {/* Category grid: tiles straight on the page, no wrapping card */}
       <Section title="Tus categorías">
+        <p className="text-[13px] text-[var(--text-faint)]">
+          La casita marca los gastos del hogar. Podés cambiarlo en cada
+          transacción.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
           {categoryCards.map((cat) => (
             <CategoryCard
@@ -241,6 +287,13 @@ export function Categories({
                   : spending.get(normalizeCategoryId(cat.id))
               }
               homeCurrency={homeCurrency}
+              household={isCategoryHousehold(cat.id, categoryHousehold)}
+              householdSaving={savingHousehold.has(cat.id)}
+              onToggleHousehold={
+                cat.isOrphan || !canHaveHouseholdDefault(cat.id)
+                  ? undefined
+                  : (id) => void handleToggleHousehold(id)
+              }
               onNavigateToTransactions={onNavigateToTransactions}
               onEdit={startEdit}
               onDelete={(id) => void handleDelete(id)}
