@@ -475,6 +475,7 @@ export function Transactions({
         rows={allFilteredTransactions}
         homeCurrency={homeCurrency}
         fxRate={fxRate}
+        household={filters.household}
       />
 
       {/* Floating bulk bar — rendered before table so DOM order puts it first for a11y queries */}

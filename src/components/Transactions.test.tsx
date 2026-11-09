@@ -109,6 +109,83 @@ describe('Transactions', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
   })
 
+  describe('totals under the Hogar filter', () => {
+    const rows: Transaction[] = [
+      {
+        ...makeTransaction(0, 'devoto'),
+        category: 'groceries',
+        amount: 4000,
+        currency: 'UYU',
+      },
+      {
+        ...makeTransaction(1, 'farmacia'),
+        category: 'healthcare',
+        amount: 50,
+        currency: 'USD',
+      },
+      { ...makeTransaction(2, 'cena'), category: 'restaurants', amount: 999 },
+      {
+        ...makeTransaction(3, 'sueldo'),
+        category: 'income',
+        type: 'credit',
+        amount: 5000,
+        currency: 'USD',
+      },
+      {
+        ...makeTransaction(4, 'misterio'),
+        category: 'uncategorized',
+        amount: 2025,
+        currency: 'UYU',
+      },
+    ]
+    const strip = () =>
+      screen.getByRole('group', { name: 'Totales del período' })
+    const view = (household: 'all' | 'household' | 'unassigned') =>
+      render(
+        <Transactions
+          transactions={rows}
+          homeCurrency="USD"
+          fxRate={40}
+          initialFilters={{
+            ...DEFAULT_URL_FILTERS,
+            period: { mode: 'all' },
+            household,
+          }}
+        />
+      )
+
+    it('shows one tile with the household total in the home currency', () => {
+      view('household')
+      // $U 4.000 / 40 + US$ 50 = US$ 150
+      expect(within(strip()).getByText('Gastos del hogar')).toBeInTheDocument()
+      expect(within(strip()).getByText('US$ 150,00')).toBeInTheDocument()
+      expect(within(strip()).getByText('2 gastos')).toBeInTheDocument()
+      for (const gone of ['Ingresos', 'Gastos', 'Balance']) {
+        expect(within(strip()).queryByText(gone)).toBeNull()
+      }
+    })
+
+    it('Sin definir shows its total, count and what to do', () => {
+      view('unassigned')
+      // $U 2.025 / 40 = US$ 50,63 (50.625 rounds half up)
+      expect(within(strip()).getByText('Sin definir')).toBeInTheDocument()
+      expect(within(strip()).getByText('US$ 50,63')).toBeInTheDocument()
+      expect(within(strip()).getByText('1 gasto')).toBeInTheDocument()
+      expect(
+        within(strip()).getByText('Categorizalas o marcalas con la casita.')
+      ).toBeInTheDocument()
+    })
+
+    it('keeps the three tiles without the filter', () => {
+      view('all')
+      expect(
+        within(strip())
+          .getAllByText(/^(Ingresos|Gastos|Balance)$/)
+          .map((el) => el.textContent)
+      ).toEqual(['Ingresos', 'Gastos', 'Balance'])
+    })
+  })
+
   it('says there are no ignored transfers instead of a blank disabled toggle', () => {
     render(<Transactions transactions={[makeTransaction(0)]} />)
 

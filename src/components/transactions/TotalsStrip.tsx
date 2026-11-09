@@ -1,8 +1,17 @@
 import { useMemo } from 'react'
-import { TrendingDown, TrendingUp, Wallet } from 'lucide-react'
+import {
+  HelpCircle,
+  House,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react'
 import type { Currency, Transaction } from '../../models'
 import { fitMonoFontSize, formatCurrency } from '../../utils/formatting'
-import { sumCountedTotals } from '../../services/spending/spending-rules'
+import {
+  isCountedExpense,
+  sumCountedTotals,
+} from '../../services/spending/spending-rules'
 
 /* ---- TotalsStrip ---- */
 function TotalTile({
@@ -11,6 +20,7 @@ function TotalTile({
   fitTo,
   accent,
   icon,
+  note,
 }: {
   label: string
   value: string
@@ -19,6 +29,8 @@ function TotalTile({
   fitTo: string
   accent?: string
   icon: React.ReactNode
+  // A short line under the amount (the one-tile Hogar strip).
+  note?: React.ReactNode
 }) {
   return (
     // Phones: label left, amount right, one row each (three columns would
@@ -40,6 +52,9 @@ function TotalTile({
       >
         {value}
       </div>
+      {note && (
+        <div className="text-[12px] text-[var(--text-muted)]">{note}</div>
+      )}
     </div>
   )
 }
@@ -50,10 +65,14 @@ export function TotalsStrip({
   rows,
   homeCurrency,
   fxRate,
+  household = 'all',
 }: {
   rows: Transaction[]
   homeCurrency: string
   fxRate: number
+  // Under the Hogar filter the strip is one total: the rows are counted
+  // expenses already, so there is no income or balance to show.
+  household?: 'all' | 'household' | 'unassigned'
 }) {
   const totals = useMemo(
     () => sumCountedTotals(rows, homeCurrency as Currency, fxRate),
@@ -61,6 +80,30 @@ export function TotalsStrip({
   )
 
   const cur = homeCurrency as Currency
+  if (household !== 'all') {
+    const count = rows.filter(isCountedExpense).length
+    const unassigned = household === 'unassigned'
+    return (
+      <div
+        role="group"
+        aria-label="Totales del período"
+        className="mb-4 grid grid-cols-1 divide-y divide-[var(--border)]"
+      >
+        <TotalTile
+          label={unassigned ? 'Sin definir' : 'Gastos del hogar'}
+          icon={unassigned ? <HelpCircle size={14} /> : <House size={14} />}
+          value={formatCurrency(totals.expense, cur)}
+          fitTo={formatCurrency(totals.expense, cur)}
+          note={[
+            <div key="count">{`${count} ${count === 1 ? 'gasto' : 'gastos'}`}</div>,
+            ...(unassigned
+              ? [<div key="hint">Categorizalas o marcalas con la casita.</div>]
+              : []),
+          ]}
+        />
+      </div>
+    )
+  }
   const net = totals.net
   const incomeText = formatCurrency(totals.income, cur)
   const expenseText = formatCurrency(totals.expense, cur)
