@@ -684,6 +684,80 @@ describe('household default of a category (#251, ADR-0005)', () => {
     })
   })
 
+  it('clears a custom category’s default from an edit (null), locally and on the server', async () => {
+    const created = await addCustomCategoryWithSync(repo, {
+      label: 'Mascotas',
+      color: '#112233',
+      isHousehold: true,
+    })
+
+    await updateCustomCategoryWithSync(repo, created.id, {
+      label: 'Mascotas',
+      isHousehold: null,
+    })
+
+    expect(byId(created.id)?.isHousehold).toBeUndefined()
+    expect(repo.customCategories.get(created.id)?.isHousehold).toBeUndefined()
+  })
+
+  it('clears a built-in’s default from an edit (null), locally and on the server', async () => {
+    await setCategoryHouseholdWithSync(repo, Category.Groceries, false)
+
+    await upsertBuiltinOverrideWithSync(repo, Category.Groceries, {
+      isIgnored: false,
+      isHousehold: null,
+    })
+
+    expect(byId(Category.Groceries)?.isHousehold).toBeUndefined()
+    expect(
+      repo.customCategories.get(Category.Groceries)?.isHousehold
+    ).toBeUndefined()
+  })
+
+  it('leaves the stored default alone when an edit does not mention it', async () => {
+    await setCategoryHouseholdWithSync(repo, Category.Groceries, false)
+    const created = await addCustomCategoryWithSync(repo, {
+      label: 'Mascotas',
+      color: '#112233',
+      isHousehold: true,
+    })
+
+    await upsertBuiltinOverrideWithSync(repo, Category.Groceries, {
+      isIgnored: true,
+    })
+    await updateCustomCategoryWithSync(repo, created.id, { label: 'Perro' })
+
+    expect(repo.customCategories.get(Category.Groceries)?.isHousehold).toBe(
+      false
+    )
+    expect(repo.customCategories.get(created.id)?.isHousehold).toBe(true)
+    expect(byId(Category.Groceries)?.isHousehold).toBe(false)
+    expect(byId(created.id)?.isHousehold).toBe(true)
+  })
+
+  it('puts a failed clear from an edit back, and throws', async () => {
+    const created = await addCustomCategoryWithSync(repo, {
+      label: 'Mascotas',
+      color: '#112233',
+      isHousehold: true,
+    })
+    await setCategoryHouseholdWithSync(repo, Category.Restaurants, true)
+    repo.failOn('upsertCustomCategory', { error: new Error('timeout') })
+
+    await expect(
+      updateCustomCategoryWithSync(repo, created.id, { isHousehold: null })
+    ).rejects.toThrow('timeout')
+    expect(byId(created.id)?.isHousehold).toBe(true)
+
+    repo.failOn('upsertCustomCategory', { error: new Error('timeout') })
+    await expect(
+      upsertBuiltinOverrideWithSync(repo, Category.Restaurants, {
+        isHousehold: null,
+      })
+    ).rejects.toThrow('timeout')
+    expect(byId(Category.Restaurants)?.isHousehold).toBe(true)
+  })
+
   it('treats stored rows that disagree on the default as different settings', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
