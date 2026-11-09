@@ -72,6 +72,37 @@ export function resolveHousehold(
   }
 }
 
+/** The effective household default of a category (false for Sin categoría). */
+export function isCategoryHousehold(
+  categoryId: string,
+  categoryHousehold: CategoryHousehold
+): boolean {
+  return (
+    resolveHousehold({ category: categoryId }, categoryHousehold).status ===
+    'household'
+  )
+}
+
+/**
+ * What to store when the user wants `household` for a category: null (follow
+ * the app's default) when that is already the seeded default, else the value.
+ */
+export function categoryHouseholdChoice(
+  categoryId: string,
+  household: boolean
+): boolean | null {
+  const seeded = SEEDED_HOUSEHOLD_CATEGORIES.has(
+    normalizeCategoryId(categoryId)
+  )
+  return household === seeded ? null : household
+}
+
+/** Sin categoría and Ingresos (income is never an expense) cannot have one. */
+export function canHaveHouseholdDefault(categoryId: string): boolean {
+  const id = normalizeCategoryId(categoryId)
+  return id !== Category.Uncategorized && id !== Category.Income
+}
+
 /** The signed-in user's category defaults, from the category store. */
 export function currentCategoryHousehold(): CategoryHousehold {
   return categoryHouseholdOf(listCustomCategories())
