@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Category } from '../../models'
+import { merchantOverrideKey } from '../categorizer/category-overrides'
 import {
   canHaveHouseholdDefault,
   categoryHouseholdChoice,
@@ -8,11 +9,12 @@ import {
   nextHouseholdChoice,
   partitionByHousehold,
   resolveHousehold,
+  rowsSharingMerchantRule,
   rowHouseholdView,
 } from './household'
 import type { Transaction } from '../../models'
 import { replaceCustomCategories } from '../categories/category-store'
-import { categoryRules } from '../../test/household-rules'
+import { categoryRules, householdRulesOf } from '../../test/household-rules'
 
 const NONE = categoryRules([])
 
@@ -29,7 +31,7 @@ describe('resolveHousehold', () => {
     ]) {
       expect(resolveHousehold({ category }, NONE)).toEqual({
         status: 'household',
-        isOverride: false,
+        source: 'category',
       })
     }
   })
@@ -76,7 +78,7 @@ describe('resolveHousehold', () => {
       ['mascotas', true],
     ])
     expect(resolveHousehold({ category: Category.Groceries }, mapping)).toEqual(
-      { status: 'not_household', isOverride: false }
+      { status: 'not_household', source: 'category' }
     )
     expect(resolveHousehold({ category: 'mascotas' }, mapping).status).toBe(
       'household'
@@ -124,7 +126,7 @@ describe('resolveHousehold', () => {
     ]) {
       expect(resolveHousehold({ category }, NONE)).toEqual({
         status: 'unassigned',
-        isOverride: false,
+        source: 'category',
       })
     }
   })
@@ -150,13 +152,13 @@ describe('resolveHousehold', () => {
   it("lets the row's own choice win over its category, either way", () => {
     expect(
       resolveHousehold({ category: Category.Groceries, household: false }, NONE)
-    ).toEqual({ status: 'not_household', isOverride: true })
+    ).toEqual({ status: 'not_household', source: 'row' })
     expect(
       resolveHousehold(
         { category: Category.Restaurants, household: true },
         categoryRules([[Category.Restaurants, false]])
       )
-    ).toEqual({ status: 'household', isOverride: true })
+    ).toEqual({ status: 'household', source: 'row' })
   })
 
   it('keeps the row choice when the row is recategorized', () => {
@@ -170,14 +172,14 @@ describe('resolveHousehold', () => {
   it('keeps the row choice on an uncategorized row', () => {
     expect(resolveHousehold({ household: true }, NONE)).toEqual({
       status: 'household',
-      isOverride: true,
+      source: 'row',
     })
   })
 
   it('follows the category when the row choice is cleared (null)', () => {
     expect(
       resolveHousehold({ category: Category.Groceries, household: null }, NONE)
-    ).toEqual({ status: 'household', isOverride: false })
+    ).toEqual({ status: 'household', source: 'category' })
   })
 
   it('ignores a stored value that is not a yes/no', () => {
@@ -187,7 +189,7 @@ describe('resolveHousehold', () => {
         { category: Category.Restaurants, household: garbage },
         NONE
       )
-    ).toEqual({ status: 'not_household', isOverride: false })
+    ).toEqual({ status: 'not_household', source: 'category' })
     expect(
       resolveHousehold(
         { category: Category.Restaurants },
@@ -339,7 +341,7 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     const tx = expense()
     expect(rowHouseholdView(tx, NONE)).toEqual({
       status: 'household',
-      isOverride: false,
+      source: 'category',
     })
     // Following Alimentación (household): a click says "no".
     expect(nextHouseholdChoice(tx, NONE)).toBe(false)
@@ -349,7 +351,7 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     const tx = expense({ category: Category.Restaurants, household: true })
     expect(rowHouseholdView(tx, NONE)).toEqual({
       status: 'household',
-      isOverride: true,
+      source: 'row',
     })
     // Restaurantes is not household: unmarking equals the category → null.
     expect(nextHouseholdChoice(tx, NONE)).toBeNull()
@@ -378,7 +380,7 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     const tx = expense({ category: Category.Uncategorized })
     expect(rowHouseholdView(tx, NONE)).toEqual({
       status: 'unassigned',
-      isOverride: false,
+      source: 'category',
     })
     expect(nextHouseholdChoice(tx, NONE)).toBe(true)
   })
@@ -439,5 +441,98 @@ describe('partitionByHousehold', () => {
       expect(household.includes(tx)).toBe(status === 'household')
       expect(unassigned.includes(tx)).toBe(status === 'unassigned')
     }
+  })
+})
+
+describe('merchant rules', () => {
+  const devoto = (description: string, overrides = {}) =>
+    ({
+      ...expense({ category: Category.Restaurants, description }),
+      ...overrides,
+    }) as Transaction
+  const keyOf = (d: string) => merchantOverrideKey(d) as string
+  const rule = (d: string, value: boolean) =>
+    householdRulesOf({ merchants: [[keyOf(d), value]] })
+
+  it('a rule true makes a restaurants debit household, from the merchant', () => {
+    expect(resolveHousehold(devoto('DEVOTO'), rule('DEVOTO', true))).toEqual({
+      status: 'household',
+      source: 'merchant',
+    })
+  })
+
+  it('a rule false makes a groceries debit not household', () => {
+    const tx = expense({ description: 'DEVOTO', category: Category.Groceries })
+    expect(resolveHousehold(tx, rule('DEVOTO', false))).toEqual({
+      status: 'not_household',
+      source: 'merchant',
+    })
+  })
+
+  it('the row’s own choice beats the rule', () => {
+    const tx = devoto('DEVOTO', { household: false })
+    expect(resolveHousehold(tx, rule('DEVOTO', true))).toEqual({
+      status: 'not_household',
+      source: 'row',
+    })
+  })
+
+  it('a rule covers an uncategorized row, which is then not Sin definir', () => {
+    const tx = expense({
+      description: 'DEVOTO',
+      category: Category.Uncategorized,
+    })
+    expect(resolveHousehold(tx, rule('DEVOTO', true))).toEqual({
+      status: 'household',
+      source: 'merchant',
+    })
+  })
+
+  it('a split part ignores the rule and keeps its category default', () => {
+    const part = devoto('DEVOTO', { splitParentId: 'parent' })
+    expect(resolveHousehold(part, rule('DEVOTO', true))).toEqual({
+      status: 'not_household',
+      source: 'category',
+    })
+  })
+
+  it('descriptions that differ only in per-transaction noise share the rule', () => {
+    const rules = rule('DEVOTO SUPERMERCADO 12/03/2026 14:05', true)
+    const other = devoto('DEVOTO SUPERMERCADO 19/03/2026 09:30')
+    expect(resolveHousehold(other, rules).source).toBe('merchant')
+  })
+
+  it('without a rule the answer is the category’s', () => {
+    expect(resolveHousehold(devoto('DEVOTO'), householdRulesOf())).toEqual({
+      status: 'not_household',
+      source: 'category',
+    })
+  })
+
+  it('a click that lands on what the row would inherit clears the choice (rule first)', () => {
+    const rules = rule('DEVOTO', true)
+    const tx = devoto('DEVOTO', { household: false })
+    expect(nextHouseholdChoice(tx, rules)).toBeNull()
+    // Following the rule (household), a click says no: the category (no) agrees.
+    expect(nextHouseholdChoice(devoto('DEVOTO'), rules)).toBe(false)
+  })
+
+  it('a click against the rule on a groceries row writes the boolean', () => {
+    const rules = rule('DEVOTO', false)
+    const tx = expense({ description: 'DEVOTO', category: Category.Groceries })
+    // Rule says no, category says yes: a click means yes = the category's.
+    expect(nextHouseholdChoice(tx, rules)).toBe(true)
+  })
+
+  it('rowsSharingMerchantRule: counted, non-split rows with the same key, target included', () => {
+    const a = devoto('DEVOTO 12/03/2026', { id: 'a' })
+    const b = devoto('DEVOTO 19/03/2026', { id: 'b' })
+    const other = devoto('TIENDA INGLESA', { id: 'c' })
+    const part = devoto('DEVOTO', { id: 'd', splitParentId: 'p' })
+    const income = devoto('DEVOTO', { id: 'e', type: 'credit' })
+    expect(
+      rowsSharingMerchantRule([a, b, other, part, income], a).map((t) => t.id)
+    ).toEqual(['a', 'b'])
+    expect(rowsSharingMerchantRule([a, b, part], part)).toEqual([])
   })
 })

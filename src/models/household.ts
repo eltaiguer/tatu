@@ -11,8 +11,8 @@ export type HouseholdFilter = 'all' | 'household' | 'unassigned'
 /** A row's household status and where it came from. */
 export interface HouseholdResolution {
   status: HouseholdStatus
-  /** The row's own choice, not its category's default. */
-  isOverride: boolean
+  /** Where the value comes from: the row's own choice, its merchant's rule or its category. */
+  source: 'row' | 'merchant' | 'category'
 }
 
 /**

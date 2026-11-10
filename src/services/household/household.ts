@@ -14,6 +14,7 @@ import {
   type CustomCategory,
 } from '../categories/category-store'
 import { memoizeByReference } from '../../utils/memo'
+import { merchantOverrideKey } from '../categorizer/category-overrides'
 import { isCountedExpense } from '../spending/spending-rules'
 import type { Transaction } from '../../models'
 
@@ -59,20 +60,31 @@ export function buildCategoryHousehold(
 }
 
 /**
- * Precedence: the row's own choice → the user's default for its category →
- * the seeded default. An uncategorized row without a choice of its own is
- * 'unassigned', and Sin categoría cannot be given a default.
+ * Precedence: the row's own choice → the user's rule for its merchant → the
+ * user's default for its category → the seeded default. An uncategorized row
+ * with no choice and no merchant rule is 'unassigned', and Sin categoría
+ * cannot be given a default. A split part ignores merchant rules (a split is a
+ * mixed purchase) and keeps its own choice and its category default.
  */
 export function resolveHousehold(
-  tx: { category?: string | null; household?: boolean | null },
+  tx: {
+    category?: string | null
+    household?: boolean | null
+    description?: string
+    splitParentId?: string
+  },
   householdRules: HouseholdRules
 ): HouseholdResolution {
   if (typeof tx.household === 'boolean') {
-    return { status: statusOf(tx.household), isOverride: true }
+    return { status: statusOf(tx.household), source: 'row' }
+  }
+  const merchant = merchantRule(tx, householdRules.merchants)
+  if (merchant !== undefined) {
+    return { status: statusOf(merchant), source: 'merchant' }
   }
   const id = normalizeCategoryId(tx.category)
   if (id === Category.Uncategorized) {
-    return { status: 'unassigned', isOverride: false }
+    return { status: 'unassigned', source: 'category' }
   }
   // Ingresos cannot have a default: a stray stored one is ignored.
   const stored = canHaveHouseholdDefault(id)
@@ -80,8 +92,55 @@ export function resolveHousehold(
     : undefined
   return {
     status: statusOf(stored ?? SEEDED_HOUSEHOLD_CATEGORIES.has(id)),
-    isOverride: false,
+    source: 'category',
   }
+}
+
+// merchantOverrideKey runs regexes and Resumen resolves thousands of rows per
+// render, so the key is cached per description (bounded: cleared when full).
+const KEY_CACHE_LIMIT = 20000
+const keyCache = new Map<string, string | null>()
+
+function merchantKeyOf(description: string): string | null {
+  const cached = keyCache.get(description)
+  if (cached !== undefined) return cached
+  if (keyCache.size >= KEY_CACHE_LIMIT) keyCache.clear()
+  const key = merchantOverrideKey(description)
+  keyCache.set(description, key)
+  return key
+}
+
+function merchantRule(
+  tx: { description?: string; splitParentId?: string },
+  merchants: MerchantHousehold
+): boolean | undefined {
+  if (merchants.size === 0 || tx.splitParentId || !tx.description) {
+    return undefined
+  }
+  const key = merchantKeyOf(tx.description)
+  return key === null ? undefined : merchants.get(key)
+}
+
+/**
+ * The counted expenses, split parts excluded, that share `tx`'s merchant key
+ * (`tx` included when it qualifies): the rows a merchant rule reaches. The
+ * toast count, the dialog count and both writes read this one list, so a
+ * preview cannot drift from the save. Empty when `tx` has no key, is a split
+ * part or is not a counted expense.
+ */
+export function rowsSharingMerchantRule(
+  all: readonly Transaction[],
+  tx: Transaction
+): Transaction[] {
+  if (!isCountedExpense(tx) || tx.splitParentId) return []
+  const key = merchantKeyOf(tx.description)
+  if (key === null) return []
+  return all.filter(
+    (row) =>
+      isCountedExpense(row) &&
+      !row.splitParentId &&
+      merchantKeyOf(row.description) === key
+  )
 }
 
 /** The effective household default of a category (false for Sin categoría). */
@@ -169,7 +228,12 @@ export function nextHouseholdChoice(
   const view = rowHouseholdView(tx, householdRules)
   if (!view) return null
   const target = view.status !== 'household'
-  return target === categoryDefault(tx.category, householdRules) ? null : target
+  // What the row would show with no choice of its own: rule, then category.
+  const inherited = resolveHousehold({ ...tx, household: null }, householdRules)
+  return inherited.status !== 'unassigned' &&
+    (inherited.status === 'household') === target
+    ? null
+    : target
 }
 
 export { canHaveHouseholdDefault } from '../categories/category-aliases'

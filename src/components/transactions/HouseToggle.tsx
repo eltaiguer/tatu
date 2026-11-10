@@ -35,7 +35,7 @@ export function HouseToggle({
   const title = unassigned
     ? 'Sin definir: categorizala o marcala'
     : `${household ? 'Hogar' : 'No es del hogar'} · ${
-        view.isOverride
+        view.source === 'row'
           ? 'elegido a mano'
           : `según ${resolveCategory(transaction.category).label}`
       }`
@@ -46,11 +46,11 @@ export function HouseToggle({
       aria-label={`Gasto del hogar: ${description}`}
       aria-pressed={household}
       title={title}
-      data-origin={view.isOverride ? 'hand' : 'category'}
+      data-origin={view.source === 'row' ? 'hand' : 'category'}
       disabled={disabled}
       onClick={() => onToggle(transaction)}
       className={`relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--brand-text)] disabled:opacity-50 ${
-        view.isOverride
+        view.source === 'row'
           ? 'text-[color:var(--brand-text)]'
           : household
             ? // A filled house that follows its category is stronger than the
@@ -59,7 +59,7 @@ export function HouseToggle({
             : 'text-[color:var(--text-faint)]'
       }`}
     >
-      {view.isOverride && (
+      {view.source === 'row' && (
         // Set by hand: a small dot as well as the colour, so the difference
         // does not rest on hue alone.
         <span
