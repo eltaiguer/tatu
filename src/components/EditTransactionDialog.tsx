@@ -27,6 +27,7 @@ import { getAccountLabel } from './TransactionTable'
 import {
   categoryDefault,
   currentHouseholdRules,
+  merchantHouseholdRule,
   rowHouseholdView,
 } from '../services/household/household'
 
@@ -55,6 +56,10 @@ export interface EditTransactionDraft {
   // category. Never part of the apply-scope. Unchanged (the row's own) for a
   // row that cannot be household.
   household: boolean | null
+  // The user touched the household radio. Under an apply-to-similar scope the
+  // choice is the merchant's rule, and it is written only when touched: a
+  // category edit must not create or delete a rule.
+  householdTouched: boolean
 }
 
 interface EditTransactionDialogProps {
@@ -68,6 +73,9 @@ interface EditTransactionDialogProps {
   // Tags already in use, offered as suggestions.
   knownTags: string[]
   isSaving: boolean
+  // Counted rows a merchant household rule would reach (rowsSharingMerchantRule),
+  // for the household legend.
+  countHouseholdSimilar: (transaction: Transaction) => number
   // Whether the view can save a household choice; without it the group is
   // not offered.
   canSetHousehold: boolean
@@ -129,6 +137,7 @@ export function EditTransactionDialog({
 function EditTransactionForm({
   transaction,
   countSimilar,
+  countHouseholdSimilar,
   knownTags,
   isSaving,
   canSetHousehold,
@@ -147,6 +156,7 @@ function EditTransactionForm({
   const [householdChoice, setHouseholdChoice] = useState<HouseholdChoice>(() =>
     choiceOf(transaction.household)
   )
+  const [householdTouched, setHouseholdTouched] = useState(false)
   const [error, setError] = useState('')
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
@@ -219,6 +229,27 @@ function EditTransactionForm({
     const says = categoryDefault(category, householdRules)
     return says === null ? 'sin definir' : says ? 'sí' : 'no'
   })()
+  // Under an apply-to-similar scope the radio is the merchant's rule: until
+  // touched it shows the rule (or "según categoría" when none covers the
+  // row), not the row's own choice. Solo esta shows the row's own choice, and
+  // "según comercio" when a rule covers the row.
+  const ruleScope = applyScope !== 'single'
+  const merchantRule = merchantHouseholdRule(transaction, householdRules)
+  const shownChoice: HouseholdChoice =
+    ruleScope && !householdTouched ? choiceOf(merchantRule) : householdChoice
+  const followLabel =
+    !ruleScope && merchantRule !== undefined
+      ? `Según comercio (${merchantRule ? 'Sí' : 'No'})`
+      : `Según categoría (${categoryDefaultLabel})`
+  const householdSimilarCount = countHouseholdSimilar(transaction)
+  const householdReach =
+    applyScope === 'matching_past_and_future'
+      ? householdSimilarCount > 1
+        ? `se aplica a ${householdSimilarCount} transacciones (y a las futuras)`
+        : 'solo esta por ahora (y las futuras)'
+      : applyScope === 'future_matching_only'
+        ? 'esta y las que importes en el futuro'
+        : 'solo esta transacción'
 
   function handleSave() {
     const trimmed = description.trim()
@@ -233,8 +264,9 @@ function EditTransactionForm({
       tags,
       applyScope,
       household: showHousehold
-        ? householdOf(householdChoice)
+        ? householdOf(shownChoice)
         : (transaction.household ?? null),
+      householdTouched: showHousehold && householdTouched,
     })
   }
 
@@ -375,18 +407,18 @@ function EditTransactionForm({
               <>
                 Gasto del hogar{' '}
                 <span className="font-normal text-muted-foreground">
-                  · solo esta transacción
+                  · {householdReach}
                 </span>
               </>
             }
             name="household"
-            value={householdChoice}
-            onChange={setHouseholdChoice}
+            value={shownChoice}
+            onChange={(choice) => {
+              setHouseholdChoice(choice)
+              setHouseholdTouched(true)
+            }}
             options={[
-              {
-                value: 'category',
-                label: `Según categoría (${categoryDefaultLabel})`,
-              },
+              { value: 'category', label: followLabel },
               { value: 'yes', label: 'Sí' },
               { value: 'no', label: 'No' },
             ]}

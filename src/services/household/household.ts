@@ -110,6 +110,18 @@ function merchantKeyOf(description: string): string | null {
   return key
 }
 
+/**
+ * The user's merchant rule for this row (true / false), or undefined when no
+ * rule covers it: none stored, no merchant key, or a split part (a split is a
+ * mixed purchase, so it never takes a merchant's rule).
+ */
+export function merchantHouseholdRule(
+  tx: { description?: string; splitParentId?: string },
+  householdRules: HouseholdRules
+): boolean | undefined {
+  return merchantRule(tx, householdRules.merchants)
+}
+
 function merchantRule(
   tx: { description?: string; splitParentId?: string },
   merchants: MerchantHousehold

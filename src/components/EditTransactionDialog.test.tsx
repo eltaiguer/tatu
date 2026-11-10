@@ -27,6 +27,7 @@ function baseProps(overrides: Partial<DialogProps> = {}): DialogProps {
     transaction,
     // Fake reach: 4 similar rows, 2 once the name changes.
     countSimilar: (_transaction, renamed) => (renamed ? 2 : 4),
+    countHouseholdSimilar: () => 3,
     knownTags: ['super', 'viaje', 'trabajo'],
     isSaving: false,
     onCreateCategory: vi.fn(async () => undefined),
@@ -77,6 +78,7 @@ describe('EditTransactionDialog', () => {
       tags: ['super'],
       applyScope: 'single',
       household: null,
+      householdTouched: false,
     })
   })
 
@@ -100,6 +102,7 @@ describe('EditTransactionDialog', () => {
       tags: ['super', 'viaje'],
       applyScope: 'matching_past_and_future',
       household: null,
+      householdTouched: false,
     })
   })
 

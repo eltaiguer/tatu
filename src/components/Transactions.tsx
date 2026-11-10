@@ -44,6 +44,7 @@ import { useBulkActions } from './transactions/useBulkActions'
 import {
   currentHouseholdRules,
   nextHouseholdChoice,
+  rowsSharingMerchantRule,
 } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
 import { getDisplayDescription } from '../utils/transaction-display'
@@ -69,6 +70,7 @@ export function Transactions({
   onSplitTransaction,
   onUnsplitTransaction,
   onSetHousehold,
+  onApplyHouseholdToSimilar,
   onRestoreTransactions,
   onReload,
   repository,
@@ -244,6 +246,10 @@ export function Transactions({
     return countSimilarEditReach(transactions, transaction, renamed)
   }
 
+  function countHouseholdSimilar(transaction: Transaction) {
+    return rowsSharingMerchantRule(transactions, transaction).length
+  }
+
   async function handleCreateCategory(label: string) {
     try {
       const created = await addCustomCategoryWithSync(
@@ -265,13 +271,20 @@ export function Transactions({
     if (!onUpdateTransaction || !editingTransaction) return
     const editing = editingTransaction
     const editingId = editing.id
-    const householdChanged =
-      Boolean(onSetHousehold) && draft.household !== (editing.household ?? null)
+    // Under an apply-to-similar scope the household choice is the merchant's
+    // rule, written only when the radio was touched (a category edit must not
+    // create or delete a rule). Under Solo esta it is the row's own choice.
+    const ruleScope =
+      draft.applyScope !== 'single' && Boolean(onApplyHouseholdToSimilar)
+    const householdChanged = ruleScope
+      ? draft.householdTouched
+      : Boolean(onSetHousehold) &&
+        draft.household !== (editing.household ?? null)
     // A household-only save must not re-write the category as the user's own
-    // confirmed one (confidence 1): nothing about name, category or tags
-    // changed, and no apply-scope rule was asked for.
+    // confirmed one (confidence 1) nor, under a rule scope, upsert the
+    // category rule and stamp every similar row: nothing about name,
+    // category or tags changed.
     const unchanged =
-      draft.applyScope === 'single' &&
       draft.description === getDisplayDescription(editing) &&
       draft.category === ((editing.category ?? '').trim() || null) &&
       sameTags(draft.tags, editing.tags ?? [])
@@ -300,11 +313,27 @@ export function Transactions({
     // outcome is reported: the success only once everything saved, or one
     // error that says what did.
     if (householdChanged) {
-      const saved = await writeHousehold(
-        editingId,
-        draft.household,
-        message ? AFTER_EDIT : 'No se pudo guardar el gasto del hogar'
-      )
+      const failure = message
+        ? AFTER_EDIT
+        : 'No se pudo guardar el gasto del hogar'
+      let saved: boolean
+      if (ruleScope && draft.applyScope !== 'single') {
+        const applied = await writeHouseholdRule(
+          editingId,
+          draft.household,
+          draft.applyScope,
+          failure
+        )
+        saved = applied !== null
+        if (applied !== null && !message) {
+          message =
+            applied > 1
+              ? `Se aplicó a ${applied} transacciones`
+              : 'Cambios guardados'
+        }
+      } else {
+        saved = await writeHousehold(editingId, draft.household, failure)
+      }
       if (!saved && !message) {
         // Nothing saved at all: keep the dialog open to try again.
         setPending(editingId, false)
@@ -418,6 +447,35 @@ export function Transactions({
         }
       })
       return false
+    } finally {
+      setPending(id, false)
+    }
+  }
+
+  // Saves the merchant's household rule from the edit dialog and applies it
+  // to the similar rows; resolves with how many rows it reaches, or null when
+  // it failed (reported). A failure that saved nothing offers the same write
+  // again; a partial one offers to retry just the rest.
+  async function writeHouseholdRule(
+    id: string,
+    household: boolean | null,
+    scope: 'matching_past_and_future' | 'future_matching_only',
+    failure: string
+  ): Promise<number | null> {
+    if (!onApplyHouseholdToSimilar) return null
+    setPending(id, true)
+    try {
+      const { affected } = await onApplyHouseholdToSimilar(id, household, scope)
+      return affected
+    } catch (error) {
+      const prefix =
+        failure === AFTER_EDIT && error instanceof UserFacingError
+          ? `${AFTER_EDIT}. `
+          : ''
+      reportError(error, failure, prefix, () => {
+        void writeHouseholdRule(id, household, scope, failure)
+      })
+      return null
     } finally {
       setPending(id, false)
     }
@@ -571,6 +629,7 @@ export function Transactions({
       <EditTransactionDialog
         transaction={editingTransaction}
         countSimilar={countSimilar}
+        countHouseholdSimilar={countHouseholdSimilar}
         knownTags={tagSuggestions}
         canSetHousehold={Boolean(onSetHousehold)}
         isSaving={

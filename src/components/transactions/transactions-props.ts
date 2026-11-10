@@ -48,6 +48,14 @@ interface BaseTransactionsProps {
     transactionIds: string[],
     household: boolean | null
   ) => Promise<{ updated: number }>
+  // Saves (true / false) or removes (null) the merchant's household rule and
+  // applies it to the similar rows (applyHouseholdToSimilar). Without it the
+  // edit dialog only offers the row's own choice.
+  onApplyHouseholdToSimilar?: (
+    transactionId: string,
+    household: boolean | null,
+    scope: 'matching_past_and_future' | 'future_matching_only'
+  ) => Promise<{ affected: number }>
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void
   // The signed-in user's repository: a category created inline saves there.
