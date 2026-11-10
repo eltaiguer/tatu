@@ -453,7 +453,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
       render(<Harness transactions={marchRows()} />)
       expect(
         screen.getByRole('button', {
-          name: 'Hogar US$ 190,00 de US$ 250,00 gastados',
+          name: 'Ver solo los gastos del hogar: Hogar US$ 190,00 de US$ 250,00 gastados',
         })
       ).toBeInTheDocument()
       // The hero sentence is unchanged.
@@ -466,7 +466,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
       render(<Harness transactions={marchRows()} />)
       fireEvent.click(
         screen.getByRole('button', {
-          name: 'Hogar US$ 190,00 de US$ 250,00 gastados',
+          name: 'Ver solo los gastos del hogar: Hogar US$ 190,00 de US$ 250,00 gastados',
         })
       )
       expect(
@@ -480,7 +480,11 @@ describe('Dashboard: Todo / Hogar mode', () => {
       render(
         <Harness transactions={marchRows()} onNavigateToTransactions={go} />
       )
-      fireEvent.click(screen.getByRole('button', { name: /^Hogar US\$ 190/ }))
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: /^Ver solo los gastos del hogar: Hogar US\$ 190/,
+        })
+      )
       expect(go).not.toHaveBeenCalled()
     })
 
@@ -510,6 +514,113 @@ describe('Dashboard: Todo / Hogar mode', () => {
     it('is gone in Hogar mode', () => {
       render(<Harness transactions={marchRows()} initialHousehold />)
       expect(screen.queryByText(/gastados$/)).not.toBeInTheDocument()
+    })
+  })
+
+  describe('review round 1', () => {
+    it('shows only the no-transactions state on ?hogar=si with no rows', () => {
+      render(<Harness transactions={[]} initialHousehold />)
+      expect(
+        screen.getByText('Empezá importando tu extracto')
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('Todavía no hay gastos del hogar')
+      ).not.toBeInTheDocument()
+    })
+
+    it('keeps a month with no household spend in "Mes a mes", at the same months as Todo', () => {
+      const rows = [
+        tx({ amount: 100, date: new Date('2026-01-10T00:00:00.000Z') }),
+        tx({
+          amount: 60,
+          category: Category.Restaurants,
+          date: new Date('2026-02-10T00:00:00.000Z'),
+        }),
+        tx({ amount: 100, date: new Date('2026-03-10T00:00:00.000Z') }),
+      ]
+      const months = () =>
+        screen
+          .getAllByRole('button', { name: /^Ver los gastos de (ene|feb|mar)/ })
+          .map((b) => b.getAttribute('aria-label'))
+      const { unmount } = render(
+        <Harness transactions={rows} onNavigateToTransactions={() => {}} />
+      )
+      const todo = months()
+      expect(todo).toHaveLength(3)
+      expect(screen.getByText(/Últimos 3 meses con datos/)).toBeInTheDocument()
+      unmount()
+
+      render(
+        <Harness
+          transactions={rows}
+          initialHousehold
+          onNavigateToTransactions={() => {}}
+        />
+      )
+      expect(months()).toEqual(todo)
+      expect(screen.getByText(/Últimos 3 meses con datos/)).toBeInTheDocument()
+    })
+
+    it('keeps the Sin definir banner when there is no household spend yet', () => {
+      render(
+        <Harness
+          transactions={[
+            tx({ category: Category.Restaurants, description: 'Resto plano' }),
+            tx({ category: Category.Uncategorized, amount: 30 }),
+          ]}
+          initialHousehold
+          onNavigateToTransactions={() => {}}
+        />
+      )
+      expect(
+        screen.getByText('Todavía no hay gastos del hogar')
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Ver los gastos sin definir' })
+      ).toHaveTextContent('US$ 30,00')
+    })
+
+    it('hides the household link at $0 and keeps the Sin definir line', () => {
+      const go = vi.fn()
+      render(
+        <Harness
+          transactions={[
+            tx({ date: new Date('2026-02-10T00:00:00.000Z') }),
+            tx({
+              category: Category.Restaurants,
+              amount: 80,
+              date: new Date('2026-03-20T00:00:00.000Z'),
+            }),
+            tx({
+              category: Category.Uncategorized,
+              amount: 30,
+              date: new Date('2026-03-21T00:00:00.000Z'),
+            }),
+          ]}
+          initialHousehold
+          onNavigateToTransactions={go}
+        />
+      )
+      expect(
+        screen.queryByRole('button', {
+          name: 'Ver los gastos del hogar del mes',
+        })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole('button', {
+          name: 'Ver los gastos sin definir del mes',
+        })
+      ).toBeInTheDocument()
+    })
+
+    it('moves focus to the hero after the share button switches the mode', () => {
+      render(<Harness transactions={marchRows()} />)
+      fireEvent.click(
+        screen.getByRole('button', { name: /^Ver solo los gastos del hogar/ })
+      )
+      expect(
+        screen.getByRole('heading', { name: /Gastos del hogar/ })
+      ).toHaveFocus()
     })
   })
 })

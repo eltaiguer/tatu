@@ -1,6 +1,7 @@
 // Resumen's hero: the month's spend as one sentence, converted + combined in
 // the home currency, with income, the currency split and the balance under it.
 
+import { useRef } from 'react'
 import type { Currency, TransactionsFilter } from '../../models'
 import type { MonthSummary } from '../../services/charts/chart-data'
 import { formatCurrency } from '../../utils/formatting'
@@ -56,10 +57,14 @@ export function MonthHero({
           })
       : undefined
 
+  // The share button unmounts when it switches the mode; focus goes to the
+  // hero, which says what the page now shows.
+  const heroRef = useRef<HTMLHeadingElement>(null)
+
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="m-0">
+        <h2 ref={heroRef} tabIndex={-1} className="m-0 outline-none">
           <span className="block font-sans text-label font-semibold tracking-[0.06em] text-[var(--text-faint)] uppercase">
             {monthSummary.isCurrentMonth
               ? 'Este mes'
@@ -76,7 +81,11 @@ export function MonthHero({
         {!householdMode && householdExpense > 0 && onShowHousehold && (
           <button
             type="button"
-            onClick={onShowHousehold}
+            onClick={() => {
+              onShowHousehold()
+              heroRef.current?.focus()
+            }}
+            aria-label={`Ver solo los gastos del hogar: Hogar ${formatCurrency(householdExpense, homeCurrency)} de ${formatCurrency(monthSummary.expense, homeCurrency)} gastados`}
             className="mt-1.5 -mx-1 block cursor-pointer rounded-md border-none bg-transparent px-1 py-0.5 text-left text-small text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Hogar{' '}
@@ -115,15 +124,18 @@ export function MonthHero({
         </p>
       </div>
       {householdMode ? (
-        <DrillTarget
-          onOpen={openSummaryMonth && (() => openSummaryMonth('debit'))}
-          label="Ver los gastos del hogar del mes"
-          className="max-w-[720px] px-3 py-2"
-        >
-          <span className="text-small font-semibold">
-            Ver los gastos del hogar del mes →
-          </span>
-        </DrillTarget>
+        // Nothing to open when the month has no household spend.
+        monthSummary.expense > 0 && (
+          <DrillTarget
+            onOpen={openSummaryMonth && (() => openSummaryMonth('debit'))}
+            label="Ver los gastos del hogar del mes"
+            className="max-w-[720px] px-3 py-2"
+          >
+            <span className="text-small font-semibold">
+              Ver los gastos del hogar del mes →
+            </span>
+          </DrillTarget>
+        )
       ) : (
         <div className="grid max-w-[720px] grid-cols-1 gap-2 sm:grid-cols-3">
           <DrillTarget

@@ -522,9 +522,10 @@ Resumen passes today's month.
   "not imported" from "the account didn't exist yet or was quiet", so the
   copy says only what is always true: those months lack data from some
   account. Importing the missing statements brings them back.
-- In Resumen's Hogar mode the rows drawn are a subset, but completeness is
-  about the statements: `buildMonthlyTrendRows` and `categoryChanges` take an
-  optional `coverage` (every row) for `completeMonths`.
+- In Resumen's Hogar mode the rows drawn are a subset, but the months and
+  their completeness are about the statements: `buildMonthlyTrendRows` and
+  `categoryChanges` take an optional `coverage` (every row) for
+  `completeMonths`, and the trend's axis comes from it too.
 
 ## What a category id means
 
@@ -586,17 +587,28 @@ clicks equals the sum of the rows it opens. Callers never re-derive it from
 value is Todo; the sidebar's Resumen link goes to `/`). Todo is the whole
 page. Hogar is one cut at the top: `householdRows` = the rows whose
 `rowHouseholdView(tx, currentCategoryHousehold())` is `household` (counted
-expenses only, so income, ignored rows and split parents are out). Every memo
-reads `rows = householdMode ? householdRows : transactions`; the household map
-is memoized on the category store's array, so a changed category default or
-row choice changes the numbers on the next render.
+expenses only, so income, ignored rows and split parents are out), found with
+`partitionByHousehold` (one pass; it also yields the Sin definir rows). Every
+memo reads `rows = householdMode ? householdRows : transactions`. The
+category defaults are read at render: nothing subscribes to the category
+store, and the numbers follow a changed default because coming back from
+Categorías remounts the view (as in `useTransactionFiltering`). The map
+changes identity when a default does, so the memos re-run without the rows
+changing.
 
 - The hero's month is always the Todo month: `buildCurrentMonthSummary` takes
   an optional reference month, so the household summary of a month with no
   household spend is $0 rather than another month.
 - Sin definir (`status === 'unassigned'`) is summed apart with
   `sumCountedTotals` / the same month summary, never into the household total.
-- Months' completeness reads every row (see "Complete months").
+- "Mes a mes" has the same months as Todo's (`coverage` is every row): a
+  month with no household spend is a bar at 0, not a missing month. Which
+  months are complete reads every row too (see "Complete months").
+- The URL token (`hogar` / `si`) lives in `services/filters/url-filters.ts`
+  (`householdModeFromSearch` / `householdModeToSearch`) beside the
+  Transacciones filter's, and `App.tsx` reads it on Resumen only.
+  Re-selecting Resumen in the sidebar replaces the entry and drops the query
+  (`keepsQueryOnReselect` in `src/routes.ts`: only Transacciones keeps its).
 - Drill-throughs go through one wrapper that adds `household: 'household'`
   (a filter naming its own household, such as Sin definir, keeps it).
 
