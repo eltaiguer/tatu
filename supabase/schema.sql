@@ -116,6 +116,18 @@ alter table public.category_overrides
   add column if not exists created_at timestamptz not null default timezone('utc', now()),
   add column if not exists updated_at timestamptz not null default timezone('utc', now());
 
+-- Hogar per merchant (#251): one yes/no per merchant key (the same key
+-- category_overrides uses), read at resolution time; rows are never stamped.
+create table if not exists public.household_rules (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  merchant_normalized text not null,
+  merchant_original text,
+  is_household boolean not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  primary key (user_id, merchant_normalized)
+);
+
 create table if not exists public.description_overrides (
   user_id uuid not null references auth.users(id) on delete cascade,
   description_normalized text not null,
@@ -239,6 +251,9 @@ create index if not exists idx_import_runs_user_checksum
 create index if not exists idx_category_overrides_user_updated
   on public.category_overrides (user_id, updated_at desc);
 
+create index if not exists idx_household_rules_user_updated
+  on public.household_rules (user_id, updated_at desc);
+
 create index if not exists idx_description_overrides_user_updated
   on public.description_overrides (user_id, updated_at desc);
 
@@ -291,6 +306,12 @@ before update on public.category_overrides
 for each row
 execute function public.set_updated_at_timestamp();
 
+drop trigger if exists set_household_rules_updated_at on public.household_rules;
+create trigger set_household_rules_updated_at
+before update on public.household_rules
+for each row
+execute function public.set_updated_at_timestamp();
+
 drop trigger if exists set_description_overrides_updated_at on public.description_overrides;
 create trigger set_description_overrides_updated_at
 before update on public.description_overrides
@@ -318,6 +339,7 @@ execute function public.set_updated_at_timestamp();
 alter table public.transactions enable row level security;
 alter table public.import_runs enable row level security;
 alter table public.category_overrides enable row level security;
+alter table public.household_rules enable row level security;
 alter table public.description_overrides enable row level security;
 alter table public.custom_categories enable row level security;
 alter table public.user_preferences enable row level security;
@@ -327,6 +349,7 @@ alter table public.ai_insights enable row level security;
 grant select, insert, update, delete on table public.transactions to authenticated;
 grant select, insert, update, delete on table public.import_runs to authenticated;
 grant select, insert, update, delete on table public.category_overrides to authenticated;
+grant select, insert, update, delete on table public.household_rules to authenticated;
 grant select, insert, update, delete on table public.description_overrides to authenticated;
 grant select, insert, update, delete on table public.custom_categories to authenticated;
 grant select, insert, update, delete on table public.user_preferences to authenticated;
@@ -416,6 +439,35 @@ with check (auth.uid() = user_id);
 drop policy if exists "category_overrides_delete_own" on public.category_overrides;
 create policy "category_overrides_delete_own"
 on public.category_overrides
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "household_rules_select_own" on public.household_rules;
+create policy "household_rules_select_own"
+on public.household_rules
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "household_rules_insert_own" on public.household_rules;
+create policy "household_rules_insert_own"
+on public.household_rules
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "household_rules_update_own" on public.household_rules;
+create policy "household_rules_update_own"
+on public.household_rules
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "household_rules_delete_own" on public.household_rules;
+create policy "household_rules_delete_own"
+on public.household_rules
 for delete
 to authenticated
 using (auth.uid() = user_id);

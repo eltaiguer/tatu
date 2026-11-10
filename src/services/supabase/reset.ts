@@ -13,6 +13,7 @@ export async function resetUserSupabaseData(userId: string): Promise<void> {
   await deleteByUser(userId, 'transactions')
   await deleteByUser(userId, 'import_runs')
   await deleteByUser(userId, 'category_overrides')
+  await deleteByUser(userId, 'household_rules')
   await deleteByUser(userId, 'description_overrides')
   await deleteByUser(userId, 'custom_categories')
   await deleteByUser(userId, 'custom_patterns')

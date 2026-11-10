@@ -13,7 +13,7 @@ import {
   listCustomCategories,
   type CustomCategory,
 } from '../categories/category-store'
-import { memoizeByReference } from '../../utils/memo'
+import { listMerchantHouseholdRules } from './household-rules-store'
 import { merchantOverrideKey } from '../categorizer/category-overrides'
 import { isCountedExpense } from '../spending/spending-rules'
 import type { Transaction } from '../../models'
@@ -240,18 +240,21 @@ export { canHaveHouseholdDefault } from '../categories/category-aliases'
 
 /**
  * Everything resolveHousehold reads besides the row: the signed-in user's
- * category defaults and (from a later commit) merchant rules.
+ * category defaults and merchant rules. The same object comes back until the
+ * category store or the rules store changes (both replace their value on
+ * every write), so memos keyed on it recompute only when they must.
  */
 export function currentHouseholdRules(): HouseholdRules {
-  return householdRulesOf(listCustomCategories())
-}
-
-const NO_MERCHANT_RULES: MerchantHousehold = new Map()
-
-// The category store replaces its array on every change (category-registry
-// relies on it too), so the array's identity is the cache key.
-const householdRulesOf = memoizeByReference(
-  (categories: CustomCategory[]): HouseholdRules => ({
+  const categories = listCustomCategories()
+  const merchants = listMerchantHouseholdRules()
+  if (
+    cached &&
+    cached.categories === categories &&
+    cached.merchants === merchants
+  ) {
+    return cached.rules
+  }
+  const rules: HouseholdRules = {
     categories: buildCategoryHousehold(
       categories.flatMap((c) =>
         typeof c.isHousehold === 'boolean'
@@ -259,9 +262,17 @@ const householdRulesOf = memoizeByReference(
           : []
       )
     ),
-    merchants: NO_MERCHANT_RULES,
-  })
-)
+    merchants,
+  }
+  cached = { categories, merchants, rules }
+  return rules
+}
+
+let cached: {
+  categories: CustomCategory[]
+  merchants: MerchantHousehold
+  rules: HouseholdRules
+} | null = null
 
 function statusOf(household: boolean): HouseholdResolution['status'] {
   return household ? 'household' : 'not_household'

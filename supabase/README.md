@@ -43,3 +43,12 @@ Whenever `schema.sql` changes (or after pulling a branch that changed it):
 - [ ] Apply `schema.sql` in the SQL Editor (steps above) **before** shipping the
       feature — code that writes the column will 400 until the DB has it.
 - [ ] `notify pgrst, 'reload schema';`
+
+## Tables added after the first release
+
+These need a manual apply before the code that uses them ships. Unlike a
+missing column, a missing table makes the workspace load fail (the app shows
+the connection-lost state), so apply them **before merging**:
+
+- `household_rules` (#251, step 7): the Hogar yes/no remembered per merchant,
+  one row per (user, merchant key). Read on every sign-in.

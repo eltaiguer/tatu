@@ -396,13 +396,70 @@ describe('Supabase repository — workspace', () => {
         updated_at: '',
       },
     ])
+    db.seed('household_rules', [
+      {
+        user_id: 'user-1',
+        merchant_normalized: 'disco',
+        merchant_original: 'DISCO',
+        is_household: true,
+        created_at: '',
+        updated_at: '',
+      },
+      {
+        user_id: 'user-2',
+        merchant_normalized: 'devoto',
+        is_household: false,
+        created_at: '',
+        updated_at: '',
+      },
+    ])
     const repo = createSupabaseRepository('user-1')
 
     const snapshot = await repo.loadWorkspace()
 
     expect(snapshot.transactions.map((t) => t.id)).toEqual(['tx-1'])
     expect(snapshot.categoryOverrides).toHaveLength(1)
+    expect(
+      snapshot.householdRules.map((r) => [r.merchantNormalized, r.isHousehold])
+    ).toEqual([['disco', true]])
     expect(snapshot.preferences).toBeNull()
+  })
+})
+
+describe('Supabase repository — household rules', () => {
+  it('saves, replaces and deletes a merchant rule of its user only', async () => {
+    db.seed('household_rules', [
+      {
+        user_id: 'user-2',
+        merchant_normalized: 'disco',
+        is_household: false,
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    const repo = createSupabaseRepository('user-1')
+
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      merchantOriginal: 'DISCO',
+      isHousehold: true,
+    })
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      merchantOriginal: 'DISCO',
+      isHousehold: false,
+    })
+
+    expect(
+      db.rows('household_rules').map((r) => [r.user_id, r.is_household])
+    ).toEqual([
+      ['user-2', false],
+      ['user-1', false],
+    ])
+
+    await repo.deleteHouseholdRule('disco')
+
+    expect(db.rows('household_rules').map((r) => r.user_id)).toEqual(['user-2'])
   })
 })
 
@@ -451,6 +508,7 @@ describe('Supabase repository — reset all data', () => {
     'transactions',
     'import_runs',
     'category_overrides',
+    'household_rules',
     'description_overrides',
     'custom_categories',
     'custom_patterns',
@@ -479,7 +537,7 @@ describe('Supabase repository — reset all data', () => {
     await expect(repo.resetAll()).rejects.toThrow('request failed')
 
     const deletes = db.requests.filter((r) => r.op === 'delete')
-    expect(deletes.map((r) => r.table)).toEqual(RESET_TABLES.slice(0, 5))
+    expect(deletes.map((r) => r.table)).toEqual(RESET_TABLES.slice(0, 6))
   })
 
   it('still succeeds when the insights table is missing', async () => {

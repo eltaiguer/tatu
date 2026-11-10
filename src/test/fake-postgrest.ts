@@ -22,6 +22,7 @@ const PRIMARY_KEYS: Record<string, string[]> = {
   import_runs: ['id'],
   description_overrides: ['user_id', 'description_normalized'],
   category_overrides: ['user_id', 'merchant_normalized'],
+  household_rules: ['user_id', 'merchant_normalized'],
   custom_patterns: ['user_id', 'id'],
   custom_categories: ['user_id', 'id'],
   user_preferences: ['user_id'],
