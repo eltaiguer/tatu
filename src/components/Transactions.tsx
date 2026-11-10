@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
-import type { RuleScope } from '../services/mutations/transaction-mutations'
 import { requireRepository } from '../services/repository/repository'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import { Download, X } from 'lucide-react'
@@ -43,18 +42,15 @@ import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
 import {
+  AFTER_EDIT,
+  useHouseholdWrites,
+} from './transactions/useHouseholdWrites'
+import {
   currentHouseholdRules,
-  nextHouseholdChoice,
-  resolveHousehold,
-  rowsChangedByRule,
   rowsSharingMerchantRule,
 } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
 import { getDisplayDescription } from '../utils/transaction-display'
-import { UserFacingError } from '../utils/user-error'
-
-const offerToastId = (id: string) => `household-offer-${id}`
-const AFTER_EDIT = 'Se guardaron los cambios, pero no el gasto del hogar'
 
 const sameTags = (a: string[], b: string[]) =>
   a.length === b.length && a.every((tag, i) => tag === b[i])
@@ -151,28 +147,6 @@ export function Transactions({
   // `newestRowDate` is null only without rows.
   const newestForNav = newestRowDate ?? todayAsUtcDate()
 
-  // The newest household write started per row, so an old toast's retry can
-  // tell it has been superseded.
-  const householdWrites = useRef(new Map<string, number>())
-  // The latest rows, to see whether a row changed after a failed write.
-  const transactionsRef = useRef(transactions)
-  transactionsRef.current = transactions
-  const rowChoice = (id: string) =>
-    transactionsRef.current.find((tx) => tx.id === id)?.household ?? null
-  // Starts a household write of a row: any earlier offer of the row is
-  // withdrawn (its action would replay an old click) and the returned number
-  // marks this write as the newest.
-  const startHouseholdWrite = (id: string) => {
-    const seq = (householdWrites.current.get(id) ?? 0) + 1
-    householdWrites.current.set(id, seq)
-    toast.dismiss(offerToastId(id))
-    return seq
-  }
-  // Whether nothing else wrote the row since `seq` and it still holds what it
-  // did when `heldWhenFailed` was read: only then may an old retry run.
-  const mayReplay = (id: string, seq: number, held: boolean | null) =>
-    householdWrites.current.get(id) === seq && rowChoice(id) === held
-
   /* ---- Edit state ---- */
   // Rows with a mutation in flight. A set, not a single id, so two
   // overlapping deletes don't re-enable each other's buttons.
@@ -239,6 +213,15 @@ export function Transactions({
     reportDeleted,
     deleteWithConfirmation,
   })
+
+  const { handleToggleHousehold, writeHousehold, writeHouseholdRule } =
+    useHouseholdWrites({
+      transactions,
+      onSetHousehold,
+      onApplyHouseholdToSimilar,
+      setPending,
+      reportError,
+    })
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
@@ -417,142 +400,6 @@ export function Transactions({
       reportError(error, 'No se pudo restaurar la transacción')
     } finally {
       setPending(transaction.id, false)
-    }
-  }
-
-  // One click flips the row's house. Quiet on success: the house moves when
-  // the saved row comes back from the store.
-  // When other rows of the merchant would change if it became a rule, the
-  // toast after a saved click offers "Aplicar a las N similares".
-  async function handleToggleHousehold(transaction: Transaction) {
-    const rules = currentHouseholdRules()
-    const choice = nextHouseholdChoice(transaction, rules)
-    const saved = await writeHousehold(
-      transaction.id,
-      choice,
-      'No se pudo guardar el gasto del hogar'
-    )
-    if (!saved || !onApplyHouseholdToSimilar || transaction.splitParentId) {
-      return
-    }
-    // The row as the write left it; the others as they were on the click.
-    const after = resolveHousehold({ ...transaction, household: choice }, rules)
-    if (after.status === 'unassigned') return
-    const value = after.status === 'household'
-    const others = rowsChangedByRule(
-      transactions,
-      transaction,
-      value,
-      rules,
-      true
-    ).filter((row) => row.id !== transaction.id).length
-    if (others < 1) return
-    const offered = householdWrites.current.get(transaction.id)
-    toast(
-      value
-        ? 'Transacción marcada como hogar'
-        : 'Transacción marcada como no hogar',
-      {
-        id: offerToastId(transaction.id),
-        duration: 8000,
-        action: {
-          label:
-            others === 1
-              ? 'Aplicar a la otra similar'
-              : `Aplicar a las ${others} similares`,
-          onClick: () => {
-            // A newer click or write of the row withdrew this offer.
-            if (householdWrites.current.get(transaction.id) !== offered) return
-            void applyToSimilar(transaction.id, value, others)
-          },
-        },
-      }
-    )
-  }
-
-  async function applyToSimilar(id: string, value: boolean, others: number) {
-    if (!onApplyHouseholdToSimilar) return
-    const seq = startHouseholdWrite(id)
-    try {
-      await onApplyHouseholdToSimilar(id, value, 'matching_past_and_future')
-      toast.success(
-        others === 1
-          ? 'Se aplicó a la otra similar'
-          : `Se aplicó a ${others} transacciones`
-      )
-    } catch (error) {
-      const held = rowChoice(id)
-      reportError(error, 'No se pudo aplicar a las similares', '', () => {
-        if (mayReplay(id, seq, held)) void applyToSimilar(id, value, others)
-      })
-    }
-  }
-
-  // Writes one row's choice; true when it saved. A failure that saved nothing
-  // offers the same write again, but only if nothing else touched the row
-  // since: no newer write of this view started (the counter) and the saved
-  // row still holds what it did when this one failed (which also covers bulk
-  // writes and the dialog). A newer choice is never overwritten by an old
-  // toast.
-  async function writeHousehold(
-    id: string,
-    household: boolean | null,
-    failure: string
-  ): Promise<boolean> {
-    if (!onSetHousehold) return false
-    const seq = startHouseholdWrite(id)
-    setPending(id, true)
-    try {
-      await onSetHousehold([id], household)
-      return true
-    } catch (error) {
-      const heldWhenFailed = rowChoice(id)
-      // After a saved edit, say so even when the error brings its own words.
-      const prefix =
-        failure === AFTER_EDIT && error instanceof UserFacingError
-          ? `${AFTER_EDIT}. `
-          : ''
-      reportError(error, failure, prefix, () => {
-        if (mayReplay(id, seq, heldWhenFailed)) {
-          void writeHousehold(id, household, failure)
-        }
-      })
-      return false
-    } finally {
-      setPending(id, false)
-    }
-  }
-
-  // Saves the merchant's household rule from the edit dialog and applies it
-  // to the similar rows; resolves with how many rows it reaches, or null when
-  // it failed (reported). A failure that saved nothing offers the same write
-  // again; a partial one offers to retry just the rest.
-  async function writeHouseholdRule(
-    id: string,
-    household: boolean | null,
-    scope: RuleScope,
-    failure: string
-  ): Promise<number | null> {
-    if (!onApplyHouseholdToSimilar) return null
-    const seq = startHouseholdWrite(id)
-    setPending(id, true)
-    try {
-      const { affected } = await onApplyHouseholdToSimilar(id, household, scope)
-      return affected
-    } catch (error) {
-      const prefix =
-        failure === AFTER_EDIT && error instanceof UserFacingError
-          ? `${AFTER_EDIT}. `
-          : ''
-      const held = rowChoice(id)
-      reportError(error, failure, prefix, () => {
-        if (mayReplay(id, seq, held)) {
-          void writeHouseholdRule(id, household, scope, failure)
-        }
-      })
-      return null
-    } finally {
-      setPending(id, false)
     }
   }
 
