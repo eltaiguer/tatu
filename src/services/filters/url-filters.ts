@@ -1,4 +1,8 @@
-import type { TransactionsFilter, UrlPeriod } from '../../models'
+import type {
+  HouseholdFilter,
+  TransactionsFilter,
+  UrlPeriod,
+} from '../../models'
 
 export type { UrlPeriod }
 
@@ -19,6 +23,9 @@ export interface UrlFilterState {
   min: string
   max: string
   showIgnored: boolean
+  // Hogar: only counted expenses that are household / still Sin definir
+  // (services/household/household.ts decides which).
+  household: HouseholdFilter
   // Undefined when the URL doesn't say; the view picks its default.
   period?: UrlPeriod
 }
@@ -33,6 +40,7 @@ export const DEFAULT_URL_FILTERS: UrlFilterState = {
   min: '',
   max: '',
   showIgnored: false,
+  household: 'all',
 }
 
 // Whether the view is "filtrado" — and whether a link filters at all: every
@@ -48,7 +56,8 @@ export function hasActiveFilters(filters: UrlFilterState): boolean {
     filters.currency !== 'all' ||
     filters.type !== 'all' ||
     filters.min !== '' ||
-    filters.max !== ''
+    filters.max !== '' ||
+    filters.household !== 'all'
   )
 }
 
@@ -92,6 +101,7 @@ export function parseFilterParams(search: string): UrlFilterState {
   const type = params.get('tipo')
   const min = params.get('min') ?? ''
   const max = params.get('max') ?? ''
+  const hogar = params.get('hogar')
   return {
     search: params.get('q') ?? '',
     merchant: params.get('comercio') ?? '',
@@ -106,6 +116,16 @@ export function parseFilterParams(search: string): UrlFilterState {
     min: isNumeric(min) ? min : '',
     max: isNumeric(max) ? max : '',
     showIgnored: params.get('ignoradas') === '1',
+    // Income has no household answer, so that mix would list nothing: the
+    // income type wins and hogar is dropped.
+    household:
+      type === 'credit'
+        ? 'all'
+        : hogar === 'si'
+          ? 'household'
+          : hogar === 'sin-definir'
+            ? 'unassigned'
+            : 'all',
     ...(parsePeriod(params) && { period: parsePeriod(params) }),
   }
 }
@@ -122,6 +142,11 @@ export function serializeFilterParams(state: UrlFilterState): string {
   if (state.min) params.set('min', state.min)
   if (state.max) params.set('max', state.max)
   if (state.showIgnored) params.set('ignoradas', '1')
+  // Never written beside tipo=credit (see parseFilterParams).
+  if (state.type !== 'credit') {
+    if (state.household === 'household') params.set('hogar', 'si')
+    if (state.household === 'unassigned') params.set('hogar', 'sin-definir')
+  }
   const period = state.period
   if (period?.mode === 'all') params.set('periodo', 'todo')
   if (period?.mode === 'month') {
@@ -153,6 +178,7 @@ export function filterToSearch(filter: TransactionsFilter): string {
         : [],
     currency: filter.currency ?? 'all',
     type: filter.type ?? 'all',
+    household: filter.household ?? 'all',
   }
   const period =
     filter.period ??

@@ -10,6 +10,7 @@ import {
   countsTowardTotals,
   countsAsRow,
 } from '../services/spending/spending-rules'
+import { currentCategoryHousehold } from '../services/household/household'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { sortCategoryIdsByLabel } from '../services/categories/category-registry'
 import { newestDate, todayAsUtcDate } from '../utils/date-utils'
@@ -187,6 +188,12 @@ export function useTransactionFiltering({
   // The period as days, for the date inputs.
   const dateRange = periodDateRange(filters.period, recentAnchor)
 
+  // The user's category defaults, read at render (nothing subscribes to the
+  // category store; navigating to Categorías and back remounts the view).
+  // The map changes identity when a default does, so a re-render re-runs the
+  // Hogar filter without the rows or the filters changing.
+  const categoryHousehold = currentCategoryHousehold()
+
   // Every matching row, ignored ones included (the totals strip and the
   // "n ignoradas" count need them), sorted for the table.
   const allFilteredTransactions = useMemo(
@@ -195,12 +202,19 @@ export function useTransactionFiltering({
         filterTransactions(
           transactions,
           { ...filters, showIgnored: true },
-          { recentAnchor }
+          { recentAnchor, categoryHousehold }
         ),
         sortField,
         sortDirection
       ),
-    [transactions, filters, recentAnchor, sortField, sortDirection]
+    [
+      transactions,
+      filters,
+      recentAnchor,
+      categoryHousehold,
+      sortField,
+      sortDirection,
+    ]
   )
 
   const showIgnored = filters.showIgnored

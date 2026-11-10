@@ -1,9 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import type { Transaction } from '../../models'
-import { buildCsv, buildPdfReportHtml, exportTransactions } from './export'
+import {
+  buildCsv,
+  buildPdfReportHtml,
+  exportTransactions,
+  HOUSEHOLD_HEADER,
+} from './export'
+import { buildCategoryHousehold } from '../household/household'
 import { captureCsvDownload } from '../../test/csv-download'
 import { capturePrintFrame } from '../../test/print-frame'
 import { UserFacingError } from '../../utils/user-error'
+
+const NO_DEFAULTS = buildCategoryHousehold([])
 
 function makeTransaction(
   id: string,
@@ -32,23 +40,26 @@ describe('Export helpers', () => {
       }),
     ]
 
-    const csv = buildCsv(transactions)
+    const csv = buildCsv(transactions, NO_DEFAULTS)
 
     expect(csv).toContain(
-      '"Date","Description","Amount","Currency","Type","Category","cuenta_en_totales"'
+      '"Date","Description","Amount","Currency","Type","Category","cuenta_en_totales","hogar"'
     )
     expect(csv).toContain(
-      '"2025-01-01","Netflix","12.50","USD","debit","Entretenimiento","1"'
+      '"2025-01-01","Netflix","12.50","USD","debit","Entretenimiento","1","no"'
     )
   })
 
   it('humanizes unknown category labels in printable exports', () => {
-    const html = buildPdfReportHtml([
-      makeTransaction('tx-1', {
-        description: 'Desk lamp',
-        category: 'home_office',
-      }),
-    ])
+    const html = buildPdfReportHtml(
+      [
+        makeTransaction('tx-1', {
+          description: 'Desk lamp',
+          category: 'home_office',
+        }),
+      ],
+      { categoryHousehold: NO_DEFAULTS }
+    )
 
     expect(html).toContain('Home office')
   })
@@ -62,7 +73,7 @@ describe('Export helpers', () => {
           makeTransaction('trf', { category: 'internal_transfer' }),
           makeTransaction('tx-1', { category: 'groceries' }),
         ],
-        { format: 'csv' }
+        { format: 'csv', categoryHousehold: NO_DEFAULTS }
       )
 
       const [, ...rows] = await csv.rows()
@@ -96,7 +107,7 @@ describe('Export helpers', () => {
             splitParentId: 'parent',
           }),
         ],
-        { format: 'csv' }
+        { format: 'csv', categoryHousehold: NO_DEFAULTS }
       )
 
       const [header, ...rows] = await csv.rows()
@@ -116,6 +127,7 @@ describe('Export helpers', () => {
 
     const html = buildPdfReportHtml(transactions, {
       title: 'Export Report',
+      categoryHousehold: NO_DEFAULTS,
     })
 
     expect(html).toContain('<table')
@@ -128,7 +140,7 @@ describe('Export helpers', () => {
     try {
       const written = exportTransactions(
         [makeTransaction('tx-1', { description: 'Devoto Pocitos' })],
-        { format: 'pdf', fileName: 'report' }
+        { format: 'pdf', fileName: 'report', categoryHousehold: NO_DEFAULTS }
       )
 
       expect(written).toBe(1)
@@ -145,7 +157,10 @@ describe('Export helpers', () => {
     const frame = capturePrintFrame({ failing: true })
     try {
       expect(() =>
-        exportTransactions([makeTransaction('tx-1')], { format: 'pdf' })
+        exportTransactions([makeTransaction('tx-1')], {
+          format: 'pdf',
+          categoryHousehold: NO_DEFAULTS,
+        })
       ).toThrow(UserFacingError)
       expect(frame.printed()).toHaveLength(0)
     } finally {
@@ -159,6 +174,7 @@ describe('Export helpers', () => {
       [makeTransaction('tx-1', { description })],
       {
         title: 'Gastos <b>2026</b> & más',
+        categoryHousehold: NO_DEFAULTS,
       }
     )
 
@@ -181,20 +197,80 @@ describe('Export helpers', () => {
 // midnight and for rows stored before #58 at 03:00Z.
 describe('exported dates', () => {
   it('writes each row on its own calendar day', () => {
-    const csv = buildCsv([
-      makeTransaction('new', { date: new Date('2026-03-01T00:00:00.000Z') }),
-      makeTransaction('pre-58', {
-        date: new Date('2026-03-31T03:00:00.000Z'),
-      }),
-    ])
+    const csv = buildCsv(
+      [
+        makeTransaction('new', { date: new Date('2026-03-01T00:00:00.000Z') }),
+        makeTransaction('pre-58', {
+          date: new Date('2026-03-31T03:00:00.000Z'),
+        }),
+      ],
+      NO_DEFAULTS
+    )
     const dates = csv
       .split('\n')
       .slice(1)
       .map((line) => line.split(',')[0].replace(/"/g, ''))
     expect(dates).toEqual(['2026-03-01', '2026-03-31'])
-    const html = buildPdfReportHtml([
-      makeTransaction('new', { date: new Date('2026-03-01T00:00:00.000Z') }),
-    ])
+    const html = buildPdfReportHtml(
+      [makeTransaction('new', { date: new Date('2026-03-01T00:00:00.000Z') })],
+      { categoryHousehold: NO_DEFAULTS }
+    )
     expect(html).toContain('<td>2026-03-01</td>')
+  })
+})
+
+describe('hogar column', () => {
+  const rows = [
+    makeTransaction('groceries', { category: 'groceries' }),
+    makeTransaction('restaurants', { category: 'restaurants' }),
+    makeTransaction('restaurants-yes', {
+      category: 'restaurants',
+      household: true,
+    }),
+    makeTransaction('uncategorized', { category: 'uncategorized' }),
+    makeTransaction('income', { category: 'income', type: 'credit' }),
+    makeTransaction('transfer', { category: 'internal_transfer' }),
+    makeTransaction('parent', { isSplitParent: true }),
+  ]
+  const hogar = (map = NO_DEFAULTS) => {
+    const [header, ...data] = buildCsv(rows, map)
+      .split('\n')
+      .map((line) => line.split('","').map((c) => c.replace(/^"|"$/g, '')))
+    const col = header.indexOf(HOUSEHOLD_HEADER)
+    return Object.fromEntries(rows.map((r, i) => [r.id, data[i][col]]))
+  }
+
+  it('is the column after cuenta_en_totales', () => {
+    const header = buildCsv(rows, NO_DEFAULTS).split('\n')[0]
+    expect(header.endsWith('"cuenta_en_totales","hogar"')).toBe(true)
+  })
+
+  it('says si / no / sin_definir for expenses and nothing for the rest', () => {
+    expect(hogar()).toEqual({
+      groceries: 'si',
+      restaurants: 'no',
+      'restaurants-yes': 'si',
+      uncategorized: 'sin_definir',
+      income: '',
+      transfer: '',
+      parent: '',
+    })
+  })
+
+  it("follows the user's category default", () => {
+    expect(
+      hogar(buildCategoryHousehold([['restaurants', true]])).restaurants
+    ).toBe('si')
+  })
+
+  it('is in the PDF report too', () => {
+    const html = buildPdfReportHtml(rows, { categoryHousehold: NO_DEFAULTS })
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    const heads = [...doc.querySelectorAll('th')].map((th) => th.textContent)
+    expect(heads[heads.length - 1]).toBe('hogar')
+    const first = [
+      ...doc.querySelectorAll('tbody tr')[0].querySelectorAll('td'),
+    ]
+    expect(first[first.length - 1].textContent).toBe('si')
   })
 })

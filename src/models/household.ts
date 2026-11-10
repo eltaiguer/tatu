@@ -5,6 +5,9 @@
  */
 export type HouseholdStatus = 'household' | 'not_household' | 'unassigned'
 
+/** The Transacciones Hogar filter: everything, or one household status. */
+export type HouseholdFilter = 'all' | 'household' | 'unassigned'
+
 /** A row's household status and where it came from. */
 export interface HouseholdResolution {
   status: HouseholdStatus
