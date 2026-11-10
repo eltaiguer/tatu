@@ -11,6 +11,7 @@ import {
   bulkTag,
   deleteTransactions,
   editTransaction,
+  applyHouseholdToSimilar,
   restoreDeleted,
   setHousehold,
   splitTransaction,
@@ -105,6 +106,14 @@ export function useTransactionHandlers({
     handleSetHousehold: run(
       (repo, transactionIds: string[], household: boolean | null) =>
         setHousehold(repo, transactionIds, household)
+    ),
+    handleApplyHouseholdToSimilar: run(
+      (
+        repo,
+        transactionId: string,
+        household: boolean | null,
+        scope: 'matching_past_and_future' | 'future_matching_only'
+      ) => applyHouseholdToSimilar(repo, transactionId, household, scope)
     ),
     handleAutoCategorizeTransactions: run((repo, transactionIds: string[]) =>
       autoCategorize(repo, transactionIds)

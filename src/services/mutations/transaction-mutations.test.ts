@@ -41,6 +41,7 @@ vi.mock('../ai/correction-context', () => ({
 }))
 
 import {
+  applyHouseholdToSimilar,
   applyPatternToPast,
   autoCategorize,
   bulkCategorize,
@@ -72,6 +73,11 @@ import {
   replaceDescriptionOverrides,
   setDescriptionOverride,
 } from '../descriptions/description-overrides'
+import {
+  clearHouseholdRules,
+  listMerchantHouseholdRules,
+} from '../household/household-rules-store'
+import { currentHouseholdRules, resolveHousehold } from '../household/household'
 import { getDisplayDescription } from '../../utils/transaction-display'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 import { currentUserRules } from '../categorizer/user-rules'
@@ -151,6 +157,7 @@ beforeEach(() => {
   transactionStore.getState().clearTransactions()
   replaceDescriptionOverrides({})
   replaceMerchantCategoryOverrides({})
+  clearHouseholdRules()
   replaceCustomPatterns([])
   workspaceStore.setState({ userId: null, status: 'idle' })
   ai.getAiConfig.mockReturnValue(null)
@@ -1663,6 +1670,293 @@ describe('transaction-mutations — household choice (#251)', () => {
     }
   })
 })
+
+describe('transaction-mutations — household rule for similar rows (#251)', () => {
+  const KEY = merchantOverrideKey('DEVOTO') as string
+  const devoto = (id: string, overrides: Partial<Transaction> = {}) =>
+    makeTransaction(id, {
+      description: `DEVOTO ${10 + (id.charCodeAt(id.length - 1) % 18)}/03/2026`,
+      category: 'restaurants',
+      ...overrides,
+    })
+  // d1 is the edited row; d2 has its own "no"; d3 its own "yes"; d4 has none.
+  const rows = () => [
+    devoto('d1'),
+    devoto('d2', { household: false }),
+    devoto('d3', { household: true }),
+    devoto('d4'),
+    devoto('part', { splitParentId: 'parent' }),
+    makeTransaction('other', {
+      description: 'TIENDA INGLESA',
+      category: 'restaurants',
+    }),
+  ]
+  const shows = (id: string) =>
+    resolveHousehold(stored(id)!, currentHouseholdRules())
+  beforeEach(() => {
+    // Every Devoto row shares one merchant key: the suffix is noise.
+    expect(merchantOverrideKey(devoto('d1').description)).toBe(KEY)
+    expect(merchantOverrideKey(devoto('d9').description)).toBe(KEY)
+  })
+
+  describe("'matching_past_and_future'", () => {
+    it('saves the rule on both sides and clears the own choice of every similar row', async () => {
+      const repo = signedIn(rows())
+
+      const result = await applyHouseholdToSimilar(
+        repo,
+        'd1',
+        true,
+        'matching_past_and_future'
+      )
+
+      expect(result.affected).toBe(4)
+      expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
+      expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
+      for (const id of ['d1', 'd2', 'd3', 'd4']) {
+        expect(shows(id)).toEqual({ status: 'household', source: 'merchant' })
+        expect(repo.row(id)?.household ?? null).toBeNull()
+      }
+    })
+
+    it('never writes a split part or another merchant', async () => {
+      const repo = signedIn(rows())
+
+      await applyHouseholdToSimilar(
+        repo,
+        'd1',
+        true,
+        'matching_past_and_future'
+      )
+
+      expect(shows('part').source).toBe('category')
+      expect(shows('other').source).toBe('category')
+    })
+
+    it('a no rule turns a groceries merchant off', async () => {
+      const repo = signedIn([
+        makeTransaction('g1', { description: 'DISCO 11/03/2026' }),
+        makeTransaction('g2', {
+          description: 'DISCO 12/03/2026',
+          household: true,
+        }),
+      ])
+
+      await applyHouseholdToSimilar(
+        repo,
+        'g1',
+        false,
+        'matching_past_and_future'
+      )
+
+      expect(shows('g1').status).toBe('not_household')
+      expect(shows('g2')).toEqual({
+        status: 'not_household',
+        source: 'merchant',
+      })
+    })
+
+    it('null deletes the rule and clears the choices: rows go back to their category', async () => {
+      const repo = signedIn(rows(), {
+        householdRules: [
+          {
+            merchantNormalized: KEY,
+            isHousehold: true,
+            createdAt: '',
+            updatedAt: '',
+          },
+        ],
+      })
+      // The store side of a loaded rule.
+      const { loadHouseholdRules } =
+        await import('../household/household-rules-store')
+      loadHouseholdRules([
+        {
+          merchantNormalized: KEY,
+          isHousehold: true,
+          createdAt: '',
+          updatedAt: '',
+        },
+      ])
+
+      await applyHouseholdToSimilar(
+        repo,
+        'd1',
+        null,
+        'matching_past_and_future'
+      )
+
+      expect(repo.householdRules.size).toBe(0)
+      expect(listMerchantHouseholdRules().size).toBe(0)
+      expect(shows('d3')).toEqual({
+        status: 'not_household',
+        source: 'category',
+      })
+      expect(repo.row('d3')?.household ?? null).toBeNull()
+    })
+
+    it('a partial failure keeps the rule and retries only the rows that failed', async () => {
+      const repo = signedIn(rows())
+      repo.failOn('update', {
+        when: (chunk) => chunk.includes('d2'),
+        times: 1,
+        error: new Error('429 too many requests'),
+      })
+
+      const error = await applyHouseholdToSimilar(
+        repo,
+        'd1',
+        true,
+        'matching_past_and_future'
+      ).catch((e: unknown) => e)
+
+      expect(error).toBeInstanceOf(PartialWriteError)
+      expect((error as PartialWriteError).message).toMatch(
+        /Se guardó la regla, pero se actualizaron \d de \d transacciones/
+      )
+      expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
+      await (error as PartialWriteError).retry!()
+      expect(repo.row('d2')?.household ?? null).toBeNull()
+      expect(repo.row('d3')?.household ?? null).toBeNull()
+    })
+
+    it('drops its local changes when another user signed in mid-write', async () => {
+      const repo = signedIn(rows())
+      const gate = repo.hold('upsertHouseholdRule')
+      const pending = applyHouseholdToSimilar(
+        repo,
+        'd1',
+        true,
+        'matching_past_and_future'
+      ).catch((e: unknown) => e)
+      await Promise.resolve()
+
+      workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+      gate.release()
+      const error = await pending
+
+      expect(error).toBeInstanceOf(UserFacingError)
+      expect(listMerchantHouseholdRules().size).toBe(0)
+      expect(stored('d2')?.household).toBe(false)
+    })
+
+    it('a row imported afterwards follows the rule', async () => {
+      const repo = signedIn(rows())
+      await applyHouseholdToSimilar(
+        repo,
+        'd1',
+        true,
+        'matching_past_and_future'
+      )
+
+      const later = devoto('d9')
+      transactionStore.getState().setTransactions([...storedAll(), later])
+
+      expect(shows('d9')).toEqual({ status: 'household', source: 'merchant' })
+    })
+  })
+
+  describe("'future_matching_only'", () => {
+    it('keeps what past rows show: pins them, keeps own choices, the edited row follows the rule', async () => {
+      const repo = signedIn([
+        ...rows(),
+        devoto('d5', { category: 'uncategorized' }),
+      ])
+
+      await applyHouseholdToSimilar(repo, 'd1', true, 'future_matching_only')
+
+      expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
+      // d1: the edited row follows the rule.
+      expect(shows('d1')).toEqual({ status: 'household', source: 'merchant' })
+      // d4 showed "no" (its category): pinned to keep showing it.
+      expect(shows('d4')).toEqual({ status: 'not_household', source: 'row' })
+      expect(repo.row('d4')?.household).toBe(false)
+      // d2 / d3 keep their own choices, untouched.
+      expect(shows('d2')).toEqual({ status: 'not_household', source: 'row' })
+      expect(shows('d3')).toEqual({ status: 'household', source: 'row' })
+      // d5 was Sin definir: nothing to keep, it takes the rule.
+      expect(shows('d5')).toEqual({ status: 'household', source: 'merchant' })
+      expect(repo.row('d5')?.household ?? null).toBeNull()
+    })
+
+    it('does not pin a row whose shown value does not change', async () => {
+      const repo = signedIn([
+        makeTransaction('g1', { description: 'DISCO 11/03/2026' }),
+        makeTransaction('g2', { description: 'DISCO 12/03/2026' }),
+      ])
+
+      // Groceries already show household: a yes rule changes nothing for g2.
+      await applyHouseholdToSimilar(repo, 'g1', true, 'future_matching_only')
+
+      expect(repo.row('g2')?.household ?? null).toBeNull()
+    })
+
+    it('null deletes the rule and pins the rows that showed it', async () => {
+      const repo = signedIn(rows())
+      const { loadHouseholdRules } =
+        await import('../household/household-rules-store')
+      const record = {
+        merchantNormalized: KEY,
+        isHousehold: true,
+        createdAt: '',
+        updatedAt: '',
+      }
+      await repo.upsertHouseholdRule({
+        merchantNormalized: KEY,
+        isHousehold: true,
+      })
+      loadHouseholdRules([record])
+      expect(shows('d4').status).toBe('household')
+
+      await applyHouseholdToSimilar(repo, 'd1', null, 'future_matching_only')
+
+      expect(repo.householdRules.size).toBe(0)
+      expect(shows('d4')).toEqual({ status: 'household', source: 'row' })
+      expect(shows('d1')).toEqual({
+        status: 'not_household',
+        source: 'category',
+      })
+    })
+
+    it('a failure while pinning leaves the rule unsaved and the rows as they were', async () => {
+      const repo = signedIn(rows())
+      failChunksWith(repo, 'update', 'd4')
+
+      const error = await applyHouseholdToSimilar(
+        repo,
+        'd1',
+        true,
+        'future_matching_only'
+      ).catch((e: unknown) => e)
+
+      expect(error).toBeDefined()
+      expect(repo.householdRules.size).toBe(0)
+      expect(shows('d4')).toEqual({
+        status: 'not_household',
+        source: 'category',
+      })
+    })
+  })
+
+  it('without a merchant key it writes only the row and no rule', async () => {
+    const repo = signedIn([makeTransaction('n1', { description: '' })])
+
+    const result = await applyHouseholdToSimilar(
+      repo,
+      'n1',
+      true,
+      'matching_past_and_future'
+    )
+
+    expect(result.affected).toBe(1)
+    expect(repo.householdRules.size).toBe(0)
+    expect(repo.row('n1')?.household).toBe(true)
+  })
+})
+
+function storedAll() {
+  return transactionStore.getState().transactions
+}
 
 describe('transaction-mutations — Auto-categorizar pool and write rule (audit)', () => {
   // Amounts between 3001 and 15000 UYU get no amount heuristic, so only the
