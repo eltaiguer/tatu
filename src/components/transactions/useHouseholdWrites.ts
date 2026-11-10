@@ -11,7 +11,6 @@ import type { RuleScope } from '../../services/mutations/transaction-mutations'
 import { UserFacingError } from '../../utils/user-error'
 import type { TransactionsProps } from './transactions-props'
 
-const offerToastId = (id: string) => `household-offer-${id}`
 export const AFTER_EDIT = 'Se guardaron los cambios, pero no el gasto del hogar'
 
 /**
@@ -43,6 +42,8 @@ export function useHouseholdWrites({
   // The newest household write started per row, so an old toast's retry can
   // tell it has been superseded.
   const householdWrites = useRef(new Map<string, number>())
+  // The toast offering "Aplicar a las N similares", per row, while it shows.
+  const offers = useRef(new Map<string, string | number>())
   // The latest rows, to see whether a row changed after a failed write.
   const transactionsRef = useRef(transactions)
   transactionsRef.current = transactions
@@ -54,7 +55,13 @@ export function useHouseholdWrites({
   const startHouseholdWrite = (id: string) => {
     const seq = (householdWrites.current.get(id) ?? 0) + 1
     householdWrites.current.set(id, seq)
-    toast.dismiss(offerToastId(id))
+    // Only an offer that was shown, by its own id: dismissing an id that has
+    // no toast yet would dismiss the next toast made with it.
+    const offer = offers.current.get(id)
+    if (offer !== undefined) {
+      toast.dismiss(offer)
+      offers.current.delete(id)
+    }
     return seq
   }
   // Whether nothing else wrote the row since `seq` and it still holds what it
@@ -90,12 +97,11 @@ export function useHouseholdWrites({
     ).filter((row) => row.id !== transaction.id).length
     if (others < 1) return
     const offered = householdWrites.current.get(transaction.id)
-    toast(
+    const offer = toast(
       value
         ? 'Transacción marcada como hogar'
         : 'Transacción marcada como no hogar',
       {
-        id: offerToastId(transaction.id),
         duration: 8000,
         action: {
           label:
@@ -110,6 +116,7 @@ export function useHouseholdWrites({
         },
       }
     )
+    offers.current.set(transaction.id, offer)
   }
 
   async function applyToSimilar(id: string, value: boolean, others: number) {

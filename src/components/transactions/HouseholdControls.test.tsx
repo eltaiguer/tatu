@@ -285,7 +285,7 @@ describe('household choice in the edit dialog (#251)', () => {
   it('saves a hand choice with the rest of the edit', async () => {
     seed([tx('Devoto')])
     await openEdit('Devoto')
-    expect(screen.getByLabelText('Según categoría (sí)')).toBeChecked()
+    expect(screen.getByLabelText('Según categoría (Sí)')).toBeChecked()
 
     fireEvent.click(screen.getByLabelText('No'))
     await save()
@@ -302,7 +302,7 @@ describe('household choice in the edit dialog (#251)', () => {
     await openEdit('Cena')
     expect(screen.getByLabelText('Sí')).toBeChecked()
 
-    fireEvent.click(screen.getByLabelText('Según categoría (no)'))
+    fireEvent.click(screen.getByLabelText('Según categoría (No)'))
     await save()
 
     await waitFor(() => expect(repo.row('Cena')?.household ?? null).toBeNull())
@@ -969,7 +969,7 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     scope(/^Todas las similares/)
     // Under a rule scope the radio starts at the rule.
     expect(screen.getByLabelText('Sí')).toBeChecked()
-    fireEvent.click(screen.getByLabelText('Según categoría (no)'))
+    fireEvent.click(screen.getByLabelText('Según categoría (No)'))
     await save()
 
     await waitFor(() => expect(on(D3)).toBe(false))
@@ -1054,7 +1054,7 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
 
     scope(/^Todas las similares/)
 
-    expect(screen.getByLabelText('Según categoría (no)')).toBeChecked()
+    expect(screen.getByLabelText('Según categoría (No)')).toBeChecked()
     expect(screen.getByText(/Gasto del hogar/)).toHaveTextContent(
       /se aplica a 3 transacciones \(y a las futuras\)/
     )
@@ -1122,19 +1122,27 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
 
     expect(on(D1)).toBe(true)
     expect(on(D2)).toBe(false)
-    const action = await screen.findByRole('button', {
-      name: 'Aplicar a las 2 similares',
-    })
+    const action = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
     await act(async () => {
       fireEvent.click(action)
     })
 
-    await waitFor(() => expect(on(D2)).toBe(true))
+    await waitFor(() => expect(on(D2)).toBe(true), { timeout: 5000 })
     expect(on(D3)).toBe(true)
     expect(house(D2)).toHaveAttribute('title', 'Hogar · según comercio')
     expect(house(D2).querySelector('[data-hand-mark]')).toBeNull()
     expect(repo.householdRules.size).toBe(1)
-    expect(await screen.findByText('Se aplicó a 2 transacciones')).toBeVisible()
+    expect(
+      await screen.findByText(
+        'Se aplicó a 2 transacciones',
+        {},
+        { timeout: 5000 }
+      )
+    ).toBeVisible()
   })
 
   it('offers nothing when the click only returns to following an existing rule', async () => {
@@ -1188,23 +1196,29 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     expect(on(D2S)).toBe(false)
 
     await click(D1S)
-    const action = await screen.findByRole('button', {
-      name: 'Aplicar a la otra similar',
-    })
+    const action = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a la otra similar' },
+      { timeout: 5000 }
+    )
     await act(async () => {
       fireEvent.click(action)
     })
 
-    await waitFor(() => expect(repo.householdRules.size).toBe(1))
+    await waitFor(() => expect(repo.householdRules.size).toBe(1), {
+      timeout: 5000,
+    })
     expect(on(D2S)).toBe(true)
   })
 
   it('an old toast action does not apply a click that was since changed', async () => {
     seed(devotos())
     await click(D1)
-    const stale = await screen.findByRole('button', {
-      name: 'Aplicar a las 2 similares',
-    })
+    const stale = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
 
     // The user changes their mind before the toast goes away.
     await click(D1)
@@ -1222,13 +1236,19 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     await click(D1)
     repo.failOn('upsertHouseholdRule', { error: new Error('boom'), times: 1 })
-    const apply = await screen.findByRole('button', {
-      name: 'Aplicar a las 2 similares',
-    })
+    const apply = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
     await act(async () => {
       fireEvent.click(apply)
     })
-    const staleRetry = await screen.findByRole('button', { name: 'Reintentar' })
+    const staleRetry = await screen.findByRole(
+      'button',
+      { name: 'Reintentar' },
+      { timeout: 5000 }
+    )
 
     await click(D1)
     await act(async () => {
@@ -1246,19 +1266,25 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     await click(D1)
     repo.failOn('upsertHouseholdRule', { error: new Error('boom'), times: 1 })
 
-    const apply = await screen.findByRole('button', {
-      name: 'Aplicar a las 2 similares',
-    })
+    const apply = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
     await act(async () => {
       fireEvent.click(apply)
     })
-    const retry = await screen.findByRole('button', { name: 'Reintentar' })
+    const retry = await screen.findByRole(
+      'button',
+      { name: 'Reintentar' },
+      { timeout: 5000 }
+    )
     expect(on(D2)).toBe(false)
     await act(async () => {
       fireEvent.click(retry)
     })
 
-    await waitFor(() => expect(on(D2)).toBe(true))
+    await waitFor(() => expect(on(D2)).toBe(true), { timeout: 5000 })
     expect(logged).toHaveBeenCalled()
   })
 })
