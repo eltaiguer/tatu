@@ -245,13 +245,17 @@ export function Transactions({
 
   // Same matching the apply-to-similar write uses, so the number the
   // dialog shows is the number of rows the save will touch.
-  function countSimilar(transaction: Transaction, renamed: boolean) {
-    return countSimilarEditReach(transactions, transaction, renamed)
-  }
+  const countSimilar = useCallback(
+    (transaction: Transaction, renamed: boolean) =>
+      countSimilarEditReach(transactions, transaction, renamed),
+    [transactions]
+  )
 
-  function countHouseholdSimilar(transaction: Transaction) {
-    return rowsSharingMerchantRule(transactions, transaction).length
-  }
+  const countHouseholdSimilar = useCallback(
+    (transaction: Transaction) =>
+      rowsSharingMerchantRule(transactions, transaction).length,
+    [transactions]
+  )
 
   async function handleCreateCategory(label: string) {
     try {
@@ -274,15 +278,10 @@ export function Transactions({
     if (!onUpdateTransaction || !editingTransaction) return
     const editing = editingTransaction
     const editingId = editing.id
-    // Under an apply-to-similar scope the household choice is the merchant's
-    // rule, written only when the radio was touched (a category edit must not
-    // create or delete a rule). Under Solo esta it is the row's own choice.
-    const ruleScope =
-      draft.applyScope !== 'single' && Boolean(onApplyHouseholdToSimilar)
-    const householdChanged = ruleScope
-      ? draft.householdTouched
-      : Boolean(onSetHousehold) &&
-        draft.household !== (editing.household ?? null)
+    // The household part is written only when the dialog says the radio holds
+    // something to write (a category edit must not create or delete a rule,
+    // nor wipe a hand-set choice), under every scope.
+    const householdChanged = Boolean(onSetHousehold) && draft.householdTouched
     // A household-only save must not re-write the category as the user's own
     // confirmed one (confidence 1) nor, under a rule scope, upsert the
     // category rule and stamp every similar row: nothing about name,
@@ -320,7 +319,8 @@ export function Transactions({
         ? AFTER_EDIT
         : 'No se pudo guardar el gasto del hogar'
       let saved: boolean
-      if (ruleScope && draft.applyScope !== 'single') {
+      // Under an apply-to-similar scope the choice is the merchant's rule.
+      if (draft.applyScope !== 'single' && onApplyHouseholdToSimilar) {
         const applied = await writeHouseholdRule(
           editingId,
           draft.household,

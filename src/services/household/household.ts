@@ -126,6 +126,18 @@ export function merchantRule(
   return key === null ? undefined : merchants.get(key)
 }
 
+/** Whether a merchant rule can cover this row: it has a key and is not a split part. */
+export function canHaveMerchantRule(tx: {
+  description?: string
+  splitParentId?: string
+}): boolean {
+  return (
+    !tx.splitParentId &&
+    !!tx.description &&
+    householdRuleKey(tx.description) !== null
+  )
+}
+
 /**
  * The counted expenses, split parts excluded, that share `tx`'s merchant key
  * (`tx` included when it qualifies): the rows a merchant rule reaches. The

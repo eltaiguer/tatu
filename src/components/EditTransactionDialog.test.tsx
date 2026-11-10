@@ -5,6 +5,11 @@ import { EditTransactionDialog } from './EditTransactionDialog'
 import type { Transaction } from '../models'
 import { resolveCategory } from '../services/categories/category-registry'
 import { replaceCustomCategories } from '../services/categories/category-store'
+import { merchantOverrideKey } from '../services/categorizer/category-overrides'
+import {
+  clearHouseholdRules,
+  putMerchantHouseholdRule,
+} from '../services/household/household-rules-store'
 
 type DialogProps = ComponentProps<typeof EditTransactionDialog>
 
@@ -402,15 +407,113 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
     render(<EditTransactionDialog {...props} />)
 
     fireEvent.click(screen.getByLabelText('Sí'))
-    fireEvent.click(screen.getByLabelText(/^Todas las similares/))
     save()
 
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         household: true,
-        applyScope: 'matching_past_and_future',
+        householdTouched: true,
+        applyScope: 'single',
       })
     )
+  })
+
+  describe('household rule scopes (#251, review 1)', () => {
+    const rule = (value: boolean) =>
+      putMerchantHouseholdRule(
+        merchantOverrideKey(transaction.description) as string,
+        value
+      )
+
+    beforeEach(() => clearHouseholdRules())
+
+    it('a pick made under Solo esta is not a rule pick', () => {
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText('Sí'))
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applyScope: 'matching_past_and_future',
+          householdTouched: false,
+        })
+      )
+    })
+
+    it('choosing the option that is already shown still counts as a pick', () => {
+      rule(true)
+      const props = baseProps({
+        transaction: { ...transaction, household: false },
+      })
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+      expect(screen.getByLabelText('Sí')).toBeChecked()
+      fireEvent.click(screen.getByLabelText('Sí'))
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ household: true, householdTouched: true })
+      )
+    })
+
+    it('a rule pick does not follow the dialog back to Solo esta', () => {
+      const props = baseProps({
+        transaction: { ...transaction, household: false },
+      })
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+      fireEvent.click(screen.getByLabelText('Sí'))
+      fireEvent.click(screen.getByLabelText('Solo esta transacción'))
+
+      // The row's own choice again, and nothing to write for it.
+      expect(screen.getByLabelText('No')).toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applyScope: 'single',
+          household: false,
+          householdTouched: false,
+        })
+      )
+    })
+
+    it('does not promise future rows where no rule can be made', () => {
+      render(
+        <EditTransactionDialog
+          {...baseProps({
+            transaction: { ...transaction, splitParentId: 'parent' },
+          })}
+        />
+      )
+
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+
+      expect(screen.getByText(/Gasto del hogar/)).toHaveTextContent(
+        'solo esta transacción'
+      )
+      expect(screen.getByText(/Gasto del hogar/)).not.toHaveTextContent(
+        'futuras'
+      )
+    })
+
+    it('counts the similar rows once, not on every keystroke', () => {
+      const countHouseholdSimilar = vi.fn(() => 3)
+      render(
+        <EditTransactionDialog {...baseProps({ countHouseholdSimilar })} />
+      )
+      const calls = countHouseholdSimilar.mock.calls.length
+
+      fireEvent.change(screen.getByLabelText('Descripción edición'), {
+        target: { value: 'Disco Pocitos' },
+      })
+
+      expect(countHouseholdSimilar).toHaveBeenCalledTimes(calls)
+    })
   })
 
   it('follows the dialog’s own category picker', () => {
