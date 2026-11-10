@@ -447,4 +447,69 @@ describe('Dashboard: Todo / Hogar mode', () => {
       expect(screen.queryByText(/Sin definir este mes/)).not.toBeInTheDocument()
     })
   })
+
+  describe('the household share, in Todo mode', () => {
+    it('says how much of the month’s spend was for the household', () => {
+      render(<Harness transactions={marchRows()} />)
+      expect(
+        screen.getByRole('button', {
+          name: 'Hogar US$ 190,00 de US$ 250,00 gastados',
+        })
+      ).toBeInTheDocument()
+      // The hero sentence is unchanged.
+      expect(
+        screen.getByRole('heading', { name: /Gastaste/ })
+      ).toHaveTextContent('Gastaste US$ 250,00')
+    })
+
+    it('switches Resumen to Hogar mode when clicked', () => {
+      render(<Harness transactions={marchRows()} />)
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Hogar US$ 190,00 de US$ 250,00 gastados',
+        })
+      )
+      expect(
+        screen.getByRole('heading', { name: /Gastos del hogar/ })
+      ).toHaveTextContent('US$ 190,00')
+      expect(screen.getByRole('radio', { name: 'Hogar' })).toBeChecked()
+    })
+
+    it('does not navigate away', () => {
+      const go = vi.fn()
+      render(
+        <Harness transactions={marchRows()} onNavigateToTransactions={go} />
+      )
+      fireEvent.click(screen.getByRole('button', { name: /^Hogar US\$ 190/ }))
+      expect(go).not.toHaveBeenCalled()
+    })
+
+    it('is hidden when the month has no household spend', () => {
+      render(
+        <Harness
+          transactions={[
+            tx({ category: Category.Restaurants, description: 'Resto plano' }),
+          ]}
+        />
+      )
+      expect(screen.queryByText(/gastados$/)).not.toBeInTheDocument()
+    })
+
+    it('says nothing of Sin definir in Todo mode', () => {
+      render(
+        <Harness
+          transactions={[
+            ...marchRows(),
+            tx({ category: Category.Uncategorized, amount: 30 }),
+          ]}
+        />
+      )
+      expect(screen.queryByText(/Sin definir/)).not.toBeInTheDocument()
+    })
+
+    it('is gone in Hogar mode', () => {
+      render(<Harness transactions={marchRows()} initialHousehold />)
+      expect(screen.queryByText(/gastados$/)).not.toBeInTheDocument()
+    })
+  })
 })

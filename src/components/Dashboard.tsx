@@ -176,26 +176,20 @@ export function Dashboard({
         : undefined,
     [todaySummary]
   )
-  const monthSummary = useMemo(
+  // The household cut of the hero's month: Hogar mode's own summary, and
+  // the "Hogar X de Y" line in Todo mode.
+  const householdSummary = useMemo(
     () =>
-      householdMode
-        ? buildCurrentMonthSummary(
-            householdRows,
-            homeCurrency,
-            fxRate,
-            undefined,
-            referenceMonth
-          )
-        : todaySummary,
-    [
-      householdMode,
-      householdRows,
-      todaySummary,
-      referenceMonth,
-      homeCurrency,
-      fxRate,
-    ]
+      buildCurrentMonthSummary(
+        householdRows,
+        homeCurrency,
+        fxRate,
+        undefined,
+        referenceMonth
+      ),
+    [householdRows, referenceMonth, homeCurrency, fxRate]
   )
+  const monthSummary = householdMode ? householdSummary : todaySummary
   // Sin definir in the hero's month, and over all history for the banner.
   const unassignedMonthExpense = useMemo(
     () =>
@@ -386,6 +380,10 @@ export function Dashboard({
             curWord={curWord}
             householdMode={householdMode}
             unassignedExpense={unassignedMonthExpense}
+            householdExpense={householdSummary.expense}
+            onShowHousehold={
+              onHouseholdModeChange && (() => onHouseholdModeChange(true))
+            }
             onNavigateToTransactions={openTransactions}
           />
 

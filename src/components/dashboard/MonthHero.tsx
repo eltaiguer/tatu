@@ -23,6 +23,10 @@ interface MonthHeroProps {
   // Hogar mode: the month's Sin definir expense, shown under the total as a
   // link to those rows; hidden at zero.
   unassignedExpense?: number
+  // Todo mode: how much of the month's expense was household, as a line under
+  // the sentence that switches Resumen to Hogar mode; hidden at zero.
+  householdExpense?: number
+  onShowHousehold?: () => void
 }
 
 export function MonthHero({
@@ -32,6 +36,8 @@ export function MonthHero({
   onNavigateToTransactions,
   householdMode = false,
   unassignedExpense = 0,
+  householdExpense = 0,
+  onShowHousehold,
 }: MonthHeroProps) {
   // Opens exactly the month's rows (optionally only income/expenses).
   const openSummaryMonth =
@@ -67,6 +73,23 @@ export function MonthHero({
             </span>
           </span>
         </h2>
+        {!householdMode && householdExpense > 0 && onShowHousehold && (
+          <button
+            type="button"
+            onClick={onShowHousehold}
+            className="mt-1.5 -mx-1 block cursor-pointer rounded-md border-none bg-transparent px-1 py-0.5 text-left text-small text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            Hogar{' '}
+            <span className="font-mono tabular-nums">
+              {formatCurrency(householdExpense, homeCurrency)}
+            </span>{' '}
+            de{' '}
+            <span className="font-mono tabular-nums">
+              {formatCurrency(monthSummary.expense, homeCurrency)}
+            </span>{' '}
+            gastados
+          </button>
+        )}
         {householdMode && unassignedExpense > 0 && (
           <DrillTarget
             onOpen={
