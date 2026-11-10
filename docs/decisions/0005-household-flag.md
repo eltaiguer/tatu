@@ -136,11 +136,44 @@ Implemented in step 6 of #251: the Todo / Hogar mode on Resumen.
   token); re-selecting Resumen in the sidebar replaces the history entry and
   returns to Todo.
 
+Implemented in step 7 of #251: the household flag remembered per merchant.
+This reverses "no merchant rules in the first version": the owner expects Hogar
+to behave like categories, where one choice reaches the merchant's other rows
+and the ones imported later.
+
+- Precedence becomes: the row's own choice → the merchant rule → the user's
+  category default → the seeded default → Sin definir. A rule also covers an
+  uncategorized row (it is then not Sin definir). `HouseholdResolution.source`
+  (`row` / `merchant` / `category`) replaces `isOverride`; the dot on the house
+  is `row` only, a rule shows the faint house like a category default.
+- Rules are read, not stamped: a rule is one row in `household_rules`
+  (`merchantOverrideKey` of the raw description, like category rules, so rows
+  imported later follow it with no import change), and resolution reads it.
+  Deleting the rule puts its rows back on their category. The alternative,
+  stamping every similar row with its own choice, would lose the difference
+  between "chosen" and "inherited" and make a rule impossible to undo.
+- A split part ignores merchant rules (a split is a mixed purchase, as
+  `findSimilarTransactions` already leaves it out) but keeps its own choice and
+  its category default.
+- Edit dialog, one "Aplicar a" for category and Hogar. Solo esta: the row's own
+  choice, its follow option reads "Según comercio (Sí|No)" when a rule covers
+  the row. Todas las similares: Sí/No saves the rule and clears the own choice
+  of every similar row; "Según categoría" deletes the rule. Esta y las que
+  importes en el futuro: saves or deletes the rule, and every other similar row
+  without an own choice whose shown value would change keeps it as its own
+  choice (a Sin definir row has nothing to keep and takes the rule). Under the
+  two rule scopes the radio starts at the rule and the household part is
+  written only if it was touched; a Hogar-only save never reaches
+  `editTransaction`.
+- The one-click house still writes only its row; its toast offers "Aplicar a las
+  N similares" (N = the other rows whose shown value would change), which runs
+  the Todas las similares path. The bulk menu stays rows-only and no screen
+  lists rules: they are managed through the dialog, as category rules are.
+
 Planned for the later PRs of #251:
 
-- Household-aware Insights.
+- Step 8: household-aware Insights.
 - A mixed purchase is split, and each part gets its own flag.
-- No merchant rules for the flag in the first version.
 
 ## Alternatives considered
 
@@ -167,5 +200,7 @@ position nobody needs.
 - Changing a category's default moves all its rows that have no choice of
   their own at once. That is intended: most rows should follow their
   category, and only the exceptions are flagged by hand.
-- If repeated per-merchant exceptions appear, merchant rules for the flag are
-  the natural follow-up.
+- A per-merchant rule is one more place a row's value can come from; every
+  surface reads `HouseholdResolution.source` instead of guessing.
+- The new table needs a manual apply of `schema.sql` before the code ships
+  (`supabase/README.md`).

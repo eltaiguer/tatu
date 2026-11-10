@@ -440,8 +440,8 @@ see Merchant key below), amounts by absolute value, search over display name +
 raw description + tags. The Hogar filter (`household`: `all` / `household` /
 `unassigned`, `?hogar=si` / `?hogar=sin-definir`) keeps the counted expenses
 whose `rowHouseholdView` status is that value; it takes the user's category
-defaults as `options.categoryHousehold` (callers pass
-`currentCategoryHousehold()`; `useTransactionFiltering` reads it at render, so
+rules as `options.householdRules` (callers pass
+`currentHouseholdRules()`: category defaults + merchant rules; `useTransactionFiltering` reads it at render, so
 a changed default re-filters). `sortTransactions` orders the result.
 
 `useTransactionFiltering` holds that state in React as one value (seeded once
@@ -586,7 +586,7 @@ clicks equals the sum of the rows it opens. Callers never re-derive it from
 (`App.tsx` reads it into `householdMode` and writes it with REPLACE; any other
 value is Todo; the sidebar's Resumen link goes to `/`). Todo is the whole
 page. Hogar is one cut at the top: `householdRows` = the rows whose
-`rowHouseholdView(tx, currentCategoryHousehold())` is `household` (counted
+`rowHouseholdView(tx, currentHouseholdRules())` is `household` (counted
 expenses only, so income, ignored rows and split parents are out), found with
 `partitionByHousehold` (one pass; it also yields the Sin definir rows). Every
 memo reads `rows = householdMode ? householdRows : transactions`. The
@@ -670,8 +670,8 @@ ignored" on). Both CSV and PDF end with a `cuenta_en_totales` column (`1` /
 `0`, from `countsTowardTotals`): summing the `1` rows gives the app's totals,
 because a split parent is `0` and its parts are `1`. After it comes `hogar`
 (`si` / `no` / `sin_definir` from `rowHouseholdView`, empty for rows that are
-not counted expenses); the callers pass the user's category defaults
-(`currentCategoryHousehold()`). PDF prints an HTML
+not counted expenses); the callers pass the user's household rules
+(`currentHouseholdRules()`). PDF prints an HTML
 report (every interpolated string HTML-escaped) from a hidden same-origin
 iframe, not a popup — `window.open` with `noopener` returns `null` (#179). If
 the frame can't be written or printed, the export throws a `UserFacingError`
@@ -737,7 +737,7 @@ and skip their rollback after a switch.
 | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | Transactions                                                                                   | Supabase `transactions` (soft delete via `is_deleted` / `deleted_at`; split parts hard-deleted)                                    | Zustand `transactionStore`, no persist middleware                                                                |
 | Description overrides, merchant overrides, household rules, custom patterns, custom categories | Supabase `description_overrides`, `category_overrides`, `household_rules`, `custom_patterns`, `custom_categories`                  | Module-level state in their services, replaced on sync; edits also write through to Supabase                     |
-| Household choice, per row and per category                                                     | Supabase `transactions.household` and `custom_categories.is_household` (nullable: null = follow the category / the seeded default) | Row: `Transaction.household` in `transactionStore`; category: `CustomCategory.isHousehold` in the category store |
+| Household choice, per row, per merchant and per category                                       | Supabase `transactions.household` and `custom_categories.is_household` (nullable: null = follow the category / the seeded default) | Row: `Transaction.household` in `transactionStore`; category: `CustomCategory.isHousehold` in the category store |
 | Preferences, including the Claude API key                                                      | Supabase `user_preferences`                                                                                                        | `workspaceStore` preferences; the AI config in `ai-config.ts`, derived from them                                 |
 | Import audit                                                                                   | Supabase `import_runs`                                                                                                             | Not loaded                                                                                                       |
 | Insights cache                                                                                 | Supabase `ai_insights`, one row per user, via `repository.loadInsights` / `saveInsights`                                           | `Insights.tsx` state                                                                                             |
@@ -761,8 +761,18 @@ and skip their rollback after a switch.
   that is not `retryable` (`auth`, `billing`, `stale_chunk`).
 - **The household flag** is resolved by `resolveHousehold`
   (`services/household/household.ts`: the row's own choice, else the user's
-  default for its category from `currentCategoryHousehold()`, else the seeded
-  default; ADR-0005). It is not part of "which rows count"
+  rule for its merchant, else the user's default for its category, else the
+  seeded default; all from `currentHouseholdRules()`; ADR-0005). A merchant
+  rule is read at resolution time and never stamped on rows: it is keyed by
+  `merchantOverrideKey` (the key category rules use), kept in
+  `household-rules-store.ts` (replaced on every write, loaded by
+  `hydrateWorkspace`, cleared on teardown) and persisted in `household_rules`.
+  A split part ignores it. `applyHouseholdToSimilar` (mutations) saves or
+  deletes the rule and applies it to `rowsSharingMerchantRule`: past and future
+  clears the similar rows' own choices; future-only first pins the value each
+  other similar row shows today as its own choice, then writes the rule. The
+  edit dialog's "Aplicar a" drives it (only when the household radio was
+  touched), and the one-click house offers "Aplicar a las N similares". It is not part of "which rows count"
   (`services/spending/spending-rules.ts`): callers combine the two. Writes are
   `setHousehold` (one or many rows, `services/mutations/transaction-mutations.ts`)
   (the row's house, the edit dialog and the bulk "Hogar" menu all call it
