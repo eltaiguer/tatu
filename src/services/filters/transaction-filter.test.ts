@@ -3,12 +3,24 @@ import type { Transaction } from '../../models'
 import { DEFAULT_URL_FILTERS, type UrlFilterState } from './url-filters'
 import { buildCategoryHousehold } from '../household/household'
 import {
-  filterTransactions,
+  filterTransactions as filterRows,
   groupSplitRows,
   periodDateRange,
   periodWithDateBound,
   sortTransactions,
 } from './transaction-filter'
+
+// The rule needs the user's category defaults; most specs have none.
+const NO_DEFAULTS = buildCategoryHousehold([])
+function filterTransactions(
+  rows: Transaction[],
+  state: UrlFilterState,
+  options: Omit<Parameters<typeof filterRows>[2], 'categoryHousehold'> & {
+    categoryHousehold?: Parameters<typeof filterRows>[2]['categoryHousehold']
+  } = {}
+) {
+  return filterRows(rows, state, { categoryHousehold: NO_DEFAULTS, ...options })
+}
 
 function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -564,6 +576,9 @@ describe('filterTransactions — Hogar', () => {
 
   it('Solo hogar drops an ignored transfer even when shown and mapped household', () => {
     const map = buildCategoryHousehold([['transfer', true]])
+    // The transfer is there to be dropped (it shows under "all")…
+    expect(hogar(rows, 'all', { showIgnored: true }, map)).toContain('transfer')
+    // …and Hogar still leaves it out.
     expect(hogar(rows, 'household', { showIgnored: true }, map)).not.toContain(
       'transfer'
     )

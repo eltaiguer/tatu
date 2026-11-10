@@ -188,8 +188,10 @@ export function useTransactionFiltering({
   // The period as days, for the date inputs.
   const dateRange = periodDateRange(filters.period, recentAnchor)
 
-  // The user's category defaults, read at render: the map changes identity
-  // when a default does, so the Hogar filter re-runs on that alone.
+  // The user's category defaults, read at render (nothing subscribes to the
+  // category store; navigating to Categorías and back remounts the view).
+  // The map changes identity when a default does, so a re-render re-runs the
+  // Hogar filter without the rows or the filters changing.
   const categoryHousehold = currentCategoryHousehold()
 
   // Every matching row, ignored ones included (the totals strip and the

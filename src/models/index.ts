@@ -3,6 +3,8 @@
  * Designed for Santander Uruguay CSV formats
  */
 
+import type { HouseholdFilter } from './household'
+
 // Transaction models
 export type {
   Currency,
@@ -41,12 +43,13 @@ export interface TransactionsFilter {
   accountType?: 'all' | 'credit_card' | 'bank_account'
   currency?: 'all' | 'USD' | 'UYU'
   type?: 'credit' | 'debit'
-  household?: 'household' | 'unassigned'
+  household?: Exclude<HouseholdFilter, 'all'>
   period?: UrlPeriod
 }
 export type { CustomCategoryRecord } from './custom-category'
 export type {
   HouseholdStatus,
+  HouseholdFilter,
   HouseholdResolution,
   CategoryHousehold,
 } from './household'

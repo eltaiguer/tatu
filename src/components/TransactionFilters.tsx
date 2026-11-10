@@ -262,13 +262,19 @@ export function TransactionFilters({
             { value: 'debit' as const, label: 'Gastos' },
           ]}
           value={type}
-          onChange={(next) => onChange({ type: next })}
+          onChange={(next) =>
+            onChange(
+              next === 'credit' && household !== 'all'
+                ? { type: next, household: 'all' }
+                : { type: next }
+            )
+          }
           size="sm"
           aria-label="Tipo de transacción"
         />
 
-        {/* Household filter. Income has no household answer, so picking
-            one while "Ingresos" is on would list nothing: back to Todos. */}
+        {/* Household filter. Income has no household answer, so the two never
+            combine: the latest pick wins (here and in the type toggle). */}
         <div className="inline-flex items-center gap-[6px]">
           <House
             size={14}

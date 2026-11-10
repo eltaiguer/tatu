@@ -71,16 +71,24 @@ describe('a row in an archived custom category, on every surface', () => {
     expect(countsTowardTotals(row)).toBe(true)
     expect(needsCategoryReview(row)).toBe(false)
     expect(
-      filterTransactions([row], {
-        ...DEFAULT_URL_FILTERS,
-        categories: ['uncategorized'],
-      })
+      filterTransactions(
+        [row],
+        {
+          ...DEFAULT_URL_FILTERS,
+          categories: ['uncategorized'],
+        },
+        { categoryHousehold: buildCategoryHousehold([]) }
+      )
     ).toEqual([])
     expect(
-      filterTransactions([row], {
-        ...DEFAULT_URL_FILTERS,
-        categories: ['viajes-familia'],
-      })
+      filterTransactions(
+        [row],
+        {
+          ...DEFAULT_URL_FILTERS,
+          categories: ['viajes-familia'],
+        },
+        { categoryHousehold: buildCategoryHousehold([]) }
+      )
     ).toEqual([row])
     expect(getCategoryTransactionCount([row], 'viajes-familia')).toBe(1)
     expect(getCategoryTransactionCount([row], 'uncategorized')).toBe(0)

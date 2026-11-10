@@ -823,6 +823,24 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(listed('Devoto')).toBe(true)
   })
 
+  it('picking Ingresos while Hogar is on goes back to Todos in Hogar', () => {
+    seed(rows())
+    pick('Hogar')
+    fireEvent.click(
+      within(
+        screen.getByRole('radiogroup', { name: 'Tipo de transacción' })
+      ).getByRole('radio', { name: 'Ingresos' })
+    )
+
+    expect(
+      within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
+        'radio',
+        { name: 'Todos' }
+      )
+    ).toBeChecked()
+    expect(listed('Sueldo')).toBe(true)
+  })
+
   it('Limpiar todo brings Hogar back to Todos', () => {
     seed(rows())
     pick('Hogar')

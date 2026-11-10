@@ -172,7 +172,7 @@ describe('Transactions', () => {
       expect(within(strip()).getByText('US$ 50,63')).toBeInTheDocument()
       expect(within(strip()).getByText('1 gasto')).toBeInTheDocument()
       expect(
-        within(strip()).getByText('Categorizalas o marcalas con la casita.')
+        within(strip()).getByText('Categorizalos o marcalos con la casita.')
       ).toBeInTheDocument()
     })
 

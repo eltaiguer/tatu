@@ -281,6 +281,21 @@ describe('TransactionFilters', () => {
       })
     })
 
+    it('picking Ingresos while Hogar is on goes back to Todos in Hogar', () => {
+      const props = renderFilters({ household: 'household' })
+      fireEvent.click(segment('Tipo de transacción', 'Ingresos'))
+      expect(props.onChange).toHaveBeenCalledWith({
+        type: 'credit',
+        household: 'all',
+      })
+    })
+
+    it('picking Gastos keeps the household filter', () => {
+      const props = renderFilters({ household: 'household' })
+      fireEvent.click(segment('Tipo de transacción', 'Gastos'))
+      expect(props.onChange).toHaveBeenCalledWith({ type: 'debit' })
+    })
+
     it('keeps the type when going back to Todos', () => {
       const props = renderFilters({ type: 'credit', household: 'household' })
       fireEvent.click(segment('Hogar', 'Todos'))

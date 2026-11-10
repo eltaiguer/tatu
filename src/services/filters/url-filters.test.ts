@@ -116,6 +116,17 @@ describe('url filters — Hogar', () => {
     ).toBe('')
   })
 
+  it('drops hogar when the type is income: that mix lists nothing', () => {
+    expect(parseFilterParams('tipo=credit&hogar=si').household).toBe('all')
+    expect(parseFilterParams('tipo=credit&hogar=sin-definir').household).toBe(
+      'all'
+    )
+    expect(parseFilterParams('tipo=debit&hogar=si').household).toBe('household')
+    expect(filterToSearch({ type: 'credit', household: 'household' })).toBe(
+      'tipo=credit&periodo=todo'
+    )
+  })
+
   it('builds a deep link that filters all time', () => {
     expect(filterToSearch({ household: 'household' })).toBe(
       'hogar=si&periodo=todo'

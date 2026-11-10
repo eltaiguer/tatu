@@ -1,4 +1,8 @@
-import type { TransactionsFilter, UrlPeriod } from '../../models'
+import type {
+  HouseholdFilter,
+  TransactionsFilter,
+  UrlPeriod,
+} from '../../models'
 
 export type { UrlPeriod }
 
@@ -21,7 +25,7 @@ export interface UrlFilterState {
   showIgnored: boolean
   // Hogar: only counted expenses that are household / still Sin definir
   // (services/household/household.ts decides which).
-  household: 'all' | 'household' | 'unassigned'
+  household: HouseholdFilter
   // Undefined when the URL doesn't say; the view picks its default.
   period?: UrlPeriod
 }
@@ -112,12 +116,16 @@ export function parseFilterParams(search: string): UrlFilterState {
     min: isNumeric(min) ? min : '',
     max: isNumeric(max) ? max : '',
     showIgnored: params.get('ignoradas') === '1',
+    // Income has no household answer, so that mix would list nothing: the
+    // income type wins and hogar is dropped.
     household:
-      hogar === 'si'
-        ? 'household'
-        : hogar === 'sin-definir'
-          ? 'unassigned'
-          : 'all',
+      type === 'credit'
+        ? 'all'
+        : hogar === 'si'
+          ? 'household'
+          : hogar === 'sin-definir'
+            ? 'unassigned'
+            : 'all',
     ...(parsePeriod(params) && { period: parsePeriod(params) }),
   }
 }
@@ -134,8 +142,11 @@ export function serializeFilterParams(state: UrlFilterState): string {
   if (state.min) params.set('min', state.min)
   if (state.max) params.set('max', state.max)
   if (state.showIgnored) params.set('ignoradas', '1')
-  if (state.household === 'household') params.set('hogar', 'si')
-  if (state.household === 'unassigned') params.set('hogar', 'sin-definir')
+  // Never written beside tipo=credit (see parseFilterParams).
+  if (state.type !== 'credit') {
+    if (state.household === 'household') params.set('hogar', 'si')
+    if (state.household === 'unassigned') params.set('hogar', 'sin-definir')
+  }
   const period = state.period
   if (period?.mode === 'all') params.set('periodo', 'todo')
   if (period?.mode === 'month') {

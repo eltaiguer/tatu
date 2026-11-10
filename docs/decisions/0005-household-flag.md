@@ -91,12 +91,14 @@ Implemented in step 5 of #251: the Hogar filter in Transacciones and the
   part of `filterTransactions`: Hogar keeps counted expenses that resolve to
   household, Sin definir those that resolve to unassigned
   (`rowHouseholdView`), so income, ignored rows (even with "show ignored" on)
-  and split parents never match. There is no "not household" value. Picking
-  one while "Ingresos" is on sets the type back to Todos. Split parts are
+  and split parents never match. There is no "not household" value. Income
+  and Hogar never combine: the latest pick wins (picking one while "Ingresos"
+  is on sets the type back to Todos, picking Ingresos while one is on sets
+  Hogar back to Todos), and a URL with `tipo=credit` drops `hogar`. Split parts are
   filtered one by one, as the category filter does: the parent shows above
   the parts that match.
 - Under either value the totals strip is one tile: "Gastos del hogar" or
-  "Sin definir" (with "Categorizalas o marcalas con la casita."), the
+  "Sin definir" (with "Categorizalos o marcalos con la casita."), the
   home-currency total and the number of expenses.
 - A `hogar` column after `cuenta_en_totales` in the CSV and the PDF report:
   `si` / `no` / `sin_definir` for counted expenses, empty for every other row.
