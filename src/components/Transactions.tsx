@@ -44,6 +44,8 @@ import { useBulkActions } from './transactions/useBulkActions'
 import {
   currentHouseholdRules,
   nextHouseholdChoice,
+  resolveHousehold,
+  rowsChangedByMerchantRule,
   rowsSharingMerchantRule,
 } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
@@ -405,12 +407,60 @@ export function Transactions({
 
   // One click flips the row's house. Quiet on success: the house moves when
   // the saved row comes back from the store.
-  function handleToggleHousehold(transaction: Transaction) {
-    void writeHousehold(
+  // When other rows of the merchant would change if it became a rule, the
+  // toast after a saved click offers "Aplicar a las N similares".
+  async function handleToggleHousehold(transaction: Transaction) {
+    const rules = currentHouseholdRules()
+    const choice = nextHouseholdChoice(transaction, rules)
+    const saved = await writeHousehold(
       transaction.id,
-      nextHouseholdChoice(transaction, currentHouseholdRules()),
+      choice,
       'No se pudo guardar el gasto del hogar'
     )
+    if (!saved || !onApplyHouseholdToSimilar || transaction.splitParentId) {
+      return
+    }
+    // The row as the write left it; the others as they were on the click.
+    const after = resolveHousehold({ ...transaction, household: choice }, rules)
+    if (after.status === 'unassigned') return
+    const value = after.status === 'household'
+    const others = rowsChangedByMerchantRule(
+      transactions,
+      transaction,
+      value,
+      rules
+    ).length
+    if (others < 1) return
+    toast(
+      value
+        ? 'Transacción marcada como hogar'
+        : 'Transacción marcada como no hogar',
+      {
+        duration: 8000,
+        action: {
+          label: `Aplicar a las ${others} similares`,
+          onClick: () => {
+            void applyToSimilar(transaction.id, value, others)
+          },
+        },
+      }
+    )
+  }
+
+  async function applyToSimilar(id: string, value: boolean, others: number) {
+    if (!onApplyHouseholdToSimilar) return
+    try {
+      await onApplyHouseholdToSimilar(id, value, 'matching_past_and_future')
+      toast.success(
+        others === 1
+          ? 'Se aplicó a 1 transacción'
+          : `Se aplicó a ${others} transacciones`
+      )
+    } catch (error) {
+      reportError(error, 'No se pudo aplicar a las similares', '', () => {
+        void applyToSimilar(id, value, others)
+      })
+    }
   }
 
   // Writes one row's choice; true when it saved. A failure that saved nothing
@@ -623,7 +673,13 @@ export function Transactions({
               }
             : undefined
         }
-        onToggleHousehold={onSetHousehold ? handleToggleHousehold : undefined}
+        onToggleHousehold={
+          onSetHousehold
+            ? (transaction) => {
+                void handleToggleHousehold(transaction)
+              }
+            : undefined
+        }
       />
 
       <EditTransactionDialog

@@ -1057,3 +1057,105 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     expect(screen.getByLabelText('Según comercio (No)')).toBeChecked()
   })
 })
+
+describe('applying a house click to similar rows (#251, step 7)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  const D1 = 'DEVOTO 11/03/2026'
+  const D2 = 'DEVOTO 12/03/2026'
+  const D3 = 'DEVOTO 13/03/2026'
+  const devotos = () =>
+    [D1, D2, D3].map((d) => tx(d, { category: 'restaurants' }))
+  const on = (d: string) => house(d).getAttribute('aria-pressed') === 'true'
+  const offer = (n: number) =>
+    screen.queryByRole('button', { name: `Aplicar a las ${n} similares` })
+
+  async function click(description: string) {
+    await act(async () => {
+      fireEvent.click(house(description))
+    })
+  }
+
+  it('offers to apply the click to the look-alikes, and the action makes them household by rule', async () => {
+    seed(devotos())
+
+    await click(D1)
+
+    expect(on(D1)).toBe(true)
+    expect(on(D2)).toBe(false)
+    const action = await screen.findByRole('button', {
+      name: 'Aplicar a las 2 similares',
+    })
+    await act(async () => {
+      fireEvent.click(action)
+    })
+
+    await waitFor(() => expect(on(D2)).toBe(true))
+    expect(on(D3)).toBe(true)
+    expect(house(D2)).toHaveAttribute('title', 'Hogar · según comercio')
+    expect(house(D2).querySelector('[data-hand-mark]')).toBeNull()
+    expect(repo.householdRules.size).toBe(1)
+    expect(await screen.findByText('Se aplicó a 2 transacciones')).toBeVisible()
+  })
+
+  it('offers nothing when the click only returns to following an existing rule', async () => {
+    seed(devotos())
+    await act(async () => {
+      await applyHouseholdToSimilar(repo, D1, true, 'matching_past_and_future')
+      await setHousehold(repo, [D1], false)
+    })
+    expect(on(D1)).toBe(false)
+
+    await click(D1)
+
+    expect(on(D1)).toBe(true)
+    expect(offer(2)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Aplicar a las/ })).toBeNull()
+  })
+
+  it('offers nothing when no other row would change', async () => {
+    seed([tx(D1, { category: 'restaurants' }), tx('Tienda Inglesa')])
+
+    await click(D1)
+
+    expect(on(D1)).toBe(true)
+    expect(screen.queryByRole('button', { name: /Aplicar a las/ })).toBeNull()
+  })
+
+  it('offers nothing on a split part', async () => {
+    seed([
+      ...devotos(),
+      tx('DEVOTO 15/03/2026', {
+        category: 'restaurants',
+        splitParentId: 'madre',
+      }),
+    ])
+
+    await click('DEVOTO 15/03/2026')
+
+    expect(screen.queryByRole('button', { name: /Aplicar a las/ })).toBeNull()
+  })
+
+  it('a failure while applying offers Reintentar', async () => {
+    seed(devotos())
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await click(D1)
+    repo.failOn('upsertHouseholdRule', { error: new Error('boom'), times: 1 })
+
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Aplicar a las 2 similares' })
+      )
+    })
+    const retry = await screen.findByRole('button', { name: 'Reintentar' })
+    expect(on(D2)).toBe(false)
+    await act(async () => {
+      fireEvent.click(retry)
+    })
+
+    await waitFor(() => expect(on(D2)).toBe(true))
+    expect(logged).toHaveBeenCalled()
+  })
+})

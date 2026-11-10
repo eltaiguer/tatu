@@ -155,6 +155,33 @@ export function rowsSharingMerchantRule(
   )
 }
 
+/**
+ * The rows, other than `tx`, that sharing its merchant would change if the
+ * merchant's rule became `household` (their own choices cleared, so they
+ * follow it): those whose shown status differs after. The one-click toast's
+ * count, so "Aplicar a las N similares" never counts a row that already shows
+ * the value.
+ */
+export function rowsChangedByMerchantRule(
+  all: readonly Transaction[],
+  tx: Transaction,
+  household: boolean,
+  householdRules: HouseholdRules
+): Transaction[] {
+  const key = merchantKeyOf(tx.description)
+  if (key === null) return []
+  const after: HouseholdRules = {
+    ...householdRules,
+    merchants: new Map(householdRules.merchants).set(key, household),
+  }
+  return rowsSharingMerchantRule(all, tx).filter(
+    (row) =>
+      row.id !== tx.id &&
+      resolveHousehold(row, householdRules).status !==
+        resolveHousehold({ ...row, household: null }, after).status
+  )
+}
+
 /** The effective household default of a category (false for Sin categoría). */
 export function isCategoryHousehold(
   categoryId: string,

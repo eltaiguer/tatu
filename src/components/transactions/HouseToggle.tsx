@@ -37,7 +37,9 @@ export function HouseToggle({
     : `${household ? 'Hogar' : 'No es del hogar'} · ${
         view.source === 'row'
           ? 'elegido a mano'
-          : `según ${resolveCategory(transaction.category).label}`
+          : view.source === 'merchant'
+            ? 'según comercio'
+            : `según ${resolveCategory(transaction.category).label}`
       }`
 
   return (
@@ -46,7 +48,7 @@ export function HouseToggle({
       aria-label={`Gasto del hogar: ${description}`}
       aria-pressed={household}
       title={title}
-      data-origin={view.source === 'row' ? 'hand' : 'category'}
+      data-origin={view.source === 'row' ? 'hand' : view.source}
       disabled={disabled}
       onClick={() => onToggle(transaction)}
       className={`relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--brand-text)] disabled:opacity-50 ${
