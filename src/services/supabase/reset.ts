@@ -1,10 +1,17 @@
 import { getSupabaseClient } from './client'
+import { isMissingTable } from './missing-table'
 
-async function deleteByUser(userId: string, table: string): Promise<void> {
+async function deleteByUser(
+  userId: string,
+  table: string,
+  { tolerateMissing = false } = {}
+): Promise<void> {
   const client = getSupabaseClient()
   const { error } = await client.from(table).delete().eq('user_id', userId)
 
   if (error) {
+    // A table added by hand (supabase/README.md) has no rows to delete yet.
+    if (tolerateMissing && isMissingTable(error)) return
     throw new Error(error.message)
   }
 }
@@ -13,7 +20,7 @@ export async function resetUserSupabaseData(userId: string): Promise<void> {
   await deleteByUser(userId, 'transactions')
   await deleteByUser(userId, 'import_runs')
   await deleteByUser(userId, 'category_overrides')
-  await deleteByUser(userId, 'household_rules')
+  await deleteByUser(userId, 'household_rules', { tolerateMissing: true })
   await deleteByUser(userId, 'description_overrides')
   await deleteByUser(userId, 'custom_categories')
   await deleteByUser(userId, 'custom_patterns')

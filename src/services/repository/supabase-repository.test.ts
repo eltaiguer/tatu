@@ -426,6 +426,41 @@ describe('Supabase repository — workspace', () => {
   })
 })
 
+describe('Supabase repository — before household_rules exists', () => {
+  // The table is added by hand (supabase/README.md): until then nobody may be
+  // locked out of the app.
+  it.each(['42P01', 'PGRST205'])(
+    'loads the workspace with no rules when the table is missing (%s)',
+    async (code) => {
+      db.seed('transactions', [row('tx-1')])
+      db.failWhen((r) => r.table === 'household_rules', { code })
+      const repo = createSupabaseRepository('user-1')
+
+      const snapshot = await repo.loadWorkspace()
+
+      expect(snapshot.transactions.map((t) => t.id)).toEqual(['tx-1'])
+      expect(snapshot.householdRules).toEqual([])
+    }
+  )
+
+  it('still fails the load on any other error of the table', async () => {
+    db.failWhen((r) => r.table === 'household_rules', { code: '57014' })
+    const repo = createSupabaseRepository('user-1')
+
+    await expect(repo.loadWorkspace()).rejects.toThrow('request failed')
+  })
+
+  it('resets the other tables when the table is missing', async () => {
+    db.seed('user_preferences', [{ user_id: 'user-1' }])
+    db.failWhen((r) => r.table === 'household_rules', { code: 'PGRST205' })
+    const repo = createSupabaseRepository('user-1')
+
+    await expect(repo.resetAll()).resolves.toBeUndefined()
+
+    expect(db.rows('user_preferences')).toEqual([])
+  })
+})
+
 describe('Supabase repository — household rules', () => {
   it('saves, replaces and deletes a merchant rule of its user only', async () => {
     db.seed('household_rules', [

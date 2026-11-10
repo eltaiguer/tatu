@@ -1,4 +1,5 @@
 import { getSupabaseClient } from './client'
+import { isMissingTable } from './missing-table'
 
 interface HouseholdRuleRow {
   user_id: string
@@ -37,6 +38,9 @@ export async function listHouseholdRules(
     .eq('user_id', userId)
 
   if (error) {
+    // Until schema.sql is applied by hand there are no rules, and the app
+    // must still load.
+    if (isMissingTable(error)) return []
     throw new Error(error.message)
   }
 
