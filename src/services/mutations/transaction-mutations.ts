@@ -58,6 +58,7 @@ import { listCustomCategories } from '../categories/category-store'
 import {
   currentHouseholdRules,
   resolveHousehold,
+  rowsChangedByRule,
   rowsSharingMerchantRule,
 } from '../household/household'
 import {
@@ -512,6 +513,9 @@ export type ApplyScope =
   | 'single'
   | 'matching_past_and_future'
   | 'future_matching_only'
+
+/** The scopes that make a rule: everything but one row. */
+export type RuleScope = Exclude<ApplyScope, 'single'>
 
 export interface TransactionEdit {
   displayDescription?: string
@@ -1048,7 +1052,7 @@ export async function applyHouseholdToSimilar(
   repo: Repository,
   transactionId: string,
   household: boolean | null,
-  scope: 'matching_past_and_future' | 'future_matching_only'
+  scope: RuleScope
 ): Promise<{ affected: number }> {
   assertOwner(repo)
   const all = store().transactions
@@ -1066,20 +1070,25 @@ export async function applyHouseholdToSimilar(
     applyHouseholdToSimilar(repo, transactionId, household, scope)
   const hasOwnChoice = (tx: Transaction) => typeof tx.household === 'boolean'
 
+  // Rows whose shown value the rule changes; computed before anything is
+  // written, from the rows as this save's category edit left them.
+  const changed = rowsChangedByRule(
+    all,
+    target,
+    household,
+    currentHouseholdRules(),
+    scope === 'matching_past_and_future'
+  )
+
+  const pins = new Map<string, TransactionPatch>()
   if (scope === 'future_matching_only') {
-    const before = currentHouseholdRules()
-    const merchantsAfter = new Map(before.merchants)
-    if (household === null) merchantsAfter.delete(key)
-    else merchantsAfter.set(key, household)
-    const after = { ...before, merchants: merchantsAfter }
-    const pins = new Map<string, TransactionPatch>()
-    for (const tx of similar) {
-      if (tx.id === transactionId || hasOwnChoice(tx)) continue
-      const was = resolveHousehold(tx, before).status
-      if (was === 'unassigned' || was === resolveHousehold(tx, after).status) {
-        continue
-      }
-      pins.set(tx.id, { household: was === 'household' })
+    const rules = currentHouseholdRules()
+    for (const tx of changed) {
+      if (tx.id === transactionId) continue
+      const was = resolveHousehold(tx, rules).status
+      // A Sin definir row has nothing to keep: it takes the rule.
+      if (was !== 'unassigned')
+        pins.set(tx.id, { household: was === 'household' })
     }
     if (pins.size > 0) {
       const outcome = await writePatches(repo, pins)
@@ -1108,7 +1117,14 @@ export async function applyHouseholdToSimilar(
       alwaysPartial: true,
     })
   }
-  return { affected: similar.length }
+  // Past and future reaches every similar row; future-only only the rows
+  // whose shown value changed (the pinned past rows look the same).
+  return {
+    affected:
+      scope === 'matching_past_and_future'
+        ? similar.length
+        : changed.length - pins.size,
+  }
 }
 
 /** Saves (or, for null, deletes) a merchant's rule, then mirrors it locally. */

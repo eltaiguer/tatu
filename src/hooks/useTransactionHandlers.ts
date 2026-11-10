@@ -17,6 +17,7 @@ import {
   splitTransaction,
   unsplitTransaction,
   type DeleteResult,
+  type RuleScope,
   type SplitPart,
   type TransactionEdit,
 } from '../services/mutations/transaction-mutations'
@@ -112,7 +113,7 @@ export function useTransactionHandlers({
         repo,
         transactionId: string,
         household: boolean | null,
-        scope: 'matching_past_and_future' | 'future_matching_only'
+        scope: RuleScope
       ) => applyHouseholdToSimilar(repo, transactionId, household, scope)
     ),
     handleAutoCategorizeTransactions: run((repo, transactionIds: string[]) =>

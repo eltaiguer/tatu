@@ -2,6 +2,7 @@ import type { Transaction } from '../../models'
 import type { Repository } from '../../services/repository/repository'
 import type { UrlFilterState } from '../../services/filters/url-filters'
 import type { DeleteResult } from './useMutationFeedback'
+import type { RuleScope } from '../../services/mutations/transaction-mutations'
 
 // The Transacciones view's public props.
 interface BaseTransactionsProps {
@@ -54,7 +55,7 @@ interface BaseTransactionsProps {
   onApplyHouseholdToSimilar?: (
     transactionId: string,
     household: boolean | null,
-    scope: 'matching_past_and_future' | 'future_matching_only'
+    scope: RuleScope
   ) => Promise<{ affected: number }>
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void

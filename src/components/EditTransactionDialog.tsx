@@ -27,7 +27,7 @@ import { getAccountLabel } from './TransactionTable'
 import {
   categoryDefault,
   currentHouseholdRules,
-  merchantHouseholdRule,
+  merchantRule as merchantRuleOf,
   rowHouseholdView,
 } from '../services/household/household'
 
@@ -234,7 +234,7 @@ function EditTransactionForm({
   // row), not the row's own choice. Solo esta shows the row's own choice, and
   // "según comercio" when a rule covers the row.
   const ruleScope = applyScope !== 'single'
-  const merchantRule = merchantHouseholdRule(transaction, householdRules)
+  const merchantRule = merchantRuleOf(transaction, householdRules.merchants)
   const shownChoice: HouseholdChoice =
     ruleScope && !householdTouched ? choiceOf(merchantRule) : householdChoice
   const followLabel =

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
+import type { RuleScope } from '../services/mutations/transaction-mutations'
 import { requireRepository } from '../services/repository/repository'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import { Download, X } from 'lucide-react'
@@ -45,7 +46,7 @@ import {
   currentHouseholdRules,
   nextHouseholdChoice,
   resolveHousehold,
-  rowsChangedByMerchantRule,
+  rowsChangedByRule,
   rowsSharingMerchantRule,
 } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
@@ -424,12 +425,13 @@ export function Transactions({
     const after = resolveHousehold({ ...transaction, household: choice }, rules)
     if (after.status === 'unassigned') return
     const value = after.status === 'household'
-    const others = rowsChangedByMerchantRule(
+    const others = rowsChangedByRule(
       transactions,
       transaction,
       value,
-      rules
-    ).length
+      rules,
+      true
+    ).filter((row) => row.id !== transaction.id).length
     if (others < 1) return
     toast(
       value
@@ -509,7 +511,7 @@ export function Transactions({
   async function writeHouseholdRule(
     id: string,
     household: boolean | null,
-    scope: 'matching_past_and_future' | 'future_matching_only',
+    scope: RuleScope,
     failure: string
   ): Promise<number | null> {
     if (!onApplyHouseholdToSimilar) return null

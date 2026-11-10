@@ -971,6 +971,9 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     await waitFor(() => expect(on(D1)).toBe(true))
     expect(on(D2) || on(D3)).toBe(false)
     expect(repo.row(D2)?.household).toBe(false)
+    // One row changed what it shows: the pinned past rows look the same.
+    expect(await screen.findByText('Cambios guardados')).toBeVisible()
+    expect(screen.queryByText(/Se aplicó a/)).toBeNull()
     // A row imported later: it reads the rule.
     await act(async () => {
       transactionStore

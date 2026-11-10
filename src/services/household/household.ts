@@ -101,7 +101,7 @@ export function resolveHousehold(
 const KEY_CACHE_LIMIT = 20000
 const keyCache = new Map<string, string | null>()
 
-function merchantKeyOf(description: string): string | null {
+function householdRuleKey(description: string): string | null {
   const cached = keyCache.get(description)
   if (cached !== undefined) return cached
   if (keyCache.size >= KEY_CACHE_LIMIT) keyCache.clear()
@@ -115,21 +115,14 @@ function merchantKeyOf(description: string): string | null {
  * rule covers it: none stored, no merchant key, or a split part (a split is a
  * mixed purchase, so it never takes a merchant's rule).
  */
-export function merchantHouseholdRule(
-  tx: { description?: string; splitParentId?: string },
-  householdRules: HouseholdRules
-): boolean | undefined {
-  return merchantRule(tx, householdRules.merchants)
-}
-
-function merchantRule(
+export function merchantRule(
   tx: { description?: string; splitParentId?: string },
   merchants: MerchantHousehold
 ): boolean | undefined {
   if (merchants.size === 0 || tx.splitParentId || !tx.description) {
     return undefined
   }
-  const key = merchantKeyOf(tx.description)
+  const key = householdRuleKey(tx.description)
   return key === null ? undefined : merchants.get(key)
 }
 
@@ -145,41 +138,46 @@ export function rowsSharingMerchantRule(
   tx: Transaction
 ): Transaction[] {
   if (!isCountedExpense(tx) || tx.splitParentId) return []
-  const key = merchantKeyOf(tx.description)
+  const key = householdRuleKey(tx.description)
   if (key === null) return []
   return all.filter(
     (row) =>
       isCountedExpense(row) &&
       !row.splitParentId &&
-      merchantKeyOf(row.description) === key
+      householdRuleKey(row.description) === key
   )
 }
 
 /**
- * The rows, other than `tx`, that sharing its merchant would change if the
- * merchant's rule became `household` (their own choices cleared, so they
- * follow it): those whose shown status differs after. The one-click toast's
- * count, so "Aplicar a las N similares" never counts a row that already shows
- * the value.
+ * The rows a merchant rule would change the shown value of, if it became
+ * `household` (null: deleted): `tx` and its similar rows
+ * (`rowsSharingMerchantRule`) whose status differs once it is in place.
+ * `tx`'s own choice is always cleared (it follows the rule); the others'
+ * only when `clearsOwnChoices` (past and future), else they keep it. The one
+ * list behind the one-click toast's count, the future-only pins and the
+ * count a save reports, so they cannot disagree.
  */
-export function rowsChangedByMerchantRule(
+export function rowsChangedByRule(
   all: readonly Transaction[],
   tx: Transaction,
-  household: boolean,
-  householdRules: HouseholdRules
+  household: boolean | null,
+  householdRules: HouseholdRules,
+  clearsOwnChoices: boolean
 ): Transaction[] {
-  const key = merchantKeyOf(tx.description)
+  const key = householdRuleKey(tx.description)
   if (key === null) return []
-  const after: HouseholdRules = {
-    ...householdRules,
-    merchants: new Map(householdRules.merchants).set(key, household),
-  }
-  return rowsSharingMerchantRule(all, tx).filter(
-    (row) =>
-      row.id !== tx.id &&
+  const merchants = new Map(householdRules.merchants)
+  if (household === null) merchants.delete(key)
+  else merchants.set(key, household)
+  const after: HouseholdRules = { ...householdRules, merchants }
+  return rowsSharingMerchantRule(all, tx).filter((row) => {
+    const next =
+      clearsOwnChoices || row.id === tx.id ? { ...row, household: null } : row
+    return (
       resolveHousehold(row, householdRules).status !==
-        resolveHousehold({ ...row, household: null }, after).status
-  )
+      resolveHousehold(next, after).status
+    )
+  })
 }
 
 /** The effective household default of a category (false for Sin categoría). */

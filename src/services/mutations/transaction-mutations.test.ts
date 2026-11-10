@@ -1863,8 +1863,16 @@ describe('transaction-mutations — household rule for similar rows (#251)', () 
         devoto('d5', { category: 'uncategorized' }),
       ])
 
-      await applyHouseholdToSimilar(repo, 'd1', true, 'future_matching_only')
+      const result = await applyHouseholdToSimilar(
+        repo,
+        'd1',
+        true,
+        'future_matching_only'
+      )
 
+      // Rows whose shown value changed: the edited row and the Sin definir
+      // look-alike. The pinned past rows look the same as before.
+      expect(result.affected).toBe(2)
       expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
       // d1: the edited row follows the rule.
       expect(shows('d1')).toEqual({ status: 'household', source: 'merchant' })
