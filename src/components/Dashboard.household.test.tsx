@@ -453,7 +453,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
       render(<Harness transactions={marchRows()} />)
       expect(
         screen.getByRole('button', {
-          name: 'Ver solo los gastos del hogar: Hogar US$ 190,00 de US$ 250,00 gastados',
+          name: 'Hogar US$ 190,00 de US$ 250,00 gastados: ver solo los gastos del hogar',
         })
       ).toBeInTheDocument()
       // The hero sentence is unchanged.
@@ -466,7 +466,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
       render(<Harness transactions={marchRows()} />)
       fireEvent.click(
         screen.getByRole('button', {
-          name: 'Ver solo los gastos del hogar: Hogar US$ 190,00 de US$ 250,00 gastados',
+          name: 'Hogar US$ 190,00 de US$ 250,00 gastados: ver solo los gastos del hogar',
         })
       )
       expect(
@@ -482,7 +482,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
       )
       fireEvent.click(
         screen.getByRole('button', {
-          name: /^Ver solo los gastos del hogar: Hogar US\$ 190/,
+          name: /^Hogar US\$ 190,00 de .*: ver solo los gastos del hogar$/,
         })
       )
       expect(go).not.toHaveBeenCalled()
@@ -541,7 +541,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
       const months = () =>
         screen
           .getAllByRole('button', { name: /^Ver los gastos de (ene|feb|mar)/ })
-          .map((b) => b.getAttribute('aria-label'))
+          .map((b) => b.textContent)
       const { unmount } = render(
         <Harness transactions={rows} onNavigateToTransactions={() => {}} />
       )
@@ -557,7 +557,9 @@ describe('Dashboard: Todo / Hogar mode', () => {
           onNavigateToTransactions={() => {}}
         />
       )
-      expect(months()).toEqual(todo)
+      // The axis keeps the three months (the label below counts them); the
+      // $0 one has no drill of its own (round 2).
+      expect(months()).toEqual(todo.filter((m) => !/feb/.test(m ?? '')))
       expect(screen.getByText(/Últimos 3 meses con datos/)).toBeInTheDocument()
     })
 
@@ -616,11 +618,47 @@ describe('Dashboard: Todo / Hogar mode', () => {
     it('moves focus to the hero after the share button switches the mode', () => {
       render(<Harness transactions={marchRows()} />)
       fireEvent.click(
-        screen.getByRole('button', { name: /^Ver solo los gastos del hogar/ })
+        screen.getByRole('button', { name: /: ver solo los gastos del hogar$/ })
       )
       expect(
         screen.getByRole('heading', { name: /Gastos del hogar/ })
       ).toHaveFocus()
+    })
+  })
+
+  describe('review round 2', () => {
+    const rows = () => [
+      tx({ amount: 100, date: new Date('2026-01-10T00:00:00.000Z') }),
+      tx({
+        amount: 60,
+        category: Category.Restaurants,
+        date: new Date('2026-02-10T00:00:00.000Z'),
+      }),
+      tx({ amount: 100, date: new Date('2026-03-10T00:00:00.000Z') }),
+    ]
+    const drill = (month: string) =>
+      screen.queryByRole('button', {
+        name: new RegExp(`^Ver los gastos de ${month}`),
+      })
+
+    it('has no drill for a month with no household spend', () => {
+      render(
+        <Harness
+          transactions={rows()}
+          initialHousehold
+          onNavigateToTransactions={() => {}}
+        />
+      )
+      expect(drill('ene')).toBeInTheDocument()
+      expect(drill('mar')).toBeInTheDocument()
+      expect(drill('feb')).not.toBeInTheDocument()
+    })
+
+    it('keeps every month’s drill in Todo mode', () => {
+      render(
+        <Harness transactions={rows()} onNavigateToTransactions={() => {}} />
+      )
+      expect(drill('feb')).toBeInTheDocument()
     })
   })
 })

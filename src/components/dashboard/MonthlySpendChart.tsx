@@ -45,6 +45,10 @@ export function MonthlySpendChart({
     monthlyTrend.filter((m) => m.complete).map((m) => m.gastos)
   )
 
+  // A Hogar month with no household spend would open an empty list, so it has
+  // no drill (bar or button). Todo keeps every month's.
+  const opensExpenses = (m: { gastos: number }) => showIncome || m.gastos > 0
+
   const tooltip = ({
     active,
     payload,
@@ -161,8 +165,10 @@ export function MonthlySpendChart({
             maxBarSize={14}
             isAnimationActive={false}
             cursor={openMonth ? 'pointer' : undefined}
-            onClick={(row: { key?: string }) =>
-              row.key && openMonth?.(row.key, 'debit')
+            onClick={(row: { key?: string; gastos?: number }) =>
+              row.key &&
+              opensExpenses({ gastos: row.gastos ?? 0 }) &&
+              openMonth?.(row.key, 'debit')
             }
           >
             {monthlyTrend.map((m) => (
@@ -175,11 +181,15 @@ export function MonthlySpendChart({
         <MonthButtons
           label={showIncome ? 'Gastos e ingresos por mes' : 'Gastos por mes'}
           buttons={monthlyTrend.flatMap((m) => [
-            {
-              key: `${m.key}-debit`,
-              text: `Ver los gastos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
-              onClick: () => openMonth(m.key, 'debit'),
-            },
+            ...(opensExpenses(m)
+              ? [
+                  {
+                    key: `${m.key}-debit`,
+                    text: `Ver los gastos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
+                    onClick: () => openMonth(m.key, 'debit'),
+                  },
+                ]
+              : []),
             ...(showIncome
               ? [
                   {

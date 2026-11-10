@@ -114,7 +114,7 @@ Implemented in step 6 of #251: the Todo / Hogar mode on Resumen.
   currency split). The months of "Mes a mes" and which of them are complete
   still come from every row (`coverage` of `buildMonthlyTrendRows` /
   `categoryChanges`): it is about the statements, so a month with no household
-  spend is a bar at 0.
+  spend is a bar at 0, with no drill (it would open an empty list).
 - Hero: "Gastos del hogar $X" for the Todo hero's month (it never moves with
   the mode: `buildCurrentMonthSummary` takes the reference month, so a month
   with no household spend reads $0). The income, balance and savings views
@@ -127,7 +127,8 @@ Implemented in step 6 of #251: the Todo / Hogar mode on Resumen.
   "Sin categoría" nudge, a "Sin definir" banner with the all-time total and
   count. Never inside the household totals.
 - Todo mode's hero adds "Hogar $X de $Y gastados", a button that switches to
-  Hogar mode and moves focus to the hero (hidden when $X is 0).
+  Hogar mode and moves focus to the hero (hidden when $X is 0; its accessible
+  name starts with the visible text, and an arrow marks it as a link).
 - With transactions but no household spend at all Hogar mode shows
   "Todavía no hay gastos del hogar" and a link to Categorías instead of zeroed
   cards, plus the Sin definir banner when there are such rows.

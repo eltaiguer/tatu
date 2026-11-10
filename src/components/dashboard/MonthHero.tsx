@@ -85,7 +85,7 @@ export function MonthHero({
               onShowHousehold()
               heroRef.current?.focus()
             }}
-            aria-label={`Ver solo los gastos del hogar: Hogar ${formatCurrency(householdExpense, homeCurrency)} de ${formatCurrency(monthSummary.expense, homeCurrency)} gastados`}
+            aria-label={`Hogar ${formatCurrency(householdExpense, homeCurrency)} de ${formatCurrency(monthSummary.expense, homeCurrency)} gastados: ver solo los gastos del hogar`}
             className="mt-1.5 -mx-1 block cursor-pointer rounded-md border-none bg-transparent px-1 py-0.5 text-left text-small text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Hogar{' '}
@@ -97,6 +97,12 @@ export function MonthHero({
               {formatCurrency(monthSummary.expense, homeCurrency)}
             </span>{' '}
             gastados
+            <span
+              aria-hidden="true"
+              className="ml-2 font-semibold text-[var(--text)]"
+            >
+              →
+            </span>
           </button>
         )}
         {householdMode && unassignedExpense > 0 && (
