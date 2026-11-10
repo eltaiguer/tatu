@@ -346,4 +346,105 @@ describe('Dashboard: Todo / Hogar mode', () => {
       expect(screen.getByText(/Gastaste/)).toBeInTheDocument()
     })
   })
+
+  describe('Sin definir, apart', () => {
+    // Uncategorized rows with no choice of their own resolve to Sin definir.
+    // March 30 + Feb 800 UYU (= 20) -> 50 all time; households stay 190.
+    const withUnassigned = () => [
+      ...marchRows(),
+      tx({
+        description: 'Cosa rara',
+        amount: 30,
+        category: Category.Uncategorized,
+      }),
+      tx({
+        description: 'Cosa vieja',
+        amount: 800,
+        currency: 'UYU',
+        category: Category.Uncategorized,
+        date: new Date('2026-02-10T00:00:00.000Z'),
+      }),
+    ]
+
+    function setup(rows = withUnassigned(), initialHousehold = true) {
+      const go = vi.fn()
+      render(
+        <Harness
+          transactions={rows}
+          initialHousehold={initialHousehold}
+          onNavigateToTransactions={go}
+        />
+      )
+      return go
+    }
+
+    it('keeps them out of the household total', () => {
+      setup()
+      expect(
+        screen.getByRole('heading', { name: /Gastos del hogar/ })
+      ).toHaveTextContent('Gastos del hogar US$ 190,00')
+    })
+
+    it('names the month’s Sin definir under the hero total, as a link to those rows', () => {
+      const go = setup()
+      const link = screen.getByRole('button', {
+        name: 'Ver los gastos sin definir del mes',
+      })
+      expect(link).toHaveTextContent(
+        'Sin definir este mes: US$ 30,00 · Categorizalos o marcalos con la casita.'
+      )
+      fireEvent.click(link)
+      expect(go).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2026, m: 2 },
+        type: 'debit',
+        household: 'unassigned',
+      })
+    })
+
+    it('hides the hero line when the month has none', () => {
+      setup(marchRows())
+      expect(
+        screen.queryByRole('button', {
+          name: 'Ver los gastos sin definir del mes',
+        })
+      ).not.toBeInTheDocument()
+    })
+
+    it('shows a Sin definir banner with the all-time total and count', () => {
+      const go = setup()
+      const banner = screen.getByRole('button', {
+        name: 'Ver los gastos sin definir',
+      })
+      expect(banner).toHaveTextContent('Sin definir')
+      expect(banner).toHaveTextContent('US$ 50,00')
+      expect(banner).toHaveTextContent('2 gastos · todo el historial')
+      fireEvent.click(banner)
+      expect(go).toHaveBeenCalledWith({
+        type: 'debit',
+        household: 'unassigned',
+      })
+    })
+
+    it('has no banner when nothing is Sin definir', () => {
+      setup(marchRows())
+      expect(
+        screen.queryByRole('button', { name: 'Ver los gastos sin definir' })
+      ).not.toBeInTheDocument()
+    })
+
+    it('replaces the Sin categoría nudge in Hogar mode, and only there', () => {
+      setup()
+      expect(
+        screen.queryByRole('button', { name: 'Ver los gastos sin categoría' })
+      ).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('radio', { name: 'Todo' }))
+      expect(
+        screen.getByRole('button', { name: 'Ver los gastos sin categoría' })
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Ver los gastos sin definir' })
+      ).not.toBeInTheDocument()
+      expect(screen.queryByText(/Sin definir este mes/)).not.toBeInTheDocument()
+    })
+  })
 })

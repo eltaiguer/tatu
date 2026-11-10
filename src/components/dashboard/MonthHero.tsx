@@ -20,6 +20,9 @@ interface MonthHeroProps {
   // income / balance boxes give way to one link to those rows. The caller's
   // `onNavigateToTransactions` already adds the household filter.
   householdMode?: boolean
+  // Hogar mode: the month's Sin definir expense, shown under the total as a
+  // link to those rows; hidden at zero.
+  unassignedExpense?: number
 }
 
 export function MonthHero({
@@ -28,13 +31,14 @@ export function MonthHero({
   curWord,
   onNavigateToTransactions,
   householdMode = false,
+  unassignedExpense = 0,
 }: MonthHeroProps) {
   // Opens exactly the month's rows (optionally only income/expenses).
   const openSummaryMonth =
     onNavigateToTransactions &&
     monthSummary.y !== undefined &&
     monthSummary.m !== undefined
-      ? (type?: 'credit' | 'debit') =>
+      ? (type?: 'credit' | 'debit', household?: 'unassigned') =>
           onNavigateToTransactions({
             period: {
               mode: 'month',
@@ -42,6 +46,7 @@ export function MonthHero({
               m: monthSummary.m as number,
             },
             ...(type && { type }),
+            ...(household && { household }),
           })
       : undefined
 
@@ -62,6 +67,24 @@ export function MonthHero({
             </span>
           </span>
         </h2>
+        {householdMode && unassignedExpense > 0 && (
+          <DrillTarget
+            onOpen={
+              openSummaryMonth &&
+              (() => openSummaryMonth('debit', 'unassigned'))
+            }
+            label="Ver los gastos sin definir del mes"
+            className="mt-1.5 -mx-1 px-1 py-0.5"
+          >
+            <span className="text-small text-muted-foreground">
+              Sin definir este mes:{' '}
+              <span className="font-mono tabular-nums">
+                {formatCurrency(unassignedExpense, homeCurrency)}
+              </span>{' '}
+              · Categorizalos o marcalos con la casita.
+            </span>
+          </DrillTarget>
+        )}
         <p className="mt-1.5 mb-0 text-small text-[var(--text-faint)]">
           {!monthSummary.isCurrentMonth &&
             'Último mes con movimientos · importá tu extracto más reciente para ver este mes. '}

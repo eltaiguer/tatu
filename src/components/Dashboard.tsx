@@ -20,7 +20,10 @@ import {
   toCategorySpendRows,
 } from '../services/charts/dashboard-rows'
 import { categoryChanges } from '../services/charts/category-changes'
-import { countsTowardTotals } from '../services/spending/spending-rules'
+import {
+  countsTowardTotals,
+  sumCountedTotals,
+} from '../services/spending/spending-rules'
 import {
   currentCategoryHousehold,
   rowHouseholdView,
@@ -44,6 +47,7 @@ import { SavingsCard } from './dashboard/SavingsCard'
 import { ResumenSection } from './dashboard/ResumenSection'
 import { TopMerchantsCard } from './dashboard/TopMerchantsCard'
 import { UncategorizedNudge } from './dashboard/UncategorizedNudge'
+import { UnassignedNudge } from './dashboard/UnassignedNudge'
 import { newestDate, todayAsUtcDate, toMonthKey } from '../utils/date-utils'
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -102,6 +106,18 @@ export function Dashboard({
       ),
     [transactions, categoryHousehold]
   )
+  // Sin definir: expenses whose household answer is still open. Shown apart
+  // in Hogar mode, never inside its totals.
+  const unassignedRows = useMemo(
+    () =>
+      householdMode
+        ? transactions.filter(
+            (tx) =>
+              rowHouseholdView(tx, categoryHousehold)?.status === 'unassigned'
+          )
+        : [],
+    [householdMode, transactions, categoryHousehold]
+  )
   const rows = householdMode ? householdRows : transactions
   const countedTransactions = useMemo(
     () => rows.filter(countsTowardTotals),
@@ -115,7 +131,8 @@ export function Dashboard({
     () =>
       onNavigateToTransactions && householdMode
         ? (filter: TransactionsFilter) =>
-            onNavigateToTransactions({ ...filter, household: 'household' })
+            // A filter that names its own household (Sin definir) keeps it.
+            onNavigateToTransactions({ household: 'household', ...filter })
         : onNavigateToTransactions,
     [onNavigateToTransactions, householdMode]
   )
@@ -152,6 +169,13 @@ export function Dashboard({
     () => buildCurrentMonthSummary(transactions, homeCurrency, fxRate),
     [transactions, homeCurrency, fxRate]
   )
+  const referenceMonth = useMemo(
+    () =>
+      todaySummary.y !== undefined && todaySummary.m !== undefined
+        ? { y: todaySummary.y, m: todaySummary.m }
+        : undefined,
+    [todaySummary]
+  )
   const monthSummary = useMemo(
     () =>
       householdMode
@@ -160,12 +184,38 @@ export function Dashboard({
             homeCurrency,
             fxRate,
             undefined,
-            todaySummary.y !== undefined && todaySummary.m !== undefined
-              ? { y: todaySummary.y, m: todaySummary.m }
-              : undefined
+            referenceMonth
           )
         : todaySummary,
-    [householdMode, householdRows, todaySummary, homeCurrency, fxRate]
+    [
+      householdMode,
+      householdRows,
+      todaySummary,
+      referenceMonth,
+      homeCurrency,
+      fxRate,
+    ]
+  )
+  // Sin definir in the hero's month, and over all history for the banner.
+  const unassignedMonthExpense = useMemo(
+    () =>
+      householdMode && unassignedRows.length > 0
+        ? buildCurrentMonthSummary(
+            unassignedRows,
+            homeCurrency,
+            fxRate,
+            undefined,
+            referenceMonth
+          ).expense
+        : 0,
+    [householdMode, unassignedRows, referenceMonth, homeCurrency, fxRate]
+  )
+  const unassignedAllTime = useMemo(
+    () => ({
+      total: sumCountedTotals(unassignedRows, homeCurrency, fxRate).expense,
+      count: unassignedRows.length,
+    }),
+    [unassignedRows, homeCurrency, fxRate]
   )
 
   // Category breakdown — all history (for donut)
@@ -335,6 +385,7 @@ export function Dashboard({
             homeCurrency={homeCurrency}
             curWord={curWord}
             householdMode={householdMode}
+            unassignedExpense={unassignedMonthExpense}
             onNavigateToTransactions={openTransactions}
           />
 
@@ -342,11 +393,20 @@ export function Dashboard({
             title="¿A dónde se fue la plata?"
             period={periodRange}
           >
-            <UncategorizedNudge
-              uncategorizedSpend={uncategorizedSpend}
-              homeCurrency={homeCurrency}
-              onNavigateToTransactions={openTransactions}
-            />
+            {householdMode ? (
+              <UnassignedNudge
+                total={unassignedAllTime.total}
+                count={unassignedAllTime.count}
+                homeCurrency={homeCurrency}
+                onNavigateToTransactions={openTransactions}
+              />
+            ) : (
+              <UncategorizedNudge
+                uncategorizedSpend={uncategorizedSpend}
+                homeCurrency={homeCurrency}
+                onNavigateToTransactions={openTransactions}
+              />
+            )}
             <CategorySpendCard
               donutData={donutData}
               otherCategoryIds={otherCategoryIds}
