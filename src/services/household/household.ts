@@ -1,5 +1,10 @@
 import { Category } from '../../models'
-import type { CategoryHousehold, HouseholdResolution } from '../../models'
+import type {
+  CategoryHousehold,
+  HouseholdResolution,
+  HouseholdRules,
+  MerchantHousehold,
+} from '../../models'
 import {
   canHaveHouseholdDefault,
   normalizeCategoryId,
@@ -60,7 +65,7 @@ export function buildCategoryHousehold(
  */
 export function resolveHousehold(
   tx: { category?: string | null; household?: boolean | null },
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): HouseholdResolution {
   if (typeof tx.household === 'boolean') {
     return { status: statusOf(tx.household), isOverride: true }
@@ -71,7 +76,7 @@ export function resolveHousehold(
   }
   // Ingresos cannot have a default: a stray stored one is ignored.
   const stored = canHaveHouseholdDefault(id)
-    ? categoryHousehold.get(id)
+    ? householdRules.categories.get(id)
     : undefined
   return {
     status: statusOf(stored ?? SEEDED_HOUSEHOLD_CATEGORIES.has(id)),
@@ -82,10 +87,10 @@ export function resolveHousehold(
 /** The effective household default of a category (false for Sin categoría). */
 export function isCategoryHousehold(
   categoryId: string,
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): boolean {
   return (
-    resolveHousehold({ category: categoryId }, categoryHousehold).status ===
+    resolveHousehold({ category: categoryId }, householdRules).status ===
     'household'
   )
 }
@@ -112,10 +117,10 @@ export function categoryHouseholdChoice(
  */
 export function rowHouseholdView(
   tx: Transaction,
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): HouseholdResolution | null {
   if (!isCountedExpense(tx)) return null
-  return resolveHousehold(tx, categoryHousehold)
+  return resolveHousehold(tx, householdRules)
 }
 
 /**
@@ -125,12 +130,12 @@ export function rowHouseholdView(
  */
 export function partitionByHousehold(
   rows: readonly Transaction[],
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): { household: Transaction[]; unassigned: Transaction[] } {
   const household: Transaction[] = []
   const unassigned: Transaction[] = []
   for (const tx of rows) {
-    const status = rowHouseholdView(tx, categoryHousehold)?.status
+    const status = rowHouseholdView(tx, householdRules)?.status
     if (status === 'household') household.push(tx)
     else if (status === 'unassigned') unassigned.push(tx)
   }
@@ -143,12 +148,12 @@ export function partitionByHousehold(
  */
 export function categoryDefault(
   categoryId: string | null | undefined,
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): boolean | null {
   const id = normalizeCategoryId(categoryId)
   return id === Category.Uncategorized
     ? null
-    : isCategoryHousehold(id, categoryHousehold)
+    : isCategoryHousehold(id, householdRules)
 }
 
 /**
@@ -159,34 +164,39 @@ export function categoryDefault(
  */
 export function nextHouseholdChoice(
   tx: Transaction,
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): boolean | null {
-  const view = rowHouseholdView(tx, categoryHousehold)
+  const view = rowHouseholdView(tx, householdRules)
   if (!view) return null
   const target = view.status !== 'household'
-  return target === categoryDefault(tx.category, categoryHousehold)
-    ? null
-    : target
+  return target === categoryDefault(tx.category, householdRules) ? null : target
 }
 
 export { canHaveHouseholdDefault } from '../categories/category-aliases'
 
-/** The signed-in user's category defaults, from the category store. */
-export function currentCategoryHousehold(): CategoryHousehold {
-  return categoryHouseholdOf(listCustomCategories())
+/**
+ * Everything resolveHousehold reads besides the row: the signed-in user's
+ * category defaults and (from a later commit) merchant rules.
+ */
+export function currentHouseholdRules(): HouseholdRules {
+  return householdRulesOf(listCustomCategories())
 }
+
+const NO_MERCHANT_RULES: MerchantHousehold = new Map()
 
 // The category store replaces its array on every change (category-registry
 // relies on it too), so the array's identity is the cache key.
-const categoryHouseholdOf = memoizeByReference(
-  (categories: CustomCategory[]): CategoryHousehold =>
-    buildCategoryHousehold(
+const householdRulesOf = memoizeByReference(
+  (categories: CustomCategory[]): HouseholdRules => ({
+    categories: buildCategoryHousehold(
       categories.flatMap((c) =>
         typeof c.isHousehold === 'boolean'
           ? [[c.id, c.isHousehold] as const]
           : []
       )
-    )
+    ),
+    merchants: NO_MERCHANT_RULES,
+  })
 )
 
 function statusOf(household: boolean): HouseholdResolution['status'] {

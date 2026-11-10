@@ -20,3 +20,12 @@ export interface HouseholdResolution {
  * Build it with buildCategoryHousehold, which normalizes the keys.
  */
 export type CategoryHousehold = ReadonlyMap<string, boolean>
+
+/** The user's merchant household rules, keyed by merchantOverrideKey. */
+export type MerchantHousehold = ReadonlyMap<string, boolean>
+
+/** Everything resolveHousehold reads besides the row. */
+export interface HouseholdRules {
+  categories: CategoryHousehold
+  merchants: MerchantHousehold
+}

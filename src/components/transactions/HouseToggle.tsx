@@ -2,7 +2,7 @@ import { House } from 'lucide-react'
 import type { Transaction } from '../../models'
 import { resolveCategory } from '../../services/categories/category-registry'
 import {
-  currentCategoryHousehold,
+  currentHouseholdRules,
   rowHouseholdView,
 } from '../../services/household/household'
 
@@ -27,7 +27,7 @@ export function HouseToggle({
 }) {
   // Read while rendering: a category default changed in Categorías applies
   // to the rows without a reload.
-  const view = rowHouseholdView(transaction, currentCategoryHousehold())
+  const view = rowHouseholdView(transaction, currentHouseholdRules())
   if (!view) return null
 
   const household = view.status === 'household'

@@ -21,7 +21,7 @@ import { workspaceStore } from '../../stores/workspace-state'
 import { CATEGORY_COLORS, CATEGORY_LABELS, Category } from '../../models'
 import { UserFacingError } from '../../utils/user-error'
 import { resolveCategory } from './category-registry'
-import { currentCategoryHousehold } from '../household/household'
+import { currentHouseholdRules } from '../household/household'
 
 describe('Custom category store', () => {
   beforeEach(() => {
@@ -497,7 +497,7 @@ describe('household default of a category (#251, ADR-0005)', () => {
     replaceCustomCategories(
       Array.from(repo.customCategories.values()).filter((c) => !c.isArchived)
     )
-    expect(currentCategoryHousehold().has('mascotas')).toBe(false)
+    expect(currentHouseholdRules().categories.has('mascotas')).toBe(false)
   })
 
   // Review round 1, item 5

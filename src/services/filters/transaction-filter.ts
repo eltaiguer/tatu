@@ -1,4 +1,4 @@
-import type { CategoryHousehold, Transaction } from '../../models'
+import type { HouseholdRules, Transaction } from '../../models'
 import { rowHouseholdView } from '../household/household'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { countsAsRow, countsTowardTotals } from '../spending/spending-rules'
@@ -28,9 +28,9 @@ export interface TransactionFilterOptions {
   // the period is chosen; left out, it is the newest row (today if none).
   recentAnchor?: Date
   // The user's category defaults, for the Hogar filter. Required so a caller
-  // cannot forget them: pass currentCategoryHousehold() (like userRules,
+  // cannot forget them: pass currentHouseholdRules() (like userRules,
   // never read in here).
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 }
 
 function utcDay(y: number, m: number, d: number): Date {
@@ -97,7 +97,7 @@ export function filterTransactions(
   const min = filters.min ? parseFloat(filters.min) : null
   const max = filters.max ? parseFloat(filters.max) : null
 
-  const { categoryHousehold } = options
+  const { householdRules } = options
 
   // Cheap field comparisons first; the search string is only built when
   // there is a query.
@@ -122,7 +122,7 @@ export function filterTransactions(
       return false
     if (
       filters.household !== 'all' &&
-      rowHouseholdView(transaction, categoryHousehold)?.status !==
+      rowHouseholdView(transaction, householdRules)?.status !==
         filters.household
     )
       return false

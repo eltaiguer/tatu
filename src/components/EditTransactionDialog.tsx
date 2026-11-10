@@ -26,7 +26,7 @@ import {
 import { getAccountLabel } from './TransactionTable'
 import {
   categoryDefault,
-  currentCategoryHousehold,
+  currentHouseholdRules,
   rowHouseholdView,
 } from '../services/household/household'
 
@@ -206,17 +206,17 @@ function EditTransactionForm({
   // Only counted expenses can be household. Read while rendering (never
   // copied into state) so the label follows the category picker above and a
   // default changed in Categorías.
-  const categoryHousehold = currentCategoryHousehold()
+  const householdRules = currentHouseholdRules()
   // Judged on the category being picked, not the saved one: an ignored
   // category has no house, and an ignored row given a counted one gets it.
   const showHousehold =
     canSetHousehold &&
     rowHouseholdView(
       { ...transaction, category: category.trim() || undefined },
-      categoryHousehold
+      householdRules
     ) !== null
   const categoryDefaultLabel = (() => {
-    const says = categoryDefault(category, categoryHousehold)
+    const says = categoryDefault(category, householdRules)
     return says === null ? 'sin definir' : says ? 'sí' : 'no'
   })()
 

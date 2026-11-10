@@ -52,6 +52,8 @@ export type {
   HouseholdFilter,
   HouseholdResolution,
   CategoryHousehold,
+  HouseholdRules,
+  MerchantHousehold,
 } from './household'
 
 // Category system

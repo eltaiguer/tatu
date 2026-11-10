@@ -42,7 +42,7 @@ import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
 import {
-  currentCategoryHousehold,
+  currentHouseholdRules,
   nextHouseholdChoice,
 } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
@@ -379,7 +379,7 @@ export function Transactions({
   function handleToggleHousehold(transaction: Transaction) {
     void writeHousehold(
       transaction.id,
-      nextHouseholdChoice(transaction, currentCategoryHousehold()),
+      nextHouseholdChoice(transaction, currentHouseholdRules()),
       'No se pudo guardar el gasto del hogar'
     )
   }
@@ -449,7 +449,7 @@ export function Transactions({
               onClick={() =>
                 exportTransactions(filteredTransactions, {
                   format: 'csv',
-                  categoryHousehold: currentCategoryHousehold(),
+                  householdRules: currentHouseholdRules(),
                 })
               }
               className="gap-[6px]"

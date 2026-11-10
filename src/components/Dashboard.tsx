@@ -25,7 +25,7 @@ import {
   sumCountedTotals,
 } from '../services/spending/spending-rules'
 import {
-  currentCategoryHousehold,
+  currentHouseholdRules,
   partitionByHousehold,
 } from '../services/household/household'
 import { CategoryChangesCard } from './CategoryChangesCard'
@@ -99,12 +99,12 @@ export function Dashboard({
   // (counted expenses only; ADR-0005) replace `transactions` in every memo
   // below. The map is memoized on the category store's array, so a changed
   // category default changes `householdRows` and everything under it.
-  const categoryHousehold = currentCategoryHousehold()
+  const householdRules = currentHouseholdRules()
   // One pass: the household rows, and those still Sin definir (shown apart
   // in Hogar mode, never inside its totals).
   const { household: householdRows, unassigned: allUnassignedRows } = useMemo(
-    () => partitionByHousehold(transactions, categoryHousehold),
-    [transactions, categoryHousehold]
+    () => partitionByHousehold(transactions, householdRules),
+    [transactions, householdRules]
   )
   const unassignedRows = householdMode ? allUnassignedRows : NO_ROWS
   const rows = householdMode ? householdRows : transactions

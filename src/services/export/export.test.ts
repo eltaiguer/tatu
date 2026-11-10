@@ -6,12 +6,12 @@ import {
   exportTransactions,
   HOUSEHOLD_HEADER,
 } from './export'
-import { buildCategoryHousehold } from '../household/household'
+import { categoryRules } from '../../test/household-rules'
 import { captureCsvDownload } from '../../test/csv-download'
 import { capturePrintFrame } from '../../test/print-frame'
 import { UserFacingError } from '../../utils/user-error'
 
-const NO_DEFAULTS = buildCategoryHousehold([])
+const NO_DEFAULTS = categoryRules([])
 
 function makeTransaction(
   id: string,
@@ -58,7 +58,7 @@ describe('Export helpers', () => {
           category: 'home_office',
         }),
       ],
-      { categoryHousehold: NO_DEFAULTS }
+      { householdRules: NO_DEFAULTS }
     )
 
     expect(html).toContain('Home office')
@@ -73,7 +73,7 @@ describe('Export helpers', () => {
           makeTransaction('trf', { category: 'internal_transfer' }),
           makeTransaction('tx-1', { category: 'groceries' }),
         ],
-        { format: 'csv', categoryHousehold: NO_DEFAULTS }
+        { format: 'csv', householdRules: NO_DEFAULTS }
       )
 
       const [, ...rows] = await csv.rows()
@@ -107,7 +107,7 @@ describe('Export helpers', () => {
             splitParentId: 'parent',
           }),
         ],
-        { format: 'csv', categoryHousehold: NO_DEFAULTS }
+        { format: 'csv', householdRules: NO_DEFAULTS }
       )
 
       const [header, ...rows] = await csv.rows()
@@ -127,7 +127,7 @@ describe('Export helpers', () => {
 
     const html = buildPdfReportHtml(transactions, {
       title: 'Export Report',
-      categoryHousehold: NO_DEFAULTS,
+      householdRules: NO_DEFAULTS,
     })
 
     expect(html).toContain('<table')
@@ -140,7 +140,7 @@ describe('Export helpers', () => {
     try {
       const written = exportTransactions(
         [makeTransaction('tx-1', { description: 'Devoto Pocitos' })],
-        { format: 'pdf', fileName: 'report', categoryHousehold: NO_DEFAULTS }
+        { format: 'pdf', fileName: 'report', householdRules: NO_DEFAULTS }
       )
 
       expect(written).toBe(1)
@@ -159,7 +159,7 @@ describe('Export helpers', () => {
       expect(() =>
         exportTransactions([makeTransaction('tx-1')], {
           format: 'pdf',
-          categoryHousehold: NO_DEFAULTS,
+          householdRules: NO_DEFAULTS,
         })
       ).toThrow(UserFacingError)
       expect(frame.printed()).toHaveLength(0)
@@ -174,7 +174,7 @@ describe('Export helpers', () => {
       [makeTransaction('tx-1', { description })],
       {
         title: 'Gastos <b>2026</b> & más',
-        categoryHousehold: NO_DEFAULTS,
+        householdRules: NO_DEFAULTS,
       }
     )
 
@@ -213,7 +213,7 @@ describe('exported dates', () => {
     expect(dates).toEqual(['2026-03-01', '2026-03-31'])
     const html = buildPdfReportHtml(
       [makeTransaction('new', { date: new Date('2026-03-01T00:00:00.000Z') })],
-      { categoryHousehold: NO_DEFAULTS }
+      { householdRules: NO_DEFAULTS }
     )
     expect(html).toContain('<td>2026-03-01</td>')
   })
@@ -258,13 +258,11 @@ describe('hogar column', () => {
   })
 
   it("follows the user's category default", () => {
-    expect(
-      hogar(buildCategoryHousehold([['restaurants', true]])).restaurants
-    ).toBe('si')
+    expect(hogar(categoryRules([['restaurants', true]])).restaurants).toBe('si')
   })
 
   it('is in the PDF report too', () => {
-    const html = buildPdfReportHtml(rows, { categoryHousehold: NO_DEFAULTS })
+    const html = buildPdfReportHtml(rows, { householdRules: NO_DEFAULTS })
     const doc = new DOMParser().parseFromString(html, 'text/html')
     const heads = [...doc.querySelectorAll('th')].map((th) => th.textContent)
     expect(heads[heads.length - 1]).toBe('hogar')

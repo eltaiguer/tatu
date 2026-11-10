@@ -1,10 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Category } from '../../models'
 import {
-  buildCategoryHousehold,
   canHaveHouseholdDefault,
   categoryHouseholdChoice,
-  currentCategoryHousehold,
+  currentHouseholdRules,
   isCategoryHousehold,
   nextHouseholdChoice,
   partitionByHousehold,
@@ -13,8 +12,9 @@ import {
 } from './household'
 import type { Transaction } from '../../models'
 import { replaceCustomCategories } from '../categories/category-store'
+import { categoryRules } from '../../test/household-rules'
 
-const NONE = buildCategoryHousehold([])
+const NONE = categoryRules([])
 
 describe('resolveHousehold', () => {
   it('starts the seeded household categories as Hogar', () => {
@@ -65,13 +65,13 @@ describe('resolveHousehold', () => {
     expect(
       resolveHousehold(
         { category: Category.ExternalTransfer },
-        buildCategoryHousehold([[Category.ExternalTransfer, true]])
+        categoryRules([[Category.ExternalTransfer, true]])
       ).status
     ).toBe('household')
   })
 
   it("follows the user's category choice over the seeded default", () => {
-    const mapping = buildCategoryHousehold([
+    const mapping = categoryRules([
       [Category.Groceries, false],
       ['mascotas', true],
     ])
@@ -91,7 +91,7 @@ describe('resolveHousehold', () => {
       'household'
     )
     // A choice stored under an old id or another casing still applies.
-    const mapping = buildCategoryHousehold([
+    const mapping = categoryRules([
       ['Restaurant', true],
       ['FOOD', false],
     ])
@@ -107,7 +107,7 @@ describe('resolveHousehold', () => {
     expect(
       resolveHousehold(
         { category: Category.Restaurants },
-        buildCategoryHousehold([
+        categoryRules([
           ['restaurant', true],
           ['restaurants', false],
         ])
@@ -130,7 +130,7 @@ describe('resolveHousehold', () => {
   })
 
   it('cannot give Ingresos a household default, under any alias', () => {
-    const mapping = buildCategoryHousehold([[Category.Income, true]])
+    const mapping = categoryRules([[Category.Income, true]])
     for (const category of [Category.Income, 'salary']) {
       expect(resolveHousehold({ category }, mapping).status).toBe(
         'not_household'
@@ -142,7 +142,7 @@ describe('resolveHousehold', () => {
     expect(
       resolveHousehold(
         { category: Category.Uncategorized },
-        buildCategoryHousehold([[Category.Uncategorized, true]])
+        categoryRules([[Category.Uncategorized, true]])
       ).status
     ).toBe('unassigned')
   })
@@ -154,7 +154,7 @@ describe('resolveHousehold', () => {
     expect(
       resolveHousehold(
         { category: Category.Restaurants, household: true },
-        buildCategoryHousehold([[Category.Restaurants, false]])
+        categoryRules([[Category.Restaurants, false]])
       )
     ).toEqual({ status: 'household', isOverride: true })
   })
@@ -191,13 +191,13 @@ describe('resolveHousehold', () => {
     expect(
       resolveHousehold(
         { category: Category.Restaurants },
-        buildCategoryHousehold([[Category.Restaurants, garbage]])
+        categoryRules([[Category.Restaurants, garbage]])
       ).status
     ).toBe('not_household')
   })
 })
 
-describe('currentCategoryHousehold', () => {
+describe('currentHouseholdRules', () => {
   afterEach(() => replaceCustomCategories([]))
 
   const row = (id: string, isHousehold?: boolean) => ({
@@ -210,7 +210,7 @@ describe('currentCategoryHousehold', () => {
   it('is empty for a user who set no default', () => {
     replaceCustomCategories([row('restaurants')])
 
-    expect(currentCategoryHousehold().size).toBe(0)
+    expect(currentHouseholdRules().categories.size).toBe(0)
   })
 
   it('reflects the category store: built-in and custom rows, true and false', () => {
@@ -221,7 +221,7 @@ describe('currentCategoryHousehold', () => {
       row('viajes'),
     ])
 
-    const map = currentCategoryHousehold()
+    const map = currentHouseholdRules().categories
 
     expect(map.get('restaurants')).toBe(true)
     expect(map.get('groceries')).toBe(false)
@@ -232,10 +232,10 @@ describe('currentCategoryHousehold', () => {
   it('applies a default stored under an old id (food → groceries)', () => {
     replaceCustomCategories([row('food', false)])
 
-    const map = currentCategoryHousehold()
+    const rules = currentHouseholdRules()
 
-    expect(map.get('groceries')).toBe(false)
-    expect(resolveHousehold({ category: 'groceries' }, map).status).toBe(
+    expect(rules.categories.get('groceries')).toBe(false)
+    expect(resolveHousehold({ category: 'groceries' }, rules).status).toBe(
       'not_household'
     )
   })
@@ -243,11 +243,11 @@ describe('currentCategoryHousehold', () => {
   it('returns the same Map until the store changes', () => {
     replaceCustomCategories([row('restaurants', true)])
 
-    const first = currentCategoryHousehold()
-    expect(currentCategoryHousehold()).toBe(first)
+    const first = currentHouseholdRules().categories
+    expect(currentHouseholdRules().categories).toBe(first)
 
     replaceCustomCategories([row('restaurants', false)])
-    const second = currentCategoryHousehold()
+    const second = currentHouseholdRules().categories
     expect(second).not.toBe(first)
     expect(second.get('restaurants')).toBe(false)
   })
@@ -263,13 +263,13 @@ describe('isCategoryHousehold', () => {
     expect(
       isCategoryHousehold(
         Category.Groceries,
-        buildCategoryHousehold([[Category.Groceries, false]])
+        categoryRules([[Category.Groceries, false]])
       )
     ).toBe(false)
     expect(
       isCategoryHousehold(
         Category.Restaurants,
-        buildCategoryHousehold([[Category.Restaurants, true]])
+        categoryRules([[Category.Restaurants, true]])
       )
     ).toBe(true)
   })
@@ -369,7 +369,7 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
   })
 
   it('follows the user’s category default', () => {
-    const map = buildCategoryHousehold([[Category.Restaurants, true]])
+    const map = categoryRules([[Category.Restaurants, true]])
     const tx = expense({ category: Category.Restaurants })
     expect(nextHouseholdChoice(tx, map)).toBe(false)
   })

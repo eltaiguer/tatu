@@ -31,7 +31,7 @@ import { listMerchantCategoryOverrides } from '../services/categorizer/category-
 import { listDescriptionOverrides } from '../services/descriptions/description-overrides'
 import { listCustomPatterns } from '../services/categorizer/custom-patterns'
 import { listCustomCategories } from '../services/categories/category-store'
-import { currentCategoryHousehold } from '../services/household/household'
+import { currentHouseholdRules } from '../services/household/household'
 import { UserFacingError } from '../utils/user-error'
 import {
   createInMemoryAuth,
@@ -200,7 +200,7 @@ describe('workspace store', () => {
       })
     )
 
-    const map = currentCategoryHousehold()
+    const map = currentHouseholdRules().categories
     expect(
       listCustomCategories().find((c) => c.id === 'groceries')
     ).toMatchObject({ isHousehold: false })
@@ -211,7 +211,7 @@ describe('workspace store', () => {
 
     teardownWorkspace()
 
-    expect(currentCategoryHousehold().size).toBe(0)
+    expect(currentHouseholdRules().categories.size).toBe(0)
   })
 
   it('gives a user without a preferences row the defaults, not the previous user’s', async () => {
