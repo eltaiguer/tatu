@@ -255,6 +255,52 @@ describe('chart-data multicurrency converting selectors', () => {
       const result = buildCurrentMonthSummary(txs, 'USD', RATE)
       expect(result.expense).toBe(50)
     })
+
+    describe('with a reference month', () => {
+      const NOW = new Date(2026, 9, 3)
+      const feb = makeTx('feb', {
+        date: new Date('2025-02-10T00:00:00.000Z'),
+        type: 'debit',
+        amount: 30,
+      })
+      const jan = makeTx('jan', {
+        date: new Date('2025-01-10T00:00:00.000Z'),
+        type: 'debit',
+        amount: 70,
+      })
+
+      it('covers that month even when the rows have none there', () => {
+        // Rows end in January, the reference month is February.
+        const result = buildCurrentMonthSummary([jan], 'USD', RATE, NOW, {
+          y: 2025,
+          m: 1,
+        })
+        expect(result.expense).toBe(0)
+        expect(result.count).toBe(0)
+        expect(result.split).toEqual({ USD: 0, UYU: 0 })
+        expect(result.y).toBe(2025)
+        expect(result.m).toBe(1)
+        expect(result.monthLabel).toBe('febrero de 2025')
+        expect(result.isCurrentMonth).toBe(false)
+      })
+
+      it('sums the reference month, not the rows’ newest one', () => {
+        const result = buildCurrentMonthSummary([jan, feb], 'USD', RATE, NOW, {
+          y: 2025,
+          m: 0,
+        })
+        expect(result.expense).toBe(70)
+        expect(result.monthLabel).toBe('enero de 2025')
+      })
+
+      it('flags the calendar month as current', () => {
+        const result = buildCurrentMonthSummary([jan], 'USD', RATE, NOW, {
+          y: 2026,
+          m: 9,
+        })
+        expect(result.isCurrentMonth).toBe(true)
+      })
+    })
   })
 
   describe('buildCurrencySplit', () => {
