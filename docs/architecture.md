@@ -522,6 +522,9 @@ Resumen passes today's month.
   "not imported" from "the account didn't exist yet or was quiet", so the
   copy says only what is always true: those months lack data from some
   account. Importing the missing statements brings them back.
+- In Resumen's Hogar mode the rows drawn are a subset, but completeness is
+  about the statements: `buildMonthlyTrendRows` and `categoryChanges` take an
+  optional `coverage` (every row) for `completeMonths`.
 
 ## What a category id means
 
@@ -575,6 +578,27 @@ clicks equals the sum of the rows it opens. Callers never re-derive it from
 | `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`isCategoryIgnored`, the cheap form of `resolveCategory(id).isIgnored`: transfers, the `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                        |
 | `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                                                                      | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                            |
 | `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                                                                  | The Transacciones totals strip, each month of `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`                                                         |
+
+## Resumen: Todo / Hogar mode
+
+`Dashboard.tsx` (Resumen) has two modes, kept in the URL as `/?hogar=si`
+(`App.tsx` reads it into `householdMode` and writes it with REPLACE; any other
+value is Todo; the sidebar's Resumen link goes to `/`). Todo is the whole
+page. Hogar is one cut at the top: `householdRows` = the rows whose
+`rowHouseholdView(tx, currentCategoryHousehold())` is `household` (counted
+expenses only, so income, ignored rows and split parents are out). Every memo
+reads `rows = householdMode ? householdRows : transactions`; the household map
+is memoized on the category store's array, so a changed category default or
+row choice changes the numbers on the next render.
+
+- The hero's month is always the Todo month: `buildCurrentMonthSummary` takes
+  an optional reference month, so the household summary of a month with no
+  household spend is $0 rather than another month.
+- Sin definir (`status === 'unassigned'`) is summed apart with
+  `sumCountedTotals` / the same month summary, never into the household total.
+- Months' completeness reads every row (see "Complete months").
+- Drill-throughs go through one wrapper that adds `household: 'household'`
+  (a filter naming its own household, such as Sin definir, keeps it).
 
 ## Merchant key
 
