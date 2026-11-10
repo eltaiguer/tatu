@@ -7,11 +7,18 @@ import {
   useState,
 } from 'react'
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
-import { pathForView, titleForView, viewFromPath } from './routes'
+import {
+  keepsQueryOnReselect,
+  pathForView,
+  titleForView,
+  viewFromPath,
+} from './routes'
 import { normalizeCategoryId } from './services/categories/category-aliases'
 import { countsAsRow } from './services/spending/spending-rules'
 import {
   filterToSearch,
+  householdModeFromSearch,
+  householdModeToSearch,
   parseFilterParams,
 } from './services/filters/url-filters'
 import { ViewSkeleton } from './components/StateSkeletons'
@@ -92,14 +99,18 @@ function App({ auth, createRepository }: AppProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   // Navigates unless already there, so re-clicking the current view doesn't
-  // stack duplicate history entries. A plain nav (no query) to the current
-  // view keeps its query too: Transacciones always carries its filters in
-  // the URL, and re-clicking it must not wipe them.
+  // stack duplicate history entries: a re-select replaces the entry. It keeps
+  // the view's query where that holds filters (`keepsQueryOnReselect`), and
+  // otherwise drops it (Resumen's Hogar mode goes back to Todo).
   function go(view: View, search = '') {
-    if (view === currentView && (!search || `?${search}` === location.search)) {
-      return
-    }
-    navigate(pathForView(view) + (search ? `?${search}` : ''))
+    const reselect = view === currentView
+    const sameQuery = search
+      ? `?${search}` === location.search
+      : keepsQueryOnReselect(view) || !location.search
+    if (reselect && sameQuery) return
+    navigate(pathForView(view) + (search ? `?${search}` : ''), {
+      replace: reselect,
+    })
   }
 
   // Transacciones writes its filters into the URL with REPLACE; only other
@@ -117,6 +128,21 @@ function App({ auth, createRepository }: AppProps) {
       navigate({ pathname: location.pathname, search: next }, { replace: true })
     },
     [location.pathname, location.search, navigate]
+  )
+
+  // Resumen's Hogar mode is `/?hogar=si`, written with REPLACE like the
+  // Transacciones filters; any other value reads as Todo.
+  // Read on Resumen only: Transacciones' own `hogar` filter is another thing.
+  const householdMode =
+    currentView === 'overview' && householdModeFromSearch(location.search)
+  const handleHouseholdModeChange = useCallback(
+    (on: boolean) => {
+      navigate(
+        { pathname: location.pathname, search: householdModeToSearch(on) },
+        { replace: true }
+      )
+    },
+    [location.pathname, navigate]
   )
 
   useEffect(() => {
@@ -451,6 +477,8 @@ function App({ auth, createRepository }: AppProps) {
                     fxRate={fxRate}
                     onSetHomeCurrency={setPreferredCurrency}
                     onSetFxRate={setFxRate}
+                    householdMode={householdMode}
+                    onHouseholdModeChange={handleHouseholdModeChange}
                   />
                 )}
                 {currentView === 'transactions' &&

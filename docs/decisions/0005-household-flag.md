@@ -103,10 +103,41 @@ Implemented in step 5 of #251: the Hogar filter in Transacciones and the
 - A `hogar` column after `cuenta_en_totales` in the CSV and the PDF report:
   `si` / `no` / `sin_definir` for counted expenses, empty for every other row.
 
+Implemented in step 6 of #251: the Todo / Hogar mode on Resumen.
+
+- A "Todo · Hogar" toggle (group "Ver gastos", house icon) beside the FX chip
+  and currency toggle. The mode is `/?hogar=si` on Resumen (REPLACE; Todo = no
+  param, any other value = Todo); the sidebar's Resumen link goes back to `/`.
+- Hogar mode is one cut at the top of `Dashboard.tsx`: the rows that
+  `rowHouseholdView` resolves to household replace `transactions` in every
+  figure ("Qué cambió", donut, merchants, recent rows, "Mes a mes", accounts,
+  currency split). The months of "Mes a mes" and which of them are complete
+  still come from every row (`coverage` of `buildMonthlyTrendRows` /
+  `categoryChanges`): it is about the statements, so a month with no household
+  spend is a bar at 0, with no drill (it would open an empty list).
+- Hero: "Gastos del hogar $X" for the Todo hero's month (it never moves with
+  the mode: `buildCurrentMonthSummary` takes the reference month, so a month
+  with no household spend reads $0). The income, balance and savings views
+  are not shown, nor the income bars of "Mes a mes"; one link opens the
+  month's household expenses (hidden when the month has none).
+- Every drill-through in Hogar mode adds `household: 'household'` (one wrapper
+  in `Dashboard.tsx`; Todo adds no key).
+- Sin definir apart: a muted hero line "Sin definir este mes: $Z" (hidden at
+  zero) opening `household: 'unassigned'` for the month, and, in place of the
+  "Sin categoría" nudge, a "Sin definir" banner with the all-time total and
+  count. Never inside the household totals.
+- Todo mode's hero adds "Hogar $X de $Y gastados", a button that switches to
+  Hogar mode and moves focus to the hero (hidden when $X is 0; its accessible
+  name starts with the visible text, and an arrow marks it as a link).
+- With transactions but no household spend at all Hogar mode shows
+  "Todavía no hay gastos del hogar" and a link to Categorías instead of zeroed
+  cards, plus the Sin definir banner when there are such rows.
+- The mode is read on Resumen only (the Transacciones filter shares the `hogar`
+  token); re-selecting Resumen in the sidebar replaces the history entry and
+  returns to Todo.
+
 Planned for the later PRs of #251:
 
-- A Todo / Hogar mode on Resumen, kept in the URL. Hogar mode shows counted
-  expenses only, plus the Sin definir amount apart.
 - Household-aware Insights.
 - A mixed purchase is split, and each part gets its own flag.
 - No merchant rules for the flag in the first version.

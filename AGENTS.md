@@ -56,8 +56,8 @@ src/
   components/              # React UI components
     ui/                    # Radix primitives (shadcn/ui style) + app ones: page-header, section (Section: display-font h2 above a named region, for Configuración/Categorías; card.tsx's SectionCard puts its rows in one card below the h2), segmented-toggle (a radiogroup), icon-tile, native-select; use-return-focus (dialogs return focus to their opener on close), option-list (arrow keys in popover picker lists)
     AppSidebar.tsx         # Fixed 252px sidebar, navigation, user footer
-    Dashboard.tsx          # Resumen view — owns the data memos; charts live here, not a separate view
-    dashboard/             # Resumen sub-components: MonthHero (the month as one sentence), ResumenSection (a question heading + period, a named region), UncategorizedNudge, CategorySpendCard (donut), TopMerchantsCard, RecentTransactionsCard, SavingsCard, MonthlySpendChart (spend bars, income ghost), MonthButtons (keyboard equivalent of a chart's bars), AccountCards, CurrencySplitCard, EmptyStates, DrillTarget
+    Dashboard.tsx          # Resumen view — owns the data memos (+ the Todo / Hogar cut: `householdRows` replace `transactions` in every memo); charts live here, not a separate view
+    dashboard/             # Resumen sub-components: MonthHero (the month as one sentence; Hogar mode: "Gastos del hogar", Sin definir line; Todo: "Hogar $X de $Y gastados"), HouseholdModeToggle (Todo / Hogar), ResumenSection (a question heading + period, a named region), SpendNudge (the "Sin categoría" / Hogar "Sin definir" row), CategorySpendCard (donut), TopMerchantsCard, RecentTransactionsCard, SavingsCard, MonthlySpendChart (spend bars, income ghost), MonthButtons (keyboard equivalent of a chart's bars), AccountCards, CurrencySplitCard, EmptyStates, DrillTarget
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
     transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable), HouseToggle (the "gasto del hogar" house on both); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state)
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
@@ -149,7 +149,7 @@ type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 - **General**: Resumen (`overview`), Transacciones (`transactions`), Insights (`insights`)
 - **Gestión**: Categorías (`categories`), Configuración (`settings`)
 - Import is a Radix `Dialog` overlay triggered from the sidebar and from Settings — not a view.
-- Charts (donut, savings bars, monthly spend bars, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view. Resumen reads top-down: "Qué cambió" → the month hero → three `ResumenSection`s ("¿A dónde se fue la plata?", "Mes a mes", "Tus cuentas"), each labelled with the period its numbers cover.
+- Charts (donut, savings bars, monthly spend bars, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view. Resumen reads top-down: "Qué cambió" → the month hero → three `ResumenSection`s ("¿A dónde se fue la plata?", "Mes a mes", "Tus cuentas"), each labelled with the period its numbers cover. A "Todo · Hogar" toggle in its header (`/?hogar=si`, read on Resumen only and written by `App.tsx`, passed down as `householdMode`; the token lives in `url-filters.ts`) cuts every figure to the household expenses (ADR-0005); the hero's month stays the Todo month.
 - Views load lazily (`lazy-views.tsx`) inside `ViewErrorBoundary` + `Suspense` in `App.tsx`.
 
 ### Routing
@@ -157,6 +157,7 @@ type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 `react-router-dom`; the URL is the source of truth for the view. `src/routes.ts` maps `View` ↔ path (`pathForView`, `viewFromPath`, `titleForView`):
 
 - `/` Resumen · `/transacciones` · `/insights` · `/categorias` · `/configuracion`
+- Resumen's Hogar mode is `/?hogar=si` (REPLACE; Todo = no param); the sidebar's Resumen link goes to `/`.
 - Unknown paths render Resumen without redirecting (a redirect could drop a password-recovery hash). Matching ignores case and trailing slashes.
 - Transacciones filters live in the query string (`services/filters/url-filters.ts`, e.g. `?categoria=restaurants&periodo=2026-03`), written with `replace`. Drill-throughs from Resumen call `onNavigateToTransactions(filter)` → `filterToSearch`.
 - Adding a view: extend `View` + the sidebar nav in `AppSidebar.tsx`, both records in `routes.ts`, a loader in `lazy-views.tsx`, and the render branch in `App.tsx`.

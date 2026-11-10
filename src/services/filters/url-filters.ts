@@ -92,6 +92,20 @@ function parsePeriod(params: URLSearchParams): UrlPeriod | undefined {
   return undefined
 }
 
+// The household token, shared by the Transacciones filter below and Resumen's
+// Hogar mode (`/?hogar=si`): it lives here and nowhere else.
+const HOUSEHOLD_PARAM = 'hogar'
+const HOUSEHOLD_YES = 'si'
+const HOUSEHOLD_UNASSIGNED = 'sin-definir'
+
+export function householdModeFromSearch(search: string): boolean {
+  return new URLSearchParams(search).get(HOUSEHOLD_PARAM) === HOUSEHOLD_YES
+}
+
+export function householdModeToSearch(on: boolean): string {
+  return on ? `?${HOUSEHOLD_PARAM}=${HOUSEHOLD_YES}` : ''
+}
+
 // Unknown enum values and malformed numbers/periods are dropped rather than
 // failing. Category ids are kept as-is: custom categories load after the URL
 // is first read, so validating them here would lose them on a cold refresh.
@@ -101,7 +115,7 @@ export function parseFilterParams(search: string): UrlFilterState {
   const type = params.get('tipo')
   const min = params.get('min') ?? ''
   const max = params.get('max') ?? ''
-  const hogar = params.get('hogar')
+  const hogar = params.get(HOUSEHOLD_PARAM)
   return {
     search: params.get('q') ?? '',
     merchant: params.get('comercio') ?? '',
@@ -121,9 +135,9 @@ export function parseFilterParams(search: string): UrlFilterState {
     household:
       type === 'credit'
         ? 'all'
-        : hogar === 'si'
+        : hogar === HOUSEHOLD_YES
           ? 'household'
-          : hogar === 'sin-definir'
+          : hogar === HOUSEHOLD_UNASSIGNED
             ? 'unassigned'
             : 'all',
     ...(parsePeriod(params) && { period: parsePeriod(params) }),
@@ -144,8 +158,10 @@ export function serializeFilterParams(state: UrlFilterState): string {
   if (state.showIgnored) params.set('ignoradas', '1')
   // Never written beside tipo=credit (see parseFilterParams).
   if (state.type !== 'credit') {
-    if (state.household === 'household') params.set('hogar', 'si')
-    if (state.household === 'unassigned') params.set('hogar', 'sin-definir')
+    if (state.household === 'household')
+      params.set(HOUSEHOLD_PARAM, HOUSEHOLD_YES)
+    if (state.household === 'unassigned')
+      params.set(HOUSEHOLD_PARAM, HOUSEHOLD_UNASSIGNED)
   }
   const period = state.period
   if (period?.mode === 'all') params.set('periodo', 'todo')

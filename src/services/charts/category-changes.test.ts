@@ -267,4 +267,19 @@ describe('categoryChanges', () => {
       }),
     ])
   })
+
+  it('takes which months are complete from the coverage rows, not the ones compared', () => {
+    const all = fullMonths(
+      ['2026-06', '2026-07', '2026-08', '2026-09'],
+      (m) => [tx(`${m}-10`, 'groceries', 100)]
+    )
+    // Only the groceries rows (no fees on the 1st / 28th): alone, June would
+    // be the account's first month and start on the 10th, so be partial.
+    const shown = all.filter((t) => t.category === 'groceries')
+    const alone = categoryChanges(shown, 'USD', 40, NOW)
+    const covered = categoryChanges(shown, 'USD', 40, NOW, all)
+
+    expect(alone.kind).not.toBe(covered.kind)
+    expect(covered.kind).toBe('ok')
+  })
 })

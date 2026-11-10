@@ -7,6 +7,7 @@ import {
   currentCategoryHousehold,
   isCategoryHousehold,
   nextHouseholdChoice,
+  partitionByHousehold,
   resolveHousehold,
   rowHouseholdView,
 } from './household'
@@ -394,5 +395,49 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     ).toBeNull()
     expect(rowHouseholdView(expense({ isSplitParent: true }), NONE)).toBeNull()
     expect(nextHouseholdChoice(expense({ type: 'credit' }), NONE)).toBeNull()
+  })
+})
+
+describe('partitionByHousehold', () => {
+  it('splits counted expenses into household and Sin definir, in one pass, keeping order', () => {
+    const groceries = expense({ id: 'g' })
+    const handMade = expense({
+      id: 'h',
+      category: Category.Restaurants,
+      household: true,
+    })
+    const plain = expense({ id: 'p', category: Category.Restaurants })
+    const loose = expense({ id: 'u', category: Category.Uncategorized })
+    const income = expense({
+      id: 'i',
+      type: 'credit',
+      category: Category.Income,
+    })
+    const transfer = expense({
+      id: 't',
+      category: Category.InternalTransfer,
+    })
+
+    const { household, unassigned } = partitionByHousehold(
+      [groceries, plain, loose, income, handMade, transfer],
+      NONE
+    )
+
+    expect(household.map((t) => t.id)).toEqual(['g', 'h'])
+    expect(unassigned.map((t) => t.id)).toEqual(['u'])
+  })
+
+  it('agrees with rowHouseholdView for every row', () => {
+    const rows = [
+      expense({ id: 'a' }),
+      expense({ id: 'b', category: Category.Uncategorized, household: false }),
+      expense({ id: 'c', category: Category.Uncategorized, household: true }),
+    ]
+    const { household, unassigned } = partitionByHousehold(rows, NONE)
+    for (const tx of rows) {
+      const status = rowHouseholdView(tx, NONE)?.status
+      expect(household.includes(tx)).toBe(status === 'household')
+      expect(unassigned.includes(tx)).toBe(status === 'unassigned')
+    }
   })
 })

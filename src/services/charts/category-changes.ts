@@ -56,10 +56,13 @@ export function categoryChanges(
   transactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number,
-  now: Date = new Date()
+  now: Date = new Date(),
+  // The rows that say what was imported, when `transactions` is a subset
+  // (Hogar mode): which months are complete is about the statements.
+  coverage: Transaction[] = transactions
 ): CategoryChanges {
   // Today's month where the user is (todayAsUtcDate reads the local day).
-  const complete = completeMonths(transactions, toMonthKey(todayAsUtcDate(now)))
+  const complete = completeMonths(coverage, toMonthKey(todayAsUtcDate(now)))
   if (complete.size === 0) {
     return { kind: 'insufficient' }
   }

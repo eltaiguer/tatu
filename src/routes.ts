@@ -20,6 +20,13 @@ export function pathForView(view: View): string {
   return VIEW_PATHS[view]
 }
 
+// Re-selecting the current view in the sidebar keeps its query only where the
+// query holds the user's filters (Transacciones); Resumen's is a mode, so it
+// goes back to plain Todo.
+export function keepsQueryOnReselect(view: View): boolean {
+  return view === 'transactions'
+}
+
 export function titleForView(view: View): string {
   return `${VIEW_TITLES[view]} · Tatú`
 }

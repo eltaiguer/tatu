@@ -29,18 +29,25 @@ interface MonthlySpendChartProps {
   homeCurrency: Currency
   // Opens one month's rows; undefined when there is nowhere to navigate.
   openMonth?: (key: string, type?: 'credit' | 'debit') => void
+  // The income ghost bars; off in Hogar mode, where income is out of scope.
+  showIncome?: boolean
 }
 
 export function MonthlySpendChart({
   monthlyTrend,
   homeCurrency,
   openMonth,
+  showIncome = true,
 }: MonthlySpendChartProps) {
   // Partial months are drawn but not averaged: ten days of a statement
   // would read as a cheap month.
   const avgMonthly = averageSpendOfMonthsWithSpend(
     monthlyTrend.filter((m) => m.complete).map((m) => m.gastos)
   )
+
+  // A Hogar month with no household spend would open an empty list, so it has
+  // no drill (bar or button). Todo keeps every month's.
+  const opensExpenses = (m: { gastos: number }) => showIncome || m.gastos > 0
 
   const tooltip = ({
     active,
@@ -60,12 +67,14 @@ export function MonthlySpendChart({
             {formatCurrency(d.gastos, homeCurrency)}
           </span>
         </p>
-        <p className="mx-0 my-[3px] text-[12px] text-[var(--pos)]">
-          Ingresos:{' '}
-          <span className="font-mono tabular-nums">
-            {formatCurrency(d.ingresos, homeCurrency)}
-          </span>
-        </p>
+        {showIncome && (
+          <p className="mx-0 my-[3px] text-[12px] text-[var(--pos)]">
+            Ingresos:{' '}
+            <span className="font-mono tabular-nums">
+              {formatCurrency(d.ingresos, homeCurrency)}
+            </span>
+          </p>
+        )}
         {!d.complete && (
           <p className="mx-0 mt-[6px] mb-0 text-[12px] text-[var(--text-faint)]">
             Le faltan datos de alguna cuenta: no entra en el promedio
@@ -80,9 +89,11 @@ export function MonthlySpendChart({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="m-0 text-title font-semibold">Gasto por mes</h3>
-          <p className="mx-0 mt-[2px] mb-0 text-caption text-[var(--text-faint)]">
-            La barra más clara detrás de cada mes son tus ingresos
-          </p>
+          {showIncome && (
+            <p className="mx-0 mt-[2px] mb-0 text-caption text-[var(--text-faint)]">
+              La barra más clara detrás de cada mes son tus ingresos
+            </p>
+          )}
         </div>
         {avgMonthly !== null && (
           <div className="sm:text-right">
@@ -127,23 +138,25 @@ export function MonthlySpendChart({
             content={tooltip}
             cursor={{ fill: 'var(--surface-2)', opacity: 0.6 }}
           />
-          <Bar
-            dataKey="ingresos"
-            xAxisId="ghost"
-            fill="var(--pos)"
-            fillOpacity={0.2}
-            radius={[3, 3, 0, 0]}
-            maxBarSize={26}
-            isAnimationActive={false}
-            cursor={openMonth ? 'pointer' : undefined}
-            onClick={(row: { key?: string }) =>
-              row.key && openMonth?.(row.key, 'credit')
-            }
-          >
-            {monthlyTrend.map((m) => (
-              <Cell key={m.key} fillOpacity={m.complete ? 0.2 : 0.1} />
-            ))}
-          </Bar>
+          {showIncome && (
+            <Bar
+              dataKey="ingresos"
+              xAxisId="ghost"
+              fill="var(--pos)"
+              fillOpacity={0.2}
+              radius={[3, 3, 0, 0]}
+              maxBarSize={26}
+              isAnimationActive={false}
+              cursor={openMonth ? 'pointer' : undefined}
+              onClick={(row: { key?: string }) =>
+                row.key && openMonth?.(row.key, 'credit')
+              }
+            >
+              {monthlyTrend.map((m) => (
+                <Cell key={m.key} fillOpacity={m.complete ? 0.2 : 0.1} />
+              ))}
+            </Bar>
+          )}
           <Bar
             dataKey="gastos"
             fill="var(--neg)"
@@ -152,8 +165,10 @@ export function MonthlySpendChart({
             maxBarSize={14}
             isAnimationActive={false}
             cursor={openMonth ? 'pointer' : undefined}
-            onClick={(row: { key?: string }) =>
-              row.key && openMonth?.(row.key, 'debit')
+            onClick={(row: { key?: string; gastos?: number }) =>
+              row.key &&
+              opensExpenses({ gastos: row.gastos ?? 0 }) &&
+              openMonth?.(row.key, 'debit')
             }
           >
             {monthlyTrend.map((m) => (
@@ -164,18 +179,26 @@ export function MonthlySpendChart({
       </ResponsiveContainer>
       {openMonth && (
         <MonthButtons
-          label="Gastos e ingresos por mes"
+          label={showIncome ? 'Gastos e ingresos por mes' : 'Gastos por mes'}
           buttons={monthlyTrend.flatMap((m) => [
-            {
-              key: `${m.key}-debit`,
-              text: `Ver los gastos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
-              onClick: () => openMonth(m.key, 'debit'),
-            },
-            {
-              key: `${m.key}-credit`,
-              text: `Ver los ingresos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
-              onClick: () => openMonth(m.key, 'credit'),
-            },
+            ...(opensExpenses(m)
+              ? [
+                  {
+                    key: `${m.key}-debit`,
+                    text: `Ver los gastos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
+                    onClick: () => openMonth(m.key, 'debit'),
+                  },
+                ]
+              : []),
+            ...(showIncome
+              ? [
+                  {
+                    key: `${m.key}-credit`,
+                    text: `Ver los ingresos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
+                    onClick: () => openMonth(m.key, 'credit'),
+                  },
+                ]
+              : []),
           ])}
         />
       )}

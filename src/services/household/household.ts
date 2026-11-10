@@ -119,6 +119,25 @@ export function rowHouseholdView(
 }
 
 /**
+ * The counted expenses that are household and those still Sin definir, in one
+ * pass over `rows` (order kept). Both come from `rowHouseholdView`, so every
+ * surface that splits rows this way agrees with the row toggle.
+ */
+export function partitionByHousehold(
+  rows: readonly Transaction[],
+  categoryHousehold: CategoryHousehold
+): { household: Transaction[]; unassigned: Transaction[] } {
+  const household: Transaction[] = []
+  const unassigned: Transaction[] = []
+  for (const tx of rows) {
+    const status = rowHouseholdView(tx, categoryHousehold)?.status
+    if (status === 'household') household.push(tx)
+    else if (status === 'unassigned') unassigned.push(tx)
+  }
+  return { household, unassigned }
+}
+
+/**
  * What a category alone says: true / false, or null for Sin categoría (it has
  * no default, so a row there is Sin definir until chosen by hand).
  */

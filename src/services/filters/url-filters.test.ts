@@ -3,6 +3,8 @@ import {
   DEFAULT_URL_FILTERS,
   filterToSearch,
   hasActiveFilters,
+  householdModeFromSearch,
+  householdModeToSearch,
   parseFilterParams,
   serializeFilterParams,
   type UrlFilterState,
@@ -172,5 +174,20 @@ describe('hasActiveFilters', () => {
         })
       )
     ).toBe(false)
+  })
+
+  describe('Resumen household mode', () => {
+    it('is on only for hogar=si', () => {
+      expect(householdModeFromSearch('?hogar=si')).toBe(true)
+      expect(householdModeFromSearch('?hogar=x')).toBe(false)
+      expect(householdModeFromSearch('?hogar=sin-definir')).toBe(false)
+      expect(householdModeFromSearch('')).toBe(false)
+    })
+
+    it('writes the query it reads back', () => {
+      expect(householdModeToSearch(true)).toBe('?hogar=si')
+      expect(householdModeToSearch(false)).toBe('')
+      expect(householdModeFromSearch(householdModeToSearch(true))).toBe(true)
+    })
   })
 })
