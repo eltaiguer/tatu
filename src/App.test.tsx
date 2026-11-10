@@ -1,5 +1,12 @@
 import { beforeAll, beforeEach, describe, it, expect, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ROUTER_FUTURE } from './router-future'
@@ -889,6 +896,89 @@ describe('App', () => {
       ).toBeGreaterThan(0)
       expect(screen.queryByText('Devoto marzo')).not.toBeInTheDocument()
       expect(screen.queryByText('Cantina abril')).not.toBeInTheDocument()
+    })
+
+    describe('Resumen Todo / Hogar mode', () => {
+      function seedHogar() {
+        seed({
+          transactions: [
+            tx(
+              'super',
+              '2026-03-10T12:00:00.000Z',
+              'Devoto marzo',
+              'groceries'
+            ),
+            tx(
+              'resto',
+              '2026-03-11T12:00:00.000Z',
+              'Cantina marzo',
+              'restaurants'
+            ),
+          ],
+        })
+      }
+      const group = () => screen.getByRole('radiogroup', { name: 'Ver gastos' })
+
+      it('opens in Hogar mode from /?hogar=si', async () => {
+        seedHogar()
+        renderApp('/?hogar=si')
+        expect(
+          await screen.findByRole('heading', { name: /Gastos del hogar/ })
+        ).toBeInTheDocument()
+        expect(screen.queryByText('Cantina marzo')).not.toBeInTheDocument()
+      })
+
+      it('reads any other value as Todo', async () => {
+        seedHogar()
+        renderApp('/?hogar=x')
+        expect(await screen.findByText(/Gastaste/)).toBeInTheDocument()
+      })
+
+      it('writes the mode to the URL, without stacking history', async () => {
+        seedHogar()
+        renderApp('/')
+        await screen.findByText(/Gastaste/)
+
+        fireEvent.click(within(group()).getByRole('radio', { name: 'Hogar' }))
+        await waitFor(() => expect(currentUrl()).toBe('/?hogar=si'))
+        expect(
+          screen.getByRole('heading', { name: /Gastos del hogar/ })
+        ).toBeInTheDocument()
+
+        fireEvent.click(within(group()).getByRole('radio', { name: 'Todo' }))
+        await waitFor(() => expect(currentUrl()).toBe('/'))
+        expect(screen.getByText(/Gastaste/)).toBeInTheDocument()
+      })
+
+      it('the sidebar’s Resumen goes back to Todo', async () => {
+        seedHogar()
+        renderApp('/?hogar=si')
+        await screen.findByRole('heading', { name: /Gastos del hogar/ })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Resumen' }))
+
+        await waitFor(() => expect(currentUrl()).toBe('/'))
+        expect(screen.getByText(/Gastaste/)).toBeInTheDocument()
+      })
+
+      it('a drill-through opens Transacciones filtered to Hogar', async () => {
+        seedHogar()
+        renderApp('/?hogar=si')
+        await screen.findByRole('heading', { name: /Gastos del hogar/ })
+
+        fireEvent.click(
+          screen.getByRole('button', {
+            name: 'Ver los gastos del hogar del mes',
+          })
+        )
+
+        await waitFor(() => expect(currentUrl()).toMatch(/^\/transacciones\?/))
+        expect(currentUrl()).toContain('hogar=si')
+        expect(
+          (await screen.findAllByText('Devoto marzo')).length
+        ).toBeGreaterThan(0)
+        expect(screen.queryByText('Cantina marzo')).not.toBeInTheDocument()
+      })
     })
 
     it('keeps the filters when re-clicking Transacciones', async () => {

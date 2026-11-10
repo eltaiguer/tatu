@@ -99,9 +99,13 @@ export function buildMonthlyTrendRows(
   homeCurrency: Currency,
   fxRate: number,
   // Today's month, 'YYYY-MM': it and later months are never complete.
-  currentMonth: string
+  currentMonth: string,
+  // The rows that say what was imported, when `transactions` is a subset
+  // (Hogar mode): a month's completeness is about the statements, not about
+  // the rows drawn.
+  coverage: Transaction[] = transactions
 ): MonthlyTrendRow[] {
-  const complete = completeMonths(transactions, currentMonth)
+  const complete = completeMonths(coverage, currentMonth)
   return buildMonthlyTrendsConverted(transactions, homeCurrency, fxRate)
     .slice(-12)
     .map((m) => ({

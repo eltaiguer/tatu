@@ -15,6 +15,11 @@ interface MonthHeroProps {
   homeCurrency: Currency
   curWord: string
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
+  // Hogar mode: `monthSummary` is the household cut of the month (its
+  // expense is the household expense). The sentence names it, and the
+  // income / balance boxes give way to one link to those rows. The caller's
+  // `onNavigateToTransactions` already adds the household filter.
+  householdMode?: boolean
 }
 
 export function MonthHero({
@@ -22,6 +27,7 @@ export function MonthHero({
   homeCurrency,
   curWord,
   onNavigateToTransactions,
+  householdMode = false,
 }: MonthHeroProps) {
   // Opens exactly the month's rows (optionally only income/expenses).
   const openSummaryMonth =
@@ -50,7 +56,7 @@ export function MonthHero({
             · todo en {curWord}
           </span>
           <span className="mt-1.5 block font-display text-[34px] leading-[1.15] font-semibold tracking-[-0.02em]">
-            Gastaste{' '}
+            {householdMode ? 'Gastos del hogar' : 'Gastaste'}{' '}
             <span className="font-mono text-[32px] font-medium tracking-[-0.03em] tabular-nums">
               {formatCurrency(monthSummary.expense, homeCurrency)}
             </span>
@@ -62,51 +68,66 @@ export function MonthHero({
           Combina tus movimientos en US$ y $U usando el tipo de cambio.
         </p>
       </div>
-      <div className="grid max-w-[720px] grid-cols-1 gap-2 sm:grid-cols-3">
-        <DrillTarget
-          onOpen={openSummaryMonth && (() => openSummaryMonth('credit'))}
-          label="Ver los ingresos del mes"
-          className="px-3 py-2"
-        >
-          <div className="text-label text-muted-foreground">Ingresos</div>
-          <div className="font-mono text-subhead text-[var(--pos)] tabular-nums">
-            {formatCurrency(monthSummary.income, homeCurrency)}
-          </div>
-        </DrillTarget>
+      {householdMode ? (
         <DrillTarget
           onOpen={openSummaryMonth && (() => openSummaryMonth('debit'))}
-          label="Ver los gastos del mes"
-          className="px-3 py-2"
+          label="Ver los gastos del hogar del mes"
+          className="max-w-[720px] px-3 py-2"
         >
-          <div className="text-label text-muted-foreground">En cada moneda</div>
-          <div className="font-mono text-subhead tabular-nums">
-            {/* Separate text nodes on purpose: merging them into one run
-                shifts the "+" by a pixel (glyph shaping). */}
-            {'US$'} {Math.round(monthSummary.split.USD).toLocaleString('es-UY')}
-            {' + $U'}{' '}
-            {Math.round(monthSummary.split.UYU).toLocaleString('es-UY')}
-          </div>
+          <span className="text-small font-semibold">
+            Ver los gastos del hogar del mes →
+          </span>
         </DrillTarget>
-        <DrillTarget
-          onOpen={openSummaryMonth && (() => openSummaryMonth())}
-          label="Ver los movimientos del mes"
-          className="px-3 py-2"
-        >
-          <div className="text-label text-muted-foreground">Balance neto</div>
-          <div
-            className="font-mono text-subhead tabular-nums"
-            style={{
-              color: monthSummary.net >= 0 ? 'var(--pos)' : 'var(--neg)',
-            }}
+      ) : (
+        <div className="grid max-w-[720px] grid-cols-1 gap-2 sm:grid-cols-3">
+          <DrillTarget
+            onOpen={openSummaryMonth && (() => openSummaryMonth('credit'))}
+            label="Ver los ingresos del mes"
+            className="px-3 py-2"
           >
-            {monthSummary.net >= 0 ? '+' : '−'}
-            {formatCurrency(Math.abs(monthSummary.net), homeCurrency)}
-          </div>
-          <div className="text-caption text-[var(--text-faint)]">
-            {monthSummary.count} transacciones registradas
-          </div>
-        </DrillTarget>
-      </div>
+            <div className="text-label text-muted-foreground">Ingresos</div>
+            <div className="font-mono text-subhead text-[var(--pos)] tabular-nums">
+              {formatCurrency(monthSummary.income, homeCurrency)}
+            </div>
+          </DrillTarget>
+          <DrillTarget
+            onOpen={openSummaryMonth && (() => openSummaryMonth('debit'))}
+            label="Ver los gastos del mes"
+            className="px-3 py-2"
+          >
+            <div className="text-label text-muted-foreground">
+              En cada moneda
+            </div>
+            <div className="font-mono text-subhead tabular-nums">
+              {/* Separate text nodes on purpose: merging them into one run
+                shifts the "+" by a pixel (glyph shaping). */}
+              {'US$'}{' '}
+              {Math.round(monthSummary.split.USD).toLocaleString('es-UY')}
+              {' + $U'}{' '}
+              {Math.round(monthSummary.split.UYU).toLocaleString('es-UY')}
+            </div>
+          </DrillTarget>
+          <DrillTarget
+            onOpen={openSummaryMonth && (() => openSummaryMonth())}
+            label="Ver los movimientos del mes"
+            className="px-3 py-2"
+          >
+            <div className="text-label text-muted-foreground">Balance neto</div>
+            <div
+              className="font-mono text-subhead tabular-nums"
+              style={{
+                color: monthSummary.net >= 0 ? 'var(--pos)' : 'var(--neg)',
+              }}
+            >
+              {monthSummary.net >= 0 ? '+' : '−'}
+              {formatCurrency(Math.abs(monthSummary.net), homeCurrency)}
+            </div>
+            <div className="text-caption text-[var(--text-faint)]">
+              {monthSummary.count} transacciones registradas
+            </div>
+          </DrillTarget>
+        </div>
+      )}
     </div>
   )
 }

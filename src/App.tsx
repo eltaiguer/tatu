@@ -96,9 +96,12 @@ function App({ auth, createRepository }: AppProps) {
   // view keeps its query too: Transacciones always carries its filters in
   // the URL, and re-clicking it must not wipe them.
   function go(view: View, search = '') {
-    if (view === currentView && (!search || `?${search}` === location.search)) {
-      return
-    }
+    // Re-clicking Resumen while in Hogar mode goes back to plain Todo: its
+    // query is a mode, not filters worth keeping like Transacciones'.
+    const sameQuery = search
+      ? `?${search}` === location.search
+      : view === 'transactions' || !location.search
+    if (view === currentView && sameQuery) return
     navigate(pathForView(view) + (search ? `?${search}` : ''))
   }
 
@@ -117,6 +120,20 @@ function App({ auth, createRepository }: AppProps) {
       navigate({ pathname: location.pathname, search: next }, { replace: true })
     },
     [location.pathname, location.search, navigate]
+  )
+
+  // Resumen's Hogar mode is `/?hogar=si`, written with REPLACE like the
+  // Transacciones filters; any other value reads as Todo.
+  const householdMode =
+    new URLSearchParams(location.search).get('hogar') === 'si'
+  const handleHouseholdModeChange = useCallback(
+    (on: boolean) => {
+      navigate(
+        { pathname: location.pathname, search: on ? '?hogar=si' : '' },
+        { replace: true }
+      )
+    },
+    [location.pathname, navigate]
   )
 
   useEffect(() => {
@@ -451,6 +468,8 @@ function App({ auth, createRepository }: AppProps) {
                     fxRate={fxRate}
                     onSetHomeCurrency={setPreferredCurrency}
                     onSetFxRate={setFxRate}
+                    householdMode={householdMode}
+                    onHouseholdModeChange={handleHouseholdModeChange}
                   />
                 )}
                 {currentView === 'transactions' &&
