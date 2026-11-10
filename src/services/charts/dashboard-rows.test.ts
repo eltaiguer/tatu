@@ -49,25 +49,20 @@ describe('buildMonthlyTrendRows', () => {
     expect(rows.map((r) => r.complete)).toEqual([true, false])
   })
 
-  it('takes completeness from the rows that say what was imported, not the ones drawn', () => {
+  it('takes the months and their completeness from the coverage rows, with 0 where the drawn rows have none', () => {
     const all = [
       tx('2026-01-12', 100), // card imported from the 12th
       tx('2026-02-27', 200),
       tx('2026-03-10', 50), // statement closes on the 10th
     ]
-    // Only February's row is drawn (e.g. the household ones), but the
-    // statement edges still make January and March partial.
-    const rows = buildMonthlyTrendRows(
-      [all[1], all[2]],
-      'USD',
-      40,
-      '2026-11',
-      all
-    )
+    // Only March's row is drawn (e.g. the household ones), but the axis is
+    // the same months as without the cut, February (complete) at 0.
+    const rows = buildMonthlyTrendRows([all[2]], 'USD', 40, '2026-11', all)
 
-    expect(rows.map((r) => [r.key, r.complete])).toEqual([
-      ['2026-02', true],
-      ['2026-03', false],
+    expect(rows.map((r) => [r.key, r.gastos, r.complete])).toEqual([
+      ['2026-01', 0, false],
+      ['2026-02', 0, true],
+      ['2026-03', 50, false],
     ])
   })
 })

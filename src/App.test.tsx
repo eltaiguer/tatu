@@ -961,6 +961,30 @@ describe('App', () => {
         expect(screen.getByText(/Gastaste/)).toBeInTheDocument()
       })
 
+      it('re-selecting Resumen replaces the entry: Back does not return to Hogar', async () => {
+        seedHogar()
+        renderApp('/?hogar=si')
+        await screen.findByRole('heading', { name: /Gastos del hogar/ })
+
+        fireEvent.click(screen.getByRole('button', { name: 'Resumen' }))
+        await waitFor(() => expect(currentUrl()).toBe('/'))
+
+        fireEvent.click(screen.getByRole('button', { name: 'test-back' }))
+        await new Promise((r) => setTimeout(r, 50))
+        expect(currentUrl()).toBe('/')
+      })
+
+      it('ignores ?hogar=si on other views', async () => {
+        seedHogar()
+        renderApp('/transacciones?hogar=si')
+        await screen.findAllByText('Devoto marzo')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Resumen' }))
+
+        await waitFor(() => expect(currentUrl()).toBe('/'))
+        expect(await screen.findByText(/Gastaste/)).toBeInTheDocument()
+      })
+
       it('a drill-through opens Transacciones filtered to Hogar', async () => {
         seedHogar()
         renderApp('/?hogar=si')
