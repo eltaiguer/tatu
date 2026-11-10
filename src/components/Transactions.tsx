@@ -440,7 +440,10 @@ export function Transactions({
       {
         duration: 8000,
         action: {
-          label: `Aplicar a las ${others} similares`,
+          label:
+            others === 1
+              ? 'Aplicar a la otra similar'
+              : `Aplicar a las ${others} similares`,
           onClick: () => {
             void applyToSimilar(transaction.id, value, others)
           },
@@ -455,7 +458,7 @@ export function Transactions({
       await onApplyHouseholdToSimilar(id, value, 'matching_past_and_future')
       toast.success(
         others === 1
-          ? 'Se aplicó a 1 transacción'
+          ? 'Se aplicó a la otra similar'
           : `Se aplicó a ${others} transacciones`
       )
     } catch (error) {

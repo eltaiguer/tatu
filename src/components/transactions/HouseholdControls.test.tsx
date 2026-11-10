@@ -1141,6 +1141,29 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     expect(screen.queryByRole('button', { name: /Aplicar a las/ })).toBeNull()
   })
 
+  it('a rule saved without patching any row still moves the other rows’ houses', async () => {
+    // d1 has its own "no" on a household category; d2 is the same merchant
+    // under a category that is not household. Clicking d1 returns it to
+    // following its category, and applying that as a rule patches no row.
+    seed([
+      tx('SUPERMERCADO 11/03/2026', { household: false }),
+      tx('SUPERMERCADO 12/03/2026', { category: 'shopping' }),
+    ])
+    const D1S = 'SUPERMERCADO 11/03/2026'
+    const D2S = 'SUPERMERCADO 12/03/2026'
+    expect(on(D2S)).toBe(false)
+
+    await click(D1S)
+    await act(async () => {
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Aplicar a la otra similar' })
+      )
+    })
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(1))
+    expect(on(D2S)).toBe(true)
+  })
+
   it('a failure while applying offers Reintentar', async () => {
     seed(devotos())
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})

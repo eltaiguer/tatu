@@ -1,10 +1,8 @@
 import { House } from 'lucide-react'
 import type { Transaction } from '../../models'
 import { resolveCategory } from '../../services/categories/category-registry'
-import {
-  currentHouseholdRules,
-  rowHouseholdView,
-} from '../../services/household/household'
+import { rowHouseholdView } from '../../services/household/household'
+import { useHouseholdRules } from '../../hooks/useHouseholdRules'
 
 // The row's "gasto del hogar" control, next to the category badge. Faint when
 // the row follows its category, solid brand colour when it was set by hand;
@@ -27,7 +25,7 @@ export function HouseToggle({
 }) {
   // Read while rendering: a category default changed in Categorías applies
   // to the rows without a reload.
-  const view = rowHouseholdView(transaction, currentHouseholdRules())
+  const view = rowHouseholdView(transaction, useHouseholdRules())
   if (!view) return null
 
   const household = view.status === 'household'

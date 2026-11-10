@@ -10,7 +10,7 @@ import {
   countsTowardTotals,
   countsAsRow,
 } from '../services/spending/spending-rules'
-import { currentHouseholdRules } from '../services/household/household'
+import { useHouseholdRules } from './useHouseholdRules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { sortCategoryIdsByLabel } from '../services/categories/category-registry'
 import { newestDate, todayAsUtcDate } from '../utils/date-utils'
@@ -192,7 +192,7 @@ export function useTransactionFiltering({
   // category store; navigating to Categorías and back remounts the view).
   // The map changes identity when a default does, so a re-render re-runs the
   // Hogar filter without the rows or the filters changing.
-  const householdRules = currentHouseholdRules()
+  const householdRules = useHouseholdRules()
 
   // Every matching row, ignored ones included (the totals strip and the
   // "n ignoradas" count need them), sorted for the table.
