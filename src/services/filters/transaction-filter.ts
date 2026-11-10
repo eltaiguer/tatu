@@ -27,7 +27,8 @@ export interface TransactionFilterOptions {
   // The month "últimos n meses" counts back from. The view freezes it when
   // the period is chosen; left out, it is the newest row (today if none).
   recentAnchor?: Date
-  // The user's category defaults, for the Hogar filter. Required so a caller
+  // The user's household rules (merchant rules and category defaults), for
+  // the Hogar filter. Required so a caller
   // cannot forget them: pass currentHouseholdRules() (like userRules,
   // never read in here).
   householdRules: HouseholdRules

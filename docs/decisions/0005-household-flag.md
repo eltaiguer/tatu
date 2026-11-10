@@ -72,7 +72,7 @@ split parents).
   it writes null (back to following the category), else the boolean
   (`nextHouseholdChoice`). Quiet: no success toast, the house moves when the
   saved row comes back; a failure offers "Reintentar".
-- A "Gasto del hogar" group in the edit dialog: "Según categoría (sí / no / sin
+- A "Gasto del hogar" group in the edit dialog: "Según categoría (Sí / No / Sin
   definir)" (follows the dialog's own category picker), "Sí", "No". It is this
   transaction's own choice, not part of the apply-scope. It is offered only
   while the picked category counts as an expense, and written after the edit it
@@ -203,4 +203,8 @@ position nobody needs.
 - A per-merchant rule is one more place a row's value can come from; every
   surface reads `HouseholdResolution.source` instead of guessing.
 - The new table needs a manual apply of `schema.sql` before the code ships
-  (`supabase/README.md`).
+  (`supabase/README.md`). Until then the app still loads (a missing table reads
+  as no rules, as for `ai_insights`) but a rule cannot be saved.
+- The rules store is subscribable (`useHouseholdRules`): a rule can change what
+  rows show without any row being written, so Transacciones, the Hogar filter
+  and Resumen re-render on it.

@@ -232,7 +232,7 @@ function EditTransactionForm({
     ) !== null
   const categoryDefaultLabel = (() => {
     const says = categoryDefault(category, householdRules)
-    return says === null ? 'sin definir' : says ? 'sí' : 'no'
+    return says === null ? 'Sin definir' : says ? 'Sí' : 'No'
   })()
   // A rule can be made only for a counted expense (judged on the category
   // being picked) that is not a split part and has a merchant key. Elsewhere

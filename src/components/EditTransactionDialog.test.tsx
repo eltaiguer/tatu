@@ -366,10 +366,10 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
 
   const group = () => screen.getByRole('group', { name: /^Gasto del hogar/ })
 
-  it('offers "Según categoría (sí)" selected for a row that follows Alimentación', () => {
+  it('offers "Según categoría (Sí)" selected for a row that follows Alimentación', () => {
     render(<EditTransactionDialog {...baseProps()} />)
 
-    expect(screen.getByLabelText('Según categoría (sí)')).toBeChecked()
+    expect(screen.getByLabelText('Según categoría (Sí)')).toBeChecked()
     expect(screen.getByLabelText('Sí')).not.toBeChecked()
     expect(screen.getByLabelText('No')).not.toBeChecked()
     expect(group()).toBeInTheDocument()
@@ -394,7 +394,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
     render(<EditTransactionDialog {...props} />)
 
     expect(screen.getByLabelText('Sí')).toBeChecked()
-    fireEvent.click(screen.getByLabelText('Según categoría (sí)'))
+    fireEvent.click(screen.getByLabelText('Según categoría (Sí)'))
     save()
 
     expect(props.onSave).toHaveBeenCalledWith(
@@ -523,7 +523,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
     fireEvent.click(
       screen.getByRole('button', { name: resolveCategory('restaurants').label })
     )
-    expect(screen.getByLabelText('Según categoría (no)')).toBeChecked()
+    expect(screen.getByLabelText('Según categoría (No)')).toBeChecked()
 
     fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     fireEvent.click(
@@ -531,7 +531,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
         name: resolveCategory('uncategorized').label,
       })
     )
-    expect(screen.getByLabelText('Según categoría (sin definir)')).toBeChecked()
+    expect(screen.getByLabelText('Según categoría (Sin definir)')).toBeChecked()
   })
 
   it('has no group for income, ignored rows and split parents, and saves them untouched', () => {
@@ -588,7 +588,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       screen.getByRole('button', { name: resolveCategory('groceries').label })
     )
 
-    expect(screen.getByLabelText('Según categoría (sí)')).toBeChecked()
+    expect(screen.getByLabelText('Según categoría (Sí)')).toBeChecked()
     fireEvent.click(screen.getByLabelText('No'))
     save()
     expect(props.onSave).toHaveBeenCalledWith(

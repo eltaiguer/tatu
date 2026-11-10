@@ -226,9 +226,9 @@ and replaces the in-memory state in one synchronous step.
 flowchart LR
     S["Session user id changes"] --> P["Parallel load from Supabase"]
     P --> T["loadUserTransactions: is_deleted = false, keyset-paged"]
-    P --> O["category_overrides, household_rules, description_overrides, custom_patterns, custom_categories"]
+    P --> O["category_overrides, household_rules (listHouseholdRules), description_overrides, custom_patterns, custom_categories"]
     P --> U["user_preferences: theme, currency, fx_rate, AI key and model"]
-    O --> R["replaceMerchantCategoryOverrides, replaceDescriptionOverrides, replaceCustomPatterns, replaceCustomCategories"]
+    O --> R["replaceMerchantCategoryOverrides, loadHouseholdRules, replaceDescriptionOverrides, replaceCustomPatterns, replaceCustomCategories"]
     U --> Q["workspace preferences (defaults when there is no row) + AI config"]
     T --> X["store.setTransactions, which runs inferInternalTransfers"]
 ```
@@ -733,15 +733,15 @@ and skip their rollback after a switch.
 
 ## Persistence boundaries
 
-| Data                                                                                           | Store of record                                                                                                                    | In memory                                                                                                        |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Transactions                                                                                   | Supabase `transactions` (soft delete via `is_deleted` / `deleted_at`; split parts hard-deleted)                                    | Zustand `transactionStore`, no persist middleware                                                                |
-| Description overrides, merchant overrides, household rules, custom patterns, custom categories | Supabase `description_overrides`, `category_overrides`, `household_rules`, `custom_patterns`, `custom_categories`                  | Module-level state in their services, replaced on sync; edits also write through to Supabase                     |
-| Household choice, per row, per merchant and per category                                       | Supabase `transactions.household` and `custom_categories.is_household` (nullable: null = follow the category / the seeded default) | Row: `Transaction.household` in `transactionStore`; category: `CustomCategory.isHousehold` in the category store |
-| Preferences, including the Claude API key                                                      | Supabase `user_preferences`                                                                                                        | `workspaceStore` preferences; the AI config in `ai-config.ts`, derived from them                                 |
-| Import audit                                                                                   | Supabase `import_runs`                                                                                                             | Not loaded                                                                                                       |
-| Insights cache                                                                                 | Supabase `ai_insights`, one row per user, via `repository.loadInsights` / `saveInsights`                                           | `Insights.tsx` state                                                                                             |
-| Auth session                                                                                   | Supabase Auth                                                                                                                      | Cached in `localStorage` under `tatu:supabase:session` (`src/services/supabase/client.ts`)                       |
+| Data                                                                                           | Store of record                                                                                                                                                                  | In memory                                                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transactions                                                                                   | Supabase `transactions` (soft delete via `is_deleted` / `deleted_at`; split parts hard-deleted)                                                                                  | Zustand `transactionStore`, no persist middleware                                                                                                                                                                |
+| Description overrides, merchant overrides, household rules, custom patterns, custom categories | Supabase `description_overrides`, `category_overrides`, `household_rules`, `custom_patterns`, `custom_categories`                                                                | Module-level state in their services, replaced on sync; edits also write through to Supabase                                                                                                                     |
+| Household choice, per row, per merchant and per category                                       | Supabase `transactions.household`, `household_rules` (one row per merchant key) and `custom_categories.is_household` (nullable: null = follow the category / the seeded default) | Row: `Transaction.household` in `transactionStore`; merchant: `household-rules-store.ts` (replaced on every write; `useHouseholdRules` subscribes); category: `CustomCategory.isHousehold` in the category store |
+| Preferences, including the Claude API key                                                      | Supabase `user_preferences`                                                                                                                                                      | `workspaceStore` preferences; the AI config in `ai-config.ts`, derived from them                                                                                                                                 |
+| Import audit                                                                                   | Supabase `import_runs`                                                                                                                                                           | Not loaded                                                                                                                                                                                                       |
+| Insights cache                                                                                 | Supabase `ai_insights`, one row per user, via `repository.loadInsights` / `saveInsights`                                                                                         | `Insights.tsx` state                                                                                                                                                                                             |
+| Auth session                                                                                   | Supabase Auth                                                                                                                                                                    | Cached in `localStorage` under `tatu:supabase:session` (`src/services/supabase/client.ts`)                                                                                                                       |
 
 - **Supabase is required.** There is no offline mode or local fallback;
   without a session the app shows the sign-in screen.
@@ -772,12 +772,17 @@ and skip their rollback after a switch.
   clears the similar rows' own choices; future-only first pins the value each
   other similar row shows today as its own choice, then writes the rule. The
   edit dialog's "Aplicar a" drives it (only when the household radio was
-  touched), and the one-click house offers "Aplicar a las N similares". It is not part of "which rows count"
+  touched), and the one-click house offers "Aplicar a las N similares". The
+  household toasts, offers and retries live in `useHouseholdWrites`.
+  The household flag is not part of "which rows count"
   (`services/spending/spending-rules.ts`): callers combine the two. Writes are
-  `setHousehold` (one or many rows, `services/mutations/transaction-mutations.ts`)
-  (the row's house, the edit dialog and the bulk "Hogar" menu all call it
-  through `useTransactionHandlers.handleSetHousehold`; what a row shows and what
-  a click writes come from `rowHouseholdView` / `nextHouseholdChoice`, so the
+  `setHousehold` (one or many rows, `services/mutations/transaction-mutations.ts`;
+  the row's house, the bulk "Hogar" menu and, under "Solo esta", the edit
+  dialog call it through `useTransactionHandlers.handleSetHousehold`),
+  `applyHouseholdToSimilar` (a merchant rule and its reach; the edit dialog
+  under the two rule scopes and the toast's action call it through
+  `handleApplyHouseholdToSimilar`; what a row shows and what a click writes
+  come from `rowHouseholdView` / `nextHouseholdChoice`, so the
   three agree) and `setCategoryHouseholdWithSync` (a category's default, from the tile
   toggle in Categorías; a built-in's lives in its override row, as its ignore
   flag does; a value, or null = back to the seeded default; Sin categoría and

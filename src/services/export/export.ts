@@ -9,8 +9,8 @@ export type ExportFormat = 'csv' | 'pdf'
 export interface ExportOptions {
   format: ExportFormat
   fileName?: string
-  // The user's category defaults (currentHouseholdRules()), for the
-  // hogar column.
+  // The user's household rules (currentHouseholdRules(): merchant rules and
+  // category defaults), for the hogar column.
   householdRules: HouseholdRules
 }
 

@@ -69,7 +69,8 @@ export function Categories({
   const [form, setForm] = useState<CategoryFormState>(EMPTY_FORM)
 
   const categoryDefinitions = getCategoryDefinitions()
-  // Read on render: memoized on the category store, never cached in state.
+  // Read on render (the household rules value, of which the category defaults
+  // are the part Categorías edits): memoized, never cached in state.
   const householdRules = currentHouseholdRules()
   const isEditing = form.id.length > 0
   // A new category can always have one; an edited one unless it is Sin
