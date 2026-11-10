@@ -970,7 +970,9 @@ describe('App', () => {
         await waitFor(() => expect(currentUrl()).toBe('/'))
 
         fireEvent.click(screen.getByRole('button', { name: 'test-back' }))
-        await new Promise((r) => setTimeout(r, 50))
+        await act(async () => {
+          await new Promise((r) => setTimeout(r, 50))
+        })
         expect(currentUrl()).toBe('/')
       })
 
