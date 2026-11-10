@@ -53,6 +53,7 @@ import type { TransactionsProps } from './transactions/transactions-props'
 import { getDisplayDescription } from '../utils/transaction-display'
 import { UserFacingError } from '../utils/user-error'
 
+const offerToastId = (id: string) => `household-offer-${id}`
 const AFTER_EDIT = 'Se guardaron los cambios, pero no el gasto del hogar'
 
 const sameTags = (a: string[], b: string[]) =>
@@ -158,6 +159,19 @@ export function Transactions({
   transactionsRef.current = transactions
   const rowChoice = (id: string) =>
     transactionsRef.current.find((tx) => tx.id === id)?.household ?? null
+  // Starts a household write of a row: any earlier offer of the row is
+  // withdrawn (its action would replay an old click) and the returned number
+  // marks this write as the newest.
+  const startHouseholdWrite = (id: string) => {
+    const seq = (householdWrites.current.get(id) ?? 0) + 1
+    householdWrites.current.set(id, seq)
+    toast.dismiss(offerToastId(id))
+    return seq
+  }
+  // Whether nothing else wrote the row since `seq` and it still holds what it
+  // did when `heldWhenFailed` was read: only then may an old retry run.
+  const mayReplay = (id: string, seq: number, held: boolean | null) =>
+    householdWrites.current.get(id) === seq && rowChoice(id) === held
 
   /* ---- Edit state ---- */
   // Rows with a mutation in flight. A set, not a single id, so two
@@ -433,11 +447,13 @@ export function Transactions({
       true
     ).filter((row) => row.id !== transaction.id).length
     if (others < 1) return
+    const offered = householdWrites.current.get(transaction.id)
     toast(
       value
         ? 'Transacción marcada como hogar'
         : 'Transacción marcada como no hogar',
       {
+        id: offerToastId(transaction.id),
         duration: 8000,
         action: {
           label:
@@ -445,6 +461,8 @@ export function Transactions({
               ? 'Aplicar a la otra similar'
               : `Aplicar a las ${others} similares`,
           onClick: () => {
+            // A newer click or write of the row withdrew this offer.
+            if (householdWrites.current.get(transaction.id) !== offered) return
             void applyToSimilar(transaction.id, value, others)
           },
         },
@@ -454,6 +472,7 @@ export function Transactions({
 
   async function applyToSimilar(id: string, value: boolean, others: number) {
     if (!onApplyHouseholdToSimilar) return
+    const seq = startHouseholdWrite(id)
     try {
       await onApplyHouseholdToSimilar(id, value, 'matching_past_and_future')
       toast.success(
@@ -462,8 +481,9 @@ export function Transactions({
           : `Se aplicó a ${others} transacciones`
       )
     } catch (error) {
+      const held = rowChoice(id)
       reportError(error, 'No se pudo aplicar a las similares', '', () => {
-        void applyToSimilar(id, value, others)
+        if (mayReplay(id, seq, held)) void applyToSimilar(id, value, others)
       })
     }
   }
@@ -480,8 +500,7 @@ export function Transactions({
     failure: string
   ): Promise<boolean> {
     if (!onSetHousehold) return false
-    const seq = (householdWrites.current.get(id) ?? 0) + 1
-    householdWrites.current.set(id, seq)
+    const seq = startHouseholdWrite(id)
     setPending(id, true)
     try {
       await onSetHousehold([id], household)
@@ -494,10 +513,7 @@ export function Transactions({
           ? `${AFTER_EDIT}. `
           : ''
       reportError(error, failure, prefix, () => {
-        if (
-          householdWrites.current.get(id) === seq &&
-          rowChoice(id) === heldWhenFailed
-        ) {
+        if (mayReplay(id, seq, heldWhenFailed)) {
           void writeHousehold(id, household, failure)
         }
       })
@@ -518,6 +534,7 @@ export function Transactions({
     failure: string
   ): Promise<number | null> {
     if (!onApplyHouseholdToSimilar) return null
+    const seq = startHouseholdWrite(id)
     setPending(id, true)
     try {
       const { affected } = await onApplyHouseholdToSimilar(id, household, scope)
@@ -527,8 +544,11 @@ export function Transactions({
         failure === AFTER_EDIT && error instanceof UserFacingError
           ? `${AFTER_EDIT}. `
           : ''
+      const held = rowChoice(id)
       reportError(error, failure, prefix, () => {
-        void writeHouseholdRule(id, household, scope, failure)
+        if (mayReplay(id, seq, held)) {
+          void writeHouseholdRule(id, household, scope, failure)
+        }
       })
       return null
     } finally {

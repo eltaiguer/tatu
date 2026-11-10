@@ -18,6 +18,8 @@ import {
   editTransaction,
   setHousehold,
 } from '../../services/mutations/transaction-mutations'
+import { replaceDescriptionOverrides } from '../../services/descriptions/description-overrides'
+import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
 import { clearHouseholdRules } from '../../services/household/household-rules-store'
 import {
   createInMemoryRepository,
@@ -45,13 +47,20 @@ function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
 
 let repo: InMemoryRepository
 
-beforeEach(() => clearHouseholdRules())
+// Edits under a rule scope write module-level rule stores: start clean.
+beforeEach(() => {
+  clearHouseholdRules()
+  replaceDescriptionOverrides({})
+  replaceMerchantCategoryOverrides({})
+})
 
 // The view reads the store like App does, so a write shows once it is saved.
 function Harness({
   onFiltersChange,
+  withRules = true,
 }: {
   onFiltersChange?: (search: string) => void
+  withRules?: boolean
 }) {
   const transactions = useStore(transactionStore, (s) => s.transactions)
   return (
@@ -62,8 +71,11 @@ function Harness({
         initialFilters={{ ...DEFAULT_URL_FILTERS, period: { mode: 'all' } }}
         onUpdateTransaction={(id, edit) => editTransaction(repo, id, edit)}
         onSetHousehold={(ids, household) => setHousehold(repo, ids, household)}
-        onApplyHouseholdToSimilar={(id, household, scope) =>
-          applyHouseholdToSimilar(repo, id, household, scope)
+        onApplyHouseholdToSimilar={
+          withRules
+            ? (id, household, scope) =>
+                applyHouseholdToSimilar(repo, id, household, scope)
+            : undefined
         }
       />
       <Toaster />
@@ -71,11 +83,15 @@ function Harness({
   )
 }
 
-function seed(rows: Transaction[], onFiltersChange?: (s: string) => void) {
+function seed(
+  rows: Transaction[],
+  onFiltersChange?: (s: string) => void,
+  withRules = true
+) {
   repo = createInMemoryRepository({ transactions: rows })
   transactionStore.getState().setTransactions(rows)
   workspaceStore.setState({ userId: repo.userId, status: 'ready' })
-  render(<Harness onFiltersChange={onFiltersChange} />)
+  render(<Harness onFiltersChange={onFiltersChange} withRules={withRules} />)
 }
 
 // Both the desktop row and the mobile card render; [0] is the row.
@@ -1047,6 +1063,24 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     )
   })
 
+  it('without the rule handler, an untouched radio under Todas leaves a hand choice alone', async () => {
+    seed(
+      devotos().map((t) => (t.id === D1 ? { ...t, household: true } : t)),
+      undefined,
+      false
+    )
+    await openEdit(D1)
+
+    scope(/^Todas las similares/)
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto centro' },
+    })
+    await save()
+
+    expect(repo.row(D1)?.household).toBe(true)
+    expect(repo.householdRules.size).toBe(0)
+  })
+
   it('on a covered row, Solo esta offers "Según comercio"', async () => {
     seed(devotos())
     await openEdit(D1)
@@ -1154,14 +1188,56 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     expect(on(D2S)).toBe(false)
 
     await click(D1S)
+    const action = await screen.findByRole('button', {
+      name: 'Aplicar a la otra similar',
+    })
     await act(async () => {
-      fireEvent.click(
-        await screen.findByRole('button', { name: 'Aplicar a la otra similar' })
-      )
+      fireEvent.click(action)
     })
 
     await waitFor(() => expect(repo.householdRules.size).toBe(1))
     expect(on(D2S)).toBe(true)
+  })
+
+  it('an old toast action does not apply a click that was since changed', async () => {
+    seed(devotos())
+    await click(D1)
+    const stale = await screen.findByRole('button', {
+      name: 'Aplicar a las 2 similares',
+    })
+
+    // The user changes their mind before the toast goes away.
+    await click(D1)
+    expect(on(D1)).toBe(false)
+    await act(async () => {
+      fireEvent.click(stale)
+    })
+
+    expect(repo.householdRules.size).toBe(0)
+    expect(on(D1)).toBe(false)
+  })
+
+  it('an old Reintentar of the apply does not run after a newer click', async () => {
+    seed(devotos())
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await click(D1)
+    repo.failOn('upsertHouseholdRule', { error: new Error('boom'), times: 1 })
+    const apply = await screen.findByRole('button', {
+      name: 'Aplicar a las 2 similares',
+    })
+    await act(async () => {
+      fireEvent.click(apply)
+    })
+    const staleRetry = await screen.findByRole('button', { name: 'Reintentar' })
+
+    await click(D1)
+    await act(async () => {
+      fireEvent.click(staleRetry)
+    })
+
+    expect(repo.householdRules.size).toBe(0)
+    expect(on(D2)).toBe(false)
+    expect(logged).toHaveBeenCalled()
   })
 
   it('a failure while applying offers Reintentar', async () => {
@@ -1170,10 +1246,11 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     await click(D1)
     repo.failOn('upsertHouseholdRule', { error: new Error('boom'), times: 1 })
 
+    const apply = await screen.findByRole('button', {
+      name: 'Aplicar a las 2 similares',
+    })
     await act(async () => {
-      fireEvent.click(
-        await screen.findByRole('button', { name: 'Aplicar a las 2 similares' })
-      )
+      fireEvent.click(apply)
     })
     const retry = await screen.findByRole('button', { name: 'Reintentar' })
     expect(on(D2)).toBe(false)
