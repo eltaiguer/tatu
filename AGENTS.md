@@ -59,7 +59,7 @@ src/
     Dashboard.tsx          # Resumen view — owns the data memos (+ the Todo / Hogar cut: `householdRows` replace `transactions` in every memo); charts live here, not a separate view
     dashboard/             # Resumen sub-components: MonthHero (the month as one sentence; Hogar mode: "Gastos del hogar", Sin definir line; Todo: "Hogar $X de $Y gastados"), HouseholdModeToggle (Todo / Hogar), ResumenSection (a question heading + period, a named region), SpendNudge (the "Sin categoría" / Hogar "Sin definir" row), CategorySpendCard (donut), TopMerchantsCard, RecentTransactionsCard, SavingsCard, MonthlySpendChart (spend bars, income ghost), MonthButtons (keyboard equivalent of a chart's bars), AccountCards, CurrencySplitCard, EmptyStates, DrillTarget
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
-    transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable), HouseToggle (the "gasto del hogar" house on both); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state)
+    transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable), HouseToggle (the "gasto del hogar" house on both); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state), useHouseholdWrites (every household write of the view: the row's house, the dialog's choice and rule, the "Aplicar a las N similares" offer; one counter per row so an old toast action or retry never replays a superseded click)
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
     Categories.tsx         # Categorías view — "Tus categorías" tile grid (no wrapping card) + auto-categorization rules, each an h2 Section
     categories/            # Categorías sub-components: CategoryForm (incl. the "Gasto del hogar" checkbox), CategoryCard (incl. the house toggle for the category's household default), PatternRulesCard (rules form + list, owns its state)
@@ -93,6 +93,7 @@ src/
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
     useTransactionHandlers.ts  # The transaction mutations bound to the signed-in user's repository (thin; one contract without one)
     useTransactionFiltering.ts # The filters as ONE value (URL shape, period included): `filters` + `update(patch)` + `clear()` + `setDateBound`, plus sort + split grouping + pagination around filterTransactions
+    useHouseholdRules.ts   # The household rules for rendering (useSyncExternalStore over the rules store): re-renders on a merchant rule even when no row was written
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)

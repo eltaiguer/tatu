@@ -501,18 +501,29 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       )
     })
 
-    it('counts the similar rows once, not on every keystroke', () => {
-      const countHouseholdSimilar = vi.fn(() => 3)
+    it('the legend count follows the category being picked, not the saved one', () => {
+      // The similar rows depend on the draft row: Alimentación (as saved)
+      // reaches 2, Restaurantes reaches 5.
+      const countHouseholdSimilar = (tx: Transaction) =>
+        tx.category === 'restaurants' ? 5 : 2
       render(
         <EditTransactionDialog {...baseProps({ countHouseholdSimilar })} />
       )
-      const calls = countHouseholdSimilar.mock.calls.length
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+      expect(screen.getByText(/Gasto del hogar/)).toHaveTextContent(
+        'se aplica a 2 transacciones (y a las futuras)'
+      )
 
-      fireEvent.change(screen.getByLabelText('Descripción edición'), {
-        target: { value: 'Disco Pocitos' },
-      })
+      fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: resolveCategory('restaurants').label,
+        })
+      )
 
-      expect(countHouseholdSimilar).toHaveBeenCalledTimes(calls)
+      expect(screen.getByText(/Gasto del hogar/)).toHaveTextContent(
+        'se aplica a 5 transacciones (y a las futuras)'
+      )
     })
   })
 

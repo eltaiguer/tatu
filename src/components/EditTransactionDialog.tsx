@@ -248,7 +248,7 @@ function EditTransactionForm({
     ? (rulePick ?? choiceOf(merchantRule))
     : ownChoice
   const followLabel =
-    !ruleScope && merchantRule !== undefined && canHaveMerchantRule(transaction)
+    !ruleScope && merchantRule !== undefined
       ? `Según comercio (${merchantRule ? 'Sí' : 'No'})`
       : `Según categoría (${categoryDefaultLabel})`
   const draftRow = useMemo(
