@@ -1231,6 +1231,30 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     expect(on(D1)).toBe(false)
   })
 
+  it('an offer does not apply once the row was changed by a bulk write', async () => {
+    seed(devotos())
+    await click(D1)
+    const stale = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
+
+    // The bulk bar does not start a single-row write, so only the row's
+    // current choice tells the offer is out of date.
+    select(D1)
+    await choose('Marcar como no hogar')
+    await waitFor(() => expect(repo.row(D1)?.household).toBe(false), {
+      timeout: 5000,
+    })
+    await act(async () => {
+      fireEvent.click(stale)
+    })
+
+    expect(repo.householdRules.size).toBe(0)
+    expect(repo.row(D1)?.household).toBe(false)
+  })
+
   it('an old Reintentar of the apply does not run after a newer click', async () => {
     seed(devotos())
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})

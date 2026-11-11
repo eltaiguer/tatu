@@ -134,8 +134,15 @@ export function useHouseholdWrites({
               ? 'Aplicar a la otra similar'
               : `Aplicar a las ${others} similares`,
           onClick: () => {
-            // A newer click or write of the row withdrew this offer.
-            if (householdWrites.current.get(transaction.id) !== offered) return
+            // A newer click or write of the row withdrew this offer, and so did
+            // a write that does not start one here (the bulk bar): the row
+            // must still hold the choice this click wrote.
+            if (
+              householdWrites.current.get(transaction.id) !== offered ||
+              rowChoice(transaction.id) !== choice
+            ) {
+              return
+            }
             void applyToSimilar(transaction.id, value, others)
           },
         },
