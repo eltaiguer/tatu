@@ -1,5 +1,6 @@
 import { getSupabaseClient } from './client'
 import { isMissingTable } from './missing-table'
+import { UserFacingError } from '../../utils/user-error'
 
 interface HouseholdRuleRow {
   user_id: string
@@ -26,6 +27,17 @@ function rowToRecord(row: HouseholdRuleRow): HouseholdRuleRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
+}
+
+// A rule cannot be saved before schema.sql creates the table (by hand,
+// supabase/README.md): say so, and no retry will help.
+function throwWriteError(error: { code?: string; message: string }): never {
+  if (isMissingTable(error)) {
+    throw new UserFacingError(
+      'Falta crear la tabla de reglas del hogar en la base de datos (ver supabase/README.md).'
+    )
+  }
+  throw new Error(error.message)
 }
 
 export async function listHouseholdRules(
@@ -67,7 +79,7 @@ export async function upsertHouseholdRule(
   )
 
   if (error) {
-    throw new Error(error.message)
+    throwWriteError(error)
   }
 }
 
@@ -83,6 +95,6 @@ export async function deleteHouseholdRule(
     .eq('merchant_normalized', merchantNormalized)
 
   if (error) {
-    throw new Error(error.message)
+    throwWriteError(error)
   }
 }

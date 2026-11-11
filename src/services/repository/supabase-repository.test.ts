@@ -13,6 +13,7 @@ vi.mock('../supabase/client', () => ({
   getSupabaseClient: () => fake.current!.client,
 }))
 
+import { UserFacingError } from '../../utils/user-error'
 import { createSupabaseRepository } from './supabase-repository'
 
 function row(id: string, extra: Record<string, unknown> = {}) {
@@ -440,6 +441,27 @@ describe('Supabase repository — before household_rules exists', () => {
 
       expect(snapshot.transactions.map((t) => t.id)).toEqual(['tx-1'])
       expect(snapshot.householdRules).toEqual([])
+    }
+  )
+
+  it.each(['42P01', 'PGRST205'])(
+    'saving or deleting a rule says what is missing instead of a generic error (%s)',
+    async (code) => {
+      db.failWhen((r) => r.table === 'household_rules', { code })
+      const repo = createSupabaseRepository('user-1')
+
+      const saved = await repo
+        .upsertHouseholdRule({ merchantNormalized: 'disco', isHousehold: true })
+        .catch((e: unknown) => e)
+      const deleted = await repo
+        .deleteHouseholdRule('disco')
+        .catch((e: unknown) => e)
+
+      for (const error of [saved, deleted]) {
+        expect(error).toBeInstanceOf(UserFacingError)
+        expect((error as Error).message).toMatch(/reglas del hogar/)
+        expect((error as Error).message).not.toMatch(/request failed/)
+      }
     }
   )
 
