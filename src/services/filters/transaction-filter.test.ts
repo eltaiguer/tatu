@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Transaction } from '../../models'
 import { DEFAULT_URL_FILTERS, type UrlFilterState } from './url-filters'
-import { buildCategoryHousehold } from '../household/household'
+import { categoryRules } from '../../test/household-rules'
 import {
   filterTransactions as filterRows,
   groupSplitRows,
@@ -11,15 +11,15 @@ import {
 } from './transaction-filter'
 
 // The rule needs the user's category defaults; most specs have none.
-const NO_DEFAULTS = buildCategoryHousehold([])
+const NO_DEFAULTS = categoryRules([])
 function filterTransactions(
   rows: Transaction[],
   state: UrlFilterState,
-  options: Omit<Parameters<typeof filterRows>[2], 'categoryHousehold'> & {
-    categoryHousehold?: Parameters<typeof filterRows>[2]['categoryHousehold']
+  options: Omit<Parameters<typeof filterRows>[2], 'householdRules'> & {
+    householdRules?: Parameters<typeof filterRows>[2]['householdRules']
   } = {}
 ) {
-  return filterRows(rows, state, { categoryHousehold: NO_DEFAULTS, ...options })
+  return filterRows(rows, state, { householdRules: NO_DEFAULTS, ...options })
 }
 
 function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
@@ -542,16 +542,16 @@ describe('groupSplitRows', () => {
 })
 
 describe('filterTransactions — Hogar', () => {
-  const none = buildCategoryHousehold([])
+  const none = categoryRules([])
   const hogar = (
     rows: Transaction[],
     household: UrlFilterState['household'],
     extra: Partial<UrlFilterState> = {},
-    categoryHousehold = none
+    householdRules = none
   ) =>
     ids(
       filterTransactions(rows, filters({ household, ...extra }), {
-        categoryHousehold,
+        householdRules,
       })
     )
 
@@ -575,7 +575,7 @@ describe('filterTransactions — Hogar', () => {
   })
 
   it('Solo hogar drops an ignored transfer even when shown and mapped household', () => {
-    const map = buildCategoryHousehold([['transfer', true]])
+    const map = categoryRules([['transfer', true]])
     // The transfer is there to be dropped (it shows under "all")…
     expect(hogar(rows, 'all', { showIgnored: true }, map)).toContain('transfer')
     // …and Hogar still leaves it out.
@@ -589,7 +589,7 @@ describe('filterTransactions — Hogar', () => {
   })
 
   it("follows the user's category default", () => {
-    const map = buildCategoryHousehold([['restaurants', true]])
+    const map = categoryRules([['restaurants', true]])
     expect(hogar(rows, 'household', {}, map)).toContain('restaurants')
   })
 
@@ -607,7 +607,7 @@ describe('filterTransactions — Hogar', () => {
     const matched = filterTransactions(
       split,
       filters({ household: 'household' }),
-      { categoryHousehold: none }
+      { householdRules: none }
     )
     expect(ids(matched)).toEqual(['p1'])
     expect(ids(groupSplitRows(matched, split))).toEqual(['parent', 'p1'])

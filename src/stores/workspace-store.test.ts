@@ -31,7 +31,11 @@ import { listMerchantCategoryOverrides } from '../services/categorizer/category-
 import { listDescriptionOverrides } from '../services/descriptions/description-overrides'
 import { listCustomPatterns } from '../services/categorizer/custom-patterns'
 import { listCustomCategories } from '../services/categories/category-store'
-import { currentCategoryHousehold } from '../services/household/household'
+import {
+  currentHouseholdRules,
+  resolveHousehold,
+} from '../services/household/household'
+import { merchantOverrideKey } from '../services/categorizer/category-overrides'
 import { UserFacingError } from '../utils/user-error'
 import {
   createInMemoryAuth,
@@ -79,6 +83,14 @@ function repoOf(
         updatedAt: '2026-01-01T00:00:00Z',
       },
     ],
+    householdRules: [
+      {
+        merchantNormalized: userId,
+        isHousehold: true,
+        createdAt: '',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+    ],
     descriptionOverrides: [
       {
         descriptionNormalized: userId,
@@ -121,6 +133,7 @@ function snapshot() {
     aiConfig: getAiConfig(),
     transactions: transactionStore.getState().transactions.map((t) => t.id),
     merchantOverrides: Object.keys(listMerchantCategoryOverrides()),
+    householdRules: [...currentHouseholdRules().merchants.keys()],
     descriptionOverrides: Object.keys(listDescriptionOverrides()),
     patterns: listCustomPatterns().map((p) => p.id),
     categories: listCustomCategories().map((c) => c.id),
@@ -134,6 +147,7 @@ const EMPTY = {
   aiConfig: null,
   transactions: [],
   merchantOverrides: [],
+  householdRules: [],
   descriptionOverrides: [],
   patterns: [],
   categories: [],
@@ -168,6 +182,7 @@ describe('workspace store', () => {
       },
       transactions: ['tx-a'],
       merchantOverrides: ['a'],
+      householdRules: ['a'],
       descriptionOverrides: ['a'],
       patterns: ['pattern-a'],
       categories: ['cat-a'],
@@ -200,7 +215,7 @@ describe('workspace store', () => {
       })
     )
 
-    const map = currentCategoryHousehold()
+    const map = currentHouseholdRules().categories
     expect(
       listCustomCategories().find((c) => c.id === 'groceries')
     ).toMatchObject({ isHousehold: false })
@@ -211,7 +226,37 @@ describe('workspace store', () => {
 
     teardownWorkspace()
 
-    expect(currentCategoryHousehold().size).toBe(0)
+    expect(currentHouseholdRules().categories.size).toBe(0)
+  })
+
+  it('loads a merchant household rule that resolves rows, and teardown forgets it (#251)', async () => {
+    const devoto = {
+      ...tx('d'),
+      description: 'DEVOTO',
+      category: 'restaurants',
+    } as Transaction
+    await signIn(
+      createInMemoryRepository({
+        userId: 'a',
+        householdRules: [
+          {
+            merchantNormalized: merchantOverrideKey('DEVOTO') as string,
+            isHousehold: true,
+            createdAt: '',
+            updatedAt: '',
+          },
+        ],
+      })
+    )
+    expect(resolveHousehold(devoto, currentHouseholdRules()).source).toBe(
+      'merchant'
+    )
+
+    teardownWorkspace()
+
+    expect(resolveHousehold(devoto, currentHouseholdRules()).source).toBe(
+      'category'
+    )
   })
 
   it('gives a user without a preferences row the defaults, not the previous user’s', async () => {
@@ -252,6 +297,7 @@ describe('workspace store', () => {
       aiConfig: null,
       transactions: ['tx-b'],
       merchantOverrides: ['b'],
+      householdRules: ['b'],
       patterns: ['pattern-b'],
       categories: ['cat-b'],
     })

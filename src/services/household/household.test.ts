@@ -1,20 +1,23 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Category } from '../../models'
+import { merchantOverrideKey } from '../categorizer/category-overrides'
 import {
-  buildCategoryHousehold,
   canHaveHouseholdDefault,
   categoryHouseholdChoice,
-  currentCategoryHousehold,
+  currentHouseholdRules,
   isCategoryHousehold,
   nextHouseholdChoice,
   partitionByHousehold,
   resolveHousehold,
+  rowsChangedByRule,
+  rowsSharingMerchantRule,
   rowHouseholdView,
 } from './household'
 import type { Transaction } from '../../models'
 import { replaceCustomCategories } from '../categories/category-store'
+import { categoryRules, householdRulesOf } from '../../test/household-rules'
 
-const NONE = buildCategoryHousehold([])
+const NONE = categoryRules([])
 
 describe('resolveHousehold', () => {
   it('starts the seeded household categories as Hogar', () => {
@@ -29,7 +32,7 @@ describe('resolveHousehold', () => {
     ]) {
       expect(resolveHousehold({ category }, NONE)).toEqual({
         status: 'household',
-        isOverride: false,
+        source: 'category',
       })
     }
   })
@@ -65,18 +68,18 @@ describe('resolveHousehold', () => {
     expect(
       resolveHousehold(
         { category: Category.ExternalTransfer },
-        buildCategoryHousehold([[Category.ExternalTransfer, true]])
+        categoryRules([[Category.ExternalTransfer, true]])
       ).status
     ).toBe('household')
   })
 
   it("follows the user's category choice over the seeded default", () => {
-    const mapping = buildCategoryHousehold([
+    const mapping = categoryRules([
       [Category.Groceries, false],
       ['mascotas', true],
     ])
     expect(resolveHousehold({ category: Category.Groceries }, mapping)).toEqual(
-      { status: 'not_household', isOverride: false }
+      { status: 'not_household', source: 'category' }
     )
     expect(resolveHousehold({ category: 'mascotas' }, mapping).status).toBe(
       'household'
@@ -91,7 +94,7 @@ describe('resolveHousehold', () => {
       'household'
     )
     // A choice stored under an old id or another casing still applies.
-    const mapping = buildCategoryHousehold([
+    const mapping = categoryRules([
       ['Restaurant', true],
       ['FOOD', false],
     ])
@@ -107,7 +110,7 @@ describe('resolveHousehold', () => {
     expect(
       resolveHousehold(
         { category: Category.Restaurants },
-        buildCategoryHousehold([
+        categoryRules([
           ['restaurant', true],
           ['restaurants', false],
         ])
@@ -124,13 +127,13 @@ describe('resolveHousehold', () => {
     ]) {
       expect(resolveHousehold({ category }, NONE)).toEqual({
         status: 'unassigned',
-        isOverride: false,
+        source: 'category',
       })
     }
   })
 
   it('cannot give Ingresos a household default, under any alias', () => {
-    const mapping = buildCategoryHousehold([[Category.Income, true]])
+    const mapping = categoryRules([[Category.Income, true]])
     for (const category of [Category.Income, 'salary']) {
       expect(resolveHousehold({ category }, mapping).status).toBe(
         'not_household'
@@ -142,7 +145,7 @@ describe('resolveHousehold', () => {
     expect(
       resolveHousehold(
         { category: Category.Uncategorized },
-        buildCategoryHousehold([[Category.Uncategorized, true]])
+        categoryRules([[Category.Uncategorized, true]])
       ).status
     ).toBe('unassigned')
   })
@@ -150,13 +153,13 @@ describe('resolveHousehold', () => {
   it("lets the row's own choice win over its category, either way", () => {
     expect(
       resolveHousehold({ category: Category.Groceries, household: false }, NONE)
-    ).toEqual({ status: 'not_household', isOverride: true })
+    ).toEqual({ status: 'not_household', source: 'row' })
     expect(
       resolveHousehold(
         { category: Category.Restaurants, household: true },
-        buildCategoryHousehold([[Category.Restaurants, false]])
+        categoryRules([[Category.Restaurants, false]])
       )
-    ).toEqual({ status: 'household', isOverride: true })
+    ).toEqual({ status: 'household', source: 'row' })
   })
 
   it('keeps the row choice when the row is recategorized', () => {
@@ -170,14 +173,14 @@ describe('resolveHousehold', () => {
   it('keeps the row choice on an uncategorized row', () => {
     expect(resolveHousehold({ household: true }, NONE)).toEqual({
       status: 'household',
-      isOverride: true,
+      source: 'row',
     })
   })
 
   it('follows the category when the row choice is cleared (null)', () => {
     expect(
       resolveHousehold({ category: Category.Groceries, household: null }, NONE)
-    ).toEqual({ status: 'household', isOverride: false })
+    ).toEqual({ status: 'household', source: 'category' })
   })
 
   it('ignores a stored value that is not a yes/no', () => {
@@ -187,17 +190,17 @@ describe('resolveHousehold', () => {
         { category: Category.Restaurants, household: garbage },
         NONE
       )
-    ).toEqual({ status: 'not_household', isOverride: false })
+    ).toEqual({ status: 'not_household', source: 'category' })
     expect(
       resolveHousehold(
         { category: Category.Restaurants },
-        buildCategoryHousehold([[Category.Restaurants, garbage]])
+        categoryRules([[Category.Restaurants, garbage]])
       ).status
     ).toBe('not_household')
   })
 })
 
-describe('currentCategoryHousehold', () => {
+describe('currentHouseholdRules', () => {
   afterEach(() => replaceCustomCategories([]))
 
   const row = (id: string, isHousehold?: boolean) => ({
@@ -210,7 +213,7 @@ describe('currentCategoryHousehold', () => {
   it('is empty for a user who set no default', () => {
     replaceCustomCategories([row('restaurants')])
 
-    expect(currentCategoryHousehold().size).toBe(0)
+    expect(currentHouseholdRules().categories.size).toBe(0)
   })
 
   it('reflects the category store: built-in and custom rows, true and false', () => {
@@ -221,7 +224,7 @@ describe('currentCategoryHousehold', () => {
       row('viajes'),
     ])
 
-    const map = currentCategoryHousehold()
+    const map = currentHouseholdRules().categories
 
     expect(map.get('restaurants')).toBe(true)
     expect(map.get('groceries')).toBe(false)
@@ -232,10 +235,10 @@ describe('currentCategoryHousehold', () => {
   it('applies a default stored under an old id (food → groceries)', () => {
     replaceCustomCategories([row('food', false)])
 
-    const map = currentCategoryHousehold()
+    const rules = currentHouseholdRules()
 
-    expect(map.get('groceries')).toBe(false)
-    expect(resolveHousehold({ category: 'groceries' }, map).status).toBe(
+    expect(rules.categories.get('groceries')).toBe(false)
+    expect(resolveHousehold({ category: 'groceries' }, rules).status).toBe(
       'not_household'
     )
   })
@@ -243,11 +246,11 @@ describe('currentCategoryHousehold', () => {
   it('returns the same Map until the store changes', () => {
     replaceCustomCategories([row('restaurants', true)])
 
-    const first = currentCategoryHousehold()
-    expect(currentCategoryHousehold()).toBe(first)
+    const first = currentHouseholdRules().categories
+    expect(currentHouseholdRules().categories).toBe(first)
 
     replaceCustomCategories([row('restaurants', false)])
-    const second = currentCategoryHousehold()
+    const second = currentHouseholdRules().categories
     expect(second).not.toBe(first)
     expect(second.get('restaurants')).toBe(false)
   })
@@ -263,13 +266,13 @@ describe('isCategoryHousehold', () => {
     expect(
       isCategoryHousehold(
         Category.Groceries,
-        buildCategoryHousehold([[Category.Groceries, false]])
+        categoryRules([[Category.Groceries, false]])
       )
     ).toBe(false)
     expect(
       isCategoryHousehold(
         Category.Restaurants,
-        buildCategoryHousehold([[Category.Restaurants, true]])
+        categoryRules([[Category.Restaurants, true]])
       )
     ).toBe(true)
   })
@@ -339,7 +342,7 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     const tx = expense()
     expect(rowHouseholdView(tx, NONE)).toEqual({
       status: 'household',
-      isOverride: false,
+      source: 'category',
     })
     // Following Alimentación (household): a click says "no".
     expect(nextHouseholdChoice(tx, NONE)).toBe(false)
@@ -349,7 +352,7 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     const tx = expense({ category: Category.Restaurants, household: true })
     expect(rowHouseholdView(tx, NONE)).toEqual({
       status: 'household',
-      isOverride: true,
+      source: 'row',
     })
     // Restaurantes is not household: unmarking equals the category → null.
     expect(nextHouseholdChoice(tx, NONE)).toBeNull()
@@ -369,7 +372,7 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
   })
 
   it('follows the user’s category default', () => {
-    const map = buildCategoryHousehold([[Category.Restaurants, true]])
+    const map = categoryRules([[Category.Restaurants, true]])
     const tx = expense({ category: Category.Restaurants })
     expect(nextHouseholdChoice(tx, map)).toBe(false)
   })
@@ -378,7 +381,7 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     const tx = expense({ category: Category.Uncategorized })
     expect(rowHouseholdView(tx, NONE)).toEqual({
       status: 'unassigned',
-      isOverride: false,
+      source: 'category',
     })
     expect(nextHouseholdChoice(tx, NONE)).toBe(true)
   })
@@ -439,5 +442,147 @@ describe('partitionByHousehold', () => {
       expect(household.includes(tx)).toBe(status === 'household')
       expect(unassigned.includes(tx)).toBe(status === 'unassigned')
     }
+  })
+})
+
+describe('merchant rules', () => {
+  const devoto = (description: string, overrides = {}) =>
+    ({
+      ...expense({ category: Category.Restaurants, description }),
+      ...overrides,
+    }) as Transaction
+  const keyOf = (d: string) => merchantOverrideKey(d) as string
+  const rule = (d: string, value: boolean) =>
+    householdRulesOf({ merchants: [[keyOf(d), value]] })
+
+  it('a rule true makes a restaurants debit household, from the merchant', () => {
+    expect(resolveHousehold(devoto('DEVOTO'), rule('DEVOTO', true))).toEqual({
+      status: 'household',
+      source: 'merchant',
+    })
+  })
+
+  it('a rule false makes a groceries debit not household', () => {
+    const tx = expense({ description: 'DEVOTO', category: Category.Groceries })
+    expect(resolveHousehold(tx, rule('DEVOTO', false))).toEqual({
+      status: 'not_household',
+      source: 'merchant',
+    })
+  })
+
+  it('the row’s own choice beats the rule', () => {
+    const tx = devoto('DEVOTO', { household: false })
+    expect(resolveHousehold(tx, rule('DEVOTO', true))).toEqual({
+      status: 'not_household',
+      source: 'row',
+    })
+  })
+
+  it('a rule covers an uncategorized row, which is then not Sin definir', () => {
+    const tx = expense({
+      description: 'DEVOTO',
+      category: Category.Uncategorized,
+    })
+    expect(resolveHousehold(tx, rule('DEVOTO', true))).toEqual({
+      status: 'household',
+      source: 'merchant',
+    })
+  })
+
+  it('a split part ignores the rule and keeps its category default', () => {
+    const part = devoto('DEVOTO', { splitParentId: 'parent' })
+    expect(resolveHousehold(part, rule('DEVOTO', true))).toEqual({
+      status: 'not_household',
+      source: 'category',
+    })
+  })
+
+  it('descriptions that differ only in per-transaction noise share the rule', () => {
+    const rules = rule('DEVOTO SUPERMERCADO 12/03/2026 14:05', true)
+    const other = devoto('DEVOTO SUPERMERCADO 19/03/2026 09:30')
+    expect(resolveHousehold(other, rules).source).toBe('merchant')
+  })
+
+  it('without a rule the answer is the category’s', () => {
+    expect(resolveHousehold(devoto('DEVOTO'), householdRulesOf())).toEqual({
+      status: 'not_household',
+      source: 'category',
+    })
+  })
+
+  it('a click that lands on what the row would inherit clears the choice (rule first)', () => {
+    const rules = rule('DEVOTO', true)
+    const tx = devoto('DEVOTO', { household: false })
+    expect(nextHouseholdChoice(tx, rules)).toBeNull()
+    // Following the rule (household), a click says no: the category (no) agrees.
+    expect(nextHouseholdChoice(devoto('DEVOTO'), rules)).toBe(false)
+  })
+
+  it('a click against the rule on a groceries row writes the boolean', () => {
+    const rules = rule('DEVOTO', false)
+    const tx = expense({ description: 'DEVOTO', category: Category.Groceries })
+    // Rule says no, category says yes: a click means yes = the category's.
+    expect(nextHouseholdChoice(tx, rules)).toBe(true)
+  })
+
+  it('rowsSharingMerchantRule: counted, non-split rows with the same key, target included', () => {
+    const a = devoto('DEVOTO 12/03/2026', { id: 'a' })
+    const b = devoto('DEVOTO 19/03/2026', { id: 'b' })
+    const other = devoto('TIENDA INGLESA', { id: 'c' })
+    const part = devoto('DEVOTO', { id: 'd', splitParentId: 'p' })
+    const income = devoto('DEVOTO', { id: 'e', type: 'credit' })
+    expect(
+      rowsSharingMerchantRule([a, b, other, part, income], a).map((t) => t.id)
+    ).toEqual(['a', 'b'])
+    expect(rowsSharingMerchantRule([a, b, part], part)).toEqual([])
+  })
+})
+
+describe('rowsChangedByRule', () => {
+  const at = (id: string, day: number, overrides = {}) =>
+    ({
+      ...expense({ category: Category.Restaurants }),
+      id,
+      description: `DEVOTO ${day}/03/2026`,
+      ...overrides,
+    }) as Transaction
+  const KEY = merchantOverrideKey('DEVOTO 1/03/2026') as string
+  const none = householdRulesOf()
+  const target = at('t', 11)
+  const plain = at('p', 12)
+  const own = at('o', 13, { household: false })
+  const loose = at('u', 14, { category: Category.Uncategorized })
+  const all = [target, plain, own, loose, expense({ description: 'OTRO' })]
+  const ids = (rows: Transaction[]) => rows.map((r) => r.id)
+
+  it('clearing own choices: every similar row whose shown value changes', () => {
+    expect(ids(rowsChangedByRule(all, target, true, none, true))).toEqual([
+      't',
+      'p',
+      'o',
+      'u',
+    ])
+  })
+
+  it('keeping own choices: those keep what they show, the rest follow the rule', () => {
+    // The target's own choice is cleared in both; "o" keeps its own No.
+    expect(ids(rowsChangedByRule(all, target, true, none, false))).toEqual([
+      't',
+      'p',
+      'u',
+    ])
+  })
+
+  it('leaves out rows that already show the value, and deleting a rule reverts', () => {
+    const withRule = householdRulesOf({ merchants: [[KEY, true]] })
+    expect(ids(rowsChangedByRule(all, target, true, withRule, true))).toEqual([
+      'o',
+    ])
+    // Rule Sí deleted: "p" and "u" showed the rule, go back to the category.
+    expect(ids(rowsChangedByRule(all, target, null, withRule, false))).toEqual([
+      't',
+      'p',
+      'u',
+    ])
   })
 })

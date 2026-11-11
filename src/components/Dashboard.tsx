@@ -24,10 +24,8 @@ import {
   countsTowardTotals,
   sumCountedTotals,
 } from '../services/spending/spending-rules'
-import {
-  currentCategoryHousehold,
-  partitionByHousehold,
-} from '../services/household/household'
+import { partitionByHousehold } from '../services/household/household'
+import { useHouseholdRules } from '../hooks/useHouseholdRules'
 import { CategoryChangesCard } from './CategoryChangesCard'
 import { FxChip } from './FxChip'
 import { CurrencyToggle } from './CurrencyToggle'
@@ -97,14 +95,15 @@ export function Dashboard({
 
   // Hogar mode is ONE cut at the top: the rows that resolve to household
   // (counted expenses only; ADR-0005) replace `transactions` in every memo
-  // below. The map is memoized on the category store's array, so a changed
-  // category default changes `householdRows` and everything under it.
-  const categoryHousehold = currentCategoryHousehold()
+  // below. The rules value changes identity when a category default or a
+  // merchant rule does (the hook also re-renders on a rule alone), so either
+  // changes `householdRows` and everything under it.
+  const householdRules = useHouseholdRules()
   // One pass: the household rows, and those still Sin definir (shown apart
   // in Hogar mode, never inside its totals).
   const { household: householdRows, unassigned: allUnassignedRows } = useMemo(
-    () => partitionByHousehold(transactions, categoryHousehold),
-    [transactions, categoryHousehold]
+    () => partitionByHousehold(transactions, householdRules),
+    [transactions, householdRules]
   )
   const unassignedRows = householdMode ? allUnassignedRows : NO_ROWS
   const rows = householdMode ? householdRows : transactions

@@ -11,11 +11,13 @@ import {
   bulkTag,
   deleteTransactions,
   editTransaction,
+  applyHouseholdToSimilar,
   restoreDeleted,
   setHousehold,
   splitTransaction,
   unsplitTransaction,
   type DeleteResult,
+  type RuleScope,
   type SplitPart,
   type TransactionEdit,
 } from '../services/mutations/transaction-mutations'
@@ -105,6 +107,14 @@ export function useTransactionHandlers({
     handleSetHousehold: run(
       (repo, transactionIds: string[], household: boolean | null) =>
         setHousehold(repo, transactionIds, household)
+    ),
+    handleApplyHouseholdToSimilar: run(
+      (
+        repo,
+        transactionId: string,
+        household: boolean | null,
+        scope: RuleScope
+      ) => applyHouseholdToSimilar(repo, transactionId, household, scope)
     ),
     handleAutoCategorizeTransactions: run((repo, transactionIds: string[]) =>
       autoCategorize(repo, transactionIds)

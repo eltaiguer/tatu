@@ -1,4 +1,4 @@
-import type { CategoryHousehold, Transaction } from '../../models'
+import type { HouseholdRules, Transaction } from '../../models'
 import { rowHouseholdView } from '../household/household'
 import { resolveCategory } from '../categories/category-registry'
 import { countsTowardTotals } from '../spending/spending-rules'
@@ -9,13 +9,13 @@ export type ExportFormat = 'csv' | 'pdf'
 export interface ExportOptions {
   format: ExportFormat
   fileName?: string
-  // The user's category defaults (currentCategoryHousehold()), for the
-  // hogar column.
-  categoryHousehold: CategoryHousehold
+  // The user's household rules (currentHouseholdRules(): merchant rules and
+  // category defaults), for the hogar column.
+  householdRules: HouseholdRules
 }
 
 export interface PdfReportOptions {
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
   title?: string
   generatedAt?: Date
 }
@@ -47,9 +47,9 @@ const HOUSEHOLD_LABELS = {
 
 function householdLabel(
   tx: Transaction,
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): string {
-  const view = rowHouseholdView(tx, categoryHousehold)
+  const view = rowHouseholdView(tx, householdRules)
   return view ? HOUSEHOLD_LABELS[view.status] : ''
 }
 
@@ -70,7 +70,7 @@ function csvEscape(value: string): string {
 
 export function buildCsv(
   transactions: Transaction[],
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): string {
   const header = [
     'Date',
@@ -90,7 +90,7 @@ export function buildCsv(
     tx.type,
     getExportCategoryLabel(tx.category),
     countsLabel(tx),
-    householdLabel(tx, categoryHousehold),
+    householdLabel(tx, householdRules),
   ])
 
   return [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\n')
@@ -116,7 +116,7 @@ export function buildPdfReportHtml(
           <td>${escapeHtml(tx.type)}</td>
           <td>${escapeHtml(getExportCategoryLabel(tx.category))}</td>
           <td>${escapeHtml(countsLabel(tx))}</td>
-          <td>${escapeHtml(householdLabel(tx, options.categoryHousehold))}</td>
+          <td>${escapeHtml(householdLabel(tx, options.householdRules))}</td>
         </tr>
       `
     )
@@ -228,12 +228,12 @@ export function exportTransactions(
   const fileName = options.fileName ?? 'tatu-export'
 
   if (options.format === 'csv') {
-    downloadCsv(buildCsv(transactions, options.categoryHousehold), fileName)
+    downloadCsv(buildCsv(transactions, options.householdRules), fileName)
   } else {
     printReport(
       buildPdfReportHtml(transactions, {
         title: fileName,
-        categoryHousehold: options.categoryHousehold,
+        householdRules: options.householdRules,
       })
     )
   }

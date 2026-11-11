@@ -21,7 +21,7 @@ import { normalizeCategoryId } from '../services/categories/category-aliases'
 import {
   canHaveHouseholdDefault,
   categoryHouseholdChoice,
-  currentCategoryHousehold,
+  currentHouseholdRules,
   isCategoryHousehold,
 } from '../services/household/household'
 import { isWorkspaceOwner } from '../stores/workspace-state'
@@ -69,8 +69,9 @@ export function Categories({
   const [form, setForm] = useState<CategoryFormState>(EMPTY_FORM)
 
   const categoryDefinitions = getCategoryDefinitions()
-  // Read on render: memoized on the category store, never cached in state.
-  const categoryHousehold = currentCategoryHousehold()
+  // Read on render (the household rules value, of which the category defaults
+  // are the part Categorías edits): memoized, never cached in state.
+  const householdRules = currentHouseholdRules()
   const isEditing = form.id.length > 0
   // A new category can always have one; an edited one unless it is Sin
   // categoría or Ingresos.
@@ -89,7 +90,7 @@ export function Categories({
   function startEdit(categoryId: string) {
     const cat = categoryDefinitions.find((c) => c.id === categoryId)
     if (!cat) return
-    const household = isCategoryHousehold(cat.id, categoryHousehold)
+    const household = isCategoryHousehold(cat.id, householdRules)
     setForm({
       id: cat.id,
       label: cat.label,
@@ -167,7 +168,7 @@ export function Categories({
   // the app's own default stores nothing (null), so it keeps following it.
   async function handleToggleHousehold(categoryId: string) {
     const label = resolveCategory(categoryId).label
-    const next = !isCategoryHousehold(categoryId, currentCategoryHousehold())
+    const next = !isCategoryHousehold(categoryId, currentHouseholdRules())
     setSavingHousehold((ids) => new Set(ids).add(categoryId))
     try {
       const repo = requireRepository(repository)
@@ -301,7 +302,7 @@ export function Categories({
                   : spending.get(normalizeCategoryId(cat.id))
               }
               homeCurrency={homeCurrency}
-              household={isCategoryHousehold(cat.id, categoryHousehold)}
+              household={isCategoryHousehold(cat.id, householdRules)}
               householdSaving={savingHousehold.has(cat.id)}
               onToggleHousehold={
                 cat.isOrphan || !canHaveHouseholdDefault(cat.id)

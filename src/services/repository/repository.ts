@@ -7,6 +7,7 @@ import type { Transaction } from '../../models'
 import { UserFacingError } from '../../utils/user-error'
 import type { ExistingTransaction } from '../dedup/import-dedup'
 import type { CategoryOverrideRecord } from '../supabase/category-overrides'
+import type { HouseholdRuleRecord } from '../supabase/household-rules'
 import type { DescriptionOverrideRecord } from '../supabase/description-overrides'
 import type { CustomCategoryRecord } from '../supabase/custom-categories'
 import type { UserPreferences } from '../supabase/user-preferences'
@@ -91,6 +92,7 @@ export interface WriteOutcome {
 export interface WorkspaceSnapshot {
   transactions: Transaction[]
   categoryOverrides: CategoryOverrideRecord[]
+  householdRules: HouseholdRuleRecord[]
   descriptionOverrides: DescriptionOverrideRecord[]
   customPatterns: CustomPattern[]
   customCategories: CustomCategoryRecord[]
@@ -217,6 +219,13 @@ export interface Repository {
     category: string
   }): Promise<void>
   deleteCategoryOverride(merchantNormalized: string): Promise<void>
+  /** The Hogar yes/no remembered for a merchant (key: merchantOverrideKey). */
+  upsertHouseholdRule(input: {
+    merchantNormalized: string
+    merchantOriginal?: string
+    isHousehold: boolean
+  }): Promise<void>
+  deleteHouseholdRule(merchantNormalized: string): Promise<void>
   upsertCustomPattern(pattern: CustomPattern): Promise<void>
   deleteCustomPattern(id: string): Promise<void>
   upsertCustomCategory(input: {

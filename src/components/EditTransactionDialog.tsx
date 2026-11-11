@@ -26,7 +26,9 @@ import {
 import { getAccountLabel } from './TransactionTable'
 import {
   categoryDefault,
-  currentCategoryHousehold,
+  currentHouseholdRules,
+  canHaveMerchantRule,
+  merchantRule as merchantRuleOf,
   rowHouseholdView,
 } from '../services/household/household'
 
@@ -51,10 +53,15 @@ export interface EditTransactionDraft {
   category: string | null
   tags: string[]
   applyScope: ApplyScope
-  // This transaction's own "gasto del hogar" choice; null follows the
-  // category. Never part of the apply-scope. Unchanged (the row's own) for a
-  // row that cannot be household.
+  // The household choice: this row's own (Solo esta) or, under a rule scope,
+  // the merchant's rule; null follows the category. Unchanged (the row's own)
+  // for a row that cannot be household.
   household: boolean | null
+  // The radio holds something to write: a pick under a rule scope (even the
+  // option already shown), else a choice different from the row's own. The
+  // household part is written only then: a category edit must not create or
+  // delete a rule, nor wipe a hand-set choice.
+  householdTouched: boolean
 }
 
 interface EditTransactionDialogProps {
@@ -68,6 +75,9 @@ interface EditTransactionDialogProps {
   // Tags already in use, offered as suggestions.
   knownTags: string[]
   isSaving: boolean
+  // Counted rows a merchant household rule would reach (rowsSharingMerchantRule),
+  // for the household legend.
+  countHouseholdSimilar: (transaction: Transaction) => number
   // Whether the view can save a household choice; without it the group is
   // not offered.
   canSetHousehold: boolean
@@ -129,6 +139,7 @@ export function EditTransactionDialog({
 function EditTransactionForm({
   transaction,
   countSimilar,
+  countHouseholdSimilar,
   knownTags,
   isSaving,
   canSetHousehold,
@@ -144,9 +155,13 @@ function EditTransactionForm({
   const [category, setCategory] = useState(transaction.category ?? '')
   const [tags, setTags] = useState<string[]>(transaction.tags ?? [])
   const [applyScope, setApplyScope] = useState<ApplyScope>('single')
-  const [householdChoice, setHouseholdChoice] = useState<HouseholdChoice>(() =>
+  // The row's own choice (Solo esta) and the merchant-rule pick (the two
+  // rule scopes; null until the user picks) are separate: a pick under one
+  // scope is not a pick under the other.
+  const [ownChoice, setOwnChoice] = useState<HouseholdChoice>(() =>
     choiceOf(transaction.household)
   )
+  const [rulePick, setRulePick] = useState<HouseholdChoice | null>(null)
   const [error, setError] = useState('')
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
@@ -206,19 +221,58 @@ function EditTransactionForm({
   // Only counted expenses can be household. Read while rendering (never
   // copied into state) so the label follows the category picker above and a
   // default changed in Categorías.
-  const categoryHousehold = currentCategoryHousehold()
+  const householdRules = currentHouseholdRules()
   // Judged on the category being picked, not the saved one: an ignored
   // category has no house, and an ignored row given a counted one gets it.
   const showHousehold =
     canSetHousehold &&
     rowHouseholdView(
       { ...transaction, category: category.trim() || undefined },
-      categoryHousehold
+      householdRules
     ) !== null
   const categoryDefaultLabel = (() => {
-    const says = categoryDefault(category, categoryHousehold)
-    return says === null ? 'sin definir' : says ? 'sí' : 'no'
+    const says = categoryDefault(category, householdRules)
+    return says === null ? 'Sin definir' : says ? 'Sí' : 'No'
   })()
+  // A rule can be made only for a counted expense (judged on the category
+  // being picked) that is not a split part and has a merchant key. Elsewhere
+  // the rule scopes write just this row, and the dialog says so.
+  const canMakeRule = showHousehold && canHaveMerchantRule(transaction)
+  // Under an apply-to-similar scope the radio is the merchant's rule: until
+  // picked it shows the rule (or "según categoría" when none covers the row),
+  // not the row's own choice. Solo esta shows the row's own choice, and
+  // "según comercio" when a rule covers the row.
+  const ruleScope = applyScope !== 'single' && canMakeRule
+  const merchantRule = merchantRuleOf(transaction, householdRules.merchants)
+  const shownChoice: HouseholdChoice = ruleScope
+    ? (rulePick ?? choiceOf(merchantRule))
+    : ownChoice
+  const followLabel =
+    !ruleScope && merchantRule !== undefined
+      ? `Según comercio (${merchantRule ? 'Sí' : 'No'})`
+      : `Según categoría (${categoryDefaultLabel})`
+  const draftRow = useMemo(
+    () => ({ ...transaction, category: category.trim() || undefined }),
+    [transaction, category]
+  )
+  const householdSimilarCount = useMemo(
+    () => countHouseholdSimilar(draftRow),
+    [countHouseholdSimilar, draftRow]
+  )
+  const householdReach = !ruleScope
+    ? 'solo esta transacción'
+    : applyScope === 'matching_past_and_future'
+      ? householdSimilarCount > 1
+        ? `se aplica a ${householdSimilarCount} transacciones (y a las futuras)`
+        : 'solo esta por ahora (y las futuras)'
+      : 'esta y las que importes en el futuro'
+  // Whether the radio holds something to write: a rule pick under a rule
+  // scope, else a different choice than the row's own.
+  const householdTouched = ruleScope
+    ? rulePick !== null
+    : ownChoice !== choiceOf(transaction.household)
+  const pickHousehold = (choice: HouseholdChoice) =>
+    ruleScope ? setRulePick(choice) : setOwnChoice(choice)
 
   function handleSave() {
     const trimmed = description.trim()
@@ -233,8 +287,9 @@ function EditTransactionForm({
       tags,
       applyScope,
       household: showHousehold
-        ? householdOf(householdChoice)
+        ? householdOf(shownChoice)
         : (transaction.household ?? null),
+      householdTouched: showHousehold && householdTouched,
     })
   }
 
@@ -375,18 +430,16 @@ function EditTransactionForm({
               <>
                 Gasto del hogar{' '}
                 <span className="font-normal text-muted-foreground">
-                  · solo esta transacción
+                  · {householdReach}
                 </span>
               </>
             }
             name="household"
-            value={householdChoice}
-            onChange={setHouseholdChoice}
+            value={shownChoice}
+            onChange={pickHousehold}
+            onReselect={pickHousehold}
             options={[
-              {
-                value: 'category',
-                label: `Según categoría (${categoryDefaultLabel})`,
-              },
+              { value: 'category', label: followLabel },
               { value: 'yes', label: 'Sí' },
               { value: 'no', label: 'No' },
             ]}

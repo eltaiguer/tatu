@@ -11,8 +11,8 @@ export type HouseholdFilter = 'all' | 'household' | 'unassigned'
 /** A row's household status and where it came from. */
 export interface HouseholdResolution {
   status: HouseholdStatus
-  /** The row's own choice, not its category's default. */
-  isOverride: boolean
+  /** Where the value comes from: the row's own choice, its merchant's rule or its category. */
+  source: 'row' | 'merchant' | 'category'
 }
 
 /**
@@ -20,3 +20,12 @@ export interface HouseholdResolution {
  * Build it with buildCategoryHousehold, which normalizes the keys.
  */
 export type CategoryHousehold = ReadonlyMap<string, boolean>
+
+/** The user's merchant household rules, keyed by merchantOverrideKey. */
+export type MerchantHousehold = ReadonlyMap<string, boolean>
+
+/** Everything resolveHousehold reads besides the row. */
+export interface HouseholdRules {
+  categories: CategoryHousehold
+  merchants: MerchantHousehold
+}

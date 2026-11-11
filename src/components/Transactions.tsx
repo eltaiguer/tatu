@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import { toast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
@@ -42,14 +42,15 @@ import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
 import {
-  currentCategoryHousehold,
-  nextHouseholdChoice,
+  AFTER_EDIT,
+  useHouseholdWrites,
+} from './transactions/useHouseholdWrites'
+import {
+  currentHouseholdRules,
+  rowsSharingMerchantRule,
 } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
 import { getDisplayDescription } from '../utils/transaction-display'
-import { UserFacingError } from '../utils/user-error'
-
-const AFTER_EDIT = 'Se guardaron los cambios, pero no el gasto del hogar'
 
 const sameTags = (a: string[], b: string[]) =>
   a.length === b.length && a.every((tag, i) => tag === b[i])
@@ -69,6 +70,7 @@ export function Transactions({
   onSplitTransaction,
   onUnsplitTransaction,
   onSetHousehold,
+  onApplyHouseholdToSimilar,
   onRestoreTransactions,
   onReload,
   repository,
@@ -145,15 +147,6 @@ export function Transactions({
   // `newestRowDate` is null only without rows.
   const newestForNav = newestRowDate ?? todayAsUtcDate()
 
-  // The newest household write started per row, so an old toast's retry can
-  // tell it has been superseded.
-  const householdWrites = useRef(new Map<string, number>())
-  // The latest rows, to see whether a row changed after a failed write.
-  const transactionsRef = useRef(transactions)
-  transactionsRef.current = transactions
-  const rowChoice = (id: string) =>
-    transactionsRef.current.find((tx) => tx.id === id)?.household ?? null
-
   /* ---- Edit state ---- */
   // Rows with a mutation in flight. A set, not a single id, so two
   // overlapping deletes don't re-enable each other's buttons.
@@ -221,6 +214,15 @@ export function Transactions({
     deleteWithConfirmation,
   })
 
+  const { handleToggleHousehold, writeHousehold, writeHouseholdRule } =
+    useHouseholdWrites({
+      transactions,
+      onSetHousehold,
+      onApplyHouseholdToSimilar,
+      setPending,
+      reportError,
+    })
+
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
 
@@ -240,9 +242,17 @@ export function Transactions({
 
   // Same matching the apply-to-similar write uses, so the number the
   // dialog shows is the number of rows the save will touch.
-  function countSimilar(transaction: Transaction, renamed: boolean) {
-    return countSimilarEditReach(transactions, transaction, renamed)
-  }
+  const countSimilar = useCallback(
+    (transaction: Transaction, renamed: boolean) =>
+      countSimilarEditReach(transactions, transaction, renamed),
+    [transactions]
+  )
+
+  const countHouseholdSimilar = useCallback(
+    (transaction: Transaction) =>
+      rowsSharingMerchantRule(transactions, transaction).length,
+    [transactions]
+  )
 
   async function handleCreateCategory(label: string) {
     try {
@@ -265,13 +275,15 @@ export function Transactions({
     if (!onUpdateTransaction || !editingTransaction) return
     const editing = editingTransaction
     const editingId = editing.id
-    const householdChanged =
-      Boolean(onSetHousehold) && draft.household !== (editing.household ?? null)
+    // The household part is written only when the dialog says the radio holds
+    // something to write (a category edit must not create or delete a rule,
+    // nor wipe a hand-set choice), under every scope.
+    const householdChanged = Boolean(onSetHousehold) && draft.householdTouched
     // A household-only save must not re-write the category as the user's own
-    // confirmed one (confidence 1): nothing about name, category or tags
-    // changed, and no apply-scope rule was asked for.
+    // confirmed one (confidence 1) nor, under a rule scope, upsert the
+    // category rule and stamp every similar row: nothing about name,
+    // category or tags changed.
     const unchanged =
-      draft.applyScope === 'single' &&
       draft.description === getDisplayDescription(editing) &&
       draft.category === ((editing.category ?? '').trim() || null) &&
       sameTags(draft.tags, editing.tags ?? [])
@@ -300,11 +312,28 @@ export function Transactions({
     // outcome is reported: the success only once everything saved, or one
     // error that says what did.
     if (householdChanged) {
-      const saved = await writeHousehold(
-        editingId,
-        draft.household,
-        message ? AFTER_EDIT : 'No se pudo guardar el gasto del hogar'
-      )
+      const failure = message
+        ? AFTER_EDIT
+        : 'No se pudo guardar el gasto del hogar'
+      let saved: boolean
+      // Under an apply-to-similar scope the choice is the merchant's rule.
+      if (draft.applyScope !== 'single' && onApplyHouseholdToSimilar) {
+        const applied = await writeHouseholdRule(
+          editingId,
+          draft.household,
+          draft.applyScope,
+          failure
+        )
+        saved = applied !== null
+        if (applied !== null && !message) {
+          message =
+            applied > 1
+              ? `Se aplicó a ${applied} transacciones`
+              : 'Cambios guardados'
+        }
+      } else {
+        saved = await writeHousehold(editingId, draft.household, failure)
+      }
       if (!saved && !message) {
         // Nothing saved at all: keep the dialog open to try again.
         setPending(editingId, false)
@@ -374,55 +403,6 @@ export function Transactions({
     }
   }
 
-  // One click flips the row's house. Quiet on success: the house moves when
-  // the saved row comes back from the store.
-  function handleToggleHousehold(transaction: Transaction) {
-    void writeHousehold(
-      transaction.id,
-      nextHouseholdChoice(transaction, currentCategoryHousehold()),
-      'No se pudo guardar el gasto del hogar'
-    )
-  }
-
-  // Writes one row's choice; true when it saved. A failure that saved nothing
-  // offers the same write again, but only if nothing else touched the row
-  // since: no newer write of this view started (the counter) and the saved
-  // row still holds what it did when this one failed (which also covers bulk
-  // writes and the dialog). A newer choice is never overwritten by an old
-  // toast.
-  async function writeHousehold(
-    id: string,
-    household: boolean | null,
-    failure: string
-  ): Promise<boolean> {
-    if (!onSetHousehold) return false
-    const seq = (householdWrites.current.get(id) ?? 0) + 1
-    householdWrites.current.set(id, seq)
-    setPending(id, true)
-    try {
-      await onSetHousehold([id], household)
-      return true
-    } catch (error) {
-      const heldWhenFailed = rowChoice(id)
-      // After a saved edit, say so even when the error brings its own words.
-      const prefix =
-        failure === AFTER_EDIT && error instanceof UserFacingError
-          ? `${AFTER_EDIT}. `
-          : ''
-      reportError(error, failure, prefix, () => {
-        if (
-          householdWrites.current.get(id) === seq &&
-          rowChoice(id) === heldWhenFailed
-        ) {
-          void writeHousehold(id, household, failure)
-        }
-      })
-      return false
-    } finally {
-      setPending(id, false)
-    }
-  }
-
   const periodLabelText = getPeriodLabel(period)
 
   return (
@@ -449,7 +429,7 @@ export function Transactions({
               onClick={() =>
                 exportTransactions(filteredTransactions, {
                   format: 'csv',
-                  categoryHousehold: currentCategoryHousehold(),
+                  householdRules: currentHouseholdRules(),
                 })
               }
               className="gap-[6px]"
@@ -565,12 +545,19 @@ export function Transactions({
               }
             : undefined
         }
-        onToggleHousehold={onSetHousehold ? handleToggleHousehold : undefined}
+        onToggleHousehold={
+          onSetHousehold
+            ? (transaction) => {
+                void handleToggleHousehold(transaction)
+              }
+            : undefined
+        }
       />
 
       <EditTransactionDialog
         transaction={editingTransaction}
         countSimilar={countSimilar}
+        countHouseholdSimilar={countHouseholdSimilar}
         knownTags={tagSuggestions}
         canSetHousehold={Boolean(onSetHousehold)}
         isSaving={

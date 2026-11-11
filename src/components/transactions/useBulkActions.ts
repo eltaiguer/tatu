@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import type { Transaction } from '../../models'
 import { PartialWriteError, userErrorMessage } from '../../utils/user-error'
 import {
-  currentCategoryHousehold,
+  currentHouseholdRules,
   rowHouseholdView,
 } from '../../services/household/household'
 import { isWorkspaceOwner, workspaceStore } from '../../stores/workspace-state'
@@ -132,7 +132,7 @@ export function useBulkActions({
       return
     }
     const selected = new Set(selectedTransactionIds)
-    const map = currentCategoryHousehold()
+    const map = currentHouseholdRules()
     const eligible = transactions.filter(
       (tx) => selected.has(tx.id) && rowHouseholdView(tx, map) !== null
     )

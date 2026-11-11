@@ -1,5 +1,10 @@
 import { Category } from '../../models'
-import type { CategoryHousehold, HouseholdResolution } from '../../models'
+import type {
+  CategoryHousehold,
+  HouseholdResolution,
+  HouseholdRules,
+  MerchantHousehold,
+} from '../../models'
 import {
   canHaveHouseholdDefault,
   normalizeCategoryId,
@@ -8,7 +13,8 @@ import {
   listCustomCategories,
   type CustomCategory,
 } from '../categories/category-store'
-import { memoizeByReference } from '../../utils/memo'
+import { listMerchantHouseholdRules } from './household-rules-store'
+import { merchantOverrideKey } from '../categorizer/category-overrides'
 import { isCountedExpense } from '../spending/spending-rules'
 import type { Transaction } from '../../models'
 
@@ -54,38 +60,145 @@ export function buildCategoryHousehold(
 }
 
 /**
- * Precedence: the row's own choice → the user's default for its category →
- * the seeded default. An uncategorized row without a choice of its own is
- * 'unassigned', and Sin categoría cannot be given a default.
+ * Precedence: the row's own choice → the user's rule for its merchant → the
+ * user's default for its category → the seeded default. An uncategorized row
+ * with no choice and no merchant rule is 'unassigned', and Sin categoría
+ * cannot be given a default. A split part ignores merchant rules (a split is a
+ * mixed purchase) and keeps its own choice and its category default.
  */
 export function resolveHousehold(
-  tx: { category?: string | null; household?: boolean | null },
-  categoryHousehold: CategoryHousehold
+  tx: {
+    category?: string | null
+    household?: boolean | null
+    description?: string
+    splitParentId?: string
+  },
+  householdRules: HouseholdRules
 ): HouseholdResolution {
   if (typeof tx.household === 'boolean') {
-    return { status: statusOf(tx.household), isOverride: true }
+    return { status: statusOf(tx.household), source: 'row' }
+  }
+  const merchant = merchantRule(tx, householdRules.merchants)
+  if (merchant !== undefined) {
+    return { status: statusOf(merchant), source: 'merchant' }
   }
   const id = normalizeCategoryId(tx.category)
   if (id === Category.Uncategorized) {
-    return { status: 'unassigned', isOverride: false }
+    return { status: 'unassigned', source: 'category' }
   }
   // Ingresos cannot have a default: a stray stored one is ignored.
   const stored = canHaveHouseholdDefault(id)
-    ? categoryHousehold.get(id)
+    ? householdRules.categories.get(id)
     : undefined
   return {
     status: statusOf(stored ?? SEEDED_HOUSEHOLD_CATEGORIES.has(id)),
-    isOverride: false,
+    source: 'category',
   }
+}
+
+// merchantOverrideKey runs regexes and Resumen resolves thousands of rows per
+// render, so the key is cached per description (bounded: cleared when full).
+const KEY_CACHE_LIMIT = 20000
+const keyCache = new Map<string, string | null>()
+
+function householdRuleKey(description: string): string | null {
+  const cached = keyCache.get(description)
+  if (cached !== undefined) return cached
+  if (keyCache.size >= KEY_CACHE_LIMIT) keyCache.clear()
+  const key = merchantOverrideKey(description)
+  keyCache.set(description, key)
+  return key
+}
+
+/**
+ * The user's merchant rule for this row (true / false), or undefined when no
+ * rule covers it: none stored, no merchant key, or a split part (a split is a
+ * mixed purchase, so it never takes a merchant's rule).
+ */
+export function merchantRule(
+  tx: { description?: string; splitParentId?: string },
+  merchants: MerchantHousehold
+): boolean | undefined {
+  if (merchants.size === 0 || tx.splitParentId || !tx.description) {
+    return undefined
+  }
+  const key = householdRuleKey(tx.description)
+  return key === null ? undefined : merchants.get(key)
+}
+
+/** Whether a merchant rule can cover this row: it has a key and is not a split part. */
+export function canHaveMerchantRule(tx: {
+  description?: string
+  splitParentId?: string
+}): boolean {
+  return (
+    !tx.splitParentId &&
+    !!tx.description &&
+    householdRuleKey(tx.description) !== null
+  )
+}
+
+/**
+ * The counted expenses, split parts excluded, that share `tx`'s merchant key
+ * (`tx` included when it qualifies): the rows a merchant rule reaches. The
+ * toast count, the dialog count and both writes read this one list, so a
+ * preview cannot drift from the save. Empty when `tx` has no key, is a split
+ * part or is not a counted expense.
+ */
+export function rowsSharingMerchantRule(
+  all: readonly Transaction[],
+  tx: Transaction
+): Transaction[] {
+  if (!isCountedExpense(tx) || tx.splitParentId) return []
+  const key = householdRuleKey(tx.description)
+  if (key === null) return []
+  return all.filter(
+    (row) =>
+      isCountedExpense(row) &&
+      !row.splitParentId &&
+      householdRuleKey(row.description) === key
+  )
+}
+
+/**
+ * The rows a merchant rule would change the shown value of, if it became
+ * `household` (null: deleted): `tx` and its similar rows
+ * (`rowsSharingMerchantRule`) whose status differs once it is in place.
+ * `tx`'s own choice is always cleared (it follows the rule); the others'
+ * only when `clearsOwnChoices` (past and future), else they keep it. The one
+ * list behind the one-click toast's count, the future-only pins and the
+ * count a save reports, so they cannot disagree.
+ */
+export function rowsChangedByRule(
+  all: readonly Transaction[],
+  tx: Transaction,
+  household: boolean | null,
+  householdRules: HouseholdRules,
+  clearsOwnChoices: boolean
+): Transaction[] {
+  const key = householdRuleKey(tx.description)
+  if (key === null) return []
+  const merchants = new Map(householdRules.merchants)
+  if (household === null) merchants.delete(key)
+  else merchants.set(key, household)
+  const after: HouseholdRules = { ...householdRules, merchants }
+  return rowsSharingMerchantRule(all, tx).filter((row) => {
+    const next =
+      clearsOwnChoices || row.id === tx.id ? { ...row, household: null } : row
+    return (
+      resolveHousehold(row, householdRules).status !==
+      resolveHousehold(next, after).status
+    )
+  })
 }
 
 /** The effective household default of a category (false for Sin categoría). */
 export function isCategoryHousehold(
   categoryId: string,
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): boolean {
   return (
-    resolveHousehold({ category: categoryId }, categoryHousehold).status ===
+    resolveHousehold({ category: categoryId }, householdRules).status ===
     'household'
   )
 }
@@ -112,10 +225,10 @@ export function categoryHouseholdChoice(
  */
 export function rowHouseholdView(
   tx: Transaction,
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): HouseholdResolution | null {
   if (!isCountedExpense(tx)) return null
-  return resolveHousehold(tx, categoryHousehold)
+  return resolveHousehold(tx, householdRules)
 }
 
 /**
@@ -125,12 +238,12 @@ export function rowHouseholdView(
  */
 export function partitionByHousehold(
   rows: readonly Transaction[],
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): { household: Transaction[]; unassigned: Transaction[] } {
   const household: Transaction[] = []
   const unassigned: Transaction[] = []
   for (const tx of rows) {
-    const status = rowHouseholdView(tx, categoryHousehold)?.status
+    const status = rowHouseholdView(tx, householdRules)?.status
     if (status === 'household') household.push(tx)
     else if (status === 'unassigned') unassigned.push(tx)
   }
@@ -143,12 +256,12 @@ export function partitionByHousehold(
  */
 export function categoryDefault(
   categoryId: string | null | undefined,
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): boolean | null {
   const id = normalizeCategoryId(categoryId)
   return id === Category.Uncategorized
     ? null
-    : isCategoryHousehold(id, categoryHousehold)
+    : isCategoryHousehold(id, householdRules)
 }
 
 /**
@@ -159,35 +272,56 @@ export function categoryDefault(
  */
 export function nextHouseholdChoice(
   tx: Transaction,
-  categoryHousehold: CategoryHousehold
+  householdRules: HouseholdRules
 ): boolean | null {
-  const view = rowHouseholdView(tx, categoryHousehold)
+  const view = rowHouseholdView(tx, householdRules)
   if (!view) return null
   const target = view.status !== 'household'
-  return target === categoryDefault(tx.category, categoryHousehold)
+  // What the row would show with no choice of its own: rule, then category.
+  const inherited = resolveHousehold({ ...tx, household: null }, householdRules)
+  return inherited.status !== 'unassigned' &&
+    (inherited.status === 'household') === target
     ? null
     : target
 }
 
 export { canHaveHouseholdDefault } from '../categories/category-aliases'
 
-/** The signed-in user's category defaults, from the category store. */
-export function currentCategoryHousehold(): CategoryHousehold {
-  return categoryHouseholdOf(listCustomCategories())
-}
-
-// The category store replaces its array on every change (category-registry
-// relies on it too), so the array's identity is the cache key.
-const categoryHouseholdOf = memoizeByReference(
-  (categories: CustomCategory[]): CategoryHousehold =>
-    buildCategoryHousehold(
+/**
+ * Everything resolveHousehold reads besides the row: the signed-in user's
+ * category defaults and merchant rules. The same object comes back until the
+ * category store or the rules store changes (both replace their value on
+ * every write), so memos keyed on it recompute only when they must.
+ */
+export function currentHouseholdRules(): HouseholdRules {
+  const categories = listCustomCategories()
+  const merchants = listMerchantHouseholdRules()
+  if (
+    cached &&
+    cached.categories === categories &&
+    cached.merchants === merchants
+  ) {
+    return cached.rules
+  }
+  const rules: HouseholdRules = {
+    categories: buildCategoryHousehold(
       categories.flatMap((c) =>
         typeof c.isHousehold === 'boolean'
           ? [[c.id, c.isHousehold] as const]
           : []
       )
-    )
-)
+    ),
+    merchants,
+  }
+  cached = { categories, merchants, rules }
+  return rules
+}
+
+let cached: {
+  categories: CustomCategory[]
+  merchants: MerchantHousehold
+  rules: HouseholdRules
+} | null = null
 
 function statusOf(household: boolean): HouseholdResolution['status'] {
   return household ? 'household' : 'not_household'

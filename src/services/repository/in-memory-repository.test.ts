@@ -49,6 +49,7 @@ describe('in-memory repository fidelity', () => {
     expect(await repo.loadWorkspace()).toEqual({
       transactions: [],
       categoryOverrides: [],
+      householdRules: [],
       descriptionOverrides: [],
       customPatterns: [],
       customCategories: [],
@@ -64,7 +65,7 @@ describe('in-memory repository fidelity', () => {
     await repo.resetAll()
 
     expect(repo.has('a')).toBe(true)
-    expect(repo.requests.resetAll).toBe(8)
+    expect(repo.requests.resetAll).toBe(9)
 
     repo.failOn('resetAll', { when: ([table]) => table === 'transactions' })
     await expect(repo.resetAll()).rejects.toThrow('resetAll failed')
@@ -135,6 +136,39 @@ describe('in-memory repository — insights cache', () => {
   })
 })
 
+describe('in-memory repository — household rules', () => {
+  it('saves, replaces and deletes a merchant rule', async () => {
+    const repo = createInMemoryRepository()
+
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      isHousehold: true,
+    })
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      isHousehold: false,
+    })
+    expect(
+      (await repo.loadWorkspace()).householdRules.map((r) => [
+        r.merchantNormalized,
+        r.isHousehold,
+      ])
+    ).toEqual([['disco', false]])
+
+    await repo.deleteHouseholdRule('disco')
+    expect((await repo.loadWorkspace()).householdRules).toEqual([])
+  })
+
+  it('fails like the other writes when told to', async () => {
+    const repo = createInMemoryRepository()
+    repo.failOn('upsertHouseholdRule')
+
+    await expect(
+      repo.upsertHouseholdRule({ merchantNormalized: 'x', isHousehold: true })
+    ).rejects.toThrow('upsertHouseholdRule failed')
+  })
+})
+
 describe('in-memory repository — reset all data', () => {
   function seeded() {
     return createInMemoryRepository({
@@ -144,6 +178,14 @@ describe('in-memory repository — reset all data', () => {
         {
           merchantNormalized: 'disco',
           category: 'groceries',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      householdRules: [
+        {
+          merchantNormalized: 'disco',
+          isHousehold: true,
           createdAt: '',
           updatedAt: '',
         },
@@ -184,6 +226,7 @@ describe('in-memory repository — reset all data', () => {
     expect(await repo.loadWorkspace()).toMatchObject({
       transactions: [],
       categoryOverrides: [],
+      householdRules: [],
       customCategories: [],
       preferences: null,
     })

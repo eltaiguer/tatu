@@ -27,6 +27,11 @@ import {
   upsertCategoryOverride,
 } from '../supabase/category-overrides'
 import {
+  deleteHouseholdRule,
+  listHouseholdRules,
+  upsertHouseholdRule,
+} from '../supabase/household-rules'
+import {
   deleteDescriptionOverride,
   listDescriptionOverrides,
   upsertDescriptionOverride,
@@ -64,6 +69,7 @@ export function createSupabaseRepository(userId: string): Repository {
       const [
         transactions,
         categoryOverrides,
+        householdRules,
         descriptionOverrides,
         customPatterns,
         customCategories,
@@ -71,6 +77,7 @@ export function createSupabaseRepository(userId: string): Repository {
       ] = await Promise.all([
         loadUserTransactions(userId),
         listCategoryOverrides(userId),
+        listHouseholdRules(userId),
         listDescriptionOverrides(userId),
         listCustomPatterns(userId),
         listCustomCategories(userId),
@@ -79,6 +86,7 @@ export function createSupabaseRepository(userId: string): Repository {
       return {
         transactions,
         categoryOverrides,
+        householdRules,
         descriptionOverrides,
         customPatterns,
         customCategories,
@@ -205,6 +213,8 @@ export function createSupabaseRepository(userId: string): Repository {
     deleteDescriptionOverride: (key) => deleteDescriptionOverride(userId, key),
     upsertCategoryOverride: (input) => upsertCategoryOverride(userId, input),
     deleteCategoryOverride: (key) => deleteCategoryOverride(userId, key),
+    upsertHouseholdRule: (input) => upsertHouseholdRule(userId, input),
+    deleteHouseholdRule: (key) => deleteHouseholdRule(userId, key),
     upsertCustomPattern: (pattern) => upsertCustomPattern(userId, pattern),
     deleteCustomPattern: (id) => deleteCustomPattern(userId, id),
     upsertCustomCategory: (input) => upsertCustomCategory(userId, input),

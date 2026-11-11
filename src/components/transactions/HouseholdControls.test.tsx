@@ -14,9 +14,13 @@ import { Transactions } from '../Transactions'
 import { PartialWriteError, UserFacingError } from '../../utils/user-error'
 import type { Transaction } from '../../models'
 import {
+  applyHouseholdToSimilar,
   editTransaction,
   setHousehold,
 } from '../../services/mutations/transaction-mutations'
+import { replaceDescriptionOverrides } from '../../services/descriptions/description-overrides'
+import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
+import { clearHouseholdRules } from '../../services/household/household-rules-store'
 import {
   createInMemoryRepository,
   type InMemoryRepository,
@@ -43,11 +47,20 @@ function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
 
 let repo: InMemoryRepository
 
+// Edits under a rule scope write module-level rule stores: start clean.
+beforeEach(() => {
+  clearHouseholdRules()
+  replaceDescriptionOverrides({})
+  replaceMerchantCategoryOverrides({})
+})
+
 // The view reads the store like App does, so a write shows once it is saved.
 function Harness({
   onFiltersChange,
+  withRules = true,
 }: {
   onFiltersChange?: (search: string) => void
+  withRules?: boolean
 }) {
   const transactions = useStore(transactionStore, (s) => s.transactions)
   return (
@@ -58,17 +71,27 @@ function Harness({
         initialFilters={{ ...DEFAULT_URL_FILTERS, period: { mode: 'all' } }}
         onUpdateTransaction={(id, edit) => editTransaction(repo, id, edit)}
         onSetHousehold={(ids, household) => setHousehold(repo, ids, household)}
+        onApplyHouseholdToSimilar={
+          withRules
+            ? (id, household, scope) =>
+                applyHouseholdToSimilar(repo, id, household, scope)
+            : undefined
+        }
       />
       <Toaster />
     </>
   )
 }
 
-function seed(rows: Transaction[], onFiltersChange?: (s: string) => void) {
+function seed(
+  rows: Transaction[],
+  onFiltersChange?: (s: string) => void,
+  withRules = true
+) {
   repo = createInMemoryRepository({ transactions: rows })
   transactionStore.getState().setTransactions(rows)
   workspaceStore.setState({ userId: repo.userId, status: 'ready' })
-  render(<Harness onFiltersChange={onFiltersChange} />)
+  render(<Harness onFiltersChange={onFiltersChange} withRules={withRules} />)
 }
 
 // Both the desktop row and the mobile card render; [0] is the row.
@@ -262,7 +285,7 @@ describe('household choice in the edit dialog (#251)', () => {
   it('saves a hand choice with the rest of the edit', async () => {
     seed([tx('Devoto')])
     await openEdit('Devoto')
-    expect(screen.getByLabelText('Según categoría (sí)')).toBeChecked()
+    expect(screen.getByLabelText('Según categoría (Sí)')).toBeChecked()
 
     fireEvent.click(screen.getByLabelText('No'))
     await save()
@@ -279,7 +302,7 @@ describe('household choice in the edit dialog (#251)', () => {
     await openEdit('Cena')
     expect(screen.getByLabelText('Sí')).toBeChecked()
 
-    fireEvent.click(screen.getByLabelText('Según categoría (no)'))
+    fireEvent.click(screen.getByLabelText('Según categoría (No)'))
     await save()
 
     await waitFor(() => expect(repo.row('Cena')?.household ?? null).toBeNull())
@@ -864,5 +887,428 @@ describe('Hogar filter in Transacciones (#251)', () => {
       fireEvent.click(house('Devoto'))
     })
     await waitFor(() => expect(listed('Devoto')).toBe(false))
+  })
+})
+
+describe('household rule from the edit dialog (#251, step 7)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  // Three look-alikes (the date is per-transaction noise) and one stranger.
+  const D1 = 'DEVOTO 11/03/2026'
+  const D2 = 'DEVOTO 12/03/2026'
+  const D3 = 'DEVOTO 13/03/2026'
+  const devotos = () => [
+    tx(D1, { category: 'restaurants' }),
+    tx(D2, { category: 'restaurants' }),
+    tx(D3, { category: 'restaurants' }),
+    tx('Tienda Inglesa', { category: 'restaurants' }),
+  ]
+
+  async function openEdit(description: string) {
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole('button', { name: `Editar ${description}` })[0]
+      )
+    })
+  }
+  async function save() {
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  }
+  const scope = (name: RegExp | string) =>
+    fireEvent.click(screen.getByLabelText(name))
+  const on = (d: string) => house(d).getAttribute('aria-pressed') === 'true'
+
+  it('Todas las similares + Sí turns every look-alike household and says how many', async () => {
+    seed(devotos())
+    await openEdit(D1)
+
+    scope(/^Todas las similares/)
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    await waitFor(() => expect(on(D2)).toBe(true))
+    expect(on(D1) && on(D2) && on(D3)).toBe(true)
+    expect(on('Tienda Inglesa')).toBe(false)
+    expect(repo.householdRules.size).toBe(1)
+    expect(await screen.findByText('Se aplicó a 3 transacciones')).toBeVisible()
+  })
+
+  it('an exception made afterwards with Solo esta leaves the other rows alone', async () => {
+    seed(devotos())
+    await openEdit(D1)
+    scope(/^Todas las similares/)
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+    await waitFor(() => expect(on(D2)).toBe(true))
+
+    await openEdit(D1)
+    expect(screen.getByLabelText('Según comercio (Sí)')).toBeChecked()
+    fireEvent.click(screen.getByLabelText('No'))
+    await save()
+
+    await waitFor(() => expect(on(D1)).toBe(false))
+    expect(on(D2)).toBe(true)
+    expect(on(D3)).toBe(true)
+    expect(repo.row(D1)?.household).toBe(false)
+  })
+
+  it('Según categoría with Todas las similares removes the rule', async () => {
+    seed(devotos())
+    await openEdit(D1)
+    scope(/^Todas las similares/)
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+    await waitFor(() => expect(on(D3)).toBe(true))
+
+    await openEdit(D2)
+    scope(/^Todas las similares/)
+    // Under a rule scope the radio starts at the rule.
+    expect(screen.getByLabelText('Sí')).toBeChecked()
+    fireEvent.click(screen.getByLabelText('Según categoría (No)'))
+    await save()
+
+    await waitFor(() => expect(on(D3)).toBe(false))
+    expect(repo.householdRules.size).toBe(0)
+    expect(on(D1) || on(D2)).toBe(false)
+  })
+
+  it('"Esta y las que importes" keeps the past rows and a later row follows the rule', async () => {
+    seed(devotos())
+    await openEdit(D1)
+    scope('Esta y las que importes en el futuro')
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    await waitFor(() => expect(on(D1)).toBe(true))
+    expect(on(D2) || on(D3)).toBe(false)
+    expect(repo.row(D2)?.household).toBe(false)
+    // One row changed what it shows: the pinned past rows look the same.
+    expect(await screen.findByText('Cambios guardados')).toBeVisible()
+    expect(screen.queryByText(/Se aplicó a/)).toBeNull()
+    // A row imported later: it reads the rule.
+    await act(async () => {
+      transactionStore
+        .getState()
+        .setTransactions([
+          ...transactionStore.getState().transactions,
+          tx('DEVOTO 20/03/2026', { category: 'restaurants' }),
+        ])
+    })
+    expect(on('DEVOTO 20/03/2026')).toBe(true)
+  })
+
+  it('"Esta y las que importes" gives a Sin definir look-alike the rule', async () => {
+    seed([...devotos(), tx('DEVOTO 14/03/2026', { category: 'uncategorized' })])
+    await openEdit(D1)
+    scope('Esta y las que importes en el futuro')
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    await waitFor(() => expect(on('DEVOTO 14/03/2026')).toBe(true))
+    expect(repo.row('DEVOTO 14/03/2026')?.household ?? null).toBeNull()
+  })
+
+  it('a category change with Todas las similares and the radio untouched makes no rule', async () => {
+    seed(devotos())
+    await openEdit(D1)
+
+    scope(/^Todas las similares/)
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Categoría dropdown' })
+      )
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
+    })
+    await save()
+
+    await waitFor(() => expect(repo.row(D2)?.category).toBe('groceries'))
+    expect(repo.householdRules.size).toBe(0)
+  })
+
+  it('a household-only save with Todas leaves categories and confidence alone', async () => {
+    seed(devotos().map((t) => ({ ...t, categoryConfidence: 0.6 })))
+    await openEdit(D1)
+
+    scope(/^Todas las similares/)
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(1))
+    for (const d of [D1, D2, D3]) {
+      expect(repo.row(d)?.category).toBe('restaurants')
+      expect(repo.row(d)?.categoryConfidence).toBe(0.6)
+    }
+    expect(repo.categoryOverrides.size).toBe(0)
+  })
+
+  it('under Todas the radio starts at the rule, and offers the category when there is none', async () => {
+    seed(devotos())
+    await openEdit(D1)
+
+    scope(/^Todas las similares/)
+
+    expect(screen.getByLabelText('Según categoría (No)')).toBeChecked()
+    expect(screen.getByText(/Gasto del hogar/)).toHaveTextContent(
+      /se aplica a 3 transacciones \(y a las futuras\)/
+    )
+    expect(screen.getByText(/Gasto del hogar/)).not.toHaveTextContent(
+      /solo esta transacción/
+    )
+  })
+
+  it('without the rule handler, an untouched radio under Todas leaves a hand choice alone', async () => {
+    seed(
+      devotos().map((t) => (t.id === D1 ? { ...t, household: true } : t)),
+      undefined,
+      false
+    )
+    await openEdit(D1)
+
+    scope(/^Todas las similares/)
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto centro' },
+    })
+    await save()
+
+    expect(repo.row(D1)?.household).toBe(true)
+    expect(repo.householdRules.size).toBe(0)
+  })
+
+  it('on a covered row, Solo esta offers "Según comercio"', async () => {
+    seed(devotos())
+    await openEdit(D1)
+    scope(/^Todas las similares/)
+    fireEvent.click(screen.getByLabelText('No'))
+    await save()
+    await waitFor(() => expect(repo.householdRules.size).toBe(1))
+
+    await openEdit(D2)
+
+    expect(screen.getByLabelText('Según comercio (No)')).toBeChecked()
+  })
+})
+
+describe('applying a house click to similar rows (#251, step 7)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  const D1 = 'DEVOTO 11/03/2026'
+  const D2 = 'DEVOTO 12/03/2026'
+  const D3 = 'DEVOTO 13/03/2026'
+  const devotos = () =>
+    [D1, D2, D3].map((d) => tx(d, { category: 'restaurants' }))
+  const on = (d: string) => house(d).getAttribute('aria-pressed') === 'true'
+  const offer = (n: number) =>
+    screen.queryByRole('button', { name: `Aplicar a las ${n} similares` })
+
+  async function click(description: string) {
+    await act(async () => {
+      fireEvent.click(house(description))
+    })
+  }
+
+  it('offers to apply the click to the look-alikes, and the action makes them household by rule', async () => {
+    seed(devotos())
+
+    await click(D1)
+
+    expect(on(D1)).toBe(true)
+    expect(on(D2)).toBe(false)
+    const action = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
+    await act(async () => {
+      fireEvent.click(action)
+    })
+
+    await waitFor(() => expect(on(D2)).toBe(true), { timeout: 5000 })
+    expect(on(D3)).toBe(true)
+    expect(house(D2)).toHaveAttribute('title', 'Hogar · según comercio')
+    expect(house(D2).querySelector('[data-hand-mark]')).toBeNull()
+    expect(repo.householdRules.size).toBe(1)
+    expect(
+      await screen.findByText(
+        'Se aplicó a 2 transacciones',
+        {},
+        { timeout: 5000 }
+      )
+    ).toBeVisible()
+  })
+
+  it('offers nothing when the click only returns to following an existing rule', async () => {
+    seed(devotos())
+    await act(async () => {
+      await applyHouseholdToSimilar(repo, D1, true, 'matching_past_and_future')
+      await setHousehold(repo, [D1], false)
+    })
+    expect(on(D1)).toBe(false)
+
+    await click(D1)
+
+    expect(on(D1)).toBe(true)
+    expect(offer(2)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Aplicar a las/ })).toBeNull()
+  })
+
+  it('offers nothing when no other row would change', async () => {
+    seed([tx(D1, { category: 'restaurants' }), tx('Tienda Inglesa')])
+
+    await click(D1)
+
+    expect(on(D1)).toBe(true)
+    expect(screen.queryByRole('button', { name: /Aplicar a las/ })).toBeNull()
+  })
+
+  it('offers nothing on a split part', async () => {
+    seed([
+      ...devotos(),
+      tx('DEVOTO 15/03/2026', {
+        category: 'restaurants',
+        splitParentId: 'madre',
+      }),
+    ])
+
+    await click('DEVOTO 15/03/2026')
+
+    expect(screen.queryByRole('button', { name: /Aplicar a las/ })).toBeNull()
+  })
+
+  it('a rule saved without patching any row still moves the other rows’ houses', async () => {
+    // d1 has its own "no" on a household category; d2 is the same merchant
+    // under a category that is not household. Clicking d1 returns it to
+    // following its category, and applying that as a rule patches no row.
+    seed([
+      tx('SUPERMERCADO 11/03/2026', { household: false }),
+      tx('SUPERMERCADO 12/03/2026', { category: 'shopping' }),
+    ])
+    const D1S = 'SUPERMERCADO 11/03/2026'
+    const D2S = 'SUPERMERCADO 12/03/2026'
+    expect(on(D2S)).toBe(false)
+
+    await click(D1S)
+    const action = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a la otra similar' },
+      { timeout: 5000 }
+    )
+    await act(async () => {
+      fireEvent.click(action)
+    })
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(1), {
+      timeout: 5000,
+    })
+    expect(on(D2S)).toBe(true)
+  })
+
+  it('an old toast action does not apply a click that was since changed', async () => {
+    seed(devotos())
+    await click(D1)
+    const stale = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
+
+    // The user changes their mind before the toast goes away.
+    await click(D1)
+    expect(on(D1)).toBe(false)
+    await act(async () => {
+      fireEvent.click(stale)
+    })
+
+    expect(repo.householdRules.size).toBe(0)
+    expect(on(D1)).toBe(false)
+  })
+
+  it('an offer does not apply once the row was changed by a bulk write', async () => {
+    seed(devotos())
+    await click(D1)
+    const stale = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
+
+    // The bulk bar does not start a single-row write, so only the row's
+    // current choice tells the offer is out of date.
+    select(D1)
+    await choose('Marcar como no hogar')
+    await waitFor(() => expect(repo.row(D1)?.household).toBe(false), {
+      timeout: 5000,
+    })
+    await act(async () => {
+      fireEvent.click(stale)
+    })
+
+    expect(repo.householdRules.size).toBe(0)
+    expect(repo.row(D1)?.household).toBe(false)
+  })
+
+  it('an old Reintentar of the apply does not run after a newer click', async () => {
+    seed(devotos())
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await click(D1)
+    repo.failOn('upsertHouseholdRule', { error: new Error('boom'), times: 1 })
+    const apply = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
+    await act(async () => {
+      fireEvent.click(apply)
+    })
+    const staleRetry = await screen.findByRole(
+      'button',
+      { name: 'Reintentar' },
+      { timeout: 5000 }
+    )
+
+    await click(D1)
+    await act(async () => {
+      fireEvent.click(staleRetry)
+    })
+
+    expect(repo.householdRules.size).toBe(0)
+    expect(on(D2)).toBe(false)
+    expect(logged).toHaveBeenCalled()
+  })
+
+  it('a failure while applying offers Reintentar', async () => {
+    seed(devotos())
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await click(D1)
+    repo.failOn('upsertHouseholdRule', { error: new Error('boom'), times: 1 })
+
+    const apply = await screen.findByRole(
+      'button',
+      { name: 'Aplicar a las 2 similares' },
+      { timeout: 5000 }
+    )
+    await act(async () => {
+      fireEvent.click(apply)
+    })
+    const retry = await screen.findByRole(
+      'button',
+      { name: 'Reintentar' },
+      { timeout: 5000 }
+    )
+    expect(on(D2)).toBe(false)
+    await act(async () => {
+      fireEvent.click(retry)
+    })
+
+    await waitFor(() => expect(on(D2)).toBe(true), { timeout: 5000 })
+    expect(logged).toHaveBeenCalled()
   })
 })

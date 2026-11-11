@@ -6,6 +6,7 @@
 import type { Transaction } from '../../models'
 import type { ExistingTransaction } from '../dedup/import-dedup'
 import type { CategoryOverrideRecord } from '../supabase/category-overrides'
+import type { HouseholdRuleRecord } from '../supabase/household-rules'
 import type { DescriptionOverrideRecord } from '../supabase/description-overrides'
 import type { CustomCategoryRecord } from '../supabase/custom-categories'
 import type { UserPreferences } from '../supabase/user-preferences'
@@ -50,6 +51,8 @@ export type InMemoryOp =
   | 'deleteDescriptionOverride'
   | 'upsertCategoryOverride'
   | 'deleteCategoryOverride'
+  | 'upsertHouseholdRule'
+  | 'deleteHouseholdRule'
   | 'upsertCustomPattern'
   | 'deleteCustomPattern'
   | 'upsertCustomCategory'
@@ -93,6 +96,7 @@ export interface InMemoryRepository extends Repository {
   has(id: string): boolean
   descriptionOverrides: Map<string, DescriptionOverrideRecord>
   categoryOverrides: Map<string, CategoryOverrideRecord>
+  householdRules: Map<string, HouseholdRuleRecord>
   customPatterns: Map<string, CustomPattern>
   customCategories: Map<string, CustomCategoryRecord>
   preferences: UserPreferences | null
@@ -129,6 +133,7 @@ export function createInMemoryRepository(
     deleted?: Transaction[]
     descriptionOverrides?: DescriptionOverrideRecord[]
     categoryOverrides?: CategoryOverrideRecord[]
+    householdRules?: HouseholdRuleRecord[]
     customPatterns?: CustomPattern[]
     customCategories?: CustomCategoryRecord[]
     preferences?: UserPreferences | null
@@ -175,6 +180,9 @@ export function createInMemoryRepository(
     categoryOverrides: new Map(
       (seed.categoryOverrides ?? []).map((o) => [o.merchantNormalized, o])
     ),
+    householdRules: new Map(
+      (seed.householdRules ?? []).map((o) => [o.merchantNormalized, o])
+    ),
     customPatterns: new Map((seed.customPatterns ?? []).map((p) => [p.id, p])),
     customCategories: new Map(
       (seed.customCategories ?? []).map((c) => [c.id, c])
@@ -220,6 +228,7 @@ export function createInMemoryRepository(
         return {
           transactions: [],
           categoryOverrides: [],
+          householdRules: [],
           descriptionOverrides: [],
           customPatterns: [],
           customCategories: [],
@@ -229,6 +238,7 @@ export function createInMemoryRepository(
       return {
         transactions: repo.rows().map(clone),
         categoryOverrides: Array.from(repo.categoryOverrides.values()),
+        householdRules: Array.from(repo.householdRules.values()),
         descriptionOverrides: Array.from(repo.descriptionOverrides.values()),
         customPatterns: Array.from(repo.customPatterns.values()),
         customCategories: Array.from(repo.customCategories.values()).filter(
@@ -456,6 +466,23 @@ export function createInMemoryRepository(
       requireAuthorized()
       repo.categoryOverrides.delete(key)
     },
+    async upsertHouseholdRule(input) {
+      await request('upsertHouseholdRule', [input.merchantNormalized])
+      requireAuthorized()
+      const now = new Date().toISOString()
+      repo.householdRules.set(input.merchantNormalized, {
+        merchantNormalized: input.merchantNormalized,
+        merchantOriginal: input.merchantOriginal,
+        isHousehold: input.isHousehold,
+        createdAt: now,
+        updatedAt: now,
+      })
+    },
+    async deleteHouseholdRule(key) {
+      await request('deleteHouseholdRule', [key])
+      requireAuthorized()
+      repo.householdRules.delete(key)
+    },
     async upsertCustomPattern(pattern) {
       await request('upsertCustomPattern', [pattern.id])
       requireAuthorized()
@@ -512,6 +539,7 @@ export function createInMemoryRepository(
         ['transactions', () => table.clear()],
         ['import_runs', () => repo.importRuns.splice(0)],
         ['category_overrides', () => repo.categoryOverrides.clear()],
+        ['household_rules', () => repo.householdRules.clear()],
         ['description_overrides', () => repo.descriptionOverrides.clear()],
         ['custom_categories', () => repo.customCategories.clear()],
         ['custom_patterns', () => repo.customPatterns.clear()],

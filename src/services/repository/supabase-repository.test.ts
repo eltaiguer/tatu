@@ -13,6 +13,7 @@ vi.mock('../supabase/client', () => ({
   getSupabaseClient: () => fake.current!.client,
 }))
 
+import { UserFacingError } from '../../utils/user-error'
 import { createSupabaseRepository } from './supabase-repository'
 
 function row(id: string, extra: Record<string, unknown> = {}) {
@@ -396,13 +397,126 @@ describe('Supabase repository — workspace', () => {
         updated_at: '',
       },
     ])
+    db.seed('household_rules', [
+      {
+        user_id: 'user-1',
+        merchant_normalized: 'disco',
+        merchant_original: 'DISCO',
+        is_household: true,
+        created_at: '',
+        updated_at: '',
+      },
+      {
+        user_id: 'user-2',
+        merchant_normalized: 'devoto',
+        is_household: false,
+        created_at: '',
+        updated_at: '',
+      },
+    ])
     const repo = createSupabaseRepository('user-1')
 
     const snapshot = await repo.loadWorkspace()
 
     expect(snapshot.transactions.map((t) => t.id)).toEqual(['tx-1'])
     expect(snapshot.categoryOverrides).toHaveLength(1)
+    expect(
+      snapshot.householdRules.map((r) => [r.merchantNormalized, r.isHousehold])
+    ).toEqual([['disco', true]])
     expect(snapshot.preferences).toBeNull()
+  })
+})
+
+describe('Supabase repository — before household_rules exists', () => {
+  // The table is added by hand (supabase/README.md): until then nobody may be
+  // locked out of the app.
+  it.each(['42P01', 'PGRST205'])(
+    'loads the workspace with no rules when the table is missing (%s)',
+    async (code) => {
+      db.seed('transactions', [row('tx-1')])
+      db.failWhen((r) => r.table === 'household_rules', { code })
+      const repo = createSupabaseRepository('user-1')
+
+      const snapshot = await repo.loadWorkspace()
+
+      expect(snapshot.transactions.map((t) => t.id)).toEqual(['tx-1'])
+      expect(snapshot.householdRules).toEqual([])
+    }
+  )
+
+  it.each(['42P01', 'PGRST205'])(
+    'saving or deleting a rule says what is missing instead of a generic error (%s)',
+    async (code) => {
+      db.failWhen((r) => r.table === 'household_rules', { code })
+      const repo = createSupabaseRepository('user-1')
+
+      const saved = await repo
+        .upsertHouseholdRule({ merchantNormalized: 'disco', isHousehold: true })
+        .catch((e: unknown) => e)
+      const deleted = await repo
+        .deleteHouseholdRule('disco')
+        .catch((e: unknown) => e)
+
+      for (const error of [saved, deleted]) {
+        expect(error).toBeInstanceOf(UserFacingError)
+        expect((error as Error).message).toMatch(/reglas del hogar/)
+        expect((error as Error).message).not.toMatch(/request failed/)
+      }
+    }
+  )
+
+  it('still fails the load on any other error of the table', async () => {
+    db.failWhen((r) => r.table === 'household_rules', { code: '57014' })
+    const repo = createSupabaseRepository('user-1')
+
+    await expect(repo.loadWorkspace()).rejects.toThrow('request failed')
+  })
+
+  it('resets the other tables when the table is missing', async () => {
+    db.seed('user_preferences', [{ user_id: 'user-1' }])
+    db.failWhen((r) => r.table === 'household_rules', { code: 'PGRST205' })
+    const repo = createSupabaseRepository('user-1')
+
+    await expect(repo.resetAll()).resolves.toBeUndefined()
+
+    expect(db.rows('user_preferences')).toEqual([])
+  })
+})
+
+describe('Supabase repository — household rules', () => {
+  it('saves, replaces and deletes a merchant rule of its user only', async () => {
+    db.seed('household_rules', [
+      {
+        user_id: 'user-2',
+        merchant_normalized: 'disco',
+        is_household: false,
+        created_at: '',
+        updated_at: '',
+      },
+    ])
+    const repo = createSupabaseRepository('user-1')
+
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      merchantOriginal: 'DISCO',
+      isHousehold: true,
+    })
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      merchantOriginal: 'DISCO',
+      isHousehold: false,
+    })
+
+    expect(
+      db.rows('household_rules').map((r) => [r.user_id, r.is_household])
+    ).toEqual([
+      ['user-2', false],
+      ['user-1', false],
+    ])
+
+    await repo.deleteHouseholdRule('disco')
+
+    expect(db.rows('household_rules').map((r) => r.user_id)).toEqual(['user-2'])
   })
 })
 
@@ -451,6 +565,7 @@ describe('Supabase repository — reset all data', () => {
     'transactions',
     'import_runs',
     'category_overrides',
+    'household_rules',
     'description_overrides',
     'custom_categories',
     'custom_patterns',
@@ -479,7 +594,7 @@ describe('Supabase repository — reset all data', () => {
     await expect(repo.resetAll()).rejects.toThrow('request failed')
 
     const deletes = db.requests.filter((r) => r.op === 'delete')
-    expect(deletes.map((r) => r.table)).toEqual(RESET_TABLES.slice(0, 5))
+    expect(deletes.map((r) => r.table)).toEqual(RESET_TABLES.slice(0, 6))
   })
 
   it('still succeeds when the insights table is missing', async () => {
