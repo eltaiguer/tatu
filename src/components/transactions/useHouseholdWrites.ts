@@ -8,9 +8,11 @@ import {
   rowsChangedByRule,
 } from '../../services/household/household'
 import type { RuleScope } from '../../services/mutations/transaction-mutations'
-import { UserFacingError } from '../../utils/user-error'
+import { PartialWriteError, UserFacingError } from '../../utils/user-error'
 import type { TransactionsProps } from './transactions-props'
 
+const SUPERSEDED =
+  'Mientras tanto se hizo otro cambio en esta transacción; no se reintentó.'
 export const AFTER_EDIT = 'Se guardaron los cambios, pero no el gasto del hogar'
 
 /**
@@ -63,6 +65,29 @@ export function useHouseholdWrites({
       offers.current.delete(id)
     }
     return seq
+  }
+  // A partial write brings its own "reintentar" (the failed remainder): it
+  // gets the same guard, so an old one cannot replay a decision that was
+  // since changed. Other errors pass through (their retry is ours).
+  const guarded = (
+    error: unknown,
+    id: string,
+    seq: number,
+    held: boolean | null
+  ) => {
+    if (!(error instanceof PartialWriteError) || !error.retry) return error
+    const retry = error.retry
+    return new PartialWriteError(
+      error.message,
+      error.done,
+      error.total,
+      () =>
+        mayReplay(id, seq, held)
+          ? retry()
+          : Promise.reject(new UserFacingError(SUPERSEDED)),
+      error.result,
+      error.cause
+    )
   }
   // Whether nothing else wrote the row since `seq` and it still holds what it
   // did when `heldWhenFailed` was read: only then may an old retry run.
@@ -131,9 +156,14 @@ export function useHouseholdWrites({
       )
     } catch (error) {
       const held = rowChoice(id)
-      reportError(error, 'No se pudo aplicar a las similares', '', () => {
-        if (mayReplay(id, seq, held)) void applyToSimilar(id, value, others)
-      })
+      reportError(
+        guarded(error, id, seq, held),
+        'No se pudo aplicar a las similares',
+        '',
+        () => {
+          if (mayReplay(id, seq, held)) void applyToSimilar(id, value, others)
+        }
+      )
     }
   }
 
@@ -161,11 +191,16 @@ export function useHouseholdWrites({
         failure === AFTER_EDIT && error instanceof UserFacingError
           ? `${AFTER_EDIT}. `
           : ''
-      reportError(error, failure, prefix, () => {
-        if (mayReplay(id, seq, heldWhenFailed)) {
-          void writeHousehold(id, household, failure)
+      reportError(
+        guarded(error, id, seq, heldWhenFailed),
+        failure,
+        prefix,
+        () => {
+          if (mayReplay(id, seq, heldWhenFailed)) {
+            void writeHousehold(id, household, failure)
+          }
         }
-      })
+      )
       return false
     } finally {
       setPending(id, false)
@@ -194,7 +229,7 @@ export function useHouseholdWrites({
           ? `${AFTER_EDIT}. `
           : ''
       const held = rowChoice(id)
-      reportError(error, failure, prefix, () => {
+      reportError(guarded(error, id, seq, held), failure, prefix, () => {
         if (mayReplay(id, seq, held)) {
           void writeHouseholdRule(id, household, scope, failure)
         }
