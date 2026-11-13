@@ -46,11 +46,17 @@ don't work from memory.
   the client detects `max_tokens` truncation and refusals. An invalid category or field is
   dropped, not trusted. AI categorization is best-effort: a failure keeps the
   rule-based result and surfaces `aiError`.
-- **The insights cache doesn't see prompt or model changes.** `ai_insights`
-  holds one row per user; `hashInsightInput` (`insight-cache.ts`) hashes only
-  the `InsightInput`, so `isStale` flips on data changes alone. After a prompt
-  or model change, cached insights stay until the user regenerates. Changing
-  the `InsightInput` shape does mark every cache row stale.
+- **The insights cache sees prompt and model changes.** `ai_insights` holds
+  one row per user (Hogar mode has its own, `ai_household_insights`);
+  `hashInsightInput` (`insight-cache.ts`) hashes the `InsightInput` together
+  with the prompt version and the model, so `isStale` flips on a data change,
+  a prompt-version bump or a model change, and the UI shows the "regenerate?"
+  banner (never an automatic call). Bump `INSIGHT_PROMPT_VERSION` when Todo's
+  prompt or user message changes, `HOUSEHOLD_INSIGHT_PROMPT_VERSION` when only
+  Hogar's paragraph does (`insight-prompt.ts`); changing Todo's text without
+  bumping leaves stale insights looking fresh, and bumping it makes every
+  user's cached Todo row stale (a hash test pins Todo's). Changing the
+  `InsightInput` shape marks every cache row stale too.
 
 ## Steps
 

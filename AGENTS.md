@@ -60,7 +60,8 @@ src/
     dashboard/             # Resumen sub-components: MonthHero (the month as one sentence; Hogar mode: "Gastos del hogar", Sin definir line; Todo: "Hogar $X de $Y gastados"), HouseholdModeToggle (Todo / Hogar), ResumenSection (a question heading + period, a named region), SpendNudge (the "Sin categoría" / Hogar "Sin definir" row), CategorySpendCard (donut), TopMerchantsCard, RecentTransactionsCard, SavingsCard, MonthlySpendChart (spend bars, income ghost), MonthButtons (keyboard equivalent of a chart's bars), AccountCards, CurrencySplitCard, EmptyStates, DrillTarget
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
     transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable), HouseToggle (the "gasto del hogar" house on both); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state), useHouseholdWrites (every household write of the view: the row's house, the dialog's choice and rule, the "Aplicar a las N similares" offer; one counter per row so an old toast action or retry never replays a superseded click)
-    Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
+    Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards); owns the Todo / Hogar mode's lookup, generation and errors per mode
+    insights/              # Insights sub-components: UndefinedHouseholdNote (Hogar: the Sin definir rows left out of the analysis, written by the app)
     Categories.tsx         # Categorías view — "Tus categorías" tile grid (no wrapping card) + auto-categorization rules, each an h2 Section
     categories/            # Categorías sub-components: CategoryForm (incl. the "Gasto del hogar" checkbox), CategoryCard (incl. the house toggle for the category's household default), PatternRulesCard (rules form + list, owns its state)
     settings/              # Configuración sub-components: DuplicatesReview ("Buscar posibles duplicados" row + review dialog, #167)
@@ -116,9 +117,9 @@ src/
     transfers/             # Internal transfer detection
     ai/                    # Client-side Claude (BYO API key): categorization/enrichment; claude-client.ts is the only place the SDK is called (complete(), parseModelJson; tests inject a fake ClaudeClient), every failure it understands is an AiError with a kind (ai-error.ts); models.ts is the only place model IDs live; jev-classifier.ts: Jev (TypeSafe, via OpenRouter) category-only classifier, eval panel only for now
     preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
-    insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
+    insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001; Hogar mode = `scope: 'hogar'` input, own prompt paragraph + version, own cache row — ADR-0005)
     monitoring/            # error-reporting.ts: Sentry init, captureError, scrubbers (ADR-0004)
-    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapters compose; they take the user id, not a session. Only `supabase-repository.ts` and `supabase-auth.ts` import them at runtime (`services/supabase-boundary.test.ts` enforces it, and keeps the `@supabase/*` SDK in here); everything else imports only their types
+    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights + ai_household_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapters compose; they take the user id, not a session. Only `supabase-repository.ts` and `supabase-auth.ts` import them at runtime (`services/supabase-boundary.test.ts` enforces it, and keeps the `@supabase/*` SDK in here); everything else imports only their types
     firebase.ts            # Firebase config
   App.tsx / main.tsx       # Shell (auth, sync, view switch; takes `auth` + `createRepository` props) / BrowserRouter mount, wires the Supabase adapters into App
   routes.ts                # View <-> URL path + document title
@@ -161,6 +162,7 @@ type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 - Resumen's Hogar mode is `/?hogar=si` (REPLACE; Todo = no param); the sidebar's Resumen link goes to `/`.
 - Unknown paths render Resumen without redirecting (a redirect could drop a password-recovery hash). Matching ignores case and trailing slashes.
 - Transacciones filters live in the query string (`services/filters/url-filters.ts`, e.g. `?categoria=restaurants&periodo=2026-03`), written with `replace`. Drill-throughs from Resumen call `onNavigateToTransactions(filter)` → `filterToSearch`.
+- Insights' Hogar mode is `/insights?hogar=si` (REPLACE, same token as Resumen; the sidebar's Insights link opens Todo): its own generation and cache over the household rows only (ADR-0005).
 - Adding a view: extend `View` + the sidebar nav in `AppSidebar.tsx`, both records in `routes.ts`, a loader in `lazy-views.tsx`, and the render branch in `App.tsx`.
 
 ## Multicurrency model
@@ -263,7 +265,7 @@ Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip
 
 **AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, an import (`importStatement` → `importTransactions` in `services/mutations/transaction-mutations.ts`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
 
-**AI Insights (shipped**, ADR-0001 + ADR-0002, `docs/decisions/000{1,2}-*.md`): Claude-generated spending insights over the user's **entire transaction history** (no period navigation — ADR-0002), using the stronger `INSIGHTS_MODEL`, cached in Supabase (`ai_insights`, one row per user — requires a manual `schema.sql` apply, see `supabase/README.md`).
+**AI Insights (shipped**, ADR-0001 + ADR-0002, `docs/decisions/000{1,2}-*.md`): Claude-generated spending insights over the user's **entire transaction history** (no period navigation — ADR-0002), using the stronger `INSIGHTS_MODEL`, cached in Supabase (`ai_insights`, one row per user — requires a manual `schema.sql` apply, see `supabase/README.md`). Hogar mode (ADR-0005) is a second analysis over the household rows with its own table, `ai_household_insights`, also applied by hand.
 
 **Next initiative**: per-category cross-period comparisons for Insights — `InsightInput.categoryTotals` is still all-time only, so add a `categoryTotals × month` breakdown and let `bleeding_money` insights detect spend that's _growing_, not just spend that _dominates_ (ADR-0002 trade-offs; Resumen's `CategoryChangesCard` already does a month-vs-median view). Anomaly/spike detection fits the same breakdown. Then better AI categorization accuracy and confidence scores on top of what ships today.
 
