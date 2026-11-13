@@ -205,3 +205,52 @@ describe('hashInsightInput — Todo and Hogar (#251)', () => {
     )
   })
 })
+
+describe('Hogar cache (#251)', () => {
+  const hogarInput: InsightInput = { ...input, scope: 'hogar' }
+  const hogarResult: InsightsResult = {
+    insights: [
+      {
+        type: 'trend',
+        title: 'Hogar',
+        narrative: 'n',
+        currency: 'USD',
+        severity: 'low',
+      },
+    ],
+  }
+
+  it('saves a Hogar result in its own row and leaves Todo untouched', async () => {
+    await saveCachedInsights(repo, input, result, INSIGHTS_MODEL)
+    await saveCachedInsights(repo, hogarInput, hogarResult, INSIGHTS_MODEL)
+
+    expect(repo.insights?.insights).toEqual(result)
+    expect(repo.householdInsights).toMatchObject({
+      inputHash: hashInsightInput(hogarInput),
+      insights: hogarResult,
+    })
+  })
+
+  it('looks a Hogar input up in the Hogar row only', async () => {
+    await saveCachedInsights(repo, input, result, INSIGHTS_MODEL)
+    expect(await getCachedInsights(repo, hogarInput)).toBeNull()
+
+    await saveCachedInsights(repo, hogarInput, hogarResult, INSIGHTS_MODEL)
+
+    expect((await getCachedInsights(repo, hogarInput))?.result).toEqual(
+      hogarResult
+    )
+    expect((await getCachedInsights(repo, hogarInput))?.isStale).toBe(false)
+    expect((await getCachedInsights(repo, input))?.result).toEqual(result)
+  })
+
+  it('marks Hogar stale when its household figures change', async () => {
+    await saveCachedInsights(repo, hogarInput, hogarResult, INSIGHTS_MODEL)
+    const changed: InsightInput = {
+      ...hogarInput,
+      categoryTotals: [{ category: 'groceries', amount: 5, pctOfTotal: 100 }],
+    }
+
+    expect((await getCachedInsights(repo, changed))?.isStale).toBe(true)
+  })
+})

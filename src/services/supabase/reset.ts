@@ -25,6 +25,9 @@ export async function resetUserSupabaseData(userId: string): Promise<void> {
   await deleteByUser(userId, 'custom_categories')
   await deleteByUser(userId, 'custom_patterns')
   await deleteByUser(userId, 'user_preferences')
+  // Hogar's cache table is added by hand after the code ships (#251): a
+  // missing one has nothing to delete, anything else fails the reset.
+  await deleteByUser(userId, 'ai_household_insights', { tolerateMissing: true })
   // Cached insights were computed from the data just deleted. Best-effort:
   // the table only exists once schema.sql was applied manually (see
   // supabase/README.md), and a stale cache must not fail the reset.

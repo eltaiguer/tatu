@@ -3,11 +3,29 @@ import type { InsightsResult } from '../insights/insight-generator'
 import { UserFacingError } from '../../utils/user-error'
 import { isMissingTable } from './missing-table'
 
-function throwInsightsError(error: { code?: string; message: string }): never {
+/**
+ * Which cache row: Todo's (`ai_insights`) or the household's
+ * (`ai_household_insights`, #251). One row per user in each.
+ */
+export type InsightsMode = 'todo' | 'hogar'
+
+const TABLES: Record<InsightsMode, string> = {
+  todo: 'ai_insights',
+  hogar: 'ai_household_insights',
+}
+
+const MISSING_TABLE_MESSAGES: Record<InsightsMode, string> = {
+  todo: 'Falta crear la tabla de insights en la base de datos (ver supabase/README.md).',
+  hogar:
+    'Falta crear la tabla de insights del hogar en la base de datos (ver supabase/README.md).',
+}
+
+function throwInsightsError(
+  error: { code?: string; message: string },
+  mode: InsightsMode
+): never {
   if (isMissingTable(error)) {
-    throw new UserFacingError(
-      'Falta crear la tabla de insights en la base de datos (ver supabase/README.md).'
-    )
+    throw new UserFacingError(MISSING_TABLE_MESSAGES[mode])
   }
   throw new Error(error.message)
 }
@@ -28,11 +46,12 @@ interface AiInsightsRow {
 }
 
 export async function loadCachedInsights(
-  userId: string
+  userId: string,
+  mode: InsightsMode = 'todo'
 ): Promise<CachedInsightsRow | null> {
   const client = getSupabaseClient()
   const { data, error } = await client
-    .from('ai_insights')
+    .from(TABLES[mode])
     .select('*')
     .eq('user_id', userId)
     // maybeSingle: no cached row is the normal first-run state, not an
@@ -45,7 +64,12 @@ export async function loadCachedInsights(
     if (error.code === 'PGRST116') {
       return null
     }
-    throwInsightsError(error)
+    // Hogar's table is added by hand after the code ships: until then there
+    // is simply no household cache (saving it explains what is missing).
+    if (mode === 'hogar' && isMissingTable(error)) {
+      return null
+    }
+    throwInsightsError(error, mode)
   }
   if (!data) {
     return null
@@ -68,10 +92,11 @@ export interface SaveInsightsParams {
 
 export async function saveInsights(
   userId: string,
-  params: SaveInsightsParams
+  params: SaveInsightsParams,
+  mode: InsightsMode = 'todo'
 ): Promise<void> {
   const client = getSupabaseClient()
-  const { error } = await client.from('ai_insights').upsert(
+  const { error } = await client.from(TABLES[mode]).upsert(
     {
       user_id: userId,
       input_hash: params.inputHash,
@@ -81,5 +106,5 @@ export async function saveInsights(
     { onConflict: 'user_id' }
   )
 
-  if (error) throwInsightsError(error)
+  if (error) throwInsightsError(error, mode)
 }

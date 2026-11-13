@@ -1,4 +1,4 @@
-import type { Repository } from '../repository/repository'
+import type { InsightsMode, Repository } from '../repository/repository'
 import { INSIGHTS_MODEL } from '../ai/models'
 import type { InsightInput } from './insight-data'
 import type { InsightsResult } from './insight-generator'
@@ -38,6 +38,11 @@ export function hashInsightInput(
   return (hash >>> 0).toString(16)
 }
 
+/** Which cache row an input belongs to: the household's or Todo's. */
+function modeOf(input: InsightInput): InsightsMode {
+  return input.scope === 'hogar' ? 'hogar' : 'todo'
+}
+
 export interface CachedInsightsLookup {
   result: InsightsResult
   model: string
@@ -46,8 +51,8 @@ export interface CachedInsightsLookup {
 }
 
 /**
- * Looks up the cached insights row for this user (one row per user — see
- * ADR-0002). `isStale` is true when the current InsightInput no longer
+ * Looks up the cached insights row for this user (one row per user and mode —
+ * ADR-0002, ADR-0005). `isStale` is true when the current InsightInput no longer
  * matches the hash of the input that produced the cached result (new
  * imports, edits, re-categorization), or the prompt version / insights model
  * changed since it was generated — the UI shows a "data changed,
@@ -57,7 +62,7 @@ export async function getCachedInsights(
   repository: Repository,
   input: InsightInput
 ): Promise<CachedInsightsLookup | null> {
-  const row = await repository.loadInsights()
+  const row = await repository.loadInsights(modeOf(input))
   if (!row) return null
 
   return {
@@ -74,9 +79,12 @@ export async function saveCachedInsights(
   result: InsightsResult,
   model: string
 ): Promise<void> {
-  await repository.saveInsights({
-    inputHash: hashInsightInput(input, { model }),
-    model,
-    insights: result,
-  })
+  await repository.saveInsights(
+    {
+      inputHash: hashInsightInput(input, { model }),
+      model,
+      insights: result,
+    },
+    modeOf(input)
+  )
 }

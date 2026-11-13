@@ -101,6 +101,8 @@ export interface InMemoryRepository extends Repository {
   customCategories: Map<string, CustomCategoryRecord>
   preferences: UserPreferences | null
   insights: CachedInsightsRow | null
+  /** Hogar's own cache row (ai_household_insights). */
+  householdInsights: CachedInsightsRow | null
   importRuns: ImportRunRecord[]
   /** Makes matching requests of `op` reject. */
   failOn(
@@ -189,6 +191,7 @@ export function createInMemoryRepository(
     ),
     preferences: seed.preferences ?? null,
     insights: null,
+    householdInsights: null,
     importRuns: [],
     requests,
     actingUserId: userId,
@@ -521,14 +524,17 @@ export function createInMemoryRepository(
         repo.customCategories.set(id, { ...existing, isArchived: true })
     },
 
-    async loadInsights() {
+    async loadInsights(mode = 'todo') {
       await request('loadInsights')
-      return repo.insights && authorized() ? { ...repo.insights } : null
+      const cached = mode === 'hogar' ? repo.householdInsights : repo.insights
+      return cached && authorized() ? { ...cached } : null
     },
-    async saveInsights(row) {
+    async saveInsights(row, mode = 'todo') {
       await request('saveInsights')
       requireAuthorized()
-      repo.insights = { ...row, generatedAt: new Date().toISOString() }
+      const saved = { ...row, generatedAt: new Date().toISOString() }
+      if (mode === 'hogar') repo.householdInsights = saved
+      else repo.insights = saved
     },
 
     // Same tables, same order and same failure rule as the Supabase adapter.
@@ -544,6 +550,7 @@ export function createInMemoryRepository(
         ['custom_categories', () => repo.customCategories.clear()],
         ['custom_patterns', () => repo.customPatterns.clear()],
         ['user_preferences', () => (repo.preferences = null)],
+        ['ai_household_insights', () => (repo.householdInsights = null)],
       ]
       for (const [name, clear] of steps) {
         await request('resetAll', [name])
