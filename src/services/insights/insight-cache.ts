@@ -1,6 +1,6 @@
-import type { InsightsMode, Repository } from '../repository/repository'
+import type { Repository } from '../repository/repository'
 import { INSIGHTS_MODEL } from '../ai/models'
-import type { InsightInput } from './insight-data'
+import { insightModeOf, type InsightInput } from './insight-data'
 import type { InsightsResult } from './insight-generator'
 import {
   HOUSEHOLD_INSIGHT_PROMPT_VERSION,
@@ -24,7 +24,7 @@ export interface InsightGenerator {
 export function hashInsightInput(
   input: InsightInput,
   {
-    promptVersion = input.scope === 'hogar'
+    promptVersion = insightModeOf(input) === 'hogar'
       ? `${INSIGHT_PROMPT_VERSION}.${HOUSEHOLD_INSIGHT_PROMPT_VERSION}`
       : INSIGHT_PROMPT_VERSION,
     model = INSIGHTS_MODEL,
@@ -37,11 +37,6 @@ export function hashInsightInput(
     hash = Math.imul(hash, 0x01000193)
   }
   return (hash >>> 0).toString(16)
-}
-
-/** Which cache row an input belongs to: the household's or Todo's. */
-function modeOf(input: InsightInput): InsightsMode {
-  return input.scope === 'hogar' ? 'hogar' : 'todo'
 }
 
 export interface CachedInsightsLookup {
@@ -63,7 +58,7 @@ export async function getCachedInsights(
   repository: Repository,
   input: InsightInput
 ): Promise<CachedInsightsLookup | null> {
-  const row = await repository.loadInsights(modeOf(input))
+  const row = await repository.loadInsights(insightModeOf(input))
   if (!row) return null
 
   return {
@@ -86,6 +81,6 @@ export async function saveCachedInsights(
       model,
       insights: result,
     },
-    modeOf(input)
+    insightModeOf(input)
   )
 }

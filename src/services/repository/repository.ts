@@ -13,12 +13,13 @@ import type { CustomCategoryRecord } from '../supabase/custom-categories'
 import type { UserPreferences } from '../supabase/user-preferences'
 import type {
   CachedInsightsRow,
-  InsightsMode,
   SaveInsightsParams,
 } from '../supabase/ai-insights'
 import type { CustomPattern } from '../categorizer/custom-patterns'
+import type { InsightsMode } from '../insights/insight-data'
 
-export type { CachedInsightsRow, InsightsMode, SaveInsightsParams }
+export type { CachedInsightsRow, SaveInsightsParams }
+export type { InsightsMode }
 
 /**
  * One change to one row, written once and applied to both the repository and

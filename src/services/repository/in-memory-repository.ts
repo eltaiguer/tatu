@@ -13,6 +13,7 @@ import type { UserPreferences } from '../supabase/user-preferences'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { CachedInsightsRow } from '../supabase/ai-insights'
 import { UserFacingError } from '../../utils/user-error'
+import type { InsightsMode } from '../insights/insight-data'
 import { groupByPatch, insertSequentially, settleChunks } from './batching'
 import {
   applyPatch,
@@ -127,6 +128,12 @@ export interface InMemoryRepository extends Repository {
    */
   actingUserId: string
 }
+
+// The row each mode's cache lives in (ai_insights / ai_household_insights).
+const INSIGHTS_SLOTS = {
+  todo: 'insights',
+  hogar: 'householdInsights',
+} as const satisfies Record<InsightsMode, string>
 
 export function createInMemoryRepository(
   seed: {
@@ -526,15 +533,14 @@ export function createInMemoryRepository(
 
     async loadInsights(mode = 'todo') {
       await request('loadInsights')
-      const cached = mode === 'hogar' ? repo.householdInsights : repo.insights
+      const cached = repo[INSIGHTS_SLOTS[mode]]
       return cached && authorized() ? { ...cached } : null
     },
     async saveInsights(row, mode = 'todo') {
       await request('saveInsights')
       requireAuthorized()
       const saved = { ...row, generatedAt: new Date().toISOString() }
-      if (mode === 'hogar') repo.householdInsights = saved
-      else repo.insights = saved
+      repo[INSIGHTS_SLOTS[mode]] = saved
     },
 
     // Same tables, same order and same failure rule as the Supabase adapter.

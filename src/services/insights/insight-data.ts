@@ -53,8 +53,21 @@ export interface MonthlyTrendPoint {
   expense: number
 }
 
-/** 'hogar' = built from the household rows only (#251, ADR-0005). */
-export type InsightScope = 'hogar'
+/**
+ * The two analyses: Todo (all counted expenses) and Hogar (the household rows
+ * only, #251, ADR-0005). Each has its own cache row and prompt version.
+ */
+export type InsightsMode = 'todo' | 'hogar'
+
+/** The input's `scope` key: present for Hogar only, so Todo's JSON is unchanged. */
+export type InsightScope = Exclude<InsightsMode, 'todo'>
+
+/** THE input → mode mapping (cache row, prompt version). */
+export function insightModeOf(
+  input: Pick<InsightInput, 'scope'>
+): InsightsMode {
+  return input.scope ?? 'todo'
+}
 
 export interface InsightInputOptions {
   scope?: InsightScope
@@ -282,7 +295,7 @@ export function buildInsightInput(
   fxRate: number,
   options: InsightInputOptions = {}
 ): InsightInput {
-  const hogar = options.scope === 'hogar'
+  const hogar = options.scope === 'hogar' // InsightScope, the only one
   if (allTransactions.length === 0) {
     return {
       historyStart: '',
