@@ -49,14 +49,19 @@ export interface CachedInsightsLookup {
   generatedAt: string
   /** The hash of the input that produced `result` (what staleness compares). */
   inputHash: string
-  isStale: boolean
 }
 
-/** The cached row of `mode`, as a lookup with no staleness yet. */
+/**
+ * The cached row of `mode` (one row per user and mode — ADR-0002, ADR-0005).
+ * Whether it is stale is `inputHash !== hashInsightInput(currentInput)`: the
+ * hash covers the input, the prompt version and the model, so new imports,
+ * edits, re-categorization, a prompt or a model change all flip it, and the UI
+ * shows a "data changed, regenerate?" banner instead of regenerating.
+ */
 export async function loadCachedLookup(
   repository: Repository,
   mode: InsightsMode
-): Promise<Omit<CachedInsightsLookup, 'isStale'> | null> {
+): Promise<CachedInsightsLookup | null> {
   const row = await repository.loadInsights(mode)
   if (!row) return null
   return {
@@ -65,23 +70,6 @@ export async function loadCachedLookup(
     generatedAt: row.generatedAt,
     inputHash: row.inputHash,
   }
-}
-
-/**
- * Looks up the cached insights row for this user in the input's mode (one row
- * per user and mode — ADR-0002, ADR-0005). `isStale` is true when the current
- * InsightInput no longer matches the hash of the input that produced the
- * cached result (new imports, edits, re-categorization), or the prompt
- * version / insights model changed since it was generated — the UI shows a
- * "data changed, regenerate?" banner instead of silently regenerating.
- */
-export async function getCachedInsights(
-  repository: Repository,
-  input: InsightInput
-): Promise<CachedInsightsLookup | null> {
-  const cached = await loadCachedLookup(repository, insightModeOf(input))
-  if (!cached) return null
-  return { ...cached, isStale: cached.inputHash !== hashInsightInput(input) }
 }
 
 export async function saveCachedInsights(

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { InsightInput } from './insight-data'
+import { insightModeOf, type InsightInput } from './insight-data'
 import type { InsightsResult } from './insight-generator'
 
 import {
   hashInsightInput,
-  getCachedInsights,
+  loadCachedLookup,
   saveCachedInsights,
 } from './insight-cache'
 import {
@@ -18,6 +18,14 @@ import {
 } from '../repository/in-memory-repository'
 
 let repo: InMemoryRepository
+
+// What the view does: the cached row of the input's mode, stale when the hash
+// of the input it came from is not the current input's.
+async function lookUp(repository: InMemoryRepository, current: InsightInput) {
+  const row = await loadCachedLookup(repository, insightModeOf(current))
+  return row && { ...row, isStale: row.inputHash !== hashInsightInput(current) }
+}
+
 beforeEach(() => {
   repo = createInMemoryRepository()
 })
@@ -69,9 +77,9 @@ describe('hashInsightInput', () => {
   })
 })
 
-describe('getCachedInsights', () => {
+describe('the cached row and its staleness', () => {
   it('returns null when there is no cached row', async () => {
-    const cached = await getCachedInsights(repo, input)
+    const cached = await lookUp(repo, input)
     expect(cached).toBeNull()
   })
 
@@ -83,7 +91,7 @@ describe('getCachedInsights', () => {
       generatedAt: '2026-06-30T12:00:00.000Z',
     }
 
-    const cached = await getCachedInsights(repo, input)
+    const cached = await lookUp(repo, input)
     expect(cached).toEqual({
       result,
       model: INSIGHTS_MODEL,
@@ -101,7 +109,7 @@ describe('getCachedInsights', () => {
       generatedAt: '2026-06-30T12:00:00.000Z',
     }
 
-    const cached = await getCachedInsights(repo, input)
+    const cached = await lookUp(repo, input)
     expect(cached?.isStale).toBe(true)
   })
 
@@ -115,7 +123,7 @@ describe('getCachedInsights', () => {
       generatedAt: '2026-06-30T12:00:00.000Z',
     }
 
-    const cached = await getCachedInsights(repo, input)
+    const cached = await lookUp(repo, input)
     expect(cached?.isStale).toBe(true)
   })
 
@@ -127,21 +135,21 @@ describe('getCachedInsights', () => {
       generatedAt: '2026-06-30T12:00:00.000Z',
     }
 
-    const cached = await getCachedInsights(repo, input)
+    const cached = await lookUp(repo, input)
     expect(cached?.isStale).toBe(true)
   })
 
   it('marks a result saved with the current prompt and model as fresh', async () => {
     await saveCachedInsights(repo, input, result, INSIGHTS_MODEL)
 
-    const cached = await getCachedInsights(repo, input)
+    const cached = await lookUp(repo, input)
     expect(cached?.isStale).toBe(false)
   })
 
   it('marks a result saved by a different model as stale', async () => {
     await saveCachedInsights(repo, input, result, 'claude-old-model')
 
-    const cached = await getCachedInsights(repo, input)
+    const cached = await lookUp(repo, input)
     expect(cached?.isStale).toBe(true)
   })
 })
@@ -234,15 +242,13 @@ describe('Hogar cache (#251)', () => {
 
   it('looks a Hogar input up in the Hogar row only', async () => {
     await saveCachedInsights(repo, input, result, INSIGHTS_MODEL)
-    expect(await getCachedInsights(repo, hogarInput)).toBeNull()
+    expect(await lookUp(repo, hogarInput)).toBeNull()
 
     await saveCachedInsights(repo, hogarInput, hogarResult, INSIGHTS_MODEL)
 
-    expect((await getCachedInsights(repo, hogarInput))?.result).toEqual(
-      hogarResult
-    )
-    expect((await getCachedInsights(repo, hogarInput))?.isStale).toBe(false)
-    expect((await getCachedInsights(repo, input))?.result).toEqual(result)
+    expect((await lookUp(repo, hogarInput))?.result).toEqual(hogarResult)
+    expect((await lookUp(repo, hogarInput))?.isStale).toBe(false)
+    expect((await lookUp(repo, input))?.result).toEqual(result)
   })
 
   it('marks Hogar stale when its household figures change', async () => {
@@ -252,6 +258,6 @@ describe('Hogar cache (#251)', () => {
       categoryTotals: [{ category: 'groceries', amount: 5, pctOfTotal: 100 }],
     }
 
-    expect((await getCachedInsights(repo, changed))?.isStale).toBe(true)
+    expect((await lookUp(repo, changed))?.isStale).toBe(true)
   })
 })

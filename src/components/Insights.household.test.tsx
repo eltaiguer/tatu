@@ -496,8 +496,8 @@ describe('Insights: Todo / Hogar mode', () => {
       choose('Hogar')
       await screen.findByRole('button', { name: /Generar/ })
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-      // Hogar's own failure, then a Todo failure arriving meanwhile must not
-      // replace it.
+      // Hogar fails on its own; Todo's error is still there when going back,
+      // and Hogar's when returning.
       fireEvent.click(screen.getByRole('button', { name: /Generar/ }))
       expect(await screen.findByRole('alert')).toBeVisible()
       choose('Todo')
@@ -529,6 +529,38 @@ describe('Insights: Todo / Hogar mode', () => {
 
       expect(await screen.findByText('Restaurantes pesa')).toBeVisible()
       expect(screen.getByText(/cambiaron/)).toBeVisible()
+    })
+  })
+
+  describe('another user’s repository', () => {
+    it('never receives a generation that finishes after the user changed', async () => {
+      let release!: () => void
+      const hold = new Promise<void>((resolve) => (release = resolve))
+      const client = modeClient(hold)
+      const first = repo
+      const second = createInMemoryRepository()
+      const view = render(
+        <Harness transactions={rows()} claudeClient={client} />
+      )
+
+      fireEvent.click(await screen.findByRole('button', { name: /Generar/ }))
+      await waitFor(() => expect(client.requests).toHaveLength(1))
+
+      repo = second
+      view.rerender(<Harness transactions={rows()} claudeClient={client} />)
+      await screen.findByRole('button', { name: /Generar/ })
+      await act(async () => {
+        release()
+        await hold
+      })
+
+      await waitFor(() => expect(first.insights).not.toBeNull())
+      expect(second.insights).toBeNull()
+      // The late result did not reset what the new user's view knew.
+      expect(second.requests.loadInsights).toBe(1)
+      // The new user sees nothing of it, and can generate their own.
+      expect(screen.queryByText('Restaurantes pesa')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Generar/ })).toBeEnabled()
     })
   })
 

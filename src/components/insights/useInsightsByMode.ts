@@ -88,8 +88,22 @@ export function useInsightsByMode({
   const byMode = state.repository === repository ? state.byMode : INITIAL
 
   // Bumped when a generation writes a mode: a lookup that began before it is
-  // out of date and must not overwrite it.
-  const writes = useRef<Record<InsightsMode, number>>({ todo: 0, hogar: 0 })
+  // out of date and must not overwrite it. One counter per repository.
+  const writesByRepository = useRef(
+    new WeakMap<Repository, Record<InsightsMode, number>>()
+  )
+  const writesOf = useCallback((forRepository: Repository) => {
+    const map = writesByRepository.current
+    let counters = map.get(forRepository)
+    if (!counters) {
+      counters = { todo: 0, hogar: 0 }
+      map.set(forRepository, counters)
+    }
+    return counters
+  }, [])
+  // The repository on screen: a late update from another one is dropped.
+  const latestRepository = useRef(repository)
+  latestRepository.current = repository
   const update = useCallback(
     (
       forRepository: Repository,
@@ -97,6 +111,7 @@ export function useInsightsByMode({
       patch: Partial<ModeState>
     ) =>
       setState((current) => {
+        if (forRepository !== latestRepository.current) return current
         const base =
           current.repository === forRepository ? current.byMode : INITIAL
         return {
@@ -116,10 +131,10 @@ export function useInsightsByMode({
   useEffect(() => {
     if (!active || known) return
     let cancelled = false
-    const startedWrites = writes.current[mode]
+    const startedWrites = writesOf(repository)[mode]
     loadCachedLookup(repository, mode)
       .then((row) => {
-        if (cancelled || writes.current[mode] !== startedWrites) return
+        if (cancelled || writesOf(repository)[mode] !== startedWrites) return
         update(repository, mode, {
           known: true,
           shown: row && {
@@ -130,7 +145,7 @@ export function useInsightsByMode({
         })
       })
       .catch((e) => {
-        if (cancelled || writes.current[mode] !== startedWrites) return
+        if (cancelled || writesOf(repository)[mode] !== startedWrites) return
         // Not being able to read the cache is not being unable to generate.
         update(repository, mode, {
           known: true,
@@ -144,7 +159,7 @@ export function useInsightsByMode({
     return () => {
       cancelled = true
     }
-  }, [repository, mode, active, known, update])
+  }, [repository, mode, active, known, update, writesOf])
 
   const generate = useCallback(async () => {
     if (!input) return
@@ -160,7 +175,7 @@ export function useInsightsByMode({
         ...(claudeClient ? [claudeClient] : [])
       )
       // Shown even if saving fails: it was generated (and paid for).
-      writes.current[startedMode] += 1
+      writesOf(startedRepository)[startedMode] += 1
       update(startedRepository, startedMode, {
         known: true,
         shown: {
@@ -189,7 +204,7 @@ export function useInsightsByMode({
     } finally {
       update(startedRepository, startedMode, { generating: false })
     }
-  }, [input, repository, mode, claudeApiKey, claudeClient, update])
+  }, [input, repository, mode, claudeApiKey, claudeClient, update, writesOf])
 
   const inputHash = useMemo(() => input && hashInsightInput(input), [input])
   const { shown } = byMode[mode]

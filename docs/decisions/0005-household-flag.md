@@ -134,7 +134,8 @@ Implemented in step 6 of #251: the Todo / Hogar mode on Resumen.
   cards, plus the Sin definir banner when there are such rows.
 - The mode is read on Resumen only (the Transacciones filter shares the `hogar`
   token); re-selecting Resumen in the sidebar replaces the history entry and
-  returns to Todo.
+  returns to Todo. (Step 8 later made Insights read it too: `App.tsx` reads the
+  token on Resumen and Insights.)
 
 Implemented in step 7 of #251: the household flag remembered per merchant.
 This reverses "no merchant rules in the first version": the owner expects Hogar
