@@ -7,7 +7,10 @@ import {
   getCachedInsights,
   saveCachedInsights,
 } from './insight-cache'
-import { INSIGHT_PROMPT_VERSION } from './insight-prompt'
+import {
+  HOUSEHOLD_INSIGHT_PROMPT_VERSION,
+  INSIGHT_PROMPT_VERSION,
+} from './insight-prompt'
 import { INSIGHTS_MODEL } from '../ai/models'
 import {
   createInMemoryRepository,
@@ -151,5 +154,54 @@ describe('saveCachedInsights', () => {
       model: INSIGHTS_MODEL,
       insights: result,
     })
+  })
+})
+
+describe('hashInsightInput — Todo and Hogar (#251)', () => {
+  const todoInput: InsightInput = {
+    historyStart: '2026-01-05',
+    historyEnd: '2026-06-30',
+    homeCurrency: 'USD',
+    categoryTotals: [
+      { category: 'groceries', amount: 100.5, pctOfTotal: 66.67 },
+    ],
+    topMerchants: [{ merchant: 'Tienda Inglesa', amount: 100.5, count: 3 }],
+    recurringCharges: [
+      {
+        merchant: 'Netflix',
+        approxAmount: 12.99,
+        cadence: 'monthly',
+        monthsSeen: 4,
+        lastSeenMonth: '2026-06',
+        monthsSinceLastSeen: 0,
+      },
+    ],
+    monthlyTrend: [{ month: '2026-06', income: 2000, expense: 150.75 }],
+  }
+
+  it('keeps every cached Todo row fresh: the hash of a fixed input is the one main computed', () => {
+    // Computed on main (3bc0667) before household Insights. If this fails,
+    // every user's cached Todo insights just went stale.
+    expect(hashInsightInput(todoInput)).toBe('f8836ae3')
+  })
+
+  it('hashes the same rows differently in Hogar', () => {
+    const hogar: InsightInput = { ...todoInput, scope: 'hogar' }
+    expect(hashInsightInput(hogar)).not.toBe(hashInsightInput(todoInput))
+  })
+
+  it('folds the Hogar prompt version into a Hogar hash, not the Todo one', () => {
+    const hogar: InsightInput = { ...todoInput, scope: 'hogar' }
+    expect(HOUSEHOLD_INSIGHT_PROMPT_VERSION).toBe(1)
+    expect(
+      hashInsightInput(hogar, {
+        promptVersion: HOUSEHOLD_INSIGHT_PROMPT_VERSION + 1,
+      })
+    ).not.toBe(hashInsightInput(hogar))
+    expect(hashInsightInput(hogar)).toBe(
+      hashInsightInput(hogar, {
+        promptVersion: HOUSEHOLD_INSIGHT_PROMPT_VERSION,
+      })
+    )
   })
 })

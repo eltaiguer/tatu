@@ -2,7 +2,10 @@ import type { Repository } from '../repository/repository'
 import { INSIGHTS_MODEL } from '../ai/models'
 import type { InsightInput } from './insight-data'
 import type { InsightsResult } from './insight-generator'
-import { INSIGHT_PROMPT_VERSION } from './insight-prompt'
+import {
+  HOUSEHOLD_INSIGHT_PROMPT_VERSION,
+  INSIGHT_PROMPT_VERSION,
+} from './insight-prompt'
 
 /** What produced a cached result besides the input: prompt + model. */
 export interface InsightGenerator {
@@ -20,7 +23,9 @@ export interface InsightGenerator {
 export function hashInsightInput(
   input: InsightInput,
   {
-    promptVersion = INSIGHT_PROMPT_VERSION,
+    promptVersion = input.scope === 'hogar'
+      ? HOUSEHOLD_INSIGHT_PROMPT_VERSION
+      : INSIGHT_PROMPT_VERSION,
     model = INSIGHTS_MODEL,
   }: Partial<InsightGenerator> = {}
 ): string {
