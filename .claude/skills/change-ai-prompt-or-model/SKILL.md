@@ -51,11 +51,12 @@ don't work from memory.
   `hashInsightInput` (`insight-cache.ts`) hashes the `InsightInput` together
   with the prompt version and the model, so `isStale` flips on a data change,
   a prompt-version bump or a model change, and the UI shows the "regenerate?"
-  banner (never an automatic call). Bump `INSIGHT_PROMPT_VERSION` when Todo's
-  prompt or user message changes, `HOUSEHOLD_INSIGHT_PROMPT_VERSION` when only
-  Hogar's paragraph does (`insight-prompt.ts`); changing Todo's text without
-  bumping leaves stale insights looking fresh, and bumping it makes every
-  user's cached Todo row stale (a hash test pins Todo's). Changing the
+  banner (never an automatic call). Bump `INSIGHT_PROMPT_VERSION` for any
+  change to the base prompt or the user message: Hogar's prompt is Todo's plus
+  a paragraph, so it stales both modes. Bump `HOUSEHOLD_INSIGHT_PROMPT_VERSION`
+  (`insight-prompt.ts`) when only Hogar's paragraph changes. Changing the text
+  without bumping leaves stale insights looking fresh, and a base bump makes
+  every user's cached Todo row stale (a hash test pins Todo's). Changing the
   `InsightInput` shape marks every cache row stale too.
 
 ## Steps

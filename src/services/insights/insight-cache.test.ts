@@ -190,17 +190,17 @@ describe('hashInsightInput — Todo and Hogar (#251)', () => {
     expect(hashInsightInput(hogar)).not.toBe(hashInsightInput(todoInput))
   })
 
-  it('folds the Hogar prompt version into a Hogar hash, not the Todo one', () => {
+  it('folds the base and the Hogar prompt versions into a Hogar hash', () => {
     const hogar: InsightInput = { ...todoInput, scope: 'hogar' }
     expect(HOUSEHOLD_INSIGHT_PROMPT_VERSION).toBe(1)
     expect(
       hashInsightInput(hogar, {
-        promptVersion: HOUSEHOLD_INSIGHT_PROMPT_VERSION + 1,
+        promptVersion: `${INSIGHT_PROMPT_VERSION}.${HOUSEHOLD_INSIGHT_PROMPT_VERSION + 1}`,
       })
     ).not.toBe(hashInsightInput(hogar))
     expect(hashInsightInput(hogar)).toBe(
       hashInsightInput(hogar, {
-        promptVersion: HOUSEHOLD_INSIGHT_PROMPT_VERSION,
+        promptVersion: `${INSIGHT_PROMPT_VERSION}.${HOUSEHOLD_INSIGHT_PROMPT_VERSION}`,
       })
     )
   })

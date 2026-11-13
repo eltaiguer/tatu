@@ -9,7 +9,8 @@ import {
 
 /** What produced a cached result besides the input: prompt + model. */
 export interface InsightGenerator {
-  promptVersion: number
+  /** Hogar's is `base.household`: its prompt is Todo's plus a paragraph. */
+  promptVersion: number | string
   model: string
 }
 
@@ -24,7 +25,7 @@ export function hashInsightInput(
   input: InsightInput,
   {
     promptVersion = input.scope === 'hogar'
-      ? HOUSEHOLD_INSIGHT_PROMPT_VERSION
+      ? `${INSIGHT_PROMPT_VERSION}.${HOUSEHOLD_INSIGHT_PROMPT_VERSION}`
       : INSIGHT_PROMPT_VERSION,
     model = INSIGHTS_MODEL,
   }: Partial<InsightGenerator> = {}
