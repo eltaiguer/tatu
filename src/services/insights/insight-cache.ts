@@ -1,6 +1,10 @@
 import type { Repository } from '../repository/repository'
 import { INSIGHTS_MODEL } from '../ai/models'
-import { insightModeOf, type InsightInput } from './insight-data'
+import {
+  insightModeOf,
+  type InsightInput,
+  type InsightsMode,
+} from './insight-data'
 import type { InsightsResult } from './insight-generator'
 import {
   HOUSEHOLD_INSIGHT_PROMPT_VERSION,
@@ -43,30 +47,41 @@ export interface CachedInsightsLookup {
   result: InsightsResult
   model: string
   generatedAt: string
+  /** The hash of the input that produced `result` (what staleness compares). */
+  inputHash: string
   isStale: boolean
 }
 
+/** The cached row of `mode`, as a lookup with no staleness yet. */
+export async function loadCachedLookup(
+  repository: Repository,
+  mode: InsightsMode
+): Promise<Omit<CachedInsightsLookup, 'isStale'> | null> {
+  const row = await repository.loadInsights(mode)
+  if (!row) return null
+  return {
+    result: row.insights,
+    model: row.model,
+    generatedAt: row.generatedAt,
+    inputHash: row.inputHash,
+  }
+}
+
 /**
- * Looks up the cached insights row for this user (one row per user and mode —
- * ADR-0002, ADR-0005). `isStale` is true when the current InsightInput no longer
- * matches the hash of the input that produced the cached result (new
- * imports, edits, re-categorization), or the prompt version / insights model
- * changed since it was generated — the UI shows a "data changed,
- * regenerate?" banner instead of silently regenerating.
+ * Looks up the cached insights row for this user in the input's mode (one row
+ * per user and mode — ADR-0002, ADR-0005). `isStale` is true when the current
+ * InsightInput no longer matches the hash of the input that produced the
+ * cached result (new imports, edits, re-categorization), or the prompt
+ * version / insights model changed since it was generated — the UI shows a
+ * "data changed, regenerate?" banner instead of silently regenerating.
  */
 export async function getCachedInsights(
   repository: Repository,
   input: InsightInput
 ): Promise<CachedInsightsLookup | null> {
-  const row = await repository.loadInsights(insightModeOf(input))
-  if (!row) return null
-
-  return {
-    result: row.insights,
-    model: row.model,
-    generatedAt: row.generatedAt,
-    isStale: row.inputHash !== hashInsightInput(input),
-  }
+  const cached = await loadCachedLookup(repository, insightModeOf(input))
+  if (!cached) return null
+  return { ...cached, isStale: cached.inputHash !== hashInsightInput(input) }
 }
 
 export async function saveCachedInsights(

@@ -1021,6 +1021,11 @@ describe('App', () => {
             ),
             tx('kiosco', '2026-03-11T12:00:00.000Z', 'Kiosco', 'uncategorized'),
           ],
+          preferences: {
+            ...DEFAULT_PREFERENCES,
+            aiEnabled: true,
+            claudeApiKey: 'sk-ant-test',
+          },
         })
       }
       const group = () => screen.getByRole('radiogroup', { name: 'Ver gastos' })
@@ -1030,7 +1035,7 @@ describe('App', () => {
         renderApp('/insights?hogar=si')
 
         expect(
-          await screen.findByText(/1 gasto sin definir/)
+          await screen.findByText(/no entran en este análisis/)
         ).toBeInTheDocument()
         expect(
           within(group()).getByRole('radio', { name: 'Hogar' })
@@ -1045,7 +1050,9 @@ describe('App', () => {
         expect(
           within(group()).getByRole('radio', { name: 'Todo' })
         ).toBeChecked()
-        expect(screen.queryByText(/sin definir/)).not.toBeInTheDocument()
+        expect(
+          screen.queryByText(/no entran en este análisis/)
+        ).not.toBeInTheDocument()
       })
 
       it('writes the mode to the URL, without stacking history', async () => {
@@ -1055,11 +1062,15 @@ describe('App', () => {
 
         fireEvent.click(within(group()).getByRole('radio', { name: 'Hogar' }))
         await waitFor(() => expect(currentUrl()).toBe('/insights?hogar=si'))
-        expect(await screen.findByText(/1 gasto sin definir/)).toBeVisible()
+        expect(
+          await screen.findByText(/no entran en este análisis/)
+        ).toBeVisible()
 
         fireEvent.click(within(group()).getByRole('radio', { name: 'Todo' }))
         await waitFor(() => expect(currentUrl()).toBe('/insights'))
-        expect(screen.queryByText(/sin definir/)).not.toBeInTheDocument()
+        expect(
+          screen.queryByText(/no entran en este análisis/)
+        ).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: 'test-back' }))
         await act(async () => {
@@ -1071,20 +1082,24 @@ describe('App', () => {
       it('the sidebar’s Insights opens Todo', async () => {
         seedInsights()
         renderApp('/insights?hogar=si')
-        await screen.findByText(/1 gasto sin definir/)
+        await screen.findByText(/no entran en este análisis/)
 
         fireEvent.click(screen.getByRole('button', { name: 'Insights' }))
 
         await waitFor(() => expect(currentUrl()).toBe('/insights'))
-        expect(screen.queryByText(/sin definir/)).not.toBeInTheDocument()
+        expect(
+          screen.queryByText(/no entran en este análisis/)
+        ).not.toBeInTheDocument()
       })
 
       it('opens the Sin definir expenses in Transacciones', async () => {
         seedInsights()
         renderApp('/insights?hogar=si')
-        await screen.findByText(/1 gasto sin definir/)
+        await screen.findByText(/no entran en este análisis/)
 
-        fireEvent.click(screen.getByRole('button', { name: /Verlos/ }))
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Ver los gastos sin definir' })
+        )
 
         await waitFor(() => expect(currentUrl()).toMatch(/^\/transacciones\?/))
         expect(currentUrl()).toContain('hogar=sin-definir')

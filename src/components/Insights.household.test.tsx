@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   act,
   fireEvent,
@@ -17,6 +17,12 @@ import {
 } from '../services/repository/in-memory-repository'
 import { fakeClaudeClient } from '../test/fake-claude-client'
 import { replaceCustomCategories } from '../services/categories/category-store'
+import {
+  clearHouseholdRules,
+  putMerchantHouseholdRule,
+} from '../services/household/household-rules-store'
+import { merchantOverrideKey } from '../services/categorizer/category-overrides'
+import { UserFacingError } from '../utils/user-error'
 
 // Insights' Todo / Hogar mode (#251, step 8). The mode lives in the URL (App
 // owns it, see App.test.tsx); here a tiny harness plays that part.
@@ -103,7 +109,9 @@ function Harness({
   transactions,
   claudeClient,
   initialHousehold = false,
+  noKey = false,
 }: {
+  noKey?: boolean
   transactions: Transaction[]
   claudeClient?: Parameters<typeof Insights>[0]['claudeClient']
   initialHousehold?: boolean
@@ -116,7 +124,7 @@ function Harness({
       fxRate={40}
       repository={repo}
       aiEnabled={true}
-      claudeApiKey="sk-test"
+      claudeApiKey={noKey ? '' : 'sk-test'}
       claudeClient={claudeClient}
       householdMode={household}
       onHouseholdModeChange={setHousehold}
@@ -144,12 +152,25 @@ function modeClient(hold?: Promise<void>) {
   })
 }
 
+function ruleKey(description: string): string {
+  const key = merchantOverrideKey(description)
+  if (!key) throw new Error(`no merchant key for "${description}"`)
+  return key
+}
+
+// Unexpected failures are reported to the console by user-error.ts.
+function expectLoggedErrors() {
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  return () => expect(spy).toHaveBeenCalled()
+}
+
 describe('Insights: Todo / Hogar mode', () => {
   beforeEach(() => {
     seq = 0
     navigations = []
     repo = createInMemoryRepository()
     replaceCustomCategories([])
+    clearHouseholdRules()
   })
 
   it('offers Todo / Hogar, with Todo selected by default', async () => {
@@ -179,6 +200,28 @@ describe('Insights: Todo / Hogar mode', () => {
     expect(request.user).not.toContain('Cantina')
     expect(request.user).not.toContain('income')
     expect(request.system).toMatch(/household/i)
+  })
+
+  it('anchors the Hogar history on every imported month', async () => {
+    const client = modeClient()
+    const later = tx({
+      id: 'later',
+      date: new Date('2026-05-20T00:00:00.000Z'),
+      category: Category.Restaurants,
+    })
+    render(
+      <Harness
+        transactions={[...rows(), later]}
+        claudeClient={client}
+        initialHousehold
+      />
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /Generar/ }))
+    await screen.findByText('Súper domina el hogar')
+
+    expect(client.requests[0].user).toContain('"historyEnd":"2026-05-20"')
+    expect(client.requests[0].user).toContain('{"month":"2026-05","expense":0}')
   })
 
   it('caches Hogar apart from Todo', async () => {
@@ -294,16 +337,19 @@ describe('Insights: Todo / Hogar mode', () => {
   })
 
   describe('Sin definir', () => {
-    it('says how many expenses are left out, with their amount, and opens them', async () => {
+    const line = 'Ver los gastos sin definir'
+
+    it('says what is left out of the analysis, with count and amount, and opens it', async () => {
       render(<Harness transactions={rows()} initialHousehold />)
 
-      expect(
-        await screen.findByText(
-          '2 gastos sin definir (US$ 50,00) no entran en este análisis'
-        )
-      ).toBeVisible()
+      const row = await screen.findByRole('button', { name: line })
+      expect(row).toHaveTextContent('no entran en este análisis')
+      expect(row).toHaveTextContent('US$ 50,00')
+      expect(row).toHaveTextContent('2 gastos')
+      // Amounts use the mono style.
+      expect(within(row).getByText('US$ 50,00')).toHaveClass('font-mono')
 
-      fireEvent.click(screen.getByRole('button', { name: /Verlos/ }))
+      fireEvent.click(row)
       expect(navigations).toEqual([{ type: 'debit', household: 'unassigned' }])
     })
 
@@ -316,17 +362,38 @@ describe('Insights: Todo / Hogar mode', () => {
       )
 
       expect(
-        await screen.findByText(
-          '1 gasto sin definir (US$ 30,00) no entra en este análisis'
-        )
-      ).toBeVisible()
+        await screen.findByRole('button', { name: line })
+      ).toHaveTextContent('1 gasto')
+    })
+
+    it('shows above the Hogar empty state too', async () => {
+      render(
+        <Harness
+          transactions={rows().filter((t) => t.id !== 'super')}
+          initialHousehold
+        />
+      )
+
+      expect(await screen.findByRole('button', { name: line })).toBeVisible()
+      expect(screen.getByText('Todavía no hay gastos del hogar')).toBeVisible()
+    })
+
+    it('is hidden while the AI is not configured', async () => {
+      render(<Harness transactions={rows()} initialHousehold noKey />)
+
+      await screen.findByText('Activá la IA para ver insights')
+      expect(
+        screen.queryByRole('button', { name: line })
+      ).not.toBeInTheDocument()
     })
 
     it('is a Hogar thing: Todo does not show it', async () => {
       render(<Harness transactions={rows()} />)
       await screen.findByRole('button', { name: /Generar/ })
 
-      expect(screen.queryByText(/sin definir/)).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: line })
+      ).not.toBeInTheDocument()
     })
 
     it('is left out when nothing is Sin definir', async () => {
@@ -338,7 +405,9 @@ describe('Insights: Todo / Hogar mode', () => {
       )
       await screen.findByRole('button', { name: /Generar/ })
 
-      expect(screen.queryByText(/sin definir/)).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: line })
+      ).not.toBeInTheDocument()
     })
   })
 
@@ -384,5 +453,146 @@ describe('Insights: Todo / Hogar mode', () => {
     fireEvent.click(screen.getByRole('button', { name: /Ver transacciones/ }))
 
     expect(navigations).toEqual([{ category: Category.Restaurants }])
+  })
+
+  describe('state per mode', () => {
+    it('keeps a paid result and its failed save when the user left the mode meanwhile', async () => {
+      let release!: () => void
+      const hold = new Promise<void>((resolve) => (release = resolve))
+      const client = modeClient(hold)
+      repo.failOn('saveInsights', {
+        error: new UserFacingError(
+          'Falta crear la tabla de insights en la base de datos (ver supabase/README.md).'
+        ),
+      })
+      render(<Harness transactions={rows()} claudeClient={client} />)
+
+      fireEvent.click(await screen.findByRole('button', { name: /Generar/ }))
+      await waitFor(() => expect(client.requests).toHaveLength(1))
+      choose('Hogar')
+      await screen.findByRole('button', { name: /Generar/ })
+      await act(async () => {
+        release()
+        await hold
+      })
+
+      choose('Todo')
+      expect(await screen.findByText('Restaurantes pesa')).toBeVisible()
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Falta crear la tabla de insights'
+      )
+    })
+
+    it('shows each mode its own error', async () => {
+      const client = fakeClaudeClient(async () => {
+        throw new Error('boom')
+      })
+      render(<Harness transactions={rows()} claudeClient={client} />)
+      fireEvent.click(await screen.findByRole('button', { name: /Generar/ }))
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'No se pudieron generar los insights'
+      )
+
+      choose('Hogar')
+      await screen.findByRole('button', { name: /Generar/ })
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      // Hogar's own failure, then a Todo failure arriving meanwhile must not
+      // replace it.
+      fireEvent.click(screen.getByRole('button', { name: /Generar/ }))
+      expect(await screen.findByRole('alert')).toBeVisible()
+      choose('Todo')
+      expect(await screen.findByRole('alert')).toBeVisible()
+      choose('Hogar')
+      expect(await screen.findByRole('alert')).toBeVisible()
+    })
+
+    it('shows the stale banner for a result that finished after the data changed', async () => {
+      let release!: () => void
+      const hold = new Promise<void>((resolve) => (release = resolve))
+      const client = modeClient(hold)
+      const view = render(
+        <Harness transactions={rows()} claudeClient={client} />
+      )
+
+      fireEvent.click(await screen.findByRole('button', { name: /Generar/ }))
+      await waitFor(() => expect(client.requests).toHaveLength(1))
+      view.rerender(
+        <Harness
+          transactions={[...rows(), tx({ id: 'late', amount: 5 })]}
+          claudeClient={client}
+        />
+      )
+      await act(async () => {
+        release()
+        await hold
+      })
+
+      expect(await screen.findByText('Restaurantes pesa')).toBeVisible()
+      expect(screen.getByText(/cambiaron/)).toBeVisible()
+    })
+  })
+
+  describe('a failed cache lookup', () => {
+    it.each([
+      ['Todo', false],
+      ['Hogar', true],
+    ])('still offers Generar in %s', async (_name, household) => {
+      const logged = expectLoggedErrors()
+      repo.failOn('loadInsights')
+      render(<Harness transactions={rows()} initialHousehold={household} />)
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'No se pudieron cargar los insights'
+      )
+      expect(screen.getByRole('button', { name: /Generar/ })).toBeVisible()
+      logged()
+    })
+  })
+
+  describe('household rules', () => {
+    it('a merchant rule alone makes Hogar stale and leaves Todo fresh', async () => {
+      const client = modeClient()
+      const first = render(
+        <Harness transactions={rows()} claudeClient={client} />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: /Generar/ }))
+      await screen.findByText('Restaurantes pesa')
+      choose('Hogar')
+      fireEvent.click(await screen.findByRole('button', { name: /Generar/ }))
+      await screen.findByText('Súper domina el hogar')
+      await waitFor(() => expect(repo.householdInsights).not.toBeNull())
+
+      // The rule changes who is household; no row is written.
+      act(() => putMerchantHouseholdRule(ruleKey('Cantina'), true))
+
+      expect(await screen.findByText(/cambiaron/)).toBeVisible()
+      first.unmount()
+      render(<Harness transactions={rows()} />)
+      await screen.findByText('Restaurantes pesa')
+      expect(screen.queryByText(/cambiaron/)).not.toBeInTheDocument()
+    })
+
+    it('a rule saved while in Todo does not look the cache up again', async () => {
+      render(<Harness transactions={rows()} />)
+      await screen.findByRole('button', { name: /Generar/ })
+      const lookups = repo.requests.loadInsights
+
+      act(() => putMerchantHouseholdRule(ruleKey('Cantina'), true))
+
+      expect(repo.requests.loadInsights).toBe(lookups)
+    })
+
+    it('a rule saved while in Todo leaves a Todo error on screen', async () => {
+      const client = fakeClaudeClient(async () => {
+        throw new Error('boom')
+      })
+      render(<Harness transactions={rows()} claudeClient={client} />)
+      fireEvent.click(await screen.findByRole('button', { name: /Generar/ }))
+      await screen.findByRole('alert')
+
+      act(() => putMerchantHouseholdRule(ruleKey('Cantina'), true))
+
+      expect(screen.getByRole('alert')).toBeVisible()
+    })
   })
 })

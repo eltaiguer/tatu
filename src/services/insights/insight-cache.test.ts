@@ -88,6 +88,7 @@ describe('getCachedInsights', () => {
       result,
       model: INSIGHTS_MODEL,
       generatedAt: '2026-06-30T12:00:00.000Z',
+      inputHash: hashInsightInput(input),
       isStale: false,
     })
   })

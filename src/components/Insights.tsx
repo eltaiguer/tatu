@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { PageHeader } from './ui/page-header'
 import {
   Sparkles,
@@ -15,35 +15,29 @@ import { Button } from './ui/button'
 import { CategoryBadge } from './CategoryBadge'
 import { HouseholdModeToggle } from './dashboard/HouseholdModeToggle'
 import { NoHouseholdState } from './dashboard/EmptyStates'
-import { UndefinedHouseholdNote } from './insights/UndefinedHouseholdNote'
+import { SpendNudge } from './dashboard/SpendNudge'
 import { formatCurrency } from '../utils/formatting'
 import type { Currency, Transaction, TransactionsFilter } from '../models'
-import type {
-  InsightsMode,
-  Repository,
-} from '../services/repository/repository'
+import type { Repository } from '../services/repository/repository'
 import type { ClaudeClient } from '../services/ai/claude-client'
 import { partitionByHousehold } from '../services/household/household'
 import { sumCountedTotals } from '../services/spending/spending-rules'
 import { useHouseholdRules } from '../hooks/useHouseholdRules'
-import { buildInsightInput } from '../services/insights/insight-data'
 import {
-  generateInsights,
-  type Insight,
-  type InsightSeverity,
-  type InsightType,
+  buildInsightInput,
+  type InsightsMode,
+} from '../services/insights/insight-data'
+import type {
+  Insight,
+  InsightSeverity,
+  InsightType,
 } from '../services/insights/insight-generator'
-import {
-  getCachedInsights,
-  saveCachedInsights,
-  type CachedInsightsLookup,
-} from '../services/insights/insight-cache'
-import { INSIGHTS_MODEL } from '../services/ai/models'
-import {
-  aiErrorMessage,
-  reportAiError,
-  userErrorMessage,
-} from '../utils/user-error'
+import { useInsightsByMode } from './insights/useInsightsByMode'
+
+const NO_PARTITION = {
+  household: [] as Transaction[],
+  unassigned: [] as Transaction[],
+}
 
 interface InsightsProps {
   transactions: Transaction[]
@@ -127,56 +121,52 @@ export function Insights({
   onNavigateToCategories,
   claudeClient,
 }: InsightsProps) {
-  // Todo and Hogar are two analyses with their own cache row (ADR-0005). The
-  // lookup, a running generation and an error each belong to the mode they
-  // started in, so switching mode never shows or saves one in the other.
+  // Todo and Hogar are two analyses with their own cache row and their own
+  // state (ADR-0005; see useInsightsByMode).
   const mode: InsightsMode = householdMode ? 'hogar' : 'todo'
-  const [lookup, setLookup] = useState<{
-    mode: InsightsMode
-    value: CachedInsightsLookup | null
-  } | null>(null)
-  const [loadingCache, setLoadingCache] = useState(true)
-  const [generatingModes, setGeneratingModes] = useState<
-    ReadonlySet<InsightsMode>
-  >(new Set())
-  const [errorState, setErrorState] = useState<{
-    mode: InsightsMode
-    message: string
-  } | null>(null)
-  const modeRef = useRef(mode)
-  modeRef.current = mode
-
-  const cached = lookup?.mode === mode ? lookup.value : null
-  const generating = generatingModes.has(mode)
-  const error = errorState?.mode === mode ? errorState.message : ''
-  const setError = useCallback(
-    (message: string, forMode: InsightsMode = modeRef.current) =>
-      setErrorState(message ? { mode: forMode, message } : null),
-    []
-  )
-
   const isConfigured = aiEnabled && Boolean(claudeApiKey)
   const hasTransactions = transactions.length > 0
 
   // Hogar's rows: the ones that resolve to household; Sin definir apart. The
-  // rules come through the hook so a merchant rule alone changes them.
+  // rules come through the hook so a merchant rule alone changes them. Todo
+  // never looks at them, so a rule never rebuilds Todo's input.
   const householdRules = useHouseholdRules()
   const { household: householdRows, unassigned: unassignedRows } = useMemo(
-    () => partitionByHousehold(transactions, householdRules),
-    [transactions, householdRules]
+    () =>
+      householdMode
+        ? partitionByHousehold(transactions, householdRules)
+        : NO_PARTITION,
+    [householdMode, transactions, householdRules]
   )
   const noHouseholdSpend = householdMode && householdRows.length === 0
   const hasRows = householdMode ? !noHouseholdSpend : hasTransactions
 
-  const input = useMemo(
+  const todoInput = useMemo(
+    () => buildInsightInput(transactions, homeCurrency, fxRate),
+    [transactions, homeCurrency, fxRate]
+  )
+  const householdInput = useMemo(
     () =>
-      householdMode
+      householdMode && householdRows.length > 0
         ? buildInsightInput(householdRows, homeCurrency, fxRate, {
             scope: 'hogar',
+            // The imports' months and end, not the household rows'.
+            coverage: transactions,
           })
-        : buildInsightInput(transactions, homeCurrency, fxRate),
+        : null,
     [householdMode, householdRows, transactions, homeCurrency, fxRate]
   )
+  const input = householdMode ? householdInput : todoInput
+
+  const { cached, lookedUp, generating, error, generate } = useInsightsByMode({
+    repository,
+    mode,
+    input: hasRows ? input : null,
+    isConfigured,
+    claudeApiKey,
+    claudeClient,
+  })
+  const handleGenerate = generate
 
   const unassigned = useMemo(
     () => ({
@@ -186,107 +176,10 @@ export function Insights({
     [unassignedRows, homeCurrency, fxRate]
   )
 
-  useEffect(() => {
-    if (!isConfigured || !hasRows) {
-      setLoadingCache(false)
-      setLookup({ mode, value: null })
-      return
-    }
-
-    let cancelled = false
-    setLoadingCache(true)
-    setError('')
-
-    getCachedInsights(repository, input)
-      .then((result) => {
-        if (!cancelled) setLookup({ mode, value: result })
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(
-            userErrorMessage(
-              e,
-              'No se pudieron cargar los insights',
-              'insights'
-            )
-          )
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingCache(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [repository, input, isConfigured, hasRows, mode, setError])
-
-  function setGenerating(forMode: InsightsMode, on: boolean) {
-    setGeneratingModes((current) => {
-      const next = new Set(current)
-      if (on) next.add(forMode)
-      else next.delete(forMode)
-      return next
-    })
-  }
-
-  async function handleGenerate() {
-    // This run belongs to the mode and input it started with.
-    const startedMode = mode
-    const startedInput = input
-    setGenerating(startedMode, true)
-    setError('', startedMode)
-    let step: 'generate' | 'save' = 'generate'
-    try {
-      const result = await generateInsights(
-        startedInput,
-        claudeApiKey,
-        ...(claudeClient ? [claudeClient] : [])
-      )
-      // Shown even if saving fails: it was generated (and paid for) — but
-      // only where it was generated: another mode has its own cards.
-      if (modeRef.current === startedMode) {
-        setLookup({
-          mode: startedMode,
-          value: {
-            result,
-            model: INSIGHTS_MODEL,
-            generatedAt: new Date().toISOString(),
-            isStale: false,
-          },
-        })
-      }
-      step = 'save'
-      await saveCachedInsights(repository, startedInput, result, INSIGHTS_MODEL)
-    } catch (e) {
-      if (step === 'generate') {
-        reportAiError(e, 'insights')
-        setError(
-          `No se pudieron generar los insights: ${aiErrorMessage(e)}`,
-          startedMode
-        )
-      } else {
-        setError(
-          userErrorMessage(
-            e,
-            'No se pudieron guardar los insights',
-            'insights'
-          ),
-          startedMode
-        )
-      }
-    } finally {
-      setGenerating(startedMode, false)
-    }
-  }
-
   const groups = useMemo(
     () => groupAndSortInsights(cached?.result.insights ?? []),
     [cached]
   )
-  // The lookup of the other mode is on screen until this one's answer lands:
-  // show no state of its own meanwhile.
-  const lookedUp = lookup?.mode === mode && !loadingCache
 
   return (
     <div className="flex flex-col gap-[24px]">
@@ -321,11 +214,16 @@ export function Insights({
         </p>
       )}
 
-      {householdMode && hasTransactions && unassigned.count > 0 && (
-        <UndefinedHouseholdNote
+      {/* The rows Hogar leaves out of the analysis, written by the app. */}
+      {householdMode && isConfigured && unassigned.count > 0 && (
+        <SpendNudge
+          title="Sin definir: no entran en este análisis"
           total={unassigned.total}
           count={unassigned.count}
           homeCurrency={homeCurrency}
+          filter={{ type: 'debit', household: 'unassigned' }}
+          label="Ver los gastos sin definir"
+          cta="Categorizalos o marcalos →"
           onNavigateToTransactions={onNavigateToTransactions}
         />
       )}
