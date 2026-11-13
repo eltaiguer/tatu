@@ -505,7 +505,7 @@ describe('buildInsightInput — amounts are rounded for the model', () => {
 
     expect(input.monthlyTrend.length).toBeGreaterThan(0)
     for (const m of input.monthlyTrend) {
-      expect(isRounded(m.income)).toBe(true)
+      expect(isRounded(m.income ?? NaN)).toBe(true)
       expect(isRounded(m.expense)).toBe(true)
     }
   })
@@ -724,5 +724,73 @@ describe('recurring cadence across stored date shapes', () => {
       40.5
     ).recurringCharges.find((c) => c.merchant === 'Feria')
     expect(feria?.cadence).toBe('weekly')
+  })
+})
+
+describe('buildInsightInput — Hogar scope (#251)', () => {
+  const rows = [
+    makeTransaction('g1', {
+      date: new Date('2026-05-10T00:00:00.000Z'),
+      amount: 100,
+      currency: 'USD',
+      category: Category.Groceries,
+      description: 'TIENDA INGLESA',
+    }),
+    makeTransaction('g2', {
+      date: new Date('2026-06-10T00:00:00.000Z'),
+      amount: 4050,
+      currency: 'UYU',
+      category: Category.Groceries,
+      description: 'TIENDA INGLESA',
+    }),
+    makeTransaction('pay', {
+      date: new Date('2026-06-01T00:00:00.000Z'),
+      amount: 3000,
+      type: 'credit',
+      category: Category.Income,
+    }),
+  ]
+
+  it.each([
+    ['USD', 200],
+    ['UYU', 8100],
+  ] as const)(
+    'adds scope and drops income from the trend in %s',
+    (home, expected) => {
+      const result = buildInsightInput(rows, home, 40.5, { scope: 'hogar' })
+
+      expect(result.scope).toBe('hogar')
+      expect(result.monthlyTrend.length).toBeGreaterThan(0)
+      for (const point of result.monthlyTrend) {
+        expect(Object.keys(point).sort()).toEqual(['expense', 'month'])
+      }
+      expect(result.categoryTotals[0].amount).toBe(expected)
+    }
+  )
+
+  it('totals only the rows it is given', () => {
+    const result = buildInsightInput([rows[0]], 'USD', 40.5, {
+      scope: 'hogar',
+    })
+
+    expect(result.categoryTotals).toEqual([
+      { category: Category.Groceries, amount: 100, pctOfTotal: 100 },
+    ])
+  })
+
+  it('leaves Todo exactly as before: no scope key, income in the trend', () => {
+    const result = buildInsightInput(rows, 'USD', 40.5)
+
+    expect('scope' in result).toBe(false)
+    expect(result.monthlyTrend.every((p) => typeof p.income === 'number')).toBe(
+      true
+    )
+  })
+
+  it('marks an empty Hogar input with its scope too', () => {
+    const result = buildInsightInput([], 'USD', 40.5, { scope: 'hogar' })
+
+    expect(result.scope).toBe('hogar')
+    expect(result.monthlyTrend).toEqual([])
   })
 })

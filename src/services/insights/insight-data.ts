@@ -48,8 +48,16 @@ export interface RecurringCharge {
 
 export interface MonthlyTrendPoint {
   month: string
-  income: number
+  /** Absent in the Hogar scope: household insights are spending only. */
+  income?: number
   expense: number
+}
+
+/** 'hogar' = built from the household rows only (#251, ADR-0005). */
+export type InsightScope = 'hogar'
+
+export interface InsightInputOptions {
+  scope?: InsightScope
 }
 
 export interface InsightInput {
@@ -61,6 +69,8 @@ export interface InsightInput {
   topMerchants: MerchantTotal[]
   recurringCharges: RecurringCharge[]
   monthlyTrend: MonthlyTrendPoint[]
+  /** Set for Hogar only; Todo has no key, so its JSON is what it always was. */
+  scope?: InsightScope
 }
 
 const TOP_MERCHANTS_LIMIT = 8
@@ -237,8 +247,10 @@ function detectRecurringCharges(
 export function buildInsightInput(
   allTransactions: Transaction[],
   homeCurrency: Currency,
-  fxRate: number
+  fxRate: number,
+  options: InsightInputOptions = {}
 ): InsightInput {
+  const hogar = options.scope === 'hogar'
   if (allTransactions.length === 0) {
     return {
       historyStart: '',
@@ -248,6 +260,7 @@ export function buildInsightInput(
       topMerchants: [],
       recurringCharges: [],
       monthlyTrend: [],
+      ...(hogar && { scope: options.scope }),
     }
   }
 
@@ -281,10 +294,15 @@ export function buildInsightInput(
       allTransactions,
       homeCurrency,
       fxRate
-    ).map((d) => ({
-      month: d.month,
-      income: round2(d.income),
-      expense: round2(d.expense),
-    })),
+    ).map((d) =>
+      hogar
+        ? { month: d.month, expense: round2(d.expense) }
+        : {
+            month: d.month,
+            income: round2(d.income),
+            expense: round2(d.expense),
+          }
+    ),
+    ...(hogar && { scope: options.scope }),
   }
 }
