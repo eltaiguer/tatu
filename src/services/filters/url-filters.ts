@@ -92,8 +92,9 @@ function parsePeriod(params: URLSearchParams): UrlPeriod | undefined {
   return undefined
 }
 
-// The household token, shared by the Transacciones filter below and Resumen's
-// Hogar mode (`/?hogar=si`): it lives here and nowhere else.
+// The household token, shared by the Transacciones filter below and the Hogar
+// mode of Resumen and Insights (`/?hogar=si`, `/insights?hogar=si`): it lives
+// here and nowhere else.
 const HOUSEHOLD_PARAM = 'hogar'
 const HOUSEHOLD_YES = 'si'
 const HOUSEHOLD_UNASSIGNED = 'sin-definir'

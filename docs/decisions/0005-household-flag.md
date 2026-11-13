@@ -134,7 +134,8 @@ Implemented in step 6 of #251: the Todo / Hogar mode on Resumen.
   cards, plus the Sin definir banner when there are such rows.
 - The mode is read on Resumen only (the Transacciones filter shares the `hogar`
   token); re-selecting Resumen in the sidebar replaces the history entry and
-  returns to Todo.
+  returns to Todo. (Step 8 later made Insights read it too: `App.tsx` reads the
+  token on Resumen and Insights.)
 
 Implemented in step 7 of #251: the household flag remembered per merchant.
 This reverses "no merchant rules in the first version": the owner expects Hogar
@@ -170,9 +171,57 @@ and the ones imported later.
   the Todas las similares path. The bulk menu stays rows-only and no screen
   lists rules: they are managed through the dialog, as category rules are.
 
+Implemented in step 8 of #251: Hogar mode on Insights (`/insights?hogar=si`).
+
+- Same "Todo · Hogar" toggle and URL token as Resumen (REPLACE; Todo = no
+  param; the sidebar's Insights link opens Todo). Read on Resumen and Insights
+  only.
+- Hogar is its **own analysis**, not a filter over Todo's cards: the household
+  rows (`partitionByHousehold`, counted expenses only) go through the same
+  `buildInsightInput` with `scope: 'hogar'`, whose trend is `{ month, expense }`
+  only (spending, no income or savings, as on Resumen). The partner reads it,
+  so it must never carry personal cards.
+- Own prompt paragraph (`buildInsightSystemPrompt('hogar')`: household
+  figures only, never talk about income, savings or personal spending) and its
+  own version constant, `HOUSEHOLD_INSIGHT_PROMPT_VERSION`, folded into the
+  Hogar hash together with `INSIGHT_PROMPT_VERSION` (`base.household`): its
+  prompt is Todo's plus a paragraph, so a base change stales both modes.
+  Recurring charges are detected over the household rows only, but the
+  history's start/end and the months of the trend come from every imported row
+  (`coverage`): a household subscription that stopped two imported months ago
+  reads as lapsed, and a month with no household spend is a point at 0, as on
+  Resumen's "Mes a mes".
+- Own cache, own table: `ai_household_insights`, same shape and policy as
+  `ai_insights`, one row per user. A table beside the old one rather than a
+  `mode` column: no primary-key migration, and Todo's cache path, hash, prompt
+  and table stay exactly as they were, so every cached Todo row stays fresh
+  (pinned by a hash test). The repository port takes a mode:
+  `loadInsights(mode?)` / `saveInsights(row, mode?)`, `'todo'` by default; the
+  cache functions pick it from `input.scope`.
+- Stale like Todo (hash of the Hogar input): a house click, a merchant rule or
+  a category default that moves a row in or out of the household shows the
+  banner; nothing regenerates by itself. Todo is not made stale by those.
+- Sin definir rows are left out of the input. A `SpendNudge` row (Resumen's
+  component), written by the app and not by Claude, says so: "Sin definir: no
+  entran en este análisis", with the total and count, opening
+  `{ type: 'debit', household: 'unassigned' }`. It shows only while the AI is
+  configured (above the cards and above the empty state). A Hogar
+  card's "Ver transacciones →" adds `household: 'household'`.
+- No household spend yet: the Resumen empty state ("Todavía no hay gastos del
+  hogar") and no Generar button.
+- A lookup, a running generation and an error each belong to the mode they
+  started in (`useInsightsByMode`, one record per mode): switching mode never
+  shows or saves one in the other, a result that finishes while the user is in
+  the other mode is kept for when they return, and staleness is derived from
+  the hash of the input a result came from, so a result that finished after the
+  data changed shows the banner. A failed cache lookup still offers Generar.
+- Until the table is applied by hand, loading Hogar insights reads as no cache,
+  a reset skips it (clearing either cache is best-effort and never fails
+  "reset all data"), and saving a generation says "Falta crear la tabla de
+  insights del hogar…" (the generated cards still show).
+
 Planned for the later PRs of #251:
 
-- Step 8: household-aware Insights.
 - A mixed purchase is split, and each part gets its own flag.
 
 ## Alternatives considered
@@ -202,6 +251,8 @@ position nobody needs.
   category, and only the exceptions are flagged by hand.
 - A per-merchant rule is one more place a row's value can come from; every
   surface reads `HouseholdResolution.source` instead of guessing.
+- `ai_household_insights` (step 8) also needs the manual apply, but nothing
+  breaks without it: only generating Hogar insights is blocked.
 - The new table needs a manual apply of `schema.sql` before the code ships
   (`supabase/README.md`). Until then the app still loads (a missing table reads
   as no rules, as for `ai_insights`) but a rule cannot be saved.

@@ -25,6 +25,8 @@ its checklist is the source of truth for the apply steps.
      `create policy "<table>_<op>_own"` pairs (`auth.uid() = user_id`), and a
      `set_updated_at_timestamp` trigger if it has `updated_at`. Copy the shape
      of `custom_patterns`.
+     A per-user cache table (`ai_insights`, `ai_household_insights`) may
+     instead mirror that cache's single `for all` `<table>_all_own` policy.
    - Keep every statement idempotent: the whole file is re-run on every apply.
 3. **Green: row mapping.** Each table's row mapping lives in its own service
    in `src/services/supabase/` — for transactions, `TransactionRow`,

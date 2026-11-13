@@ -48,8 +48,37 @@ export interface RecurringCharge {
 
 export interface MonthlyTrendPoint {
   month: string
-  income: number
+  /** Absent in the Hogar scope: household insights are spending only. */
+  income?: number
   expense: number
+}
+
+/**
+ * The two analyses: Todo (all counted expenses) and Hogar (the household rows
+ * only, #251, ADR-0005). Each has its own cache row and prompt version.
+ */
+export type InsightsMode = 'todo' | 'hogar'
+
+/** The input's `scope` key: present for Hogar only, so Todo's JSON is unchanged. */
+export type InsightScope = Exclude<InsightsMode, 'todo'>
+
+/** THE input → mode mapping (cache row, prompt version). */
+export function insightModeOf(
+  input: Pick<InsightInput, 'scope'>
+): InsightsMode {
+  return input.scope ?? 'todo'
+}
+
+export interface InsightInputOptions {
+  scope?: InsightScope
+  /**
+   * Hogar: every row the user has, whatever its household answer. The
+   * history's start/end and the months of the trend come from it, so a
+   * household subscription that stopped two imported months ago reads as
+   * lapsed, and a month with no household spend is a point at 0 (as on
+   * Resumen's Hogar "Mes a mes"). Defaults to the rows given.
+   */
+  coverage?: Transaction[]
 }
 
 export interface InsightInput {
@@ -61,6 +90,8 @@ export interface InsightInput {
   topMerchants: MerchantTotal[]
   recurringCharges: RecurringCharge[]
   monthlyTrend: MonthlyTrendPoint[]
+  /** Set for Hogar only; Todo has no key, so its JSON is what it always was. */
+  scope?: InsightScope
 }
 
 const TOP_MERCHANTS_LIMIT = 8
@@ -226,6 +257,30 @@ function detectRecurringCharges(
   return charges.sort((a, b) => b.approxAmount - a.approxAmount)
 }
 
+// The household's expense per month, over the months the statements cover.
+function buildHogarTrend(
+  household: Transaction[],
+  coverage: Transaction[],
+  homeCurrency: Currency,
+  fxRate: number
+): MonthlyTrendPoint[] {
+  const spent = new Map(
+    buildMonthlyTrendsConverted(household, homeCurrency, fxRate).map((d) => [
+      d.month,
+      d.expense,
+    ])
+  )
+  const months = new Set([
+    ...buildMonthlyTrendsConverted(coverage, homeCurrency, fxRate).map(
+      (d) => d.month
+    ),
+    ...spent.keys(),
+  ])
+  return [...months]
+    .sort()
+    .map((month) => ({ month, expense: round2(spent.get(month) ?? 0) }))
+}
+
 /**
  * Builds the deterministic, pre-computed input handed to the AI insight
  * generator, over the user's *entire* transaction history — there is no
@@ -237,8 +292,10 @@ function detectRecurringCharges(
 export function buildInsightInput(
   allTransactions: Transaction[],
   homeCurrency: Currency,
-  fxRate: number
+  fxRate: number,
+  options: InsightInputOptions = {}
 ): InsightInput {
+  const hogar = options.scope === 'hogar' // InsightScope, the only one
   if (allTransactions.length === 0) {
     return {
       historyStart: '',
@@ -248,6 +305,7 @@ export function buildInsightInput(
       topMerchants: [],
       recurringCharges: [],
       monthlyTrend: [],
+      ...(hogar && { scope: options.scope }),
     }
   }
 
@@ -256,7 +314,7 @@ export function buildInsightInput(
   // count and risks a call-stack error on a very large import history.
   let historyStartMs = Infinity
   let historyEndMs = -Infinity
-  for (const tx of allTransactions) {
+  for (const tx of options.coverage ?? allTransactions) {
     const t = tx.date.getTime()
     if (t < historyStartMs) historyStartMs = t
     if (t > historyEndMs) historyEndMs = t
@@ -277,14 +335,20 @@ export function buildInsightInput(
       fxRate,
       historyEndMonthKey
     ),
-    monthlyTrend: buildMonthlyTrendsConverted(
-      allTransactions,
-      homeCurrency,
-      fxRate
-    ).map((d) => ({
-      month: d.month,
-      income: round2(d.income),
-      expense: round2(d.expense),
-    })),
+    monthlyTrend: hogar
+      ? buildHogarTrend(
+          allTransactions,
+          options.coverage ?? allTransactions,
+          homeCurrency,
+          fxRate
+        )
+      : buildMonthlyTrendsConverted(allTransactions, homeCurrency, fxRate).map(
+          (d) => ({
+            month: d.month,
+            income: round2(d.income),
+            expense: round2(d.expense),
+          })
+        ),
+    ...(hogar && { scope: options.scope }),
   }
 }

@@ -560,6 +560,31 @@ describe('Supabase repository — insights cache', () => {
   })
 })
 
+describe('Supabase repository — Hogar insights cache (#251)', () => {
+  it('keeps the Todo and Hogar rows in their own tables', async () => {
+    const repo = createSupabaseRepository('user-1')
+    await repo.saveInsights({
+      inputHash: 'todo',
+      model: 'm',
+      insights: { insights: [] },
+    })
+    expect(await repo.loadInsights('hogar')).toBeNull()
+
+    await repo.saveInsights(
+      { inputHash: 'hogar', model: 'm', insights: { insights: [] } },
+      'hogar'
+    )
+
+    expect(db.rows('ai_insights').map((r) => r.input_hash)).toEqual(['todo'])
+    expect(db.rows('ai_household_insights').map((r) => r.input_hash)).toEqual([
+      'hogar',
+    ])
+    expect(await repo.loadInsights('hogar')).toMatchObject({
+      inputHash: 'hogar',
+    })
+  })
+})
+
 describe('Supabase repository — reset all data', () => {
   const RESET_TABLES = [
     'transactions',
@@ -570,6 +595,7 @@ describe('Supabase repository — reset all data', () => {
     'custom_categories',
     'custom_patterns',
     'user_preferences',
+    'ai_household_insights',
     'ai_insights',
   ]
 

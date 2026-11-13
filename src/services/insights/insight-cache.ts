@@ -1,12 +1,20 @@
 import type { Repository } from '../repository/repository'
 import { INSIGHTS_MODEL } from '../ai/models'
-import type { InsightInput } from './insight-data'
+import {
+  insightModeOf,
+  type InsightInput,
+  type InsightsMode,
+} from './insight-data'
 import type { InsightsResult } from './insight-generator'
-import { INSIGHT_PROMPT_VERSION } from './insight-prompt'
+import {
+  HOUSEHOLD_INSIGHT_PROMPT_VERSION,
+  INSIGHT_PROMPT_VERSION,
+} from './insight-prompt'
 
 /** What produced a cached result besides the input: prompt + model. */
 export interface InsightGenerator {
-  promptVersion: number
+  /** Hogar's is `base.household`: its prompt is Todo's plus a paragraph. */
+  promptVersion: number | string
   model: string
 }
 
@@ -20,7 +28,9 @@ export interface InsightGenerator {
 export function hashInsightInput(
   input: InsightInput,
   {
-    promptVersion = INSIGHT_PROMPT_VERSION,
+    promptVersion = insightModeOf(input) === 'hogar'
+      ? `${INSIGHT_PROMPT_VERSION}.${HOUSEHOLD_INSIGHT_PROMPT_VERSION}`
+      : INSIGHT_PROMPT_VERSION,
     model = INSIGHTS_MODEL,
   }: Partial<InsightGenerator> = {}
 ): string {
@@ -37,29 +47,28 @@ export interface CachedInsightsLookup {
   result: InsightsResult
   model: string
   generatedAt: string
-  isStale: boolean
+  /** The hash of the input that produced `result` (what staleness compares). */
+  inputHash: string
 }
 
 /**
- * Looks up the cached insights row for this user (one row per user — see
- * ADR-0002). `isStale` is true when the current InsightInput no longer
- * matches the hash of the input that produced the cached result (new
- * imports, edits, re-categorization), or the prompt version / insights model
- * changed since it was generated — the UI shows a "data changed,
- * regenerate?" banner instead of silently regenerating.
+ * The cached row of `mode` (one row per user and mode — ADR-0002, ADR-0005).
+ * Whether it is stale is `inputHash !== hashInsightInput(currentInput)`: the
+ * hash covers the input, the prompt version and the model, so new imports,
+ * edits, re-categorization, a prompt or a model change all flip it, and the UI
+ * shows a "data changed, regenerate?" banner instead of regenerating.
  */
-export async function getCachedInsights(
+export async function loadCachedLookup(
   repository: Repository,
-  input: InsightInput
+  mode: InsightsMode
 ): Promise<CachedInsightsLookup | null> {
-  const row = await repository.loadInsights()
+  const row = await repository.loadInsights(mode)
   if (!row) return null
-
   return {
     result: row.insights,
     model: row.model,
     generatedAt: row.generatedAt,
-    isStale: row.inputHash !== hashInsightInput(input),
+    inputHash: row.inputHash,
   }
 }
 
@@ -69,9 +78,12 @@ export async function saveCachedInsights(
   result: InsightsResult,
   model: string
 ): Promise<void> {
-  await repository.saveInsights({
-    inputHash: hashInsightInput(input, { model }),
-    model,
-    insights: result,
-  })
+  await repository.saveInsights(
+    {
+      inputHash: hashInsightInput(input, { model }),
+      model,
+      insights: result,
+    },
+    insightModeOf(input)
+  )
 }

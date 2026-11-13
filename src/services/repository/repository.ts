@@ -16,8 +16,10 @@ import type {
   SaveInsightsParams,
 } from '../supabase/ai-insights'
 import type { CustomPattern } from '../categorizer/custom-patterns'
+import type { InsightsMode } from '../insights/insight-data'
 
 export type { CachedInsightsRow, SaveInsightsParams }
+export type { InsightsMode }
 
 /**
  * One change to one row, written once and applied to both the repository and
@@ -240,23 +242,28 @@ export interface Repository {
   }): Promise<void>
   archiveCustomCategory(id: string): Promise<void>
 
-  // Insights cache (ADR-0001/0002: one row per user) -----------------------
+  // Insights cache (ADR-0001/0002/0005: one row per user and mode) ---------
   /**
-   * The cached insights, or null when there are none (also when the row is
-   * unusable, e.g. a database still on the old per-period key). A missing
-   * `ai_insights` table (schema.sql not applied) rejects with a
-   * UserFacingError.
+   * The cached insights of `mode` (Todo by default, or the household's), or
+   * null when there are none (also when the row is unusable, e.g. a database
+   * still on the old per-period key). A missing `ai_insights` table
+   * (schema.sql not applied) rejects with a UserFacingError; a missing
+   * `ai_household_insights` table reads as no cache.
    */
-  loadInsights(): Promise<CachedInsightsRow | null>
-  /** Replaces the cached insights; the server stamps `generatedAt`. */
-  saveInsights(row: SaveInsightsParams): Promise<void>
+  loadInsights(mode?: InsightsMode): Promise<CachedInsightsRow | null>
+  /**
+   * Replaces the cached insights of `mode`; the server stamps `generatedAt`.
+   * A missing table rejects with a UserFacingError, in either mode.
+   */
+  saveInsights(row: SaveInsightsParams, mode?: InsightsMode): Promise<void>
 
   // Account -----------------------------------------------------------------
   /**
    * Deletes everything the user has stored, one table at a time, stopping
    * at the first table that fails (the tables before it stay deleted; the
-   * caller reloads to show what remains). The insights cache is cleared
-   * last and best-effort: failing to clear it only warns.
+   * caller reloads to show what remains). The two insights caches
+   * (Hogar's, then Todo's) are cleared last and best-effort, each on its own:
+   * failing to clear one only warns.
    */
   resetAll(): Promise<void>
 }

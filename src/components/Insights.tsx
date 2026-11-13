@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { PageHeader } from './ui/page-header'
 import {
   Sparkles,
@@ -13,27 +13,31 @@ import {
 import { Card } from './ui/card'
 import { Button } from './ui/button'
 import { CategoryBadge } from './CategoryBadge'
+import { HouseholdModeToggle } from './dashboard/HouseholdModeToggle'
+import { NoHouseholdState } from './dashboard/EmptyStates'
+import { SpendNudge } from './dashboard/SpendNudge'
 import { formatCurrency } from '../utils/formatting'
 import type { Currency, Transaction, TransactionsFilter } from '../models'
 import type { Repository } from '../services/repository/repository'
-import { buildInsightInput } from '../services/insights/insight-data'
+import type { ClaudeClient } from '../services/ai/claude-client'
+import { partitionByHousehold } from '../services/household/household'
+import { sumCountedTotals } from '../services/spending/spending-rules'
+import { useHouseholdRules } from '../hooks/useHouseholdRules'
 import {
-  generateInsights,
-  type Insight,
-  type InsightSeverity,
-  type InsightType,
+  buildInsightInput,
+  type InsightsMode,
+} from '../services/insights/insight-data'
+import type {
+  Insight,
+  InsightSeverity,
+  InsightType,
 } from '../services/insights/insight-generator'
-import {
-  getCachedInsights,
-  saveCachedInsights,
-  type CachedInsightsLookup,
-} from '../services/insights/insight-cache'
-import { INSIGHTS_MODEL } from '../services/ai/models'
-import {
-  aiErrorMessage,
-  reportAiError,
-  userErrorMessage,
-} from '../utils/user-error'
+import { useInsightsByMode } from './insights/useInsightsByMode'
+
+const NO_PARTITION = {
+  household: [] as Transaction[],
+  unassigned: [] as Transaction[],
+}
 
 interface InsightsProps {
   transactions: Transaction[]
@@ -46,6 +50,12 @@ interface InsightsProps {
   onNavigateToTransactions: (filter: TransactionsFilter) => void
   onNavigateToSettings: () => void
   onNavigateToImport?: () => void
+  /** Hogar mode (`/insights?hogar=si`, owned by App): the household's rows only. */
+  householdMode?: boolean
+  onHouseholdModeChange?: (householdMode: boolean) => void
+  onNavigateToCategories?: () => void
+  /** Tests hand in a fake; the app builds the real one from the key. */
+  claudeClient?: ClaudeClient
 }
 
 const TYPE_ORDER: InsightType[] = [
@@ -106,83 +116,65 @@ export function Insights({
   onNavigateToTransactions,
   onNavigateToSettings,
   onNavigateToImport,
+  householdMode = false,
+  onHouseholdModeChange,
+  onNavigateToCategories,
+  claudeClient,
 }: InsightsProps) {
-  const [cached, setCached] = useState<CachedInsightsLookup | null>(null)
-  const [loadingCache, setLoadingCache] = useState(true)
-  const [generating, setGenerating] = useState(false)
-  const [error, setError] = useState('')
-
+  // Todo and Hogar are two analyses with their own cache row and their own
+  // state (ADR-0005; see useInsightsByMode).
+  const mode: InsightsMode = householdMode ? 'hogar' : 'todo'
   const isConfigured = aiEnabled && Boolean(claudeApiKey)
   const hasTransactions = transactions.length > 0
 
-  const input = useMemo(
+  // Hogar's rows: the ones that resolve to household; Sin definir apart. The
+  // rules come through the hook so a merchant rule alone changes them. Todo
+  // never looks at them, so a rule never rebuilds Todo's input.
+  const householdRules = useHouseholdRules()
+  const { household: householdRows, unassigned: unassignedRows } = useMemo(
+    () =>
+      householdMode
+        ? partitionByHousehold(transactions, householdRules)
+        : NO_PARTITION,
+    [householdMode, transactions, householdRules]
+  )
+  const noHouseholdSpend = householdMode && householdRows.length === 0
+  const hasRows = householdMode ? !noHouseholdSpend : hasTransactions
+
+  const todoInput = useMemo(
     () => buildInsightInput(transactions, homeCurrency, fxRate),
     [transactions, homeCurrency, fxRate]
   )
+  const householdInput = useMemo(
+    () =>
+      householdMode && householdRows.length > 0
+        ? buildInsightInput(householdRows, homeCurrency, fxRate, {
+            scope: 'hogar',
+            // The imports' months and end, not the household rows'.
+            coverage: transactions,
+          })
+        : null,
+    [householdMode, householdRows, transactions, homeCurrency, fxRate]
+  )
+  const input = householdMode ? householdInput : todoInput
 
-  useEffect(() => {
-    if (!isConfigured || !hasTransactions) {
-      setLoadingCache(false)
-      setCached(null)
-      return
-    }
+  const { cached, lookedUp, generating, error, generate } = useInsightsByMode({
+    repository,
+    mode,
+    input: hasRows ? input : null,
+    isConfigured,
+    claudeApiKey,
+    claudeClient,
+  })
+  const handleGenerate = generate
 
-    let cancelled = false
-    setLoadingCache(true)
-    setError('')
-
-    getCachedInsights(repository, input)
-      .then((result) => {
-        if (!cancelled) setCached(result)
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(
-            userErrorMessage(
-              e,
-              'No se pudieron cargar los insights',
-              'insights'
-            )
-          )
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingCache(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [repository, input, isConfigured, hasTransactions])
-
-  async function handleGenerate() {
-    setGenerating(true)
-    setError('')
-    let step: 'generate' | 'save' = 'generate'
-    try {
-      const result = await generateInsights(input, claudeApiKey)
-      // Shown even if saving fails: it was generated (and paid for).
-      setCached({
-        result,
-        model: INSIGHTS_MODEL,
-        generatedAt: new Date().toISOString(),
-        isStale: false,
-      })
-      step = 'save'
-      await saveCachedInsights(repository, input, result, INSIGHTS_MODEL)
-    } catch (e) {
-      if (step === 'generate') {
-        reportAiError(e, 'insights')
-        setError(`No se pudieron generar los insights: ${aiErrorMessage(e)}`)
-      } else {
-        setError(
-          userErrorMessage(e, 'No se pudieron guardar los insights', 'insights')
-        )
-      }
-    } finally {
-      setGenerating(false)
-    }
-  }
+  const unassigned = useMemo(
+    () => ({
+      count: unassignedRows.length,
+      total: sumCountedTotals(unassignedRows, homeCurrency, fxRate).expense,
+    }),
+    [unassignedRows, homeCurrency, fxRate]
+  )
 
   const groups = useMemo(
     () => groupAndSortInsights(cached?.result.insights ?? []),
@@ -200,13 +192,44 @@ export function Insights({
           />
         }
         title="Insights"
-        subtitle="¿Dónde se fue tu dinero? ¿Cómo podés gastar menos? — toda tu historia, de un vistazo."
+        subtitle={
+          householdMode
+            ? 'Solo los gastos del hogar — lo que revisan juntos, toda la historia.'
+            : '¿Dónde se fue tu dinero? ¿Cómo podés gastar menos? — toda tu historia, de un vistazo.'
+        }
+        actions={
+          hasTransactions &&
+          onHouseholdModeChange && (
+            <HouseholdModeToggle
+              householdMode={householdMode}
+              onChange={onHouseholdModeChange}
+            />
+          )
+        }
       />
 
       {error && (
         <p role="alert" className="text-[13px] text-[var(--neg)]">
           {error}
         </p>
+      )}
+
+      {/* The rows Hogar leaves out of the analysis, written by the app. */}
+      {householdMode && isConfigured && unassigned.count > 0 && (
+        <SpendNudge
+          title="Sin definir: no entran en este análisis"
+          total={unassigned.total}
+          count={unassigned.count}
+          homeCurrency={homeCurrency}
+          filter={{ type: 'debit', household: 'unassigned' }}
+          label="Ver los gastos sin definir"
+          cta="Categorizalos o marcalos →"
+          onNavigateToTransactions={onNavigateToTransactions}
+        />
+      )}
+
+      {hasTransactions && noHouseholdSpend && (
+        <NoHouseholdState onNavigateToCategories={onNavigateToCategories} />
       )}
 
       {!hasTransactions && (
@@ -230,7 +253,7 @@ export function Insights({
         </Card>
       )}
 
-      {hasTransactions && !isConfigured && (
+      {hasRows && !isConfigured && (
         <Card className="p-8 text-center space-y-4 items-center">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <Sparkles className="text-primary" size={28} />
@@ -246,16 +269,21 @@ export function Insights({
         </Card>
       )}
 
-      {hasTransactions && isConfigured && !loadingCache && !cached && (
+      {hasRows && isConfigured && lookedUp && !cached && (
         <Card className="p-8 text-center space-y-4 items-center">
           <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <Sparkles className="text-primary" size={28} />
           </div>
           <div>
-            <h2 className="mb-2">Generá tus primeros insights</h2>
+            <h2 className="mb-2">
+              {householdMode
+                ? 'Generá los insights del hogar'
+                : 'Generá tus primeros insights'}
+            </h2>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Analizamos todas tus categorías, comercios y cargos recurrentes
-              para mostrarte dónde se fue tu dinero.
+              {householdMode
+                ? 'Analizamos las categorías, comercios y cargos recurrentes de los gastos del hogar para mostrarte dónde se va la plata de la casa.'
+                : 'Analizamos todas tus categorías, comercios y cargos recurrentes para mostrarte dónde se fue tu dinero.'}
             </p>
             <p className="text-muted-foreground max-w-md mx-auto mt-2 text-xs">
               Se envían a Anthropic tus totales por categoría y comercio, usando
@@ -269,7 +297,7 @@ export function Insights({
         </Card>
       )}
 
-      {hasTransactions && isConfigured && cached && (
+      {hasRows && isConfigured && cached && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-[10px]">
             <p className="m-0 text-[12px] text-[var(--text-faint)]">
@@ -293,8 +321,10 @@ export function Insights({
           {cached.isStale && (
             <Card className="p-4 border-[var(--accent)] bg-[var(--accent-soft)]">
               <p className="m-0 text-[13px]">
-                Tus transacciones cambiaron desde la última vez que generaste
-                insights. Los que ves abajo pueden estar desactualizados —{' '}
+                {householdMode
+                  ? 'Tus gastos del hogar cambiaron desde la última vez que generaste los insights del hogar.'
+                  : 'Tus transacciones cambiaron desde la última vez que generaste insights.'}{' '}
+                Los que ves abajo pueden estar desactualizados —{' '}
                 <button
                   onClick={() => void handleGenerate()}
                   disabled={generating}
@@ -369,6 +399,10 @@ export function Insights({
                               onClick={() =>
                                 onNavigateToTransactions({
                                   category: insight.category,
+                                  // Inside Hogar the drill stays in the house.
+                                  ...(householdMode && {
+                                    household: 'household' as const,
+                                  }),
                                 })
                               }
                               className="mt-[6px] cursor-pointer border-none bg-transparent p-0 text-[12px] font-semibold text-[var(--brand-text)]"

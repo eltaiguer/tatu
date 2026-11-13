@@ -13,6 +13,7 @@ import type { UserPreferences } from '../supabase/user-preferences'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { CachedInsightsRow } from '../supabase/ai-insights'
 import { UserFacingError } from '../../utils/user-error'
+import type { InsightsMode } from '../insights/insight-data'
 import { groupByPatch, insertSequentially, settleChunks } from './batching'
 import {
   applyPatch,
@@ -101,6 +102,8 @@ export interface InMemoryRepository extends Repository {
   customCategories: Map<string, CustomCategoryRecord>
   preferences: UserPreferences | null
   insights: CachedInsightsRow | null
+  /** Hogar's own cache row (ai_household_insights). */
+  householdInsights: CachedInsightsRow | null
   importRuns: ImportRunRecord[]
   /** Makes matching requests of `op` reject. */
   failOn(
@@ -125,6 +128,12 @@ export interface InMemoryRepository extends Repository {
    */
   actingUserId: string
 }
+
+// The row each mode's cache lives in (ai_insights / ai_household_insights).
+const INSIGHTS_SLOTS = {
+  todo: 'insights',
+  hogar: 'householdInsights',
+} as const satisfies Record<InsightsMode, string>
 
 export function createInMemoryRepository(
   seed: {
@@ -189,6 +198,7 @@ export function createInMemoryRepository(
     ),
     preferences: seed.preferences ?? null,
     insights: null,
+    householdInsights: null,
     importRuns: [],
     requests,
     actingUserId: userId,
@@ -521,14 +531,16 @@ export function createInMemoryRepository(
         repo.customCategories.set(id, { ...existing, isArchived: true })
     },
 
-    async loadInsights() {
+    async loadInsights(mode = 'todo') {
       await request('loadInsights')
-      return repo.insights && authorized() ? { ...repo.insights } : null
+      const cached = repo[INSIGHTS_SLOTS[mode]]
+      return cached && authorized() ? { ...cached } : null
     },
-    async saveInsights(row) {
+    async saveInsights(row, mode = 'todo') {
       await request('saveInsights')
       requireAuthorized()
-      repo.insights = { ...row, generatedAt: new Date().toISOString() }
+      const saved = { ...row, generatedAt: new Date().toISOString() }
+      repo[INSIGHTS_SLOTS[mode]] = saved
     },
 
     // Same tables, same order and same failure rule as the Supabase adapter.
@@ -549,11 +561,18 @@ export function createInMemoryRepository(
         await request('resetAll', [name])
         if (authorized()) clear()
       }
-      try {
-        await request('resetAll', ['ai_insights'])
-        if (authorized()) repo.insights = null
-      } catch (error) {
-        console.warn('Could not clear cached insights during reset:', error)
+      // Both caches are best-effort, each on its own (as the adapter).
+      const caches: [string, () => void][] = [
+        ['ai_household_insights', () => (repo.householdInsights = null)],
+        ['ai_insights', () => (repo.insights = null)],
+      ]
+      for (const [name, clear] of caches) {
+        try {
+          await request('resetAll', [name])
+          if (authorized()) clear()
+        } catch (error) {
+          console.warn('Could not clear cached insights during reset:', error)
+        }
       }
     },
   }
