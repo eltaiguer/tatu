@@ -58,6 +58,14 @@ export type InsightScope = 'hogar'
 
 export interface InsightInputOptions {
   scope?: InsightScope
+  /**
+   * Hogar: every row the user has, whatever its household answer. The
+   * history's start/end and the months of the trend come from it, so a
+   * household subscription that stopped two imported months ago reads as
+   * lapsed, and a month with no household spend is a point at 0 (as on
+   * Resumen's Hogar "Mes a mes"). Defaults to the rows given.
+   */
+  coverage?: Transaction[]
 }
 
 export interface InsightInput {
@@ -236,6 +244,30 @@ function detectRecurringCharges(
   return charges.sort((a, b) => b.approxAmount - a.approxAmount)
 }
 
+// The household's expense per month, over the months the statements cover.
+function buildHogarTrend(
+  household: Transaction[],
+  coverage: Transaction[],
+  homeCurrency: Currency,
+  fxRate: number
+): MonthlyTrendPoint[] {
+  const spent = new Map(
+    buildMonthlyTrendsConverted(household, homeCurrency, fxRate).map((d) => [
+      d.month,
+      d.expense,
+    ])
+  )
+  const months = new Set([
+    ...buildMonthlyTrendsConverted(coverage, homeCurrency, fxRate).map(
+      (d) => d.month
+    ),
+    ...spent.keys(),
+  ])
+  return [...months]
+    .sort()
+    .map((month) => ({ month, expense: round2(spent.get(month) ?? 0) }))
+}
+
 /**
  * Builds the deterministic, pre-computed input handed to the AI insight
  * generator, over the user's *entire* transaction history — there is no
@@ -269,7 +301,7 @@ export function buildInsightInput(
   // count and risks a call-stack error on a very large import history.
   let historyStartMs = Infinity
   let historyEndMs = -Infinity
-  for (const tx of allTransactions) {
+  for (const tx of options.coverage ?? allTransactions) {
     const t = tx.date.getTime()
     if (t < historyStartMs) historyStartMs = t
     if (t > historyEndMs) historyEndMs = t
@@ -290,19 +322,20 @@ export function buildInsightInput(
       fxRate,
       historyEndMonthKey
     ),
-    monthlyTrend: buildMonthlyTrendsConverted(
-      allTransactions,
-      homeCurrency,
-      fxRate
-    ).map((d) =>
-      hogar
-        ? { month: d.month, expense: round2(d.expense) }
-        : {
+    monthlyTrend: hogar
+      ? buildHogarTrend(
+          allTransactions,
+          options.coverage ?? allTransactions,
+          homeCurrency,
+          fxRate
+        )
+      : buildMonthlyTrendsConverted(allTransactions, homeCurrency, fxRate).map(
+          (d) => ({
             month: d.month,
             income: round2(d.income),
             expense: round2(d.expense),
-          }
-    ),
+          })
+        ),
     ...(hogar && { scope: options.scope }),
   }
 }
