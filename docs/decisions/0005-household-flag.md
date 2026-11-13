@@ -183,7 +183,13 @@ Implemented in step 8 of #251: Hogar mode on Insights (`/insights?hogar=si`).
 - Own prompt paragraph (`buildInsightSystemPrompt('hogar')`: household
   figures only, never talk about income, savings or personal spending) and its
   own version constant, `HOUSEHOLD_INSIGHT_PROMPT_VERSION`, folded into the
-  Hogar hash. Recurring charges are detected over the household rows only.
+  Hogar hash together with `INSIGHT_PROMPT_VERSION` (`base.household`): its
+  prompt is Todo's plus a paragraph, so a base change stales both modes.
+  Recurring charges are detected over the household rows only, but the
+  history's start/end and the months of the trend come from every imported row
+  (`coverage`): a household subscription that stopped two imported months ago
+  reads as lapsed, and a month with no household spend is a point at 0, as on
+  Resumen's "Mes a mes".
 - Own cache, own table: `ai_household_insights`, same shape and policy as
   `ai_insights`, one row per user. A table beside the old one rather than a
   `mode` column: no primary-key migration, and Todo's cache path, hash, prompt
@@ -194,16 +200,23 @@ Implemented in step 8 of #251: Hogar mode on Insights (`/insights?hogar=si`).
 - Stale like Todo (hash of the Hogar input): a house click, a merchant rule or
   a category default that moves a row in or out of the household shows the
   banner; nothing regenerates by itself. Todo is not made stale by those.
-- Sin definir rows are left out of the input. A line written by the app, not
-  by Claude, says so: "N gastos sin definir ($X) no entran en este análisis",
-  with "Verlos →" opening `{ type: 'debit', household: 'unassigned' }`. A Hogar
+- Sin definir rows are left out of the input. A `SpendNudge` row (Resumen's
+  component), written by the app and not by Claude, says so: "Sin definir: no
+  entran en este análisis", with the total and count, opening
+  `{ type: 'debit', household: 'unassigned' }`. It shows only while the AI is
+  configured (above the cards and above the empty state). A Hogar
   card's "Ver transacciones →" adds `household: 'household'`.
 - No household spend yet: the Resumen empty state ("Todavía no hay gastos del
   hogar") and no Generar button.
 - A lookup, a running generation and an error each belong to the mode they
-  started in: switching mode never shows or saves one in the other.
+  started in (`useInsightsByMode`, one record per mode): switching mode never
+  shows or saves one in the other, a result that finishes while the user is in
+  the other mode is kept for when they return, and staleness is derived from
+  the hash of the input a result came from, so a result that finished after the
+  data changed shows the banner. A failed cache lookup still offers Generar.
 - Until the table is applied by hand, loading Hogar insights reads as no cache,
-  a reset skips it, and saving a generation says "Falta crear la tabla de
+  a reset skips it (clearing either cache is best-effort and never fails
+  "reset all data"), and saving a generation says "Falta crear la tabla de
   insights del hogar…" (the generated cards still show).
 
 Planned for the later PRs of #251:

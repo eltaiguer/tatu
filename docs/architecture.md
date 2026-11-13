@@ -606,7 +606,7 @@ changing.
   months are complete reads every row too (see "Complete months").
 - The URL token (`hogar` / `si`) lives in `services/filters/url-filters.ts`
   (`householdModeFromSearch` / `householdModeToSearch`) beside the
-  Transacciones filter's, and `App.tsx` reads it on Resumen only.
+  Transacciones filter's, and `App.tsx` reads it on Resumen and Insights only.
   Re-selecting Resumen in the sidebar replaces the entry and drops the query
   (`keepsQueryOnReselect` in `src/routes.ts`: only Transacciones keeps its).
 - Drill-throughs go through one wrapper that adds `household: 'household'`

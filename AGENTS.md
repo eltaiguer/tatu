@@ -61,7 +61,7 @@ src/
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
     transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable), HouseToggle (the "gasto del hogar" house on both); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state), useHouseholdWrites (every household write of the view: the row's house, the dialog's choice and rule, the "Aplicar a las N similares" offer; one counter per row so an old toast action or retry never replays a superseded click)
     Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards); owns the Todo / Hogar mode's lookup, generation and errors per mode
-    insights/              # Insights sub-components: UndefinedHouseholdNote (Hogar: the Sin definir rows left out of the analysis, written by the app)
+    insights/              # Insights sub-components: useInsightsByMode (the cache lookup, running generation and error of each mode — Todo / Hogar — as one record: a generation lands in the mode it started in; staleness derived from the hash of the input a result came from)
     Categories.tsx         # Categorías view — "Tus categorías" tile grid (no wrapping card) + auto-categorization rules, each an h2 Section
     categories/            # Categorías sub-components: CategoryForm (incl. the "Gasto del hogar" checkbox), CategoryCard (incl. the house toggle for the category's household default), PatternRulesCard (rules form + list, owns its state)
     settings/              # Configuración sub-components: DuplicatesReview ("Buscar posibles duplicados" row + review dialog, #167)
@@ -151,7 +151,7 @@ type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 - **General**: Resumen (`overview`), Transacciones (`transactions`), Insights (`insights`)
 - **Gestión**: Categorías (`categories`), Configuración (`settings`)
 - Import is a Radix `Dialog` overlay triggered from the sidebar and from Settings — not a view.
-- Charts (donut, savings bars, monthly spend bars, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view. Resumen reads top-down: "Qué cambió" → the month hero → three `ResumenSection`s ("¿A dónde se fue la plata?", "Mes a mes", "Tus cuentas"), each labelled with the period its numbers cover. A "Todo · Hogar" toggle in its header (`/?hogar=si`, read on Resumen only and written by `App.tsx`, passed down as `householdMode`; the token lives in `url-filters.ts`) cuts every figure to the household expenses (ADR-0005); the hero's month stays the Todo month.
+- Charts (donut, savings bars, monthly spend bars, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view. Resumen reads top-down: "Qué cambió" → the month hero → three `ResumenSection`s ("¿A dónde se fue la plata?", "Mes a mes", "Tus cuentas"), each labelled with the period its numbers cover. A "Todo · Hogar" toggle in its header (`/?hogar=si`, read on Resumen and Insights only and written by `App.tsx`, passed down as `householdMode`; the token lives in `url-filters.ts`) cuts every figure to the household expenses (ADR-0005); the hero's month stays the Todo month.
 - Views load lazily (`lazy-views.tsx`) inside `ViewErrorBoundary` + `Suspense` in `App.tsx`.
 
 ### Routing
