@@ -550,17 +550,23 @@ export function createInMemoryRepository(
         ['custom_categories', () => repo.customCategories.clear()],
         ['custom_patterns', () => repo.customPatterns.clear()],
         ['user_preferences', () => (repo.preferences = null)],
-        ['ai_household_insights', () => (repo.householdInsights = null)],
       ]
       for (const [name, clear] of steps) {
         await request('resetAll', [name])
         if (authorized()) clear()
       }
-      try {
-        await request('resetAll', ['ai_insights'])
-        if (authorized()) repo.insights = null
-      } catch (error) {
-        console.warn('Could not clear cached insights during reset:', error)
+      // Both caches are best-effort, each on its own (as the adapter).
+      const caches: [string, () => void][] = [
+        ['ai_household_insights', () => (repo.householdInsights = null)],
+        ['ai_insights', () => (repo.insights = null)],
+      ]
+      for (const [name, clear] of caches) {
+        try {
+          await request('resetAll', [name])
+          if (authorized()) clear()
+        } catch (error) {
+          console.warn('Could not clear cached insights during reset:', error)
+        }
       }
     },
   }

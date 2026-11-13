@@ -260,9 +260,9 @@ export interface Repository {
   /**
    * Deletes everything the user has stored, one table at a time, stopping
    * at the first table that fails (the tables before it stay deleted; the
-   * caller reloads to show what remains). The household insights cache is
-   * cleared with the rest (a missing table is skipped); Todo's insights cache
-   * is cleared last and best-effort: failing to clear it only warns.
+   * caller reloads to show what remains). The two insights caches
+   * (Hogar's, then Todo's) are cleared last and best-effort, each on its own:
+   * failing to clear one only warns.
    */
   resetAll(): Promise<void>
 }

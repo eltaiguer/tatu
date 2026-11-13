@@ -71,17 +71,24 @@ describe('supabase reset service', () => {
     expect(reporting.captureError).not.toHaveBeenCalled()
   })
 
-  it('fails on any other error clearing the household insights', async () => {
+  it('survives any other error clearing the household insights, and still clears ai_insights', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const cleared: string[] = []
     fromMock.mockImplementation((table: string) => ({
       delete: () => ({
-        eq: async () =>
-          table === 'ai_household_insights'
+        eq: async () => {
+          cleared.push(table)
+          return table === 'ai_household_insights'
             ? { error: { code: 'XX000', message: 'boom' } }
-            : { error: null },
+            : { error: null }
+        },
       }),
     }))
 
     const { resetUserSupabaseData } = await import('./reset')
-    await expect(resetUserSupabaseData(userId)).rejects.toThrow('boom')
+    await expect(resetUserSupabaseData(userId)).resolves.toBeUndefined()
+
+    expect(cleared).toContain('ai_insights')
+    expect(warn).toHaveBeenCalled()
   })
 })

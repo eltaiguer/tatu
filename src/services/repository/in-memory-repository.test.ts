@@ -275,6 +275,24 @@ describe('in-memory repository — reset all data', () => {
     expect(repo.preferences).not.toBeNull()
   })
 
+  it('still succeeds, and clears the other cache, when one insights cache cannot be cleared', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const repo = seeded()
+    await repo.saveInsights({
+      inputHash: 'h',
+      model: 'm',
+      insights: { insights: [] },
+    })
+    repo.failOn('resetAll', {
+      when: ([table]) => table === 'ai_household_insights',
+    })
+
+    await expect(repo.resetAll()).resolves.toBeUndefined()
+
+    expect(await repo.loadInsights()).toBeNull()
+    expect(warn).toHaveBeenCalled()
+  })
+
   it('still succeeds when only the insights cache cannot be cleared', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const repo = seeded()
