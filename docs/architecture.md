@@ -226,9 +226,9 @@ and replaces the in-memory state in one synchronous step.
 flowchart LR
     S["Session user id changes"] --> P["Parallel load from Supabase"]
     P --> T["loadUserTransactions: is_deleted = false, keyset-paged"]
-    P --> O["category_overrides, description_overrides, custom_patterns, custom_categories"]
+    P --> O["category_overrides, household_rules (listHouseholdRules), description_overrides, custom_patterns, custom_categories"]
     P --> U["user_preferences: theme, currency, fx_rate, AI key and model"]
-    O --> R["replaceMerchantCategoryOverrides, replaceDescriptionOverrides, replaceCustomPatterns, replaceCustomCategories"]
+    O --> R["replaceMerchantCategoryOverrides, loadHouseholdRules, replaceDescriptionOverrides, replaceCustomPatterns, replaceCustomCategories"]
     U --> Q["workspace preferences (defaults when there is no row) + AI config"]
     T --> X["store.setTransactions, which runs inferInternalTransfers"]
 ```
@@ -437,7 +437,12 @@ a reload all agree. Split parents never match; rows that don't count toward
 totals match only with `showIgnored`; categories are compared through
 `normalizeCategoryId`, the merchant by its exact merchant key (`merchantKeyOf`,
 see Merchant key below), amounts by absolute value, search over display name +
-raw description + tags. `sortTransactions` orders the result.
+raw description + tags. The Hogar filter (`household`: `all` / `household` /
+`unassigned`, `?hogar=si` / `?hogar=sin-definir`) keeps the counted expenses
+whose `rowHouseholdView` status is that value; it takes the user's category
+rules as `options.householdRules` (callers pass
+`currentHouseholdRules()`: category defaults + merchant rules; `useTransactionFiltering` reads it at render, so
+a changed default re-filters). `sortTransactions` orders the result.
 
 `useTransactionFiltering` holds that state in React as one value (seeded once
 from the URL; the view fills in its default period first): it returns
@@ -487,7 +492,7 @@ All conversion happens in the browser, at render or aggregation time, with
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `buildCurrencySplit`, `spendByAccount`, `buildMerchantSpendingConverted`) | Resumen totals, charts, account cards and "Mayores comercios" (also Insights' `topMerchants`), in the home currency |
 | `category-changes.ts` (`categoryChanges`, `categoryChangesBefore`)                                                                                                                      | "Qué cambió" month comparisons (also Insights' `categoryChanges`) and its US$ 10 noise floor                        |
-| `insight-data.ts` (`buildInsightInput`)                                                                                                                                                 | Every number handed to the Insights model, rounded to cents                                                         |
+| `insight-data.ts` (`buildInsightInput`)                                                                                                                                                 | Every number handed to the Insights model, rounded to cents (`scope: 'hogar'` = household rows only, no income)     |
 | `Dashboard.tsx`                                                                                                                                                                         | Recent rows                                                                                                         |
 | `Transactions.tsx`                                                                                                                                                                      | Filtered-set totals                                                                                                 |
 | `TransactionTable.tsx`                                                                                                                                                                  | The faint `≈` converted amount next to a native one                                                                 |
@@ -519,6 +524,10 @@ month after its history ends, so its hashed input never reads the clock.
   "not imported" from "the account didn't exist yet or was quiet", so the
   copy says only what is always true: those months lack data from some
   account. Importing the missing statements brings them back.
+- In Resumen's Hogar mode the rows drawn are a subset, but the months and
+  their completeness are about the statements: `buildMonthlyTrendRows` and
+  `categoryChanges` take an optional `coverage` (every row) for
+  `completeMonths`, and the trend's axis comes from it too.
 
 ## What a category id means
 
@@ -572,6 +581,38 @@ clicks equals the sum of the rows it opens. Callers never re-derive it from
 | `countsTowardTotals`                   | A row (`countsAsRow`) whose category is not ignored (`isCategoryIgnored`, the cheap form of `resolveCategory(id).isIgnored`: transfers, the `ignored` id, user-flagged categories). | Resumen's counted rows, monthly trend, month summary, the "show ignored" toggle, the export's `cuenta_en_totales` column                                        |
 | `isCountedExpense` / `isCountedIncome` | `countsTowardTotals` and a `debit` / `credit`.                                                                                                                                      | Category, currency, account and merchant spend; "Qué cambió"; every expense number in `InsightInput`                                                            |
 | `sumCountedTotals`                     | Income, expense and net of the counted rows, in the home currency.                                                                                                                  | The Transacciones totals strip, each month of `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`                                                         |
+
+## Resumen: Todo / Hogar mode
+
+`Dashboard.tsx` (Resumen) has two modes, kept in the URL as `/?hogar=si`
+(`App.tsx` reads it into `householdMode` and writes it with REPLACE; any other
+value is Todo; the sidebar's Resumen link goes to `/`). Todo is the whole
+page. Hogar is one cut at the top: `householdRows` = the rows whose
+`rowHouseholdView(tx, currentHouseholdRules())` is `household` (counted
+expenses only, so income, ignored rows and split parents are out), found with
+`partitionByHousehold` (one pass; it also yields the Sin definir rows). Every
+memo reads `rows = householdMode ? householdRows : transactions`. The
+category defaults are read at render: nothing subscribes to the category
+store, and the numbers follow a changed default because coming back from
+Categorías remounts the view (as in `useTransactionFiltering`). The map
+changes identity when a default does, so the memos re-run without the rows
+changing.
+
+- The hero's month is always the Todo month: `buildCurrentMonthSummary` takes
+  an optional reference month, so the household summary of a month with no
+  household spend is $0 rather than another month.
+- Sin definir (`status === 'unassigned'`) is summed apart with
+  `sumCountedTotals` / the same month summary, never into the household total.
+- "Mes a mes" has the same months as Todo's (`coverage` is every row): a
+  month with no household spend is a bar at 0, not a missing month. Which
+  months are complete reads every row too (see "Complete months").
+- The URL token (`hogar` / `si`) lives in `services/filters/url-filters.ts`
+  (`householdModeFromSearch` / `householdModeToSearch`) beside the
+  Transacciones filter's, and `App.tsx` reads it on Resumen and Insights only.
+  Re-selecting Resumen in the sidebar replaces the entry and drops the query
+  (`keepsQueryOnReselect` in `src/routes.ts`: only Transacciones keeps its).
+- Drill-throughs go through one wrapper that adds `household: 'household'`
+  (a filter naming its own household, such as Sin definir, keeps it).
 
 ## Merchant key
 
@@ -641,7 +682,10 @@ backup, split parents and ignored rows included); Transacciones exports the
 rows on screen (`filteredTransactions`, so ignored rows only with "show
 ignored" on). Both CSV and PDF end with a `cuenta_en_totales` column (`1` /
 `0`, from `countsTowardTotals`): summing the `1` rows gives the app's totals,
-because a split parent is `0` and its parts are `1`. PDF prints an HTML
+because a split parent is `0` and its parts are `1`. After it comes `hogar`
+(`si` / `no` / `sin_definir` from `rowHouseholdView`, empty for rows that are
+not counted expenses); the callers pass the user's household rules
+(`currentHouseholdRules()`). PDF prints an HTML
 report (every interpolated string HTML-escaped) from a hidden same-origin
 iframe, not a popup — `window.open` with `noopener` returns `null` (#179). If
 the frame can't be written or printed, the export throws a `UserFacingError`
@@ -656,7 +700,7 @@ the signed-in user's repository once per user id (a token refresh's new
 session object does not rebuild it; the Supabase client sends the current
 token itself) and hands it to
 `useUserWorkspace`, `useTransactionHandlers`, the views that save rules,
-Insights (its cache: `loadInsights` / `saveInsights`) and Configuración
+Insights (its cache: `loadInsights` / `saveInsights`, one row per mode) and Configuración
 ("reset all data": `resetAll`, through `resetWorkspace`). `main.tsx` passes
 `createSupabaseRepository`; tests use `createInMemoryRepository` (same
 chunking, plus fault injection and `hold` for races), and the App suites a
@@ -703,14 +747,15 @@ and skip their rollback after a switch.
 
 ## Persistence boundaries
 
-| Data                                                                          | Store of record                                                                                 | In memory                                                                                    |
-| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Transactions                                                                  | Supabase `transactions` (soft delete via `is_deleted` / `deleted_at`; split parts hard-deleted) | Zustand `transactionStore`, no persist middleware                                            |
-| Description overrides, merchant overrides, custom patterns, custom categories | Supabase `description_overrides`, `category_overrides`, `custom_patterns`, `custom_categories`  | Module-level state in their services, replaced on sync; edits also write through to Supabase |
-| Preferences, including the Claude API key                                     | Supabase `user_preferences`                                                                     | `workspaceStore` preferences; the AI config in `ai-config.ts`, derived from them             |
-| Import audit                                                                  | Supabase `import_runs`                                                                          | Not loaded                                                                                   |
-| Insights cache                                                                | Supabase `ai_insights`, one row per user, via `repository.loadInsights` / `saveInsights`        | `Insights.tsx` state                                                                         |
-| Auth session                                                                  | Supabase Auth                                                                                   | Cached in `localStorage` under `tatu:supabase:session` (`src/services/supabase/client.ts`)   |
+| Data                                                                                           | Store of record                                                                                                                                                                  | In memory                                                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Transactions                                                                                   | Supabase `transactions` (soft delete via `is_deleted` / `deleted_at`; split parts hard-deleted)                                                                                  | Zustand `transactionStore`, no persist middleware                                                                                                                                                                |
+| Description overrides, merchant overrides, household rules, custom patterns, custom categories | Supabase `description_overrides`, `category_overrides`, `household_rules`, `custom_patterns`, `custom_categories`                                                                | Module-level state in their services, replaced on sync; edits also write through to Supabase                                                                                                                     |
+| Household choice, per row, per merchant and per category                                       | Supabase `transactions.household`, `household_rules` (one row per merchant key) and `custom_categories.is_household` (nullable: null = follow the category / the seeded default) | Row: `Transaction.household` in `transactionStore`; merchant: `household-rules-store.ts` (replaced on every write; `useHouseholdRules` subscribes); category: `CustomCategory.isHousehold` in the category store |
+| Preferences, including the Claude API key                                                      | Supabase `user_preferences`                                                                                                                                                      | `workspaceStore` preferences; the AI config in `ai-config.ts`, derived from them                                                                                                                                 |
+| Import audit                                                                                   | Supabase `import_runs`                                                                                                                                                           | Not loaded                                                                                                                                                                                                       |
+| Insights cache                                                                                 | Supabase `ai_insights` (Todo) and `ai_household_insights` (Hogar mode, #251), one row per user in each, via `repository.loadInsights(mode)` / `saveInsights(row, mode)`          | `Insights.tsx` state                                                                                                                                                                                             |
+| Auth session                                                                                   | Supabase Auth                                                                                                                                                                    | Cached in `localStorage` under `tatu:supabase:session` (`src/services/supabase/client.ts`)                                                                                                                       |
 
 - **Supabase is required.** There is no offline mode or local fallback;
   without a session the app shows the sign-in screen.
@@ -728,6 +773,43 @@ and skip their rollback after a switch.
   `aiErrorMessage` shows an `AiError`'s message and "error inesperado del
   servicio de IA" for anything else; a batch loop stops at the first failure
   that is not `retryable` (`auth`, `billing`, `stale_chunk`).
+- **The household flag** is resolved by `resolveHousehold`
+  (`services/household/household.ts`: the row's own choice, else the user's
+  rule for its merchant, else the user's default for its category, else the
+  seeded default; all from `currentHouseholdRules()`; ADR-0005). A merchant
+  rule is read at resolution time and never stamped on rows: it is keyed by
+  `merchantOverrideKey` (the key category rules use), kept in
+  `household-rules-store.ts` (replaced on every write, loaded by
+  `hydrateWorkspace`, cleared on teardown) and persisted in `household_rules`.
+  A split part ignores it. `applyHouseholdToSimilar` (mutations) saves or
+  deletes the rule and applies it to `rowsSharingMerchantRule`: past and future
+  clears the similar rows' own choices; future-only first pins the value each
+  other similar row shows today as its own choice, then writes the rule. The
+  edit dialog's "Aplicar a" drives it (only when the household radio was
+  touched), and the one-click house offers "Aplicar a las N similares". The
+  household toasts, offers and retries live in `useHouseholdWrites`.
+  The household flag is not part of "which rows count"
+  (`services/spending/spending-rules.ts`): callers combine the two. Writes are
+  `setHousehold` (one or many rows, `services/mutations/transaction-mutations.ts`;
+  the row's house, the bulk "Hogar" menu and, under "Solo esta", the edit
+  dialog call it through `useTransactionHandlers.handleSetHousehold`),
+  `applyHouseholdToSimilar` (a merchant rule and its reach; the edit dialog
+  under the two rule scopes and the toast's action call it through
+  `handleApplyHouseholdToSimilar`; what a row shows and what a click writes
+  come from `rowHouseholdView` / `nextHouseholdChoice`, so the
+  three agree) and `setCategoryHouseholdWithSync` (a category's default, from the tile
+  toggle in Categorías; a built-in's lives in its override row, as its ignore
+  flag does; a value, or null = back to the seeded default; Sin categoría and
+  Ingresos are refused, `canHaveHouseholdDefault`). The category form saves
+  through `updateCustomCategoryWithSync` / `upsertBuiltinOverrideWithSync`,
+  whose `CategoryUpdate.isHousehold` is a value, null (clear) or absent
+  (unchanged); the form sends it only when its box was changed. Imports write
+  neither column. A plain edit of a single-row category re-sends `is_household`
+  only when the store already holds a value (rows that name one category
+  always send it, so they converge), so edits keep working on a database that
+  has not got the column yet while no default was ever set; creating a category
+  writes `is_household`, and setting a household choice writes either, so apply
+  `schema.sql` before the next deploy.
 - **Derived state is not persisted:** inferred transfer categories, converted
   amounts, learned patterns and temporal patterns are recomputed from the
   stored data.

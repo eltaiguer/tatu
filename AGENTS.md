@@ -56,13 +56,14 @@ src/
   components/              # React UI components
     ui/                    # Radix primitives (shadcn/ui style) + app ones: page-header, section (Section: display-font h2 above a named region, for Configuración/Categorías; card.tsx's SectionCard puts its rows in one card below the h2), segmented-toggle (a radiogroup), icon-tile, native-select; use-return-focus (dialogs return focus to their opener on close), option-list (arrow keys in popover picker lists)
     AppSidebar.tsx         # Fixed 252px sidebar, navigation, user footer
-    Dashboard.tsx          # Resumen view — owns the data memos; charts live here, not a separate view
-    dashboard/             # Resumen sub-components: MonthHero (the month as one sentence), ResumenSection (a question heading + period, a named region), UncategorizedNudge, CategorySpendCard (donut), TopMerchantsCard, RecentTransactionsCard, SavingsCard, MonthlySpendChart (spend bars, income ghost), MonthButtons (keyboard equivalent of a chart's bars), AccountCards, CurrencySplitCard, EmptyStates, DrillTarget
+    Dashboard.tsx          # Resumen view — owns the data memos (+ the Todo / Hogar cut: `householdRows` replace `transactions` in every memo); charts live here, not a separate view
+    dashboard/             # Resumen sub-components: MonthHero (the month as one sentence; Hogar mode: "Gastos del hogar", Sin definir line; Todo: "Hogar $X de $Y gastados"), HouseholdModeToggle (Todo / Hogar), ResumenSection (a question heading + period, a named region), SpendNudge (the "Sin categoría" / Hogar "Sin definir" row), CategorySpendCard (donut), TopMerchantsCard, RecentTransactionsCard, SavingsCard, MonthlySpendChart (spend bars, income ghost), MonthButtons (keyboard equivalent of a chart's bars), AccountCards, CurrencySplitCard, EmptyStates, DrillTarget
     Transactions.tsx       # Transactions view — unified filter bar, table, pagination
-    transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state)
-    Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards)
+    transactions/          # Transacciones sub-components + view hooks: MonthNav, TotalsStrip, BulkBar, TransactionsPagination, TransactionRow / TransactionCard (desktop row / mobile card of TransactionTable), HouseToggle (the "gasto del hogar" house on both); useMutationFeedback (error/undo toasts, delete confirm), useRowSelection, useBulkActions (bulk bar + bulk edit state), useHouseholdWrites (every household write of the view: the row's house, the dialog's choice and rule, the "Aplicar a las N similares" offer; one counter per row so an old toast action or retry never replays a superseded click)
+    Insights.tsx           # Insights view — AI-generated spending insights over the user's entire history (generate/regenerate, grouped cards); its Todo / Hogar mode's lookup, generation and errors live per mode in `insights/useInsightsByMode`
+    insights/              # Insights sub-components: useInsightsByMode (the cache lookup, running generation and error of each mode — Todo / Hogar — as one record: a generation lands in the mode it started in; staleness derived from the hash of the input a result came from)
     Categories.tsx         # Categorías view — "Tus categorías" tile grid (no wrapping card) + auto-categorization rules, each an h2 Section
-    categories/            # Categorías sub-components: CategoryForm, CategoryCard, PatternRulesCard (rules form + list, owns its state)
+    categories/            # Categorías sub-components: CategoryForm (incl. the "Gasto del hogar" checkbox), CategoryCard (incl. the house toggle for the category's household default), PatternRulesCard (rules form + list, owns its state)
     settings/              # Configuración sub-components: DuplicatesReview ("Buscar posibles duplicados" row + review dialog, #167)
     Settings.tsx           # Configuración view — theme, currency, AI, account, data management (one SectionCard each); dev panels in one closed "Herramientas de desarrollo" <details> (DEV builds only)
     ImportCSV.tsx          # CSV import dialog (Radix Dialog, not a view): picks the file, hands its bytes to importStatement via a required handler, stays open on a summary of counts (#202)
@@ -93,6 +94,7 @@ src/
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
     useTransactionHandlers.ts  # The transaction mutations bound to the signed-in user's repository (thin; one contract without one)
     useTransactionFiltering.ts # The filters as ONE value (URL shape, period included): `filters` + `update(patch)` + `clear()` + `setDateBound`, plus sort + split grouping + pagination around filterTransactions
+    useHouseholdRules.ts   # The household rules for rendering (useSyncExternalStore over the rules store): re-renders on a merchant rule even when no row was written
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)
@@ -103,9 +105,10 @@ src/
     import/                # import-statement.ts: importStatement = THE import pipeline, one function (decode → parse → categorize → importTransactions: classify, AI enrich, insert, import run, repair); a file it cannot read rejects with a `StatementReadError` (`utils/user-error.ts`), anything else is a save failure
     mutations/             # bulk-steps.ts: runs a bulk edit's steps in order (retry resumes the chain); transaction-mutations.ts: every transaction write, once — import, apply-scope + override pair, delete/undo, split/unsplit, bulk edits; screen mirrors database (PartialWriteError + retry of the failed remainder)
     categories/            # category-registry.ts: resolveCategory = THE answer to "what is this category id?" (label, colour, icon, isIgnored, known) for every surface — never re-derive it; isCategoryIgnored is its cheap form for totals; getCategoryDefinitions lists the pickable ones. category-store.ts: custom categories (ids normalized once, on load); category-counts.ts: rows per category
-    filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; also periodWithDateBound, groupSplitRows (split parts under their parent); url-filters.ts: that state <-> URL query + hasActiveFilters (THE "filtrado" rule: the view, its default period for links, filterToSearch); period-label.ts: a period's Spanish label
-    export/                # CSV/PDF export: writes exactly the rows it is given + a cuenta_en_totales column
+    filters/               # transaction-filter.ts: filterTransactions = THE "matches the Transacciones filter" rule over (rows, UrlFilterState), period in UTC — anything that filters (export too) calls it; also periodWithDateBound, groupSplitRows (split parts under their parent); the Hogar filter (`household`, `?hogar=`) takes the household rules (`currentHouseholdRules()`) as an option; url-filters.ts: that state <-> URL query + hasActiveFilters (THE "filtrado" rule: the view, its default period for links, filterToSearch); period-label.ts: a period's Spanish label
+    export/                # CSV/PDF export: writes exactly the rows it is given + cuenta_en_totales and hogar columns (takes the household rules)
     spending/              # spending-rules.ts: THE rule for which rows count (countsAsRow, countsTowardTotals, isCountedExpense) — never re-derive it
+    household/             # household.ts: resolveHousehold = THE "is this a household expense?" answer (Hogar sí / no / Sin definir: row choice → the user's merchant rule → user's category default → seeded default; split parts ignore merchant rules; ADR-0005) — never re-derive it; currentHouseholdRules() = the user's HouseholdRules (category defaults from the category store + merchant rules from household-rules-store.ts, the `household_rules` table), one memoized value; rowsSharingMerchantRule = THE list a merchant rule reaches; isCategoryHousehold / categoryHouseholdChoice (null = back to the seeded default) / canHaveHouseholdDefault (not Sin categoría or Ingresos) serve Categorías
     merchants/             # merchant-key.ts: THE merchant key + label (Mayores comercios, its drill-through, Insights, recurring) — never group by description
     charts/                # Home-currency aggregation (chart-data.ts: totals, categories, merchants); complete-months.ts = THE "is this month fully imported" rule (completeMonths); category-changes.ts feeds CategoryChangesCard; dashboard-rows.ts shapes Resumen rows (donut, trend with each month's `complete` flag, period label)
     currency/              # convert(amount, from, to, rate) + Currency type
@@ -114,9 +117,9 @@ src/
     transfers/             # Internal transfer detection
     ai/                    # Client-side Claude (BYO API key): categorization/enrichment; claude-client.ts is the only place the SDK is called (complete(), parseModelJson; tests inject a fake ClaudeClient), every failure it understands is an AiError with a kind (ai-error.ts); models.ts is the only place model IDs live; jev-classifier.ts: Jev (TypeSafe, via OpenRouter) category-only classifier, eval panel only for now
     preferences/           # DEFAULT_PREFERENCES (what a user without a prefs row gets)
-    insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001)
+    insights/              # AI spending insights: deterministic InsightInput builder, prompt, generator, cache (ADR-0001; Hogar mode = `scope: 'hogar'` input, own prompt paragraph + version, own cache row — ADR-0005)
     monitoring/            # error-reporting.ts: Sentry init, captureError, scrubbers (ADR-0004)
-    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapters compose; they take the user id, not a session. Only `supabase-repository.ts` and `supabase-auth.ts` import them at runtime (`services/supabase-boundary.test.ts` enforces it, and keeps the `@supabase/*` SDK in here); everything else imports only their types
+    supabase/              # Auth, transactions, preferences, overrides, custom patterns, ai_insights + ai_household_insights, import-runs, reset (wipe user data); single-request primitives the Supabase adapters compose; they take the user id, not a session. Only `supabase-repository.ts` and `supabase-auth.ts` import them at runtime (`services/supabase-boundary.test.ts` enforces it, and keeps the `@supabase/*` SDK in here); everything else imports only their types
     firebase.ts            # Firebase config
   App.tsx / main.tsx       # Shell (auth, sync, view switch; takes `auth` + `createRepository` props) / BrowserRouter mount, wires the Supabase adapters into App
   routes.ts                # View <-> URL path + document title
@@ -148,7 +151,7 @@ type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 - **General**: Resumen (`overview`), Transacciones (`transactions`), Insights (`insights`)
 - **Gestión**: Categorías (`categories`), Configuración (`settings`)
 - Import is a Radix `Dialog` overlay triggered from the sidebar and from Settings — not a view.
-- Charts (donut, savings bars, monthly spend bars, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view. Resumen reads top-down: "Qué cambió" → the month hero → three `ResumenSection`s ("¿A dónde se fue la plata?", "Mes a mes", "Tus cuentas"), each labelled with the period its numbers cover.
+- Charts (donut, savings bars, monthly spend bars, top merchants) live inside `Dashboard.tsx` (Resumen); there is no separate charts view. Resumen reads top-down: "Qué cambió" → the month hero → three `ResumenSection`s ("¿A dónde se fue la plata?", "Mes a mes", "Tus cuentas"), each labelled with the period its numbers cover. A "Todo · Hogar" toggle in its header (`/?hogar=si`, read on Resumen and Insights only and written by `App.tsx`, passed down as `householdMode`; the token lives in `url-filters.ts`) cuts every figure to the household expenses (ADR-0005); the hero's month stays the Todo month.
 - Views load lazily (`lazy-views.tsx`) inside `ViewErrorBoundary` + `Suspense` in `App.tsx`.
 
 ### Routing
@@ -156,8 +159,10 @@ type View = 'overview' | 'transactions' | 'insights' | 'categories' | 'settings'
 `react-router-dom`; the URL is the source of truth for the view. `src/routes.ts` maps `View` ↔ path (`pathForView`, `viewFromPath`, `titleForView`):
 
 - `/` Resumen · `/transacciones` · `/insights` · `/categorias` · `/configuracion`
+- Resumen's Hogar mode is `/?hogar=si` (REPLACE; Todo = no param); the sidebar's Resumen link goes to `/`.
 - Unknown paths render Resumen without redirecting (a redirect could drop a password-recovery hash). Matching ignores case and trailing slashes.
 - Transacciones filters live in the query string (`services/filters/url-filters.ts`, e.g. `?categoria=restaurants&periodo=2026-03`), written with `replace`. Drill-throughs from Resumen call `onNavigateToTransactions(filter)` → `filterToSearch`.
+- Insights' Hogar mode is `/insights?hogar=si` (REPLACE, same token as Resumen; the sidebar's Insights link opens Todo): its own generation and cache over the household rows only (ADR-0005).
 - Adding a view: extend `View` + the sidebar nav in `AppSidebar.tsx`, both records in `routes.ts`, a loader in `lazy-views.tsx`, and the render branch in `App.tsx`.
 
 ## Multicurrency model
@@ -239,7 +244,7 @@ A task is done only when:
 - **Dates**: a transaction's `date` is a calendar day at UTC midnight — read it only with UTC accessors or `timeZone: 'UTC'`; "today" is `todayAsUtcDate()`. See "Dates" in `docs/architecture.md` (#58)
 - **Deduplication**: by content, not ID — imports match rows by fingerprint (source, raw date, raw description, signed amount, currency) as a multiset, deleted rows included; on card rows a different card number (`rawData.numeroTarjeta`, via `cardNumber`, shared with the #167 review) is a different charge, while a row lacking it matches either card; a taken ID gets a salted `_cN` suffix (`services/dedup/import-dedup.ts`, #57). IDs (hash incl. row position) are unchanged. Files are decoded UTF-8-else-windows-1252 (`services/parsers/decode-csv.ts`); a re-import repairs rows stored garbled (U+FFFD) in place, same id (#192)
 - **Internal transfers**: inferred in the store (`inferInternalTransfers`) by keyword + scored debit/credit pairing within ±2 days, recomputed on load — see `docs/architecture.md`
-- **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `editTransaction` in `services/mutations/transaction-mutations.ts`
+- **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `editTransaction` in `services/mutations/transaction-mutations.ts`; the same scopes drive the Hogar choice of the edit dialog (`applyHouseholdToSimilar`: a merchant rule, written only when the household radio was touched)
 
 ## Environment
 
@@ -260,7 +265,7 @@ Redesign complete: sidebar navigation, 5 routed views, multicurrency with FxChip
 
 **AI categorization (shipped):** with AI enabled and a BYO Claude key in Configuración, an import (`importStatement` → `importTransactions` in `services/mutations/transaction-mutations.ts`) sends new transactions without a user override through `enrichTransactionsWithAi` (`services/ai/transaction-ai.ts`), with the user's past corrections as context (`correction-context.ts`). Best-effort: a failure keeps the pattern-based result. Model = the `aiModel` preference (Haiku/Sonnet, `services/ai/models.ts`). Dev panels in Settings preview it.
 
-**AI Insights (shipped**, ADR-0001 + ADR-0002, `docs/decisions/000{1,2}-*.md`): Claude-generated spending insights over the user's **entire transaction history** (no period navigation — ADR-0002), using the stronger `INSIGHTS_MODEL`, cached in Supabase (`ai_insights`, one row per user — requires a manual `schema.sql` apply, see `supabase/README.md`).
+**AI Insights (shipped**, ADR-0001 + ADR-0002, `docs/decisions/000{1,2}-*.md`): Claude-generated spending insights over the user's **entire transaction history** (no period navigation — ADR-0002), using the stronger `INSIGHTS_MODEL`, cached in Supabase (`ai_insights`, one row per user — requires a manual `schema.sql` apply, see `supabase/README.md`). Hogar mode (ADR-0005) is a second analysis over the household rows with its own table, `ai_household_insights`, also applied by hand.
 
 **Next initiative**: per-category cross-period comparisons for Insights. Step one (#239): `InsightInput.categoryChanges` carries Resumen's "Qué cambió" numbers (latest complete month vs. the median of the months before it), so `bleeding_money` / `anomaly` insights can name spend that _spiked_. Still open: a full `categoryTotals × month` breakdown for long-run growth. Then better AI categorization accuracy and confidence scores on top of what ships today.
 

@@ -99,12 +99,17 @@ export function buildCurrentMonthSummary(
   transactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number,
-  now: Date = new Date()
+  now: Date = new Date(),
+  // Cover this month (m is 0-based) instead of the rows' newest one: Hogar
+  // mode keeps the Todo month even when its own rows end earlier.
+  referenceMonth?: { y: number; m: number }
 ): MonthSummary {
   // Reference month comes from countable transactions only — a trailing
   // transfer or ignored row must not drag "este mes" onto an empty month.
   const counted = transactions.filter(countsTowardTotals)
-  const latest = newestDate(counted)
+  const latest = referenceMonth
+    ? new Date(Date.UTC(referenceMonth.y, referenceMonth.m, 1))
+    : newestDate(counted)
   if (!latest) {
     return {
       income: 0,

@@ -5,6 +5,11 @@ import { EditTransactionDialog } from './EditTransactionDialog'
 import type { Transaction } from '../models'
 import { resolveCategory } from '../services/categories/category-registry'
 import { replaceCustomCategories } from '../services/categories/category-store'
+import { merchantOverrideKey } from '../services/categorizer/category-overrides'
+import {
+  clearHouseholdRules,
+  putMerchantHouseholdRule,
+} from '../services/household/household-rules-store'
 
 type DialogProps = ComponentProps<typeof EditTransactionDialog>
 
@@ -27,11 +32,13 @@ function baseProps(overrides: Partial<DialogProps> = {}): DialogProps {
     transaction,
     // Fake reach: 4 similar rows, 2 once the name changes.
     countSimilar: (_transaction, renamed) => (renamed ? 2 : 4),
+    countHouseholdSimilar: () => 3,
     knownTags: ['super', 'viaje', 'trabajo'],
     isSaving: false,
     onCreateCategory: vi.fn(async () => undefined),
     onSave: vi.fn(),
     onClose: vi.fn(),
+    canSetHousehold: true,
     ...overrides,
   }
 }
@@ -75,6 +82,8 @@ describe('EditTransactionDialog', () => {
       category: 'groceries',
       tags: ['super'],
       applyScope: 'single',
+      household: null,
+      householdTouched: false,
     })
   })
 
@@ -97,6 +106,8 @@ describe('EditTransactionDialog', () => {
       category: 'restaurants',
       tags: ['super', 'viaje'],
       applyScope: 'matching_past_and_future',
+      household: null,
+      householdTouched: false,
     })
   })
 
@@ -345,5 +356,260 @@ describe('EditTransactionDialog', () => {
 
     expect(props.onClose).toHaveBeenCalledTimes(1)
     expect(props.onSave).not.toHaveBeenCalled()
+  })
+})
+
+describe('EditTransactionDialog — gasto del hogar (#251)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  const group = () => screen.getByRole('group', { name: /^Gasto del hogar/ })
+
+  it('offers "Según categoría (Sí)" selected for a row that follows Alimentación', () => {
+    render(<EditTransactionDialog {...baseProps()} />)
+
+    expect(screen.getByLabelText('Según categoría (Sí)')).toBeChecked()
+    expect(screen.getByLabelText('Sí')).not.toBeChecked()
+    expect(screen.getByLabelText('No')).not.toBeChecked()
+    expect(group()).toBeInTheDocument()
+  })
+
+  it('saves a hand choice for this transaction only', () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
+
+    fireEvent.click(screen.getByLabelText('No'))
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ household: false, applyScope: 'single' })
+    )
+  })
+
+  it('opens on the row’s own choice and can go back to following the category', () => {
+    const props = baseProps({
+      transaction: { ...transaction, household: true },
+    })
+    render(<EditTransactionDialog {...props} />)
+
+    expect(screen.getByLabelText('Sí')).toBeChecked()
+    fireEvent.click(screen.getByLabelText('Según categoría (Sí)'))
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ household: null })
+    )
+  })
+
+  it('keeps the choice out of the apply-scope', () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
+
+    fireEvent.click(screen.getByLabelText('Sí'))
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        household: true,
+        householdTouched: true,
+        applyScope: 'single',
+      })
+    )
+  })
+
+  describe('household rule scopes (#251, review 1)', () => {
+    const rule = (value: boolean) =>
+      putMerchantHouseholdRule(
+        merchantOverrideKey(transaction.description) as string,
+        value
+      )
+
+    beforeEach(() => clearHouseholdRules())
+
+    it('a pick made under Solo esta is not a rule pick', () => {
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText('Sí'))
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applyScope: 'matching_past_and_future',
+          householdTouched: false,
+        })
+      )
+    })
+
+    it('choosing the option that is already shown still counts as a pick', () => {
+      rule(true)
+      const props = baseProps({
+        transaction: { ...transaction, household: false },
+      })
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+      expect(screen.getByLabelText('Sí')).toBeChecked()
+      fireEvent.click(screen.getByLabelText('Sí'))
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ household: true, householdTouched: true })
+      )
+    })
+
+    it('a rule pick does not follow the dialog back to Solo esta', () => {
+      const props = baseProps({
+        transaction: { ...transaction, household: false },
+      })
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+      fireEvent.click(screen.getByLabelText('Sí'))
+      fireEvent.click(screen.getByLabelText('Solo esta transacción'))
+
+      // The row's own choice again, and nothing to write for it.
+      expect(screen.getByLabelText('No')).toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applyScope: 'single',
+          household: false,
+          householdTouched: false,
+        })
+      )
+    })
+
+    it('does not promise future rows where no rule can be made', () => {
+      render(
+        <EditTransactionDialog
+          {...baseProps({
+            transaction: { ...transaction, splitParentId: 'parent' },
+          })}
+        />
+      )
+
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+
+      expect(screen.getByText(/Gasto del hogar/)).toHaveTextContent(
+        'solo esta transacción'
+      )
+      expect(screen.getByText(/Gasto del hogar/)).not.toHaveTextContent(
+        'futuras'
+      )
+    })
+
+    it('the legend count follows the category being picked, not the saved one', () => {
+      // The similar rows depend on the draft row: Alimentación (as saved)
+      // reaches 2, Restaurantes reaches 5.
+      const countHouseholdSimilar = (tx: Transaction) =>
+        tx.category === 'restaurants' ? 5 : 2
+      render(
+        <EditTransactionDialog {...baseProps({ countHouseholdSimilar })} />
+      )
+      fireEvent.click(screen.getByLabelText(/^Todas las similares/))
+      expect(screen.getByText(/Gasto del hogar/)).toHaveTextContent(
+        'se aplica a 2 transacciones (y a las futuras)'
+      )
+
+      fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: resolveCategory('restaurants').label,
+        })
+      )
+
+      expect(screen.getByText(/Gasto del hogar/)).toHaveTextContent(
+        'se aplica a 5 transacciones (y a las futuras)'
+      )
+    })
+  })
+
+  it('follows the dialog’s own category picker', () => {
+    render(<EditTransactionDialog {...baseProps()} />)
+
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.click(
+      screen.getByRole('button', { name: resolveCategory('restaurants').label })
+    )
+    expect(screen.getByLabelText('Según categoría (No)')).toBeChecked()
+
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: resolveCategory('uncategorized').label,
+      })
+    )
+    expect(screen.getByLabelText('Según categoría (Sin definir)')).toBeChecked()
+  })
+
+  it('has no group for income, ignored rows and split parents, and saves them untouched', () => {
+    for (const row of [
+      { ...transaction, type: 'credit' as const, category: 'income' },
+      { ...transaction, category: 'internal_transfer' },
+      { ...transaction, isSplitParent: true },
+    ]) {
+      const props = baseProps({ transaction: row })
+      const { unmount } = render(<EditTransactionDialog {...props} />)
+
+      expect(
+        screen.queryByRole('group', { name: /^Gasto del hogar/ })
+      ).toBeNull()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ household: null })
+      )
+      unmount()
+    }
+  })
+
+  it('hides the group when the picked category is ignored, and writes no choice', () => {
+    const props = baseProps({
+      transaction: { ...transaction, household: true },
+    })
+    render(<EditTransactionDialog {...props} />)
+    expect(screen.getByLabelText('Sí')).toBeChecked()
+
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: resolveCategory('internal_transfer').label,
+      })
+    )
+
+    expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
+    save()
+    // The row's own choice is left as it was: nothing to write.
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ household: true })
+    )
+  })
+
+  it('shows the group once an ignored row is given a counted category', () => {
+    const props = baseProps({
+      transaction: { ...transaction, category: 'internal_transfer' },
+    })
+    render(<EditTransactionDialog {...props} />)
+    expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
+
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.click(
+      screen.getByRole('button', { name: resolveCategory('groceries').label })
+    )
+
+    expect(screen.getByLabelText('Según categoría (Sí)')).toBeChecked()
+    fireEvent.click(screen.getByLabelText('No'))
+    save()
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ household: false })
+    )
+  })
+
+  it('has no group without a way to save it', () => {
+    render(<EditTransactionDialog {...baseProps({ canSetHousehold: false })} />)
+
+    expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
   })
 })

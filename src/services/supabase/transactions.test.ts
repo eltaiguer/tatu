@@ -281,6 +281,62 @@ describe('supabase transactions service', () => {
     })
   })
 
+  // #251: the row's own household choice. null / missing = follow the category.
+  it('loads the household choice: true / false, null and missing as none', async () => {
+    table.rows = [
+      { ...makeRow(1), household: true },
+      { ...makeRow(2), household: false },
+      { ...makeRow(3), household: null },
+      makeRow(4),
+    ]
+    const { loadUserTransactions } = await import('./transactions')
+    const transactions = await loadUserTransactions(userId)
+    const byId = new Map(transactions.map((tx) => [tx.id, tx.household]))
+
+    expect(byId.get('tx-0001')).toBe(true)
+    expect(byId.get('tx-0002')).toBe(false)
+    expect(byId.get('tx-0003')).toBeUndefined()
+    expect(byId.get('tx-0004')).toBeUndefined()
+  })
+
+  it('inserts the household key only when the row has a choice', async () => {
+    const base = {
+      date: new Date('2026-02-03T00:00:00.000Z'),
+      description: 'Cafe',
+      amount: 50,
+      currency: 'UYU' as const,
+      type: 'debit' as const,
+      source: 'credit_card' as const,
+      rawData: {},
+    }
+    const { persistTransactions } = await import('./transactions')
+    await persistTransactions(userId, [
+      { ...base, id: 'tx-none' },
+      { ...base, id: 'tx-false', household: false },
+      { ...base, id: 'tx-true', household: true },
+    ])
+
+    const [none, no, yes] = insertMock.mock.calls[0][0]
+    // A database that has not got the column yet must keep accepting imports.
+    expect('household' in none).toBe(false)
+    expect(no.household).toBe(false)
+    expect(yes.household).toBe(true)
+  })
+
+  it('updates the household column: false and null are real values, absent writes nothing', async () => {
+    const { updateTransactionsByIds } = await import('./transactions')
+
+    await updateTransactionsByIds(userId, ['tx-1'], { household: false })
+    expect(updateMock).toHaveBeenLastCalledWith({ household: false })
+
+    await updateTransactionsByIds(userId, ['tx-1'], { household: null })
+    expect(updateMock).toHaveBeenLastCalledWith({ household: null })
+
+    updateMock.mockClear()
+    await updateTransactionsByIds(userId, ['tx-1'], {})
+    expect(updateMock).not.toHaveBeenCalled()
+  })
+
   it('never overwrites a stored row: an id already taken fails the import', async () => {
     // An upsert would silently replace another transaction's content (or
     // give a deleted row new content) if a taken id ever slipped through.

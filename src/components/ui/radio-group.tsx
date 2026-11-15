@@ -18,6 +18,7 @@ export function RadioGroup<T extends string>({
   name,
   value,
   onChange,
+  onReselect,
   options,
   variant = 'list',
   className,
@@ -26,6 +27,9 @@ export function RadioGroup<T extends string>({
   name: string
   value: T
   onChange: (value: T) => void
+  // A click on the option that is already selected (a native radio fires no
+  // change for it).
+  onReselect?: (value: T) => void
   options: RadioOption<T>[]
   variant?: 'list' | 'segmented'
   className?: string
@@ -51,6 +55,9 @@ export function RadioGroup<T extends string>({
                 value={option.value}
                 checked={value === option.value}
                 onChange={() => onChange(option.value)}
+                onClick={() =>
+                  value === option.value && onReselect?.(option.value)
+                }
                 className="peer sr-only"
               />
               <span className="flex h-full items-center bg-[var(--surface)] px-3 text-small text-[var(--text)] peer-checked:bg-[var(--brand)] peer-checked:font-semibold peer-checked:text-[var(--primary-foreground)] peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-inset forced-colors:peer-checked:underline">
@@ -76,6 +83,9 @@ export function RadioGroup<T extends string>({
                 value={option.value}
                 checked={value === option.value}
                 onChange={() => onChange(option.value)}
+                onClick={() =>
+                  value === option.value && onReselect?.(option.value)
+                }
                 className="size-4 accent-[var(--brand)]"
               />
               {option.label}

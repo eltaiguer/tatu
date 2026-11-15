@@ -25,6 +25,7 @@ interface TransactionRow {
   deleted_at?: string | null
   is_split_parent?: boolean
   split_parent_id?: string | null
+  household?: boolean | null
 }
 
 function transactionToRow(userId: string, tx: Transaction): TransactionRow {
@@ -45,6 +46,9 @@ function transactionToRow(userId: string, tx: Transaction): TransactionRow {
     raw_data: (tx.rawData ?? {}) as Record<string, unknown>,
     is_split_parent: tx.isSplitParent ?? false,
     split_parent_id: tx.splitParentId ?? null,
+    // Only a real choice is sent (#251): an unknown column is rejected even
+    // when its value is null, and imports go through here.
+    ...(typeof tx.household === 'boolean' ? { household: tx.household } : {}),
   }
 }
 
@@ -67,6 +71,7 @@ function rowToTransaction(row: TransactionRow): Transaction {
     rawData: row.raw_data ?? {},
     isSplitParent: row.is_split_parent ?? undefined,
     splitParentId: row.split_parent_id ?? undefined,
+    household: typeof row.household === 'boolean' ? row.household : undefined,
     importId: row.import_id ?? undefined,
     createdAt: row.created_at ? new Date(row.created_at) : undefined,
   }
@@ -284,6 +289,7 @@ export interface TransactionColumnsPatch {
   tags?: string[]
   description?: string
   rawData?: Transaction['rawData']
+  household?: boolean | null
 }
 
 function patchToColumns(
@@ -300,6 +306,8 @@ function patchToColumns(
   if (patch.tags !== undefined) columns.tags = patch.tags
   if (patch.description !== undefined) columns.description = patch.description
   if (patch.rawData !== undefined) columns.raw_data = patch.rawData
+  // `false` is a real choice, so no `|| null` here (#251).
+  if (patch.household !== undefined) columns.household = patch.household
   return columns
 }
 

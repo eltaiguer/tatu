@@ -34,6 +34,10 @@ import {
   loadMerchantCategoryOverrides,
 } from '../services/categorizer/category-overrides'
 import {
+  clearHouseholdRules,
+  loadHouseholdRules,
+} from '../services/household/household-rules-store'
+import {
   clearAllDescriptionOverrides,
   replaceDescriptionOverrides,
 } from '../services/descriptions/description-overrides'
@@ -76,6 +80,7 @@ export function teardownWorkspace(): void {
   generation += 1
   transactionStore.getState().clearTransactions()
   clearAllCategoryOverrides()
+  clearHouseholdRules()
   clearAllDescriptionOverrides()
   replaceCustomPatterns([])
   replaceCustomCategories([])
@@ -231,6 +236,7 @@ export function hydrateWorkspace(repository: Repository): Hydration {
 // Applies a whole load synchronously, so no render ever sees half a user.
 function applyLoaded(loaded: WorkspaceSnapshot) {
   loadMerchantCategoryOverrides(loaded.categoryOverrides)
+  loadHouseholdRules(loaded.householdRules)
   replaceDescriptionOverrides(
     Object.fromEntries(
       loaded.descriptionOverrides.map((override) => [
@@ -252,6 +258,7 @@ function applyLoaded(loaded: WorkspaceSnapshot) {
       color: category.color,
       icon: category.icon,
       isIgnored: category.isIgnored,
+      isHousehold: category.isHousehold,
     }))
   )
   // No row: this user has never saved preferences — defaults, never whatever

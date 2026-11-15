@@ -13,6 +13,8 @@ import { listCustomCategories } from './category-store'
 import { memoizeByReference } from '../../utils/memo'
 import {
   ID_ALIASES,
+  isBuiltinCategoryId,
+  isIgnoredByDefault,
   LEGACY_IGNORED_ID,
   normalizeCategoryId,
 } from './category-aliases'
@@ -53,22 +55,11 @@ const resolvedOverrides = memoizeByReference(
   (categories: CustomCategory[]) => new Map(categories.map((c) => [c.id, c]))
 )
 
-const BUILTIN_IDS = new Set<string>(Object.values(Category))
-
-function isBuiltinId(id: string): id is Category {
-  return BUILTIN_IDS.has(id)
-}
-
 // THE ignore rule, for every id: the user's choice if a row records one,
 // else ignored by default for the transfer categories and the 'ignored' id
 // that "Ignorar" writes. resolveCategory and isCategoryIgnored both use it.
 function ignoredFor(key: string, row: CustomCategory | undefined): boolean {
-  return (
-    row?.isIgnored ??
-    (key === Category.InternalTransfer ||
-      key === Category.ExternalTransfer ||
-      key === LEGACY_IGNORED_ID)
-  )
+  return row?.isIgnored ?? isIgnoredByDefault(key)
 }
 
 // A stored colour, unless it is a default the app shipped (see
@@ -152,7 +143,7 @@ export function resolveCategory(id?: string | null): CategoryDefinition {
   const key = normalizeCategoryId(id)
   const row = resolvedOverrides(listCustomCategories()).get(key)
 
-  if (isBuiltinId(key)) return builtinDefinition(key, row)
+  if (isBuiltinCategoryId(key)) return builtinDefinition(key, row)
   if (row) return customDefinition(key, row)
 
   if (key === LEGACY_IGNORED_ID) {
@@ -199,7 +190,7 @@ export function getCategoryDefinitions(): CategoryDefinition[] {
     builtinDefinition(category, overrideMap.get(category))
   )
   const custom = Array.from(overrideMap)
-    .filter(([key]) => !isBuiltinId(key))
+    .filter(([key]) => !isBuiltinCategoryId(key))
     .map(([key, row]) => customDefinition(key, row))
 
   return [...builtin, ...custom].sort((a, b) => {

@@ -1,17 +1,36 @@
 import { getSupabaseClient } from './client'
 import type { InsightsResult } from '../insights/insight-generator'
+import type { InsightsMode } from '../insights/insight-data'
 import { UserFacingError } from '../../utils/user-error'
+import { isMissingTable } from './missing-table'
 
-// The ai_insights table exists only once schema.sql is applied by hand
-// (supabase/README.md): Postgres says 42P01, PostgREST's schema cache
-// PGRST205. That is setup, not a bug, and the raw text is English.
-const MISSING_TABLE_CODES = new Set(['42P01', 'PGRST205'])
+// Which cache row: Todo's (`ai_insights`) or the household's
+// (`ai_household_insights`, #251). One row per user in each. Hogar's table is
+// added by hand after the code ships, so loading it tolerates its absence.
+const CACHES: Record<
+  InsightsMode,
+  { table: string; missingMessage: string; missingReadsAsNoCache: boolean }
+> = {
+  todo: {
+    table: 'ai_insights',
+    missingMessage:
+      'Falta crear la tabla de insights en la base de datos (ver supabase/README.md).',
+    missingReadsAsNoCache: false,
+  },
+  hogar: {
+    table: 'ai_household_insights',
+    missingMessage:
+      'Falta crear la tabla de insights del hogar en la base de datos (ver supabase/README.md).',
+    missingReadsAsNoCache: true,
+  },
+}
 
-function throwInsightsError(error: { code?: string; message: string }): never {
-  if (error.code && MISSING_TABLE_CODES.has(error.code)) {
-    throw new UserFacingError(
-      'Falta crear la tabla de insights en la base de datos (ver supabase/README.md).'
-    )
+function throwInsightsError(
+  error: { code?: string; message: string },
+  mode: InsightsMode
+): never {
+  if (isMissingTable(error)) {
+    throw new UserFacingError(CACHES[mode].missingMessage)
   }
   throw new Error(error.message)
 }
@@ -32,11 +51,12 @@ interface AiInsightsRow {
 }
 
 export async function loadCachedInsights(
-  userId: string
+  userId: string,
+  mode: InsightsMode = 'todo'
 ): Promise<CachedInsightsRow | null> {
   const client = getSupabaseClient()
   const { data, error } = await client
-    .from('ai_insights')
+    .from(CACHES[mode].table)
     .select('*')
     .eq('user_id', userId)
     // maybeSingle: no cached row is the normal first-run state, not an
@@ -49,7 +69,12 @@ export async function loadCachedInsights(
     if (error.code === 'PGRST116') {
       return null
     }
-    throwInsightsError(error)
+    // Hogar's table is added by hand after the code ships: until then there
+    // is simply no household cache (saving it explains what is missing).
+    if (CACHES[mode].missingReadsAsNoCache && isMissingTable(error)) {
+      return null
+    }
+    throwInsightsError(error, mode)
   }
   if (!data) {
     return null
@@ -72,10 +97,11 @@ export interface SaveInsightsParams {
 
 export async function saveInsights(
   userId: string,
-  params: SaveInsightsParams
+  params: SaveInsightsParams,
+  mode: InsightsMode = 'todo'
 ): Promise<void> {
   const client = getSupabaseClient()
-  const { error } = await client.from('ai_insights').upsert(
+  const { error } = await client.from(CACHES[mode].table).upsert(
     {
       user_id: userId,
       input_hash: params.inputHash,
@@ -85,5 +111,5 @@ export async function saveInsights(
     { onConflict: 'user_id' }
   )
 
-  if (error) throwInsightsError(error)
+  if (error) throwInsightsError(error, mode)
 }

@@ -6,12 +6,14 @@
 import type { Transaction } from '../../models'
 import type { ExistingTransaction } from '../dedup/import-dedup'
 import type { CategoryOverrideRecord } from '../supabase/category-overrides'
+import type { HouseholdRuleRecord } from '../supabase/household-rules'
 import type { DescriptionOverrideRecord } from '../supabase/description-overrides'
 import type { CustomCategoryRecord } from '../supabase/custom-categories'
 import type { UserPreferences } from '../supabase/user-preferences'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import type { CachedInsightsRow } from '../supabase/ai-insights'
 import { UserFacingError } from '../../utils/user-error'
+import type { InsightsMode } from '../insights/insight-data'
 import { groupByPatch, insertSequentially, settleChunks } from './batching'
 import {
   applyPatch,
@@ -50,6 +52,8 @@ export type InMemoryOp =
   | 'deleteDescriptionOverride'
   | 'upsertCategoryOverride'
   | 'deleteCategoryOverride'
+  | 'upsertHouseholdRule'
+  | 'deleteHouseholdRule'
   | 'upsertCustomPattern'
   | 'deleteCustomPattern'
   | 'upsertCustomCategory'
@@ -93,10 +97,13 @@ export interface InMemoryRepository extends Repository {
   has(id: string): boolean
   descriptionOverrides: Map<string, DescriptionOverrideRecord>
   categoryOverrides: Map<string, CategoryOverrideRecord>
+  householdRules: Map<string, HouseholdRuleRecord>
   customPatterns: Map<string, CustomPattern>
   customCategories: Map<string, CustomCategoryRecord>
   preferences: UserPreferences | null
   insights: CachedInsightsRow | null
+  /** Hogar's own cache row (ai_household_insights). */
+  householdInsights: CachedInsightsRow | null
   importRuns: ImportRunRecord[]
   /** Makes matching requests of `op` reject. */
   failOn(
@@ -122,6 +129,12 @@ export interface InMemoryRepository extends Repository {
   actingUserId: string
 }
 
+// The row each mode's cache lives in (ai_insights / ai_household_insights).
+const INSIGHTS_SLOTS = {
+  todo: 'insights',
+  hogar: 'householdInsights',
+} as const satisfies Record<InsightsMode, string>
+
 export function createInMemoryRepository(
   seed: {
     userId?: string
@@ -129,6 +142,7 @@ export function createInMemoryRepository(
     deleted?: Transaction[]
     descriptionOverrides?: DescriptionOverrideRecord[]
     categoryOverrides?: CategoryOverrideRecord[]
+    householdRules?: HouseholdRuleRecord[]
     customPatterns?: CustomPattern[]
     customCategories?: CustomCategoryRecord[]
     preferences?: UserPreferences | null
@@ -175,12 +189,16 @@ export function createInMemoryRepository(
     categoryOverrides: new Map(
       (seed.categoryOverrides ?? []).map((o) => [o.merchantNormalized, o])
     ),
+    householdRules: new Map(
+      (seed.householdRules ?? []).map((o) => [o.merchantNormalized, o])
+    ),
     customPatterns: new Map((seed.customPatterns ?? []).map((p) => [p.id, p])),
     customCategories: new Map(
       (seed.customCategories ?? []).map((c) => [c.id, c])
     ),
     preferences: seed.preferences ?? null,
     insights: null,
+    householdInsights: null,
     importRuns: [],
     requests,
     actingUserId: userId,
@@ -220,6 +238,7 @@ export function createInMemoryRepository(
         return {
           transactions: [],
           categoryOverrides: [],
+          householdRules: [],
           descriptionOverrides: [],
           customPatterns: [],
           customCategories: [],
@@ -229,6 +248,7 @@ export function createInMemoryRepository(
       return {
         transactions: repo.rows().map(clone),
         categoryOverrides: Array.from(repo.categoryOverrides.values()),
+        householdRules: Array.from(repo.householdRules.values()),
         descriptionOverrides: Array.from(repo.descriptionOverrides.values()),
         customPatterns: Array.from(repo.customPatterns.values()),
         customCategories: Array.from(repo.customCategories.values()).filter(
@@ -456,6 +476,23 @@ export function createInMemoryRepository(
       requireAuthorized()
       repo.categoryOverrides.delete(key)
     },
+    async upsertHouseholdRule(input) {
+      await request('upsertHouseholdRule', [input.merchantNormalized])
+      requireAuthorized()
+      const now = new Date().toISOString()
+      repo.householdRules.set(input.merchantNormalized, {
+        merchantNormalized: input.merchantNormalized,
+        merchantOriginal: input.merchantOriginal,
+        isHousehold: input.isHousehold,
+        createdAt: now,
+        updatedAt: now,
+      })
+    },
+    async deleteHouseholdRule(key) {
+      await request('deleteHouseholdRule', [key])
+      requireAuthorized()
+      repo.householdRules.delete(key)
+    },
     async upsertCustomPattern(pattern) {
       await request('upsertCustomPattern', [pattern.id])
       requireAuthorized()
@@ -476,6 +513,11 @@ export function createInMemoryRepository(
         color: input.color,
         icon: input.icon,
         isIgnored: input.isIgnored ?? false,
+        // As the column behaves: absent keeps what is stored, null clears.
+        isHousehold:
+          input.isHousehold === undefined
+            ? repo.customCategories.get(input.id)?.isHousehold
+            : (input.isHousehold ?? undefined),
         isArchived: input.isArchived ?? false,
         createdAt: now,
         updatedAt: now,
@@ -489,14 +531,16 @@ export function createInMemoryRepository(
         repo.customCategories.set(id, { ...existing, isArchived: true })
     },
 
-    async loadInsights() {
+    async loadInsights(mode = 'todo') {
       await request('loadInsights')
-      return repo.insights && authorized() ? { ...repo.insights } : null
+      const cached = repo[INSIGHTS_SLOTS[mode]]
+      return cached && authorized() ? { ...cached } : null
     },
-    async saveInsights(row) {
+    async saveInsights(row, mode = 'todo') {
       await request('saveInsights')
       requireAuthorized()
-      repo.insights = { ...row, generatedAt: new Date().toISOString() }
+      const saved = { ...row, generatedAt: new Date().toISOString() }
+      repo[INSIGHTS_SLOTS[mode]] = saved
     },
 
     // Same tables, same order and same failure rule as the Supabase adapter.
@@ -507,6 +551,7 @@ export function createInMemoryRepository(
         ['transactions', () => table.clear()],
         ['import_runs', () => repo.importRuns.splice(0)],
         ['category_overrides', () => repo.categoryOverrides.clear()],
+        ['household_rules', () => repo.householdRules.clear()],
         ['description_overrides', () => repo.descriptionOverrides.clear()],
         ['custom_categories', () => repo.customCategories.clear()],
         ['custom_patterns', () => repo.customPatterns.clear()],
@@ -516,11 +561,18 @@ export function createInMemoryRepository(
         await request('resetAll', [name])
         if (authorized()) clear()
       }
-      try {
-        await request('resetAll', ['ai_insights'])
-        if (authorized()) repo.insights = null
-      } catch (error) {
-        console.warn('Could not clear cached insights during reset:', error)
+      // Both caches are best-effort, each on its own (as the adapter).
+      const caches: [string, () => void][] = [
+        ['ai_household_insights', () => (repo.householdInsights = null)],
+        ['ai_insights', () => (repo.insights = null)],
+      ]
+      for (const [name, clear] of caches) {
+        try {
+          await request('resetAll', [name])
+          if (authorized()) clear()
+        } catch (error) {
+          console.warn('Could not clear cached insights during reset:', error)
+        }
       }
     },
   }

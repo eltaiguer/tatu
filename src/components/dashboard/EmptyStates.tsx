@@ -1,7 +1,7 @@
 // Resumen's two non-data states: nothing imported yet, and everything
 // imported falls in ignored categories.
 
-import { Upload, EyeOff } from 'lucide-react'
+import { Upload, EyeOff, House } from 'lucide-react'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'
 
@@ -59,6 +59,34 @@ export function AllIgnoredState({
       {onNavigateToCategories && (
         <Button size="lg" variant="outline" onClick={onNavigateToCategories}>
           Revisar categorías
+        </Button>
+      )}
+    </Card>
+  )
+}
+
+// Hogar mode, but no counted expense is a household one: say how to get
+// some instead of zeroed cards.
+export function NoHouseholdState({
+  onNavigateToCategories,
+}: {
+  onNavigateToCategories?: () => void
+}) {
+  return (
+    <Card className="p-8 text-center space-y-4">
+      <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+        <House className="text-primary" size={28} />
+      </div>
+      <div>
+        <h2 className="mb-2">Todavía no hay gastos del hogar</h2>
+        <p className="text-muted-foreground max-w-md mx-auto">
+          Marcá qué categorías son del hogar, o usá la casita en cada
+          movimiento, y acá vas a ver cuánto se va en la casa.
+        </p>
+      </div>
+      {onNavigateToCategories && (
+        <Button size="lg" variant="outline" onClick={onNavigateToCategories}>
+          Ir a Categorías
         </Button>
       )}
     </Card>

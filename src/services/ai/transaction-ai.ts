@@ -9,7 +9,10 @@ import {
   parseModelJson,
   type ClaudeClient,
 } from './claude-client'
-import { resolveBuiltinAlias } from '../categories/category-aliases'
+import {
+  isBuiltinCategoryId,
+  resolveBuiltinAlias,
+} from '../categories/category-aliases'
 import { captureError, errorMessage } from '../monitoring/error-reporting'
 import {
   aiPartialFailureMessage,
@@ -64,8 +67,10 @@ function buildSystemPrompt(customCategories: CustomCategory[]): string {
     .map((c) => `${c} — ${CATEGORY_LABELS[c]}`)
     .join('\n')
 
+  // A built-in's override row (its household default, say) is not another
+  // category.
   const customLines = customCategories
-    .filter((c) => !c.isIgnored)
+    .filter((c) => !c.isIgnored && !isBuiltinCategoryId(c.id))
     .map((c) => `${c.id} — ${c.label}`)
     .join('\n')
 

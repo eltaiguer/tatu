@@ -17,6 +17,7 @@
 import { Category, CATEGORY_LABELS } from '../../models'
 import type { AiEnrichmentInput } from './transaction-ai'
 import type { CustomCategory } from '../categories/category-store'
+import { isBuiltinCategoryId } from '../categories/category-aliases'
 import { rawMerchantKey } from '../merchants/merchant-key'
 
 export interface JevConfig {
@@ -77,7 +78,7 @@ function criteria(customCategories: CustomCategory[]): Record<string, string> {
       : CATEGORY_LABELS[category]
   }
   for (const custom of customCategories) {
-    if (custom.isIgnored) continue
+    if (custom.isIgnored || isBuiltinCategoryId(custom.id)) continue
     out[custom.id] = custom.label
   }
   return out

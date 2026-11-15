@@ -2,6 +2,7 @@ import type { Transaction } from '../../models'
 import type { Repository } from '../../services/repository/repository'
 import type { UrlFilterState } from '../../services/filters/url-filters'
 import type { DeleteResult } from './useMutationFeedback'
+import type { RuleScope } from '../../services/mutations/transaction-mutations'
 
 // The Transacciones view's public props.
 interface BaseTransactionsProps {
@@ -42,6 +43,20 @@ interface BaseTransactionsProps {
     parts: Array<{ description: string; amount: number; category?: string }>
   ) => Promise<{ parts: number }>
   onUnsplitTransaction?: (transactionId: string) => Promise<void>
+  // The household choice of rows: true / false, or null to follow the
+  // category again (setHousehold). Resolves with how many rows changed.
+  onSetHousehold?: (
+    transactionIds: string[],
+    household: boolean | null
+  ) => Promise<{ updated: number }>
+  // Saves (true / false) or removes (null) the merchant's household rule and
+  // applies it to the similar rows (applyHouseholdToSimilar). Without it the
+  // edit dialog only offers the row's own choice.
+  onApplyHouseholdToSimilar?: (
+    transactionId: string,
+    household: boolean | null,
+    scope: RuleScope
+  ) => Promise<{ affected: number }>
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void
   // The signed-in user's repository: a category created inline saves there.

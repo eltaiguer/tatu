@@ -2,6 +2,7 @@ import { Scissors, Slash, Pencil, Trash2, Undo2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
 import { CategoryBadge } from '../CategoryBadge'
+import { HouseToggle } from './HouseToggle'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency } from '../../models'
 import {
@@ -35,6 +36,7 @@ export function TransactionCard({
   onDelete,
   onSplit,
   onUnsplit,
+  onToggleHousehold,
 }: TransactionRowProps) {
   const displayDescription = getDisplayDescription(transaction)
   const hasFriendlyOverride = displayDescription !== transaction.description
@@ -129,6 +131,14 @@ export function TransactionCard({
             size="sm"
           />
           {needsCategoryReview(transaction) && <ReviewMarker />}
+          {onToggleHousehold && (
+            <HouseToggle
+              transaction={transaction}
+              description={displayDescription}
+              disabled={pendingTransactionIds.has(transaction.id)}
+              onToggle={onToggleHousehold}
+            />
+          )}
           {(transaction.tags ?? []).map((tag) => (
             <span
               key={`${transaction.id}-${tag}`}

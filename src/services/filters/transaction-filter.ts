@@ -1,4 +1,5 @@
-import type { Transaction } from '../../models'
+import type { HouseholdRules, Transaction } from '../../models'
+import { rowHouseholdView } from '../household/household'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { countsAsRow, countsTowardTotals } from '../spending/spending-rules'
 import { getDisplayDescription } from '../../utils/transaction-display'
@@ -26,6 +27,11 @@ export interface TransactionFilterOptions {
   // The month "últimos n meses" counts back from. The view freezes it when
   // the period is chosen; left out, it is the newest row (today if none).
   recentAnchor?: Date
+  // The user's household rules (merchant rules and category defaults), for
+  // the Hogar filter. Required so a caller
+  // cannot forget them: pass currentHouseholdRules() (like userRules,
+  // never read in here).
+  householdRules: HouseholdRules
 }
 
 function utcDay(y: number, m: number, d: number): Date {
@@ -65,7 +71,7 @@ export function periodDateRange(
 export function filterTransactions(
   transactions: Transaction[],
   filters: UrlFilterState,
-  options: TransactionFilterOptions = {}
+  options: TransactionFilterOptions
 ): Transaction[] {
   const range = periodDateRange(
     filters.period,
@@ -92,6 +98,8 @@ export function filterTransactions(
   const min = filters.min ? parseFloat(filters.min) : null
   const max = filters.max ? parseFloat(filters.max) : null
 
+  const { householdRules } = options
+
   // Cheap field comparisons first; the search string is only built when
   // there is a query.
   return transactions.filter((transaction) => {
@@ -112,6 +120,12 @@ export function filterTransactions(
     if (filters.currency !== 'all' && transaction.currency !== filters.currency)
       return false
     if (filters.type !== 'all' && transaction.type !== filters.type)
+      return false
+    if (
+      filters.household !== 'all' &&
+      rowHouseholdView(transaction, householdRules)?.status !==
+        filters.household
+    )
       return false
     if (min !== null && Math.abs(transaction.amount) < min) return false
     if (max !== null && Math.abs(transaction.amount) > max) return false

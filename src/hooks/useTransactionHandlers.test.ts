@@ -116,6 +116,7 @@ describe('useTransactionHandlers — one contract without a repository', () => {
       h.handleUnsplitTransaction('a'),
       h.handleBulkCategorizeTransactions(['a'], 'food'),
       h.handleBulkTagTransactions(['a'], 'x'),
+      h.handleApplyHouseholdToSimilar('a', true, 'matching_past_and_future'),
       h.handleAutoCategorizeTransactions(['a']),
       h.handleApplyPatternToPast({
         id: 'r',
@@ -216,6 +217,18 @@ describe('useTransactionHandlers — the view error', () => {
     [
       'handleBulkTagTransactions',
       { write: (h) => h.handleBulkTagTransactions(['a'], 'viaje') },
+    ],
+    ['handleSetHousehold', { write: (h) => h.handleSetHousehold(['a'], true) }],
+    [
+      'handleApplyHouseholdToSimilar',
+      {
+        write: (h) =>
+          h.handleApplyHouseholdToSimilar(
+            'a',
+            true,
+            'matching_past_and_future'
+          ),
+      },
     ],
     [
       'handleAutoCategorizeTransactions',

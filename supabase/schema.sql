@@ -76,6 +76,11 @@ alter table public.transactions
   add column if not exists is_split_parent boolean not null default false,
   add column if not exists split_parent_id text;
 
+-- Household flag (#251, ADR-0005): the row's own choice; null = follow its
+-- category's default.
+alter table public.transactions
+  add column if not exists household boolean;
+
 alter table public.transactions
   alter column amount type numeric(14,2),
   alter column balance type numeric(14,2),
@@ -110,6 +115,18 @@ create table if not exists public.category_overrides (
 alter table public.category_overrides
   add column if not exists created_at timestamptz not null default timezone('utc', now()),
   add column if not exists updated_at timestamptz not null default timezone('utc', now());
+
+-- Hogar per merchant (#251): one yes/no per merchant key (the same key
+-- category_overrides uses), read at resolution time; rows are never stamped.
+create table if not exists public.household_rules (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  merchant_normalized text not null,
+  merchant_original text,
+  is_household boolean not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  primary key (user_id, merchant_normalized)
+);
 
 create table if not exists public.description_overrides (
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -147,6 +164,11 @@ create table if not exists public.custom_categories (
   updated_at timestamptz not null default timezone('utc', now()),
   primary key (user_id, id)
 );
+
+-- Household default (#251, ADR-0005): null = the seeded default
+-- (SEEDED_HOUSEHOLD_CATEGORIES); built-ins use their per-user override row.
+alter table public.custom_categories
+  add column if not exists is_household boolean;
 
 alter table public.custom_categories
   add column if not exists is_ignored boolean not null default false,
@@ -202,6 +224,18 @@ create table if not exists public.ai_insights (
   generated_at timestamptz not null default timezone('utc', now())
 );
 
+-- Hogar mode of Insights (#251, ADR-0005): the household's own cached
+-- generation, same shape as ai_insights, one row per user. A separate table
+-- keeps Todo's cache path untouched (no primary-key change). Regenerable
+-- AI-cache content, like ai_insights.
+create table if not exists public.ai_household_insights (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  input_hash text not null,
+  model text not null,
+  insights jsonb not null,
+  generated_at timestamptz not null default timezone('utc', now())
+);
+
 create index if not exists idx_transactions_user_date_active
   on public.transactions (user_id, date desc)
   where is_deleted = false;
@@ -228,6 +262,9 @@ create index if not exists idx_import_runs_user_checksum
 
 create index if not exists idx_category_overrides_user_updated
   on public.category_overrides (user_id, updated_at desc);
+
+create index if not exists idx_household_rules_user_updated
+  on public.household_rules (user_id, updated_at desc);
 
 create index if not exists idx_description_overrides_user_updated
   on public.description_overrides (user_id, updated_at desc);
@@ -281,6 +318,12 @@ before update on public.category_overrides
 for each row
 execute function public.set_updated_at_timestamp();
 
+drop trigger if exists set_household_rules_updated_at on public.household_rules;
+create trigger set_household_rules_updated_at
+before update on public.household_rules
+for each row
+execute function public.set_updated_at_timestamp();
+
 drop trigger if exists set_description_overrides_updated_at on public.description_overrides;
 create trigger set_description_overrides_updated_at
 before update on public.description_overrides
@@ -308,20 +351,24 @@ execute function public.set_updated_at_timestamp();
 alter table public.transactions enable row level security;
 alter table public.import_runs enable row level security;
 alter table public.category_overrides enable row level security;
+alter table public.household_rules enable row level security;
 alter table public.description_overrides enable row level security;
 alter table public.custom_categories enable row level security;
 alter table public.user_preferences enable row level security;
 alter table public.custom_patterns enable row level security;
 alter table public.ai_insights enable row level security;
+alter table public.ai_household_insights enable row level security;
 
 grant select, insert, update, delete on table public.transactions to authenticated;
 grant select, insert, update, delete on table public.import_runs to authenticated;
 grant select, insert, update, delete on table public.category_overrides to authenticated;
+grant select, insert, update, delete on table public.household_rules to authenticated;
 grant select, insert, update, delete on table public.description_overrides to authenticated;
 grant select, insert, update, delete on table public.custom_categories to authenticated;
 grant select, insert, update, delete on table public.user_preferences to authenticated;
 grant select, insert, update, delete on table public.custom_patterns to authenticated;
 grant select, insert, update, delete on table public.ai_insights to authenticated;
+grant select, insert, update, delete on table public.ai_household_insights to authenticated;
 
 drop policy if exists "transactions_select_own" on public.transactions;
 create policy "transactions_select_own"
@@ -410,6 +457,35 @@ for delete
 to authenticated
 using (auth.uid() = user_id);
 
+drop policy if exists "household_rules_select_own" on public.household_rules;
+create policy "household_rules_select_own"
+on public.household_rules
+for select
+to authenticated
+using (auth.uid() = user_id);
+
+drop policy if exists "household_rules_insert_own" on public.household_rules;
+create policy "household_rules_insert_own"
+on public.household_rules
+for insert
+to authenticated
+with check (auth.uid() = user_id);
+
+drop policy if exists "household_rules_update_own" on public.household_rules;
+create policy "household_rules_update_own"
+on public.household_rules
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "household_rules_delete_own" on public.household_rules;
+create policy "household_rules_delete_own"
+on public.household_rules
+for delete
+to authenticated
+using (auth.uid() = user_id);
+
 drop policy if exists "description_overrides_select_own" on public.description_overrides;
 create policy "description_overrides_select_own"
 on public.description_overrides
@@ -487,6 +563,14 @@ with check (auth.uid() = user_id);
 drop policy if exists "ai_insights_all_own" on public.ai_insights;
 create policy "ai_insights_all_own"
 on public.ai_insights
+for all
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "ai_household_insights_all_own" on public.ai_household_insights;
+create policy "ai_household_insights_all_own"
+on public.ai_household_insights
 for all
 to authenticated
 using (auth.uid() = user_id)

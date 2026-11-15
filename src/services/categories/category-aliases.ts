@@ -55,3 +55,34 @@ export function isReservedCategoryId(id: string): boolean {
     (Object.values(Category) as string[]).includes(normalized)
   )
 }
+
+const BUILTIN_IDS: ReadonlySet<string> = new Set(Object.values(Category))
+
+/**
+ * Whether a category can have a household default (ADR-0005): not Sin
+ * categoría (unassigned) nor Ingresos (income is never an expense), under any
+ * alias. The one rule the store's write and the Categorías UI both use.
+ */
+export function canHaveHouseholdDefault(categoryId: string): boolean {
+  const id = normalizeCategoryId(categoryId)
+  return id !== Category.Uncategorized && id !== Category.Income
+}
+
+/** True for the id of a built-in category (already normalized). */
+export function isBuiltinCategoryId(id: string): id is Category {
+  return BUILTIN_IDS.has(id)
+}
+
+/**
+ * The ignore rule's default, for an id whose row records no choice: the
+ * transfer categories and the 'ignored' id that "Ignorar" writes are left out
+ * of every total. The registry's `ignoredFor` and the category store's new
+ * override rows both start from it.
+ */
+export function isIgnoredByDefault(id: string): boolean {
+  return (
+    id === Category.InternalTransfer ||
+    id === Category.ExternalTransfer ||
+    id === LEGACY_IGNORED_ID
+  )
+}

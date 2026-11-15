@@ -41,7 +41,19 @@ import { TransactionsPagination } from './transactions/TransactionsPagination'
 import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
+import {
+  AFTER_EDIT,
+  useHouseholdWrites,
+} from './transactions/useHouseholdWrites'
+import {
+  currentHouseholdRules,
+  rowsSharingMerchantRule,
+} from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
+import { getDisplayDescription } from '../utils/transaction-display'
+
+const sameTags = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((tag, i) => tag === b[i])
 
 export function Transactions({
   transactions,
@@ -57,6 +69,8 @@ export function Transactions({
   onBulkTag,
   onSplitTransaction,
   onUnsplitTransaction,
+  onSetHousehold,
+  onApplyHouseholdToSimilar,
   onRestoreTransactions,
   onReload,
   repository,
@@ -179,23 +193,35 @@ export function Transactions({
     handleAutoCategorizeSelected,
     handleBulkCategorizeSelected,
     handleBulkIgnore,
+    handleBulkHousehold,
     handleBulkDelete,
     openBulkEdit,
     closeBulkEdit,
     handleBulkEditSave,
     bulkEdit,
   } = useBulkActions({
+    transactions,
     selectedTransactionIds,
     setSelectedTransactionIds,
     onAutoCategorizeTransactions,
     onBulkCategorize,
     onBulkTag,
     onBulkDelete,
+    onSetHousehold,
     onReload,
     reportError,
     reportDeleted,
     deleteWithConfirmation,
   })
+
+  const { handleToggleHousehold, writeHousehold, writeHouseholdRule } =
+    useHouseholdWrites({
+      transactions,
+      onSetHousehold,
+      onApplyHouseholdToSimilar,
+      setPending,
+      reportError,
+    })
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
@@ -216,9 +242,17 @@ export function Transactions({
 
   // Same matching the apply-to-similar write uses, so the number the
   // dialog shows is the number of rows the save will touch.
-  function countSimilar(transaction: Transaction, renamed: boolean) {
-    return countSimilarEditReach(transactions, transaction, renamed)
-  }
+  const countSimilar = useCallback(
+    (transaction: Transaction, renamed: boolean) =>
+      countSimilarEditReach(transactions, transaction, renamed),
+    [transactions]
+  )
+
+  const countHouseholdSimilar = useCallback(
+    (transaction: Transaction) =>
+      rowsSharingMerchantRule(transactions, transaction).length,
+    [transactions]
+  )
 
   async function handleCreateCategory(label: string) {
     try {
@@ -239,27 +273,77 @@ export function Transactions({
 
   async function handleSaveEditTransaction(draft: EditTransactionDraft) {
     if (!onUpdateTransaction || !editingTransaction) return
-    const editingId = editingTransaction.id
+    const editing = editingTransaction
+    const editingId = editing.id
+    // The household part is written only when the dialog says the radio holds
+    // something to write (a category edit must not create or delete a rule,
+    // nor wipe a hand-set choice), under every scope.
+    const householdChanged = Boolean(onSetHousehold) && draft.householdTouched
+    // A household-only save must not re-write the category as the user's own
+    // confirmed one (confidence 1) nor, under a rule scope, upsert the
+    // category rule and stamp every similar row: nothing about name,
+    // category or tags changed.
+    const unchanged =
+      draft.description === getDisplayDescription(editing) &&
+      draft.category === ((editing.category ?? '').trim() || null) &&
+      sameTags(draft.tags, editing.tags ?? [])
+    let message: string | null = null
     setPending(editingId, true)
     try {
-      const { affected } = await onUpdateTransaction(editingId, {
-        displayDescription: draft.description,
-        category: draft.category,
-        tags: draft.tags,
-        applyScope: draft.applyScope,
-      })
-      toast.success(
-        affected > 1
-          ? `Cambios aplicados a ${affected} transacciones`
-          : 'Cambios guardados'
-      )
-      setEditingTransaction(null)
+      if (!(unchanged && householdChanged)) {
+        const { affected } = await onUpdateTransaction(editingId, {
+          displayDescription: draft.description,
+          category: draft.category,
+          tags: draft.tags,
+          applyScope: draft.applyScope,
+        })
+        message =
+          affected > 1
+            ? `Cambios aplicados a ${affected} transacciones`
+            : 'Cambios guardados'
+      }
     } catch (error) {
       // The dialog stays open so the user can retry.
       reportError(error, 'No se pudieron guardar los cambios')
-    } finally {
       setPending(editingId, false)
+      return
     }
+    // The choice is this row's own, written after the edit it came with. One
+    // outcome is reported: the success only once everything saved, or one
+    // error that says what did.
+    if (householdChanged) {
+      const failure = message
+        ? AFTER_EDIT
+        : 'No se pudo guardar el gasto del hogar'
+      let saved: boolean
+      // Under an apply-to-similar scope the choice is the merchant's rule.
+      if (draft.applyScope !== 'single' && onApplyHouseholdToSimilar) {
+        const applied = await writeHouseholdRule(
+          editingId,
+          draft.household,
+          draft.applyScope,
+          failure
+        )
+        saved = applied !== null
+        if (applied !== null && !message) {
+          message =
+            applied > 1
+              ? `Se aplicó a ${applied} transacciones`
+              : 'Cambios guardados'
+        }
+      } else {
+        saved = await writeHousehold(editingId, draft.household, failure)
+      }
+      if (!saved && !message) {
+        // Nothing saved at all: keep the dialog open to try again.
+        setPending(editingId, false)
+        return
+      }
+      if (!saved) message = null
+    }
+    if (message) toast.success(message)
+    setEditingTransaction(null)
+    setPending(editingId, false)
   }
 
   async function handleDeleteTransaction(transaction: Transaction) {
@@ -343,7 +427,10 @@ export function Transactions({
               variant="outline"
               size="sm"
               onClick={() =>
-                exportTransactions(filteredTransactions, { format: 'csv' })
+                exportTransactions(filteredTransactions, {
+                  format: 'csv',
+                  householdRules: currentHouseholdRules(),
+                })
               }
               className="gap-[6px]"
             >
@@ -371,6 +458,7 @@ export function Transactions({
         rows={allFilteredTransactions}
         homeCurrency={homeCurrency}
         fxRate={fxRate}
+        household={filters.household}
       />
 
       {/* Floating bulk bar — rendered before table so DOM order puts it first for a11y queries */}
@@ -383,6 +471,13 @@ export function Transactions({
           onCategorize={(category) => {
             void handleBulkCategorizeSelected(category)
           }}
+          onHousehold={
+            onSetHousehold
+              ? (household) => {
+                  void handleBulkHousehold(household)
+                }
+              : undefined
+          }
           onEdit={openBulkEdit}
           onAuto={() => {
             void handleAutoCategorizeSelected()
@@ -450,12 +545,21 @@ export function Transactions({
               }
             : undefined
         }
+        onToggleHousehold={
+          onSetHousehold
+            ? (transaction) => {
+                void handleToggleHousehold(transaction)
+              }
+            : undefined
+        }
       />
 
       <EditTransactionDialog
         transaction={editingTransaction}
         countSimilar={countSimilar}
+        countHouseholdSimilar={countHouseholdSimilar}
         knownTags={tagSuggestions}
+        canSetHousehold={Boolean(onSetHousehold)}
         isSaving={
           editingTransaction !== null &&
           pendingTransactionIds.has(editingTransaction.id)

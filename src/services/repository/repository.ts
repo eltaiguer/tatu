@@ -7,6 +7,7 @@ import type { Transaction } from '../../models'
 import { UserFacingError } from '../../utils/user-error'
 import type { ExistingTransaction } from '../dedup/import-dedup'
 import type { CategoryOverrideRecord } from '../supabase/category-overrides'
+import type { HouseholdRuleRecord } from '../supabase/household-rules'
 import type { DescriptionOverrideRecord } from '../supabase/description-overrides'
 import type { CustomCategoryRecord } from '../supabase/custom-categories'
 import type { UserPreferences } from '../supabase/user-preferences'
@@ -15,8 +16,10 @@ import type {
   SaveInsightsParams,
 } from '../supabase/ai-insights'
 import type { CustomPattern } from '../categorizer/custom-patterns'
+import type { InsightsMode } from '../insights/insight-data'
 
 export type { CachedInsightsRow, SaveInsightsParams }
+export type { InsightsMode }
 
 /**
  * One change to one row, written once and applied to both the repository and
@@ -36,6 +39,11 @@ export interface TransactionPatch {
    */
   description?: string
   rawData?: Transaction['rawData']
+  /**
+   * The row's own household choice (#251): true / false sets it, null goes
+   * back to following the category.
+   */
+  household?: boolean | null
 }
 
 const PATCH_KEYS = [
@@ -45,6 +53,7 @@ const PATCH_KEYS = [
   'tags',
   'description',
   'rawData',
+  'household',
 ] as const
 
 /** The store side of a patch: same keys, same clear-with-null rule. */
@@ -85,6 +94,7 @@ export interface WriteOutcome {
 export interface WorkspaceSnapshot {
   transactions: Transaction[]
   categoryOverrides: CategoryOverrideRecord[]
+  householdRules: HouseholdRuleRecord[]
   descriptionOverrides: DescriptionOverrideRecord[]
   customPatterns: CustomPattern[]
   customCategories: CustomCategoryRecord[]
@@ -211,6 +221,13 @@ export interface Repository {
     category: string
   }): Promise<void>
   deleteCategoryOverride(merchantNormalized: string): Promise<void>
+  /** The Hogar yes/no remembered for a merchant (key: merchantOverrideKey). */
+  upsertHouseholdRule(input: {
+    merchantNormalized: string
+    merchantOriginal?: string
+    isHousehold: boolean
+  }): Promise<void>
+  deleteHouseholdRule(merchantNormalized: string): Promise<void>
   upsertCustomPattern(pattern: CustomPattern): Promise<void>
   deleteCustomPattern(id: string): Promise<void>
   upsertCustomCategory(input: {
@@ -219,27 +236,34 @@ export interface Repository {
     color: string
     icon?: string
     isIgnored?: boolean
+    /** Absent = untouched; null = clear (the seeded default applies). */
+    isHousehold?: boolean | null
     isArchived?: boolean
   }): Promise<void>
   archiveCustomCategory(id: string): Promise<void>
 
-  // Insights cache (ADR-0001/0002: one row per user) -----------------------
+  // Insights cache (ADR-0001/0002/0005: one row per user and mode) ---------
   /**
-   * The cached insights, or null when there are none (also when the row is
-   * unusable, e.g. a database still on the old per-period key). A missing
-   * `ai_insights` table (schema.sql not applied) rejects with a
-   * UserFacingError.
+   * The cached insights of `mode` (Todo by default, or the household's), or
+   * null when there are none (also when the row is unusable, e.g. a database
+   * still on the old per-period key). A missing `ai_insights` table
+   * (schema.sql not applied) rejects with a UserFacingError; a missing
+   * `ai_household_insights` table reads as no cache.
    */
-  loadInsights(): Promise<CachedInsightsRow | null>
-  /** Replaces the cached insights; the server stamps `generatedAt`. */
-  saveInsights(row: SaveInsightsParams): Promise<void>
+  loadInsights(mode?: InsightsMode): Promise<CachedInsightsRow | null>
+  /**
+   * Replaces the cached insights of `mode`; the server stamps `generatedAt`.
+   * A missing table rejects with a UserFacingError, in either mode.
+   */
+  saveInsights(row: SaveInsightsParams, mode?: InsightsMode): Promise<void>
 
   // Account -----------------------------------------------------------------
   /**
    * Deletes everything the user has stored, one table at a time, stopping
    * at the first table that fails (the tables before it stay deleted; the
-   * caller reloads to show what remains). The insights cache is cleared
-   * last and best-effort: failing to clear it only warns.
+   * caller reloads to show what remains). The two insights caches
+   * (Hogar's, then Todo's) are cleared last and best-effort, each on its own:
+   * failing to clear one only warns.
    */
   resetAll(): Promise<void>
 }

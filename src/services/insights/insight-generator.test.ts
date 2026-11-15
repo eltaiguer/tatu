@@ -490,3 +490,37 @@ describe('insight amounts survive the round trip from a real InsightInput', () =
     expect(result.insights[0].amount).toBeUndefined()
   })
 })
+
+describe('generateInsights — scope prompts (#251)', () => {
+  const noInsights = () => JSON.stringify({ insights: [] })
+
+  it("sends today's exact system prompt for a Todo input", async () => {
+    const client = fakeClaudeClient(noInsights)
+    await generateInsights(baseInput, 'key', client)
+
+    const system = client.requests[0].system
+    // Pinned: Todo's prompt must not change with Hogar. Was 3251 on main;
+    // #239 rewrote the category-changes rule on purpose.
+    expect(system).toHaveLength(4034)
+    expect(system).not.toMatch(/hogar|household/i)
+    expect(system).toBe(buildInsightSystemPrompt())
+  })
+
+  it('sends the Hogar prompt for a Hogar input', async () => {
+    const hogarInput: InsightInput = {
+      ...baseInput,
+      monthlyTrend: [{ month: '2026-06', expense: 300 }],
+      scope: 'hogar',
+    }
+    const client = fakeClaudeClient(noInsights)
+    await generateInsights(hogarInput, 'key', client)
+
+    const [request] = client.requests
+    expect(request.system).toBe(buildInsightSystemPrompt('hogar'))
+    expect(request.system).toContain(buildInsightSystemPrompt())
+    expect(request.system).toMatch(/household/i)
+    expect(request.system).toMatch(/never talk about income/i)
+    expect(request.user).toContain('"scope":"hogar"')
+    expect(request.user).not.toContain('income')
+  })
+})

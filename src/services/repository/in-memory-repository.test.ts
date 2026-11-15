@@ -49,6 +49,7 @@ describe('in-memory repository fidelity', () => {
     expect(await repo.loadWorkspace()).toEqual({
       transactions: [],
       categoryOverrides: [],
+      householdRules: [],
       descriptionOverrides: [],
       customPatterns: [],
       customCategories: [],
@@ -64,7 +65,7 @@ describe('in-memory repository fidelity', () => {
     await repo.resetAll()
 
     expect(repo.has('a')).toBe(true)
-    expect(repo.requests.resetAll).toBe(8)
+    expect(repo.requests.resetAll).toBe(10)
 
     repo.failOn('resetAll', { when: ([table]) => table === 'transactions' })
     await expect(repo.resetAll()).rejects.toThrow('resetAll failed')
@@ -135,6 +136,62 @@ describe('in-memory repository — insights cache', () => {
   })
 })
 
+describe('in-memory repository — Hogar insights cache (#251)', () => {
+  it('keeps the Todo and Hogar rows apart', async () => {
+    const repo = createInMemoryRepository()
+    await repo.saveInsights({
+      inputHash: 'todo',
+      model: 'm',
+      insights: { insights: [] },
+    })
+    expect(await repo.loadInsights('hogar')).toBeNull()
+
+    await repo.saveInsights(
+      { inputHash: 'hogar', model: 'm', insights: { insights: [] } },
+      'hogar'
+    )
+
+    expect(await repo.loadInsights()).toMatchObject({ inputHash: 'todo' })
+    expect(await repo.loadInsights('todo')).toMatchObject({ inputHash: 'todo' })
+    expect(await repo.loadInsights('hogar')).toMatchObject({
+      inputHash: 'hogar',
+    })
+  })
+})
+
+describe('in-memory repository — household rules', () => {
+  it('saves, replaces and deletes a merchant rule', async () => {
+    const repo = createInMemoryRepository()
+
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      isHousehold: true,
+    })
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      isHousehold: false,
+    })
+    expect(
+      (await repo.loadWorkspace()).householdRules.map((r) => [
+        r.merchantNormalized,
+        r.isHousehold,
+      ])
+    ).toEqual([['disco', false]])
+
+    await repo.deleteHouseholdRule('disco')
+    expect((await repo.loadWorkspace()).householdRules).toEqual([])
+  })
+
+  it('fails like the other writes when told to', async () => {
+    const repo = createInMemoryRepository()
+    repo.failOn('upsertHouseholdRule')
+
+    await expect(
+      repo.upsertHouseholdRule({ merchantNormalized: 'x', isHousehold: true })
+    ).rejects.toThrow('upsertHouseholdRule failed')
+  })
+})
+
 describe('in-memory repository — reset all data', () => {
   function seeded() {
     return createInMemoryRepository({
@@ -144,6 +201,14 @@ describe('in-memory repository — reset all data', () => {
         {
           merchantNormalized: 'disco',
           category: 'groceries',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      householdRules: [
+        {
+          merchantNormalized: 'disco',
+          isHousehold: true,
           createdAt: '',
           updatedAt: '',
         },
@@ -177,6 +242,10 @@ describe('in-memory repository — reset all data', () => {
       model: 'm',
       insights: { insights: [] },
     })
+    await repo.saveInsights(
+      { inputHash: 'h', model: 'm', insights: { insights: [] } },
+      'hogar'
+    )
 
     await repo.resetAll()
 
@@ -184,10 +253,12 @@ describe('in-memory repository — reset all data', () => {
     expect(await repo.loadWorkspace()).toMatchObject({
       transactions: [],
       categoryOverrides: [],
+      householdRules: [],
       customCategories: [],
       preferences: null,
     })
     expect(await repo.loadInsights()).toBeNull()
+    expect(await repo.loadInsights('hogar')).toBeNull()
   })
 
   it('stops at the first table that fails, keeping what it did not reach', async () => {
@@ -202,6 +273,24 @@ describe('in-memory repository — reset all data', () => {
     expect(repo.categoryOverrides.size).toBe(0)
     expect(repo.customCategories.size).toBe(1)
     expect(repo.preferences).not.toBeNull()
+  })
+
+  it('still succeeds, and clears the other cache, when one insights cache cannot be cleared', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const repo = seeded()
+    await repo.saveInsights({
+      inputHash: 'h',
+      model: 'm',
+      insights: { insights: [] },
+    })
+    repo.failOn('resetAll', {
+      when: ([table]) => table === 'ai_household_insights',
+    })
+
+    await expect(repo.resetAll()).resolves.toBeUndefined()
+
+    expect(await repo.loadInsights()).toBeNull()
+    expect(warn).toHaveBeenCalled()
   })
 
   it('still succeeds when only the insights cache cannot be cleared', async () => {
