@@ -188,6 +188,61 @@ describe('Insights', () => {
     await waitFor(() =>
       expect(screen.getByText(/desactualizados/)).toBeInTheDocument()
     )
+    // A month can become complete on the 1st with no transaction changed.
+    expect(
+      screen.getByText(
+        /Desde la última vez que generaste insights cambiaron tus transacciones o se completó un mes\./
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('goes stale when the calendar rolls into a new month with no data change', async () => {
+    // One account, July to October. On Oct 31 October is still running, so
+    // the comparison is September's; on Nov 1 October is complete.
+    const rows = [
+      makeTransaction('j', { date: new Date('2026-07-02T00:00:00.000Z') }),
+      makeTransaction('a', { date: new Date('2026-08-10T00:00:00.000Z') }),
+      makeTransaction('s', { date: new Date('2026-09-10T00:00:00.000Z') }),
+      makeTransaction('o', {
+        date: new Date('2026-10-30T00:00:00.000Z'),
+        amount: 300,
+      }),
+    ]
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const oct31 = new Date('2026-10-31T12:00:00.000Z')
+      vi.setSystemTime(oct31)
+      repo.insights = {
+        inputHash: hashInsightInput(
+          buildInsightInput(rows, 'USD', 40.5, { now: oct31 })
+        ),
+        model: 'claude-opus-4-8',
+        insights: sampleResult,
+        generatedAt: '2026-10-31T10:00:00.000Z',
+      }
+      const props = { transactions: rows }
+      const { rerender } = renderInsights(props)
+      await screen.findByText('Restaurantes domina tu gasto')
+      expect(screen.queryByText(/desactualizados/)).not.toBeInTheDocument()
+
+      vi.setSystemTime(new Date('2026-11-01T12:00:00.000Z'))
+      rerender(
+        <Insights
+          transactions={rows}
+          homeCurrency="USD"
+          fxRate={40.5}
+          repository={repo}
+          aiEnabled={true}
+          claudeApiKey="sk-test"
+          onNavigateToTransactions={vi.fn()}
+          onNavigateToSettings={vi.fn()}
+        />
+      )
+
+      expect(await screen.findByText(/desactualizados/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('generates and caches new insights when the generate button is clicked', async () => {
