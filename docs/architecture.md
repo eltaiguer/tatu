@@ -491,7 +491,7 @@ All conversion happens in the browser, at render or aggregation time, with
 | Caller                                                                                                                                                                                  | What it converts                                                                                                    |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `buildCurrencySplit`, `spendByAccount`, `buildMerchantSpendingConverted`) | Resumen totals, charts, account cards and "Mayores comercios" (also Insights' `topMerchants`), in the home currency |
-| `category-changes.ts` (`categoryChanges`)                                                                                                                                               | "Qué cambió" month comparisons and its US$ 10 noise floor                                                           |
+| `category-changes.ts` (`categoryChanges`)                                                                                                                                               | "Qué cambió" month comparisons (also Insights' `categoryChanges`) and its US$ 10 noise floor                        |
 | `insight-data.ts` (`buildInsightInput`)                                                                                                                                                 | Every number handed to the Insights model, rounded to cents (`scope: 'hogar'` = household rows only, no income)     |
 | `Dashboard.tsx`                                                                                                                                                                         | Recent rows                                                                                                         |
 | `Transactions.tsx`                                                                                                                                                                      | Filtered-set totals                                                                                                 |
@@ -510,10 +510,13 @@ complete when every account (card, USD, UYU) has data from within its first
 3 days and either runs past it or reaches its last 3 days. Months between an
 account's first and last are covered even without rows, an account silent
 for 45 days before a month is dormant and doesn't constrain it, and
-`currentMonth` and later are never complete. The caller picks the clock:
-Resumen passes today's month.
+`currentMonth` and later are never complete. Resumen and Insights both
+pass today's month (`todayAsUtcDate`), so a month still running by the clock is
+never compared, even when every account already covers it to within 3 days of
+its end.
 
-- "Qué cambió" (`categoryChanges`) compares only complete months.
+- "Qué cambió" (`categoryChanges`) and Insights' `categoryChanges` compare
+  only complete months.
 - "Mes a mes" draws every month but marks partial ones (`MonthlyTrendRow.complete`,
   from `buildMonthlyTrendRows`): faded bars, "(mes incompleto)" on their
   buttons. The savings verdict ("Mes típico", "N de M meses completos en
@@ -661,6 +664,22 @@ rise doesn't read as a lapse. `npx vite-node scripts/recurring-diff.ts
 [--home UYU|USD] [--fx 40.5] [paths…]` prints, per merchant key, what the old
 rules (main; #120) and the current one detect on a Santander CSV or Tatu export
 (`scripts/fixtures/recurring-12mo.csv` is a synthetic 12-month example).
+
+**Category changes** (Insights' `categoryChanges`, #239): the same numbers
+as Resumen's "Qué cambió" card — `categoryChanges` in
+`category-changes.ts`, rounded to cents — so Insights can say a category grew
+or shrank. It follows Resumen's rule exactly: today's month is in progress
+(`InsightInputOptions.now`, default the clock; tests pass it). The hashed
+input holds only results, no date, but it changes when the month rolls over,
+which is right: a new month became complete. `Insights.tsx` rebuilds the input
+when today's month rolls over (as `Dashboard.tsx` does), so the cache reads as
+stale on the 1st even with no data change. Hogar computes them over the
+household rows only, with completeness judged from every row (`coverage`), as
+Resumen's Hogar mode does. The model may quote
+`current`, `median` and `delta` (`knownAmounts` accepts them; a drop's
+`delta` only without its minus sign, never 0), not `pctChange`. `delta` and
+`pctChange` are computed from the rounded `current` and `median`, so the four
+agree.
 
 **Export** (`services/export/export.ts`) writes exactly the rows it is given
 and returns how many it wrote. Configuración exports every row (a full

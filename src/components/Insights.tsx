@@ -17,6 +17,7 @@ import { HouseholdModeToggle } from './dashboard/HouseholdModeToggle'
 import { NoHouseholdState } from './dashboard/EmptyStates'
 import { SpendNudge } from './dashboard/SpendNudge'
 import { formatCurrency } from '../utils/formatting'
+import { todayAsUtcDate, toMonthKey } from '../utils/date-utils'
 import type { Currency, Transaction, TransactionsFilter } from '../models'
 import type { Repository } from '../services/repository/repository'
 import type { ClaudeClient } from '../services/ai/claude-client'
@@ -141,9 +142,19 @@ export function Insights({
   const noHouseholdSpend = householdMode && householdRows.length === 0
   const hasRows = householdMode ? !noHouseholdSpend : hasTransactions
 
+  // Today's month, as on Resumen: the comparison reads the clock, so both
+  // inputs rebuild when it rolls over (a month can become complete on the 1st
+  // with no data change). `now` is passed so the memos depend on what they read.
+  const currentMonth = toMonthKey(todayAsUtcDate())
+
   const todoInput = useMemo(
-    () => buildInsightInput(transactions, homeCurrency, fxRate),
-    [transactions, homeCurrency, fxRate]
+    () =>
+      buildInsightInput(transactions, homeCurrency, fxRate, {
+        now: new Date(),
+      }),
+    // currentMonth: the clock decides the month in progress.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [transactions, homeCurrency, fxRate, currentMonth]
   )
   const householdInput = useMemo(
     () =>
@@ -152,9 +163,19 @@ export function Insights({
             scope: 'hogar',
             // The imports' months and end, not the household rows'.
             coverage: transactions,
+            now: new Date(),
           })
         : null,
-    [householdMode, householdRows, transactions, homeCurrency, fxRate]
+    // currentMonth: the clock decides the month in progress.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      householdMode,
+      householdRows,
+      transactions,
+      homeCurrency,
+      fxRate,
+      currentMonth,
+    ]
   )
   const input = householdMode ? householdInput : todoInput
 
@@ -322,8 +343,8 @@ export function Insights({
             <Card className="p-4 border-[var(--accent)] bg-[var(--accent-soft)]">
               <p className="m-0 text-[13px]">
                 {householdMode
-                  ? 'Tus gastos del hogar cambiaron desde la última vez que generaste los insights del hogar.'
-                  : 'Tus transacciones cambiaron desde la última vez que generaste insights.'}{' '}
+                  ? 'Desde la última vez que generaste los insights del hogar cambiaron tus gastos del hogar o se completó un mes.'
+                  : 'Desde la última vez que generaste insights cambiaron tus transacciones o se completó un mes.'}{' '}
                 Los que ves abajo pueden estar desactualizados —{' '}
                 <button
                   onClick={() => void handleGenerate()}

@@ -6,6 +6,10 @@ import {
   buildMerchantSpendingConverted,
   buildMonthlyTrendsConverted,
 } from '../charts/chart-data'
+import {
+  categoryChanges,
+  type CategoryChange,
+} from '../charts/category-changes'
 import { groupByMerchant } from '../merchants/merchant-key'
 import {
   calendarDaysBetween,
@@ -53,6 +57,31 @@ export interface MonthlyTrendPoint {
   expense: number
 }
 
+export interface CategoryChangeFigure {
+  category: string
+  /** Spend in referenceMonth. */
+  current: number
+  /** Median monthly spend over baselineMonths. */
+  median: number
+  /** current − median: positive grew, negative shrank. */
+  delta: number
+  /** delta as a % of median, null when the median is too small to mean anything. */
+  pctChange: number | null
+}
+
+/**
+ * Resumen's "what changed" card (category-changes.ts) for Insights: each
+ * category's spend in the latest month every account fully covers vs. the
+ * median of the months just before it — up to 3 biggest increases and the
+ * biggest decrease, over a noise floor.
+ */
+export interface CategoryChangesInput {
+  referenceMonth: string
+  baselineMonths: string[]
+  increases: CategoryChangeFigure[]
+  decrease: CategoryChangeFigure | null
+}
+
 /**
  * The two analyses: Todo (all counted expenses) and Hogar (the household rows
  * only, #251, ADR-0005). Each has its own cache row and prompt version.
@@ -79,6 +108,11 @@ export interface InsightInputOptions {
    * Resumen's Hogar "Mes a mes"). Defaults to the rows given.
    */
   coverage?: Transaction[]
+  /**
+   * The clock decides the month in progress, as on Resumen; tests pass it.
+   * Defaults to now.
+   */
+  now?: Date
 }
 
 export interface InsightInput {
@@ -90,6 +124,8 @@ export interface InsightInput {
   topMerchants: MerchantTotal[]
   recurringCharges: RecurringCharge[]
   monthlyTrend: MonthlyTrendPoint[]
+  /** null when fewer than 3 complete months can be compared. */
+  categoryChanges: CategoryChangesInput | null
   /** Set for Hogar only; Todo has no key, so its JSON is what it always was. */
   scope?: InsightScope
 }
@@ -257,6 +293,48 @@ function detectRecurringCharges(
   return charges.sort((a, b) => b.approxAmount - a.approxAmount)
 }
 
+function toChangeFigure(change: CategoryChange): CategoryChangeFigure {
+  const current = round2(change.current)
+  const median = round2(change.median)
+  const delta = round2(current - median)
+  return {
+    category: change.category,
+    current,
+    median,
+    // From the rounded figures, so the four agree as the model quotes them.
+    // Null when the median is too small for a % to mean anything.
+    delta,
+    pctChange: change.pct === null ? null : round2((delta / median) * 100),
+  }
+}
+
+// Resumen's rule, unchanged: today's month is in progress and never compared,
+// and a month counts only if every account covers it to its end. The input
+// is hashed for the insights cache, so it changes when the month rolls over,
+// which is right: a new month became complete.
+function buildCategoryChanges(
+  transactions: Transaction[],
+  homeCurrency: Currency,
+  fxRate: number,
+  now: Date | undefined,
+  coverage: Transaction[]
+): CategoryChangesInput | null {
+  const changes = categoryChanges(
+    transactions,
+    homeCurrency,
+    fxRate,
+    now,
+    coverage
+  )
+  if (changes.kind !== 'ok') return null
+  return {
+    referenceMonth: changes.reference,
+    baselineMonths: changes.baseline,
+    increases: changes.increases.map(toChangeFigure),
+    decrease: changes.decrease ? toChangeFigure(changes.decrease) : null,
+  }
+}
+
 // The household's expense per month, over the months the statements cover.
 function buildHogarTrend(
   household: Transaction[],
@@ -305,6 +383,7 @@ export function buildInsightInput(
       topMerchants: [],
       recurringCharges: [],
       monthlyTrend: [],
+      categoryChanges: null,
       ...(hogar && { scope: options.scope }),
     }
   }
@@ -349,6 +428,13 @@ export function buildInsightInput(
             expense: round2(d.expense),
           })
         ),
+    categoryChanges: buildCategoryChanges(
+      allTransactions,
+      homeCurrency,
+      fxRate,
+      options.now,
+      options.coverage ?? allTransactions
+    ),
     ...(hogar && { scope: options.scope }),
   }
 }

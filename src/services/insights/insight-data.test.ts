@@ -1,11 +1,14 @@
-import { afterEach, describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { buildInsightInput } from './insight-data'
+import { categoryChanges } from '../charts/category-changes'
 import {
   clearAllDescriptionOverrides,
   setDescriptionOverride,
 } from '../descriptions/description-overrides'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
+
+const round2 = (n: number) => Math.round(n * 100) / 100
 
 function makeTransaction(
   id: string,
@@ -36,6 +39,7 @@ describe('buildInsightInput', () => {
       topMerchants: [],
       recurringCharges: [],
       monthlyTrend: [],
+      categoryChanges: null,
     })
   })
 
@@ -727,6 +731,175 @@ describe('recurring cadence across stored date shapes', () => {
   })
 })
 
+describe('buildInsightInput — category changes (#239)', () => {
+  // A USD and a UYU account, both covering January to April 2026 end to end.
+  // April is the latest complete month; January to March are its baseline.
+  const usd = (
+    id: string,
+    day: string,
+    amount: number,
+    category: Category,
+    extra: Partial<Transaction> = {}
+  ) =>
+    makeTransaction(id, {
+      date: new Date(`${day}T00:00:00.000Z`),
+      amount,
+      category,
+      ...extra,
+    })
+  const uyu = (id: string, day: string, amount: number, category: Category) =>
+    usd(id, day, amount, category, { currency: 'UYU' })
+
+  const rows = [
+    // The UYU account opens with a transfer: not spend, but proof of coverage.
+    uyu('t1', '2026-01-01', 1000, Category.InternalTransfer),
+    usd('g1', '2026-01-02', 200, Category.Groceries),
+    usd('r1', '2026-01-28', 100, Category.Restaurants),
+    usd('g2', '2026-02-10', 200, Category.Groceries),
+    usd('r2', '2026-02-10', 120, Category.Restaurants),
+    usd('g3', '2026-03-10', 200, Category.Groceries),
+    usd('r3', '2026-03-10', 110, Category.Restaurants),
+    usd('r4', '2026-04-10', 100, Category.Restaurants),
+    // Income and a split parent never count as spend.
+    usd('i1', '2026-04-15', 5000, Category.Income, { type: 'credit' }),
+    usd('p1', '2026-04-20', 999, Category.Restaurants, {
+      isSplitParent: true,
+    }),
+    usd('g4', '2026-04-29', 150, Category.Groceries),
+    // 8100 UYU = 200 USD at 40.5.
+    uyu('r5', '2026-04-30', 8100, Category.Restaurants),
+  ]
+
+  const now = new Date('2026-06-15T12:00:00.000Z')
+
+  it('compares the latest complete month with the median of the months before it, in the home currency', () => {
+    expect(
+      buildInsightInput(rows, 'USD', 40.5, { now }).categoryChanges
+    ).toEqual({
+      referenceMonth: '2026-04',
+      baselineMonths: ['2026-01', '2026-02', '2026-03'],
+      increases: [
+        {
+          category: Category.Restaurants,
+          current: 300,
+          median: 110,
+          delta: 190,
+          pctChange: 172.73,
+        },
+      ],
+      decrease: {
+        category: Category.Groceries,
+        current: 150,
+        median: 200,
+        delta: -50,
+        pctChange: -25,
+      },
+    })
+  })
+
+  it('converts into a UYU home currency too', () => {
+    const changes = buildInsightInput(rows, 'UYU', 40.5, {
+      now,
+    }).categoryChanges
+    expect(changes?.increases[0]).toMatchObject({
+      current: 12150,
+      median: 4455,
+      delta: 7695,
+    })
+    expect(changes?.decrease?.delta).toBe(-2025)
+  })
+
+  it('matches Resumen\'s "what changed" card for the same rows and clock', () => {
+    const card = categoryChanges(rows, 'USD', 40.5, now)
+    const insight = buildInsightInput(rows, 'USD', 40.5, { now })
+    if (card.kind !== 'ok') throw new Error('expected a comparison')
+    expect(insight.categoryChanges).toEqual({
+      referenceMonth: card.reference,
+      baselineMonths: card.baseline,
+      increases: card.increases.map((c) => ({
+        category: c.category,
+        current: round2(c.current),
+        median: round2(c.median),
+        delta: round2(round2(c.current) - round2(c.median)),
+        pctChange: c.pct === null ? null : round2(c.pct * 100),
+      })),
+      decrease: card.decrease
+        ? {
+            category: card.decrease.category,
+            current: round2(card.decrease.current),
+            median: round2(card.decrease.median),
+            delta: round2(
+              round2(card.decrease.current) - round2(card.decrease.median)
+            ),
+            pctChange:
+              card.decrease.pct === null
+                ? null
+                : round2(card.decrease.pct * 100),
+          }
+        : null,
+    })
+  })
+
+  it('leaves out the month still running by the clock, even when every account covers it to its end', () => {
+    // April is covered to the 30th by both accounts, but today is in April.
+    const now = new Date('2026-04-30T12:00:00.000Z')
+    expect(
+      buildInsightInput(rows, 'USD', 40.5, { now }).categoryChanges
+        ?.referenceMonth
+    ).toBe('2026-03')
+  })
+
+  it('compares that month once the clock has moved on', () => {
+    const now = new Date('2026-05-01T12:00:00.000Z')
+    expect(
+      buildInsightInput(rows, 'USD', 40.5, { now }).categoryChanges
+        ?.referenceMonth
+    ).toBe('2026-04')
+  })
+
+  it('is null when fewer than 2 complete months precede the latest one', () => {
+    // Both accounts cover March and April end to end: one baseline month.
+    const twoMonths = [
+      uyu('t0', '2026-03-01', 1000, Category.InternalTransfer),
+      usd('g0', '2026-03-01', 200, Category.Groceries),
+      ...rows.filter((tx) => tx.date >= new Date('2026-03-02')),
+    ]
+    expect(
+      buildInsightInput(twoMonths, 'USD', 40.5, { now }).categoryChanges
+    ).toBeNull()
+    // One more complete month is enough.
+    const threeMonths = [
+      uyu('t0', '2026-02-01', 1000, Category.InternalTransfer),
+      usd('g0', '2026-02-01', 200, Category.Groceries),
+      ...rows.filter((tx) => tx.date >= new Date('2026-02-02')),
+    ]
+    expect(
+      buildInsightInput(threeMonths, 'USD', 40.5, { now }).categoryChanges
+    ).not.toBeNull()
+  })
+
+  it('rounds so that delta is exactly current minus median as shown', () => {
+    // 9012 / 40.5 = 222.5185…, 4004 / 40.5 = 98.8642…: unrounded delta
+    // 123.654… would round to 123.65, a cent off 222.52 − 98.86.
+    const odd = [
+      ...rows,
+      uyu('e1', '2026-01-15', 4004, Category.Entertainment),
+      uyu('e2', '2026-02-15', 4004, Category.Entertainment),
+      uyu('e3', '2026-03-15', 4004, Category.Entertainment),
+      uyu('e4', '2026-04-15', 9012, Category.Entertainment),
+    ]
+    const change = buildInsightInput(odd, 'USD', 40.5, {
+      now,
+    }).categoryChanges?.increases.find(
+      (c) => c.category === Category.Entertainment
+    )
+    expect(change).toMatchObject({ current: 222.52, median: 98.86 })
+    expect(change?.delta).toBe(123.66)
+    // From the rounded figures too: 123.66 / 98.86, not 123.654… / 98.864…
+    expect(change?.pctChange).toBe(125.09)
+  })
+})
+
 describe('buildInsightInput — Hogar scope (#251)', () => {
   const rows = [
     makeTransaction('g1', {
@@ -792,6 +965,90 @@ describe('buildInsightInput — Hogar scope (#251)', () => {
 
     expect(result.scope).toBe('hogar')
     expect(result.monthlyTrend).toEqual([])
+  })
+
+  describe('category changes (#239)', () => {
+    const now = new Date('2026-05-15T12:00:00.000Z')
+    const at = (id: string, day: string, amount: number, category: Category) =>
+      makeTransaction(id, {
+        date: new Date(`${day}T00:00:00.000Z`),
+        amount,
+        category,
+      })
+    // The household's spend: nothing before March, then groceries.
+    const household = [
+      at('h1', '2026-03-10', 100, Category.Groceries),
+      at('h2', '2026-04-10', 300, Category.Groceries),
+    ]
+    // Everything imported: January to April end to end, plus personal
+    // restaurant spend that jumps in April (not the household's business).
+    const everything = [
+      at('p0', '2026-01-01', 20, Category.Restaurants),
+      at('p1', '2026-02-10', 20, Category.Restaurants),
+      ...household,
+      at('p2', '2026-04-29', 900, Category.Restaurants),
+    ]
+
+    it('compares household spend only; a personal category that grew does not appear', () => {
+      const changes = buildInsightInput(household, 'USD', 40.5, {
+        scope: 'hogar',
+        coverage: everything,
+        now,
+      }).categoryChanges
+
+      expect(changes?.increases.map((c) => c.category)).toEqual([
+        Category.Groceries,
+      ])
+      expect(changes?.decrease).toBeNull()
+    })
+
+    it('judges which months are complete from all the rows: a month with no household rows still counts, at 0', () => {
+      const changes = buildInsightInput(household, 'USD', 40.5, {
+        scope: 'hogar',
+        coverage: everything,
+        now,
+      }).categoryChanges
+
+      expect(changes).toEqual({
+        referenceMonth: '2026-04',
+        baselineMonths: ['2026-01', '2026-02', '2026-03'],
+        increases: [
+          {
+            category: Category.Groceries,
+            current: 300,
+            median: 0,
+            delta: 300,
+            pctChange: null,
+          },
+        ],
+        decrease: null,
+      })
+    })
+
+    it('matches Resumen\'s Hogar "what changed" card for the same rows and clock', () => {
+      const card = categoryChanges(household, 'USD', 40.5, now, everything)
+      const insight = buildInsightInput(household, 'USD', 40.5, {
+        scope: 'hogar',
+        coverage: everything,
+        now,
+      }).categoryChanges
+      if (card.kind !== 'ok') throw new Error('expected a comparison')
+      expect(insight?.referenceMonth).toBe(card.reference)
+      expect(insight?.baselineMonths).toEqual(card.baseline)
+      expect(insight?.increases.map((c) => [c.category, c.delta])).toEqual(
+        card.increases.map((c) => [c.category, c.delta])
+      )
+      expect(insight?.decrease?.delta).toBe(card.decrease?.delta)
+    })
+
+    it('is null when the household rows alone would be all the history there is', () => {
+      expect(
+        buildInsightInput(household, 'USD', 40.5, {
+          scope: 'hogar',
+          now,
+        }).categoryChanges
+      ).toBeNull()
+    })
   })
 
   describe('time anchors', () => {
