@@ -21,8 +21,8 @@ export function pathForView(view: View): string {
 }
 
 // Re-selecting the current view in the sidebar keeps its query only where the
-// query holds the user's filters (Transacciones); Resumen's is a mode, so it
-// goes back to plain Todo.
+// query holds the user's filters (Transacciones); Resumen's and Insights' is
+// a mode, so it goes back to plain Todo.
 export function keepsQueryOnReselect(view: View): boolean {
   return view === 'transactions'
 }

@@ -130,11 +130,13 @@ function App({ auth, createRepository }: AppProps) {
     [location.pathname, location.search, navigate]
   )
 
-  // Resumen's Hogar mode is `/?hogar=si`, written with REPLACE like the
-  // Transacciones filters; any other value reads as Todo.
-  // Read on Resumen only: Transacciones' own `hogar` filter is another thing.
+  // Resumen's and Insights' Hogar mode is `?hogar=si` (`/?hogar=si`,
+  // `/insights?hogar=si`), written with REPLACE like the Transacciones
+  // filters; any other value reads as Todo. Read on those two views only:
+  // Transacciones' own `hogar` filter is another thing.
   const householdMode =
-    currentView === 'overview' && householdModeFromSearch(location.search)
+    (currentView === 'overview' || currentView === 'insights') &&
+    householdModeFromSearch(location.search)
   const handleHouseholdModeChange = useCallback(
     (on: boolean) => {
       navigate(
@@ -537,6 +539,9 @@ function App({ auth, createRepository }: AppProps) {
                     onNavigateToTransactions={navigateToTransactions}
                     onNavigateToSettings={() => go('settings')}
                     onNavigateToImport={() => setImportOpen(true)}
+                    householdMode={householdMode}
+                    onHouseholdModeChange={handleHouseholdModeChange}
+                    onNavigateToCategories={() => go('categories')}
                   />
                 )}
                 {currentView === 'categories' && (

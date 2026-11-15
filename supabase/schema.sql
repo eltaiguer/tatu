@@ -224,6 +224,18 @@ create table if not exists public.ai_insights (
   generated_at timestamptz not null default timezone('utc', now())
 );
 
+-- Hogar mode of Insights (#251, ADR-0005): the household's own cached
+-- generation, same shape as ai_insights, one row per user. A separate table
+-- keeps Todo's cache path untouched (no primary-key change). Regenerable
+-- AI-cache content, like ai_insights.
+create table if not exists public.ai_household_insights (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  input_hash text not null,
+  model text not null,
+  insights jsonb not null,
+  generated_at timestamptz not null default timezone('utc', now())
+);
+
 create index if not exists idx_transactions_user_date_active
   on public.transactions (user_id, date desc)
   where is_deleted = false;
@@ -345,6 +357,7 @@ alter table public.custom_categories enable row level security;
 alter table public.user_preferences enable row level security;
 alter table public.custom_patterns enable row level security;
 alter table public.ai_insights enable row level security;
+alter table public.ai_household_insights enable row level security;
 
 grant select, insert, update, delete on table public.transactions to authenticated;
 grant select, insert, update, delete on table public.import_runs to authenticated;
@@ -355,6 +368,7 @@ grant select, insert, update, delete on table public.custom_categories to authen
 grant select, insert, update, delete on table public.user_preferences to authenticated;
 grant select, insert, update, delete on table public.custom_patterns to authenticated;
 grant select, insert, update, delete on table public.ai_insights to authenticated;
+grant select, insert, update, delete on table public.ai_household_insights to authenticated;
 
 drop policy if exists "transactions_select_own" on public.transactions;
 create policy "transactions_select_own"
@@ -549,6 +563,14 @@ with check (auth.uid() = user_id);
 drop policy if exists "ai_insights_all_own" on public.ai_insights;
 create policy "ai_insights_all_own"
 on public.ai_insights
+for all
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+drop policy if exists "ai_household_insights_all_own" on public.ai_household_insights;
+create policy "ai_household_insights_all_own"
+on public.ai_household_insights
 for all
 to authenticated
 using (auth.uid() = user_id)

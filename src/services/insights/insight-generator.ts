@@ -159,7 +159,7 @@ export async function generateInsights(
   // model's default, set explicitly so a default change cannot move it.
   const text = await client.complete({
     model: INSIGHTS_MODEL,
-    system: buildInsightSystemPrompt(),
+    system: buildInsightSystemPrompt(input.scope),
     user: buildInsightUserMessage(input),
     maxTokens: 16000,
     effort: 'medium',

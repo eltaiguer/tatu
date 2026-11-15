@@ -118,6 +118,8 @@ every charge. Installment purchases (`Cuota N M`) are excluded. See
   before re-applying `schema.sql`, since the primary key shape changed.
   The table is one day old and holds only regenerable AI-cache content —
   no source financial data is affected.
+- Update (#251, ADR-0005): the cache is one row per user **and mode**: Todo's
+  stays in `ai_insights`, Hogar mode keeps its own in `ai_household_insights`.
 - `Insights.tsx` is simpler: no period state, no stepper UI, no
   `referenceDate` plumbing (and with it, no more surface for the earlier
   infinite-fetch-loop bug class).

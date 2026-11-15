@@ -220,8 +220,8 @@ export function createSupabaseRepository(userId: string): Repository {
     upsertCustomCategory: (input) => upsertCustomCategory(userId, input),
     archiveCustomCategory: (id) => archiveCustomCategory(userId, id),
 
-    loadInsights: () => loadCachedInsights(userId),
-    saveInsights: (row) => saveInsights(userId, row),
+    loadInsights: (mode) => loadCachedInsights(userId, mode),
+    saveInsights: (row, mode) => saveInsights(userId, row, mode),
 
     resetAll: () => resetUserSupabaseData(userId),
   }

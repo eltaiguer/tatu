@@ -50,5 +50,11 @@ These need a manual apply before the code that uses them ships. Unlike a
 missing column, a missing table makes the workspace load fail (the app shows
 the connection-lost state), so apply them **before merging**:
 
+- `ai_household_insights` (#251, step 8): the cached generation of Insights'
+  Hogar mode, one row per user, same shape and policy as `ai_insights`.
+  Unlike the tables above, its absence does **not** break loading: Hogar
+  insights read as "no cache" and a reset skips it, but generating Hogar
+  insights shows "Falta crear la tabla de insights del hogar" until it exists.
+  Todo's insights are unaffected.
 - `household_rules` (#251, step 7): the Hogar yes/no remembered per merchant,
   one row per (user, merchant key). Read on every sign-in.

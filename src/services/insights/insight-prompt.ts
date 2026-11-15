@@ -1,11 +1,28 @@
-import type { InsightInput } from './insight-data'
+import type { InsightInput, InsightScope } from './insight-data'
 
 // Folded into the cached-insights hash (insight-cache.ts) so cached results
 // go stale once when the prompt changes. Bump PROMPT_VERSION whenever
 // buildInsightSystemPrompt or buildInsightUserMessage changes.
 export const INSIGHT_PROMPT_VERSION = 1
 
-export function buildInsightSystemPrompt(): string {
+// Hogar's own version, folded into a Hogar input's hash: editing the household
+// paragraph below makes only Hogar insights stale, never Todo's.
+export const HOUSEHOLD_INSIGHT_PROMPT_VERSION = 1
+
+const HOUSEHOLD_PROMPT_ADDENDUM = `
+
+HOGAR (household) MODE — this changes what the input means:
+- The input covers ONLY the household's shared expenses (what the couple reviews together), not all of the user's spending. Personal spending is not in it.
+- There is no income or savings data. Never talk about income, savings, savings rate or personal spending, and never output an insight about them.
+- For "trend" insights, monthlyTrend is the household's monthly expense series only (an "expense" figure per month); narrate that series alone.
+- Write for two people deciding together what to cut from the household's spending.`
+
+export function buildInsightSystemPrompt(scope?: InsightScope): string {
+  const base = todoSystemPrompt()
+  return scope === 'hogar' ? base + HOUSEHOLD_PROMPT_ADDENDUM : base
+}
+
+function todoSystemPrompt(): string {
   return `You are a financial insights analyst for Tatu, a personal finance app for Santander Uruguay bank and credit card statements.
 
 Your job is NOT to calculate numbers — every number you receive has already been computed. Your job is to rank, prioritize, and narrate what matters most for the app's two core questions:

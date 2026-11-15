@@ -30,10 +30,11 @@ describe('supabase reset service', () => {
     const { resetUserSupabaseData } = await import('./reset')
     await resetUserSupabaseData(userId)
 
-    expect(fromMock).toHaveBeenCalledTimes(9)
+    expect(fromMock).toHaveBeenCalledTimes(10)
     expect(fromMock).toHaveBeenCalledWith('household_rules')
     // Cached insights were computed from the deleted data.
     expect(fromMock).toHaveBeenCalledWith('ai_insights')
+    expect(fromMock).toHaveBeenCalledWith('ai_household_insights')
     expect(eqMock).toHaveBeenCalledWith('user_id', 'user-1')
   })
 
@@ -53,5 +54,41 @@ describe('supabase reset service', () => {
     await expect(resetUserSupabaseData(userId)).resolves.toBeUndefined()
     // Expected until schema.sql is applied by hand; not a bug.
     expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
+  it('still succeeds, quietly, when the household insights table is missing', async () => {
+    fromMock.mockImplementation((table: string) => ({
+      delete: () => ({
+        eq: async () =>
+          table === 'ai_household_insights'
+            ? { error: { code: '42P01', message: 'relation does not exist' } }
+            : { error: null },
+      }),
+    }))
+
+    const { resetUserSupabaseData } = await import('./reset')
+    await expect(resetUserSupabaseData(userId)).resolves.toBeUndefined()
+    expect(reporting.captureError).not.toHaveBeenCalled()
+  })
+
+  it('survives any other error clearing the household insights, and still clears ai_insights', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const cleared: string[] = []
+    fromMock.mockImplementation((table: string) => ({
+      delete: () => ({
+        eq: async () => {
+          cleared.push(table)
+          return table === 'ai_household_insights'
+            ? { error: { code: 'XX000', message: 'boom' } }
+            : { error: null }
+        },
+      }),
+    }))
+
+    const { resetUserSupabaseData } = await import('./reset')
+    await expect(resetUserSupabaseData(userId)).resolves.toBeUndefined()
+
+    expect(cleared).toContain('ai_insights')
+    expect(warn).toHaveBeenCalled()
   })
 })
