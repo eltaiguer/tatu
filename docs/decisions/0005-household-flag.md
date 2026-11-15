@@ -193,11 +193,15 @@ Implemented in step 8 of #251: Hogar mode on Insights (`/insights?hogar=si`).
   (`coverage`): a household subscription that stopped two imported months ago
   reads as lapsed, and a month with no household spend is a point at 0, as on
   Resumen's "Mes a mes".
+- Hogar Insights carry `categoryChanges` too (#239): computed over the household
+  rows only, completeness judged from every row (`coverage`), and "this month"
+  is today's, exactly as on Resumen (`HOUSEHOLD_INSIGHT_PROMPT_VERSION` is 2).
 - Own cache, own table: `ai_household_insights`, same shape and policy as
   `ai_insights`, one row per user. A table beside the old one rather than a
   `mode` column: no primary-key migration, and Todo's cache path, hash, prompt
   and table stay exactly as they were, so every cached Todo row stays fresh
-  (pinned by a hash test). The repository port takes a mode:
+  (pinned by a hash test; #239 moved that pin on purpose, once, when Todo's
+  input gained `categoryChanges`). The repository port takes a mode:
   `loadInsights(mode?)` / `saveInsights(row, mode?)`, `'todo'` by default; the
   cache functions pick it from `input.scope`.
 - Stale like Todo (hash of the Hogar input): a house click, a merchant rule or

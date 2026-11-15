@@ -38,6 +38,7 @@ const input: InsightInput = {
   topMerchants: [],
   recurringCharges: [],
   monthlyTrend: [],
+  categoryChanges: null,
 }
 
 const result: InsightsResult = { insights: [] }
@@ -186,12 +187,14 @@ describe('hashInsightInput — Todo and Hogar (#251)', () => {
       },
     ],
     monthlyTrend: [{ month: '2026-06', income: 2000, expense: 150.75 }],
+    categoryChanges: null,
   }
 
   it('keeps every cached Todo row fresh: the hash of a fixed input is the one main computed', () => {
-    // Computed on main (3bc0667) before household Insights. If this fails,
+    // Was f8836ae3 on main (3bc0667). #239 changed it on purpose: Todo's input
+    // gained `categoryChanges` and the prompt version moved. If this fails,
     // every user's cached Todo insights just went stale.
-    expect(hashInsightInput(todoInput)).toBe('f8836ae3')
+    expect(hashInsightInput(todoInput)).toBe('7bb1e120')
   })
 
   it('hashes the same rows differently in Hogar', () => {
@@ -201,7 +204,7 @@ describe('hashInsightInput — Todo and Hogar (#251)', () => {
 
   it('folds the base and the Hogar prompt versions into a Hogar hash', () => {
     const hogar: InsightInput = { ...todoInput, scope: 'hogar' }
-    expect(HOUSEHOLD_INSIGHT_PROMPT_VERSION).toBe(1)
+    expect(HOUSEHOLD_INSIGHT_PROMPT_VERSION).toBe(2)
     expect(
       hashInsightInput(hogar, {
         promptVersion: `${INSIGHT_PROMPT_VERSION}.${HOUSEHOLD_INSIGHT_PROMPT_VERSION + 1}`,

@@ -51,12 +51,34 @@ const VALID_TYPES = new Set<InsightType>([
 
 const VALID_SEVERITIES = new Set<InsightSeverity>(['low', 'medium', 'high'])
 
-function isKnownAmount(amount: number, input: InsightInput): boolean {
-  return (
-    input.categoryTotals.some((c) => c.amount === amount) ||
-    input.topMerchants.some((m) => m.amount === amount) ||
-    input.recurringCharges.some((r) => r.approxAmount === amount)
-  )
+// The money amounts of categoryChanges a card may show: an increase's
+// current, median and delta; a drop's current, median and delta without its
+// minus sign (the prompt says to quote it that way, and the card would show
+// "-US$ 50"). Not pctChange (a percentage), and never 0 (a category that
+// stopped has nothing to show: the narrative says so).
+function categoryChangeAmounts(input: InsightInput): number[] {
+  const changes = input.categoryChanges
+  if (!changes) return []
+  const amounts = changes.increases.flatMap((c) => [
+    c.current,
+    c.median,
+    c.delta,
+  ])
+  if (changes.decrease) {
+    const { current, median, delta } = changes.decrease
+    amounts.push(current, median, Math.abs(delta))
+  }
+  return amounts.filter((amount) => amount !== 0)
+}
+
+// Every amount the model may echo, built once per response.
+function knownAmounts(input: InsightInput): Set<number> {
+  return new Set([
+    ...input.categoryTotals.map((c) => c.amount),
+    ...input.topMerchants.map((m) => m.amount),
+    ...input.recurringCharges.map((r) => r.approxAmount),
+    ...categoryChangeAmounts(input),
+  ])
 }
 
 function isKnownCategory(category: string, input: InsightInput): boolean {
@@ -85,7 +107,11 @@ function knownMerchant(
   return matches.length === 1 ? matches[0] : undefined
 }
 
-function sanitizeInsight(raw: unknown, input: InsightInput): Insight | null {
+function sanitizeInsight(
+  raw: unknown,
+  input: InsightInput,
+  amounts: Set<number>
+): Insight | null {
   if (typeof raw !== 'object' || raw === null) return null
   const item = raw as Record<string, unknown>
 
@@ -109,7 +135,7 @@ function sanitizeInsight(raw: unknown, input: InsightInput): Insight | null {
     severity,
   }
 
-  if (typeof item.amount === 'number' && isKnownAmount(item.amount, input)) {
+  if (typeof item.amount === 'number' && amounts.has(item.amount)) {
     insight.amount = item.amount
   }
   if (
@@ -141,8 +167,9 @@ export function parseInsightsResponse(
   const { insights: rawList } = parsed as { insights?: unknown }
 
   const rawInsights = Array.isArray(rawList) ? rawList : []
+  const amounts = knownAmounts(input)
   const insights = rawInsights
-    .map((item) => sanitizeInsight(item, input))
+    .map((item) => sanitizeInsight(item, input, amounts))
     .filter((i): i is Insight => i !== null)
 
   return { insights }

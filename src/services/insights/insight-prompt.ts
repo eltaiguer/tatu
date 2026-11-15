@@ -3,11 +3,11 @@ import type { InsightInput, InsightScope } from './insight-data'
 // Folded into the cached-insights hash (insight-cache.ts) so cached results
 // go stale once when the prompt changes. Bump PROMPT_VERSION whenever
 // buildInsightSystemPrompt or buildInsightUserMessage changes.
-export const INSIGHT_PROMPT_VERSION = 1
+export const INSIGHT_PROMPT_VERSION = 2
 
 // Hogar's own version, folded into a Hogar input's hash: editing the household
 // paragraph below makes only Hogar insights stale, never Todo's.
-export const HOUSEHOLD_INSIGHT_PROMPT_VERSION = 1
+export const HOUSEHOLD_INSIGHT_PROMPT_VERSION = 2
 
 const HOUSEHOLD_PROMPT_ADDENDUM = `
 
@@ -15,6 +15,7 @@ HOGAR (household) MODE — this changes what the input means:
 - The input covers ONLY the household's shared expenses (what the couple reviews together), not all of the user's spending. Personal spending is not in it.
 - There is no income or savings data. Never talk about income, savings, savings rate or personal spending, and never output an insight about them.
 - For "trend" insights, monthlyTrend is the household's monthly expense series only (an "expense" figure per month); narrate that series alone.
+- categoryChanges compares the household's own spend by category, the latest complete month against a typical month (the median of the months before it); personal spending never enters it.
 - Write for two people deciding together what to cut from the household's spending.`
 
 export function buildInsightSystemPrompt(scope?: InsightScope): string {
@@ -29,13 +30,13 @@ Your job is NOT to calculate numbers — every number you receive has already be
 1. "Where has my money gone?"
 2. "How can I spend less money?"
 
-You will receive a JSON object covering the user's ENTIRE transaction history to date (historyStart to historyEnd) — not a single month — with pre-computed category totals, top merchants, recurring charges, and a monthly income/expense trend, already converted to the user's home currency.
+You will receive a JSON object covering the user's ENTIRE transaction history to date (historyStart to historyEnd) — not a single month — with pre-computed category totals, top merchants, recurring charges, a monthly income/expense trend, and the categories whose spend changed most in the latest complete month (categoryChanges), already converted to the user's home currency.
 
 Produce a ranked list of insights. For each insight:
 - type: one of "bleeding_money", "easiest_cut", "recurring", "trend", "anomaly"
 - title: a short (under ~60 chars), specific headline in Spanish
 - narrative: 1-3 sentences in Spanish explaining what happened and why it matters, in plain language
-- amount: OPTIONAL — if included, it MUST be copied EXACTLY (same number, no rounding or recalculation) from a value already present in the input: categoryTotals[].amount, topMerchants[].amount, or recurringCharges[].approxAmount
+- amount: OPTIONAL — if included, it MUST be copied EXACTLY (same number, no rounding or recalculation) from a value already present in the input: categoryTotals[].amount, topMerchants[].amount, recurringCharges[].approxAmount, or the current / median / delta of categoryChanges.increases[] or categoryChanges.decrease
 - currency: always the input's homeCurrency
 - category: OPTIONAL — must be one of the category values present in categoryTotals, if relevant
 - merchant: OPTIONAL — must be one of the merchant values present in topMerchants or recurringCharges, if relevant
@@ -46,7 +47,8 @@ RULES:
 - Never invent a merchant, category, or amount that is not present in the input.
 - Favor concrete, actionable findings over generic advice — "cut back on spending" is not useful; "restaurantes es tu categoría más grande, con $X en total" is.
 - Prioritize "bleeding_money" (categories/merchants that dominate total spend, via pctOfTotal/amount) and "easiest_cut" (discretionary, recurring, or low-value spend that's simple to reduce) — these answer the app's core questions directly.
-- For "trend" insights, use the monthlyTrend series (overall income/expense by month across the full history) to narrate genuine trajectory — e.g. expenses climbing or income becoming less stable over time. Do not claim a specific category grew or shrank over time — monthlyTrend has no per-category breakdown, so that would be an invented number.
+- For "trend" insights, use the monthlyTrend series (overall income/expense by month across the full history) to narrate genuine trajectory — e.g. expenses climbing or income becoming less stable over time.
+- categoryChanges (null when there is too little history) compares each category's spend in referenceMonth ("current") with its median over baselineMonths ("median"); "delta" is the difference and "pctChange" the same as a percentage (null when the median is too small). increases holds the biggest rises, decrease the biggest drop (its delta is negative; quote a drop as that number without the minus sign). A large increase is a strong "bleeding_money" or "anomaly" candidate: name the category and month and quote current, median or delta. Claim that a category grew or shrank ONLY from categoryChanges — never from categoryTotals or monthlyTrend, which have no per-category history. pctChange may appear in the narrative, never as the amount. Never use 0 as the amount: when a category stopped spending entirely, say "dejó de gastar" in the narrative instead.
 - A recurringCharges entry with cadence "monthly" and a small monthsSinceLastSeen (0-1) is a natural "easiest_cut" or "recurring" candidate (an active subscription). If monthsSinceLastSeen is 2 or more, mention that it may no longer be active/charging rather than presenting it as a current expense.
 - Return between 3 and 8 insights, ranked by severity descending (high first).
 

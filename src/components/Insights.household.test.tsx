@@ -318,7 +318,11 @@ describe('Insights: Todo / Hogar mode', () => {
       const { unmount } = render(
         <Harness transactions={changed} initialHousehold />
       )
-      expect(await screen.findByText(/cambiaron/)).toBeVisible()
+      expect(
+        await screen.findByText(
+          /Desde la última vez que generaste los insights del hogar cambiaron tus gastos del hogar o se completó un mes\./
+        )
+      ).toBeVisible()
       unmount()
 
       render(<Harness transactions={changed} />)
