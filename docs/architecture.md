@@ -671,7 +671,9 @@ as Resumen's "Qué cambió" card — `categoryChanges` in
 or shrank. It follows Resumen's rule exactly: today's month is in progress
 (`InsightInputOptions.now`, default the clock; tests pass it). The hashed
 input holds only results, no date, but it changes when the month rolls over,
-which is right: a new month became complete. Hogar computes them over the
+which is right: a new month became complete. `Insights.tsx` rebuilds the input
+when today's month rolls over (as `Dashboard.tsx` does), so the cache reads as
+stale on the 1st even with no data change. Hogar computes them over the
 household rows only, with completeness judged from every row (`coverage`), as
 Resumen's Hogar mode does. The model may quote
 `current`, `median` and `delta` (`isKnownAmount` accepts them; a drop's
