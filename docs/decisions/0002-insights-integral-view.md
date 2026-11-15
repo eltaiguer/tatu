@@ -98,9 +98,9 @@ _Amended by #239 (2026-10):_ `InsightInput` gains `categoryChanges`, the
 same latest-complete-month vs. baseline-median comparison as Resumen's "Qué
 cambió" card (top 3 increases and the biggest decrease, US$ 10 noise floor),
 so `bleeding_money` / `anomaly` insights can again point at spend that
-_spiked_, not only spend that dominates. Its "current month" is the month
-after the history's last one, not the clock, so the hashed input stays a
-function of the rows. The model may echo its `current`, `median` and `delta`
+_spiked_, not only spend that dominates. Its "current month" is today's, as on Resumen, so a month still running by the
+clock is never compared; the hashed input changes when the month rolls over,
+which is right. The model may echo its `current`, `median` and `delta`
 as amounts. `INSIGHT_PROMPT_VERSION` is 2. A full `categoryTotals × month`
 matrix (long-run growth) is still open.
 
