@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { buildInsightInput } from './insight-data'
 import { categoryChanges } from '../charts/category-changes'
 import {
@@ -770,12 +770,12 @@ describe('buildInsightInput — category changes (#239)', () => {
     uyu('r5', '2026-04-30', 8100, Category.Restaurants),
   ]
 
-  afterEach(() => {
-    vi.useRealTimers()
-  })
+  const now = new Date('2026-06-15T12:00:00.000Z')
 
   it('compares the latest complete month with the median of the months before it, in the home currency', () => {
-    expect(buildInsightInput(rows, 'USD', 40.5).categoryChanges).toEqual({
+    expect(
+      buildInsightInput(rows, 'USD', 40.5, { now }).categoryChanges
+    ).toEqual({
       referenceMonth: '2026-04',
       baselineMonths: ['2026-01', '2026-02', '2026-03'],
       increases: [
@@ -798,7 +798,9 @@ describe('buildInsightInput — category changes (#239)', () => {
   })
 
   it('converts into a UYU home currency too', () => {
-    const changes = buildInsightInput(rows, 'UYU', 40.5).categoryChanges
+    const changes = buildInsightInput(rows, 'UYU', 40.5, {
+      now,
+    }).categoryChanges
     expect(changes?.increases[0]).toMatchObject({
       current: 12150,
       median: 4455,
@@ -808,7 +810,6 @@ describe('buildInsightInput — category changes (#239)', () => {
   })
 
   it('matches Resumen\'s "what changed" card for the same rows and clock', () => {
-    const now = new Date('2026-06-15T12:00:00.000Z')
     const card = categoryChanges(rows, 'USD', 40.5, now)
     const insight = buildInsightInput(rows, 'USD', 40.5, { now })
     if (card.kind !== 'ok') throw new Error('expected a comparison')
@@ -863,7 +864,9 @@ describe('buildInsightInput — category changes (#239)', () => {
       usd('g0', '2026-03-01', 200, Category.Groceries),
       ...rows.filter((tx) => tx.date >= new Date('2026-03-02')),
     ]
-    expect(buildInsightInput(twoMonths, 'USD', 40.5).categoryChanges).toBeNull()
+    expect(
+      buildInsightInput(twoMonths, 'USD', 40.5, { now }).categoryChanges
+    ).toBeNull()
     // One more complete month is enough.
     const threeMonths = [
       uyu('t0', '2026-02-01', 1000, Category.InternalTransfer),
@@ -871,7 +874,7 @@ describe('buildInsightInput — category changes (#239)', () => {
       ...rows.filter((tx) => tx.date >= new Date('2026-02-02')),
     ]
     expect(
-      buildInsightInput(threeMonths, 'USD', 40.5).categoryChanges
+      buildInsightInput(threeMonths, 'USD', 40.5, { now }).categoryChanges
     ).not.toBeNull()
   })
 
@@ -885,15 +888,15 @@ describe('buildInsightInput — category changes (#239)', () => {
       uyu('e3', '2026-03-15', 4004, Category.Entertainment),
       uyu('e4', '2026-04-15', 9012, Category.Entertainment),
     ]
-    const change = buildInsightInput(
-      odd,
-      'USD',
-      40.5
-    ).categoryChanges?.increases.find(
+    const change = buildInsightInput(odd, 'USD', 40.5, {
+      now,
+    }).categoryChanges?.increases.find(
       (c) => c.category === Category.Entertainment
     )
     expect(change).toMatchObject({ current: 222.52, median: 98.86 })
     expect(change?.delta).toBe(123.66)
+    // From the rounded figures too: 123.66 / 98.86, not 123.654… / 98.864…
+    expect(change?.pctChange).toBe(125.09)
   })
 })
 
@@ -1020,6 +1023,22 @@ describe('buildInsightInput — Hogar scope (#251)', () => {
         ],
         decrease: null,
       })
+    })
+
+    it('matches Resumen\'s Hogar "what changed" card for the same rows and clock', () => {
+      const card = categoryChanges(household, 'USD', 40.5, now, everything)
+      const insight = buildInsightInput(household, 'USD', 40.5, {
+        scope: 'hogar',
+        coverage: everything,
+        now,
+      }).categoryChanges
+      if (card.kind !== 'ok') throw new Error('expected a comparison')
+      expect(insight?.referenceMonth).toBe(card.reference)
+      expect(insight?.baselineMonths).toEqual(card.baseline)
+      expect(insight?.increases.map((c) => [c.category, c.delta])).toEqual(
+        card.increases.map((c) => [c.category, c.delta])
+      )
+      expect(insight?.decrease?.delta).toBe(card.decrease?.delta)
     })
 
     it('is null when the household rows alone would be all the history there is', () => {

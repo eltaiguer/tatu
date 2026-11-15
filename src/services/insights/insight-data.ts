@@ -296,13 +296,15 @@ function detectRecurringCharges(
 function toChangeInsight(change: CategoryChange): CategoryChangeInsight {
   const current = round2(change.current)
   const median = round2(change.median)
+  const delta = round2(current - median)
   return {
     category: change.category,
     current,
     median,
-    // From the rounded figures, so the three agree as the model quotes them.
-    delta: round2(current - median),
-    pctChange: change.pct === null ? null : round2(change.pct * 100),
+    // From the rounded figures, so the four agree as the model quotes them.
+    // Null when the median is too small for a % to mean anything.
+    delta,
+    pctChange: change.pct === null ? null : round2((delta / median) * 100),
   }
 }
 
