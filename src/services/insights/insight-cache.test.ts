@@ -204,7 +204,7 @@ describe('hashInsightInput — Todo and Hogar (#251)', () => {
 
   it('folds the base and the Hogar prompt versions into a Hogar hash', () => {
     const hogar: InsightInput = { ...todoInput, scope: 'hogar' }
-    expect(HOUSEHOLD_INSIGHT_PROMPT_VERSION).toBe(1)
+    expect(HOUSEHOLD_INSIGHT_PROMPT_VERSION).toBe(2)
     expect(
       hashInsightInput(hogar, {
         promptVersion: `${INSIGHT_PROMPT_VERSION}.${HOUSEHOLD_INSIGHT_PROMPT_VERSION + 1}`,

@@ -166,6 +166,30 @@ describe('parseInsightsResponse', () => {
     }
   )
 
+  it("accepts an amount echoed from a Hogar input's categoryChanges", () => {
+    const hogarInput: InsightInput = {
+      ...baseInput,
+      monthlyTrend: [{ month: '2026-06', expense: 300 }],
+      scope: 'hogar',
+    }
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'bleeding_money',
+          title: 'Restaurantes subió',
+          narrative: 'El hogar gastó más en restaurantes que en un mes típico.',
+          amount: 75.5,
+          category: 'restaurants',
+          severity: 'high',
+        },
+      ],
+    })
+
+    expect(parseInsightsResponse(text, hogarInput).insights[0].amount).toBe(
+      75.5
+    )
+  })
+
   it('accepts a drop quoted without its minus sign', () => {
     const text = JSON.stringify({
       insights: [
@@ -520,6 +544,9 @@ describe('generateInsights — scope prompts (#251)', () => {
     expect(request.system).toContain(buildInsightSystemPrompt())
     expect(request.system).toMatch(/household/i)
     expect(request.system).toMatch(/never talk about income/i)
+    expect(request.system).toMatch(
+      /categoryChanges compares the household's own spend/i
+    )
     expect(request.user).toContain('"scope":"hogar"')
     expect(request.user).not.toContain('income')
   })

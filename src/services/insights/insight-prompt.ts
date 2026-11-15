@@ -7,7 +7,7 @@ export const INSIGHT_PROMPT_VERSION = 2
 
 // Hogar's own version, folded into a Hogar input's hash: editing the household
 // paragraph below makes only Hogar insights stale, never Todo's.
-export const HOUSEHOLD_INSIGHT_PROMPT_VERSION = 1
+export const HOUSEHOLD_INSIGHT_PROMPT_VERSION = 2
 
 const HOUSEHOLD_PROMPT_ADDENDUM = `
 
@@ -15,6 +15,7 @@ HOGAR (household) MODE — this changes what the input means:
 - The input covers ONLY the household's shared expenses (what the couple reviews together), not all of the user's spending. Personal spending is not in it.
 - There is no income or savings data. Never talk about income, savings, savings rate or personal spending, and never output an insight about them.
 - For "trend" insights, monthlyTrend is the household's monthly expense series only (an "expense" figure per month); narrate that series alone.
+- categoryChanges compares the household's own spend by category, the latest complete month against a typical month (the median of the months before it); personal spending never enters it.
 - Write for two people deciding together what to cut from the household's spending.`
 
 export function buildInsightSystemPrompt(scope?: InsightScope): string {

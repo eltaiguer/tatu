@@ -964,6 +964,74 @@ describe('buildInsightInput — Hogar scope (#251)', () => {
     expect(result.monthlyTrend).toEqual([])
   })
 
+  describe('category changes (#239)', () => {
+    const now = new Date('2026-05-15T12:00:00.000Z')
+    const at = (id: string, day: string, amount: number, category: Category) =>
+      makeTransaction(id, {
+        date: new Date(`${day}T00:00:00.000Z`),
+        amount,
+        category,
+      })
+    // The household's spend: nothing before March, then groceries.
+    const household = [
+      at('h1', '2026-03-10', 100, Category.Groceries),
+      at('h2', '2026-04-10', 300, Category.Groceries),
+    ]
+    // Everything imported: January to April end to end, plus personal
+    // restaurant spend that jumps in April (not the household's business).
+    const everything = [
+      at('p0', '2026-01-01', 20, Category.Restaurants),
+      at('p1', '2026-02-10', 20, Category.Restaurants),
+      ...household,
+      at('p2', '2026-04-29', 900, Category.Restaurants),
+    ]
+
+    it('compares household spend only; a personal category that grew does not appear', () => {
+      const changes = buildInsightInput(household, 'USD', 40.5, {
+        scope: 'hogar',
+        coverage: everything,
+        now,
+      }).categoryChanges
+
+      expect(changes?.increases.map((c) => c.category)).toEqual([
+        Category.Groceries,
+      ])
+      expect(changes?.decrease).toBeNull()
+    })
+
+    it('judges which months are complete from all the rows: a month with no household rows still counts, at 0', () => {
+      const changes = buildInsightInput(household, 'USD', 40.5, {
+        scope: 'hogar',
+        coverage: everything,
+        now,
+      }).categoryChanges
+
+      expect(changes).toEqual({
+        referenceMonth: '2026-04',
+        baselineMonths: ['2026-01', '2026-02', '2026-03'],
+        increases: [
+          {
+            category: Category.Groceries,
+            current: 300,
+            median: 0,
+            delta: 300,
+            pctChange: null,
+          },
+        ],
+        decrease: null,
+      })
+    })
+
+    it('is null when the household rows alone would be all the history there is', () => {
+      expect(
+        buildInsightInput(household, 'USD', 40.5, {
+          scope: 'hogar',
+          now,
+        }).categoryChanges
+      ).toBeNull()
+    })
+  })
+
   describe('time anchors', () => {
     // Household rows end in August; the statements run through October.
     const household = [
