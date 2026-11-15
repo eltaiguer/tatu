@@ -1186,7 +1186,9 @@ describe('App', () => {
     fireEvent.click(
       (await screen.findAllByRole('button', { name: /^Editar/ }))[0]
     )
-    const option = screen.getByLabelText(/se aplica a 3 transacciones/)
+    const option = within(
+      screen.getByRole('group', { name: 'Aplicar nombre y categoría a' })
+    ).getByLabelText(/se aplica a 3 transacciones/)
     fireEvent.click(option)
     fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 

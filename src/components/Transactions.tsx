@@ -280,9 +280,9 @@ export function Transactions({
     // nor wipe a hand-set choice), under every scope.
     const householdChanged = Boolean(onSetHousehold) && draft.householdTouched
     // A household-only save must not re-write the category as the user's own
-    // confirmed one (confidence 1) nor, under a rule scope, upsert the
-    // category rule and stamp every similar row: nothing about name,
-    // category or tags changed.
+    // confirmed one (confidence 1): nothing about name, category or tags
+    // changed. Under a rule scope for the name and category the write still
+    // runs: the user asked for that rule.
     const unchanged =
       draft.description === getDisplayDescription(editing) &&
       draft.category === ((editing.category ?? '').trim() || null) &&
@@ -290,7 +290,7 @@ export function Transactions({
     let message: string | null = null
     setPending(editingId, true)
     try {
-      if (!(unchanged && householdChanged)) {
+      if (!(unchanged && householdChanged && draft.applyScope === 'single')) {
         const { affected } = await onUpdateTransaction(editingId, {
           displayDescription: draft.description,
           category: draft.category,
@@ -316,12 +316,13 @@ export function Transactions({
         ? AFTER_EDIT
         : 'No se pudo guardar el gasto del hogar'
       let saved: boolean
-      // Under an apply-to-similar scope the choice is the merchant's rule.
-      if (draft.applyScope !== 'single' && onApplyHouseholdToSimilar) {
+      // Under an apply-to-similar household scope the choice is the
+      // merchant's rule.
+      if (draft.householdScope !== 'single' && onApplyHouseholdToSimilar) {
         const applied = await writeHouseholdRule(
           editingId,
           draft.household,
-          draft.applyScope,
+          draft.householdScope,
           failure
         )
         saved = applied !== null
@@ -330,6 +331,8 @@ export function Transactions({
             applied > 1
               ? `Se aplicó a ${applied} transacciones`
               : 'Cambios guardados'
+        } else if (applied !== null && applied > 1) {
+          message = `${message} · gasto del hogar en ${applied}`
         }
       } else {
         saved = await writeHousehold(editingId, draft.household, failure)
@@ -560,6 +563,7 @@ export function Transactions({
         countHouseholdSimilar={countHouseholdSimilar}
         knownTags={tagSuggestions}
         canSetHousehold={Boolean(onSetHousehold)}
+        canSetHouseholdRule={Boolean(onApplyHouseholdToSimilar)}
         isSaving={
           editingTransaction !== null &&
           pendingTransactionIds.has(editingTransaction.id)

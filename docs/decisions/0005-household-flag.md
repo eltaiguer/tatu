@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed
+Proposed. Partially superseded by
+[0006](0006-separate-household-scope.md): the edit dialog's single "Aplicar a"
+for category and Hogar (the Hogar choice now has its own).
 
 ## Date
 

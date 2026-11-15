@@ -7,13 +7,14 @@ stays readable. For how the system works today, see
 
 ## Index
 
-| ADR                                                | Title                                                               | Status                                                                   | Date       |
-| -------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------- |
-| [0001](0001-ai-spending-insights.md)               | AI-powered spending insights                                        | Accepted. Partially superseded by [0002](0002-insights-integral-view.md) | 2026-07-22 |
-| [0002](0002-insights-integral-view.md)             | Insights: integral (all-time) view instead of per-period            | Accepted                                                                 | 2026-07-24 |
-| [0003](0003-repository-port-and-partial-writes.md) | Repository port, one mutation module, and "screen mirrors database" | Proposed                                                                 | 2026-10-04 |
-| [0004](0004-sentry-error-reporting.md)             | Report client errors to Sentry, scrubbed in the browser             | Proposed                                                                 | 2026-10-04 |
-| [0005](0005-household-flag.md)                     | Household expenses as a yes/no flag beside the category             | Proposed                                                                 | 2026-11-08 |
+| ADR                                                | Title                                                               | Status                                                                     | Date       |
+| -------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------- |
+| [0001](0001-ai-spending-insights.md)               | AI-powered spending insights                                        | Accepted. Partially superseded by [0002](0002-insights-integral-view.md)   | 2026-07-22 |
+| [0002](0002-insights-integral-view.md)             | Insights: integral (all-time) view instead of per-period            | Accepted                                                                   | 2026-07-24 |
+| [0003](0003-repository-port-and-partial-writes.md) | Repository port, one mutation module, and "screen mirrors database" | Proposed                                                                   | 2026-10-04 |
+| [0004](0004-sentry-error-reporting.md)             | Report client errors to Sentry, scrubbed in the browser             | Proposed                                                                   | 2026-10-04 |
+| [0005](0005-household-flag.md)                     | Household expenses as a yes/no flag beside the category             | Proposed. Partially superseded by [0006](0006-separate-household-scope.md) | 2026-11-08 |
+| [0006](0006-separate-household-scope.md)           | A separate "apply to" for the household choice in the edit dialog   | Proposed                                                                   | 2026-11-15 |
 
 ADR-0002 replaced 0001's per-period navigation, per-period cache key and
 `deltaVsPriorPeriod`. ADR-0001's client-side BYO-key pattern, its model choice
@@ -23,7 +24,7 @@ stand.
 ## Adding an ADR
 
 1. Copy [`template.md`](template.md) to `<NNNN>-<short-kebab-title>.md`, using the
-   next free number with four digits (the next one is `0006`).
+   next free number with four digits (the next one is `0007`).
 2. Fill in every section. Start with status `Proposed` and change it to
    `Accepted` when the change merges.
 3. Add a row to the index above in the same PR.

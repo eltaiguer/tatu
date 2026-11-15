@@ -627,7 +627,9 @@ describe('App with supabase enabled', () => {
       (await screen.findAllByLabelText('Editar AUT 998877 DEVOTO'))[0]
     )
     fireEvent.click(
-      screen.getByLabelText('Esta y las que importes en el futuro')
+      within(
+        screen.getByRole('group', { name: 'Aplicar nombre y categoría a' })
+      ).getByLabelText('Esta y las que importes en el futuro')
     )
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'Devoto' },

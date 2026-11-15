@@ -72,7 +72,7 @@ src/
     CurrencyToggle.tsx     # Home-currency switch
     TransactionFilters.tsx # Unified filter bar (search, category, account, type, currency, date, amount): takes `filters` + `onChange(patch)` + `onDateBoundChange` + `onClearAll`
     TransactionTable.tsx   # Transaction rows, selection, confidence meter, row actions
-    EditTransactionDialog.tsx  # Edit modal: owns the draft (description, category, tags, apply-scope) + validation; emits it via one onSave
+    EditTransactionDialog.tsx  # Edit modal: owns the draft (description, category, tags, apply-scope, Hogar choice + its own scope) + validation; emits it via one onSave
     BulkEditDialog.tsx     # Bulk categorization modal
     SplitTransactionDialog.tsx # Split one transaction into parts (see is_split_parent / split_parent_id)
     ConfirmDialog.tsx      # Shared confirmation modal
@@ -244,7 +244,7 @@ A task is done only when:
 - **Dates**: a transaction's `date` is a calendar day at UTC midnight — read it only with UTC accessors or `timeZone: 'UTC'`; "today" is `todayAsUtcDate()`. See "Dates" in `docs/architecture.md` (#58)
 - **Deduplication**: by content, not ID — imports match rows by fingerprint (source, raw date, raw description, signed amount, currency) as a multiset, deleted rows included; on card rows a different card number (`rawData.numeroTarjeta`, via `cardNumber`, shared with the #167 review) is a different charge, while a row lacking it matches either card; a taken ID gets a salted `_cN` suffix (`services/dedup/import-dedup.ts`, #57). IDs (hash incl. row position) are unchanged. Files are decoded UTF-8-else-windows-1252 (`services/parsers/decode-csv.ts`); a re-import repairs rows stored garbled (U+FFFD) in place, same id (#192)
 - **Internal transfers**: inferred in the store (`inferInternalTransfers`) by keyword + scored debit/credit pairing within ±2 days, recomputed on load — see `docs/architecture.md`
-- **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `editTransaction` in `services/mutations/transaction-mutations.ts`; the same scopes drive the Hogar choice of the edit dialog (`applyHouseholdToSimilar`: a merchant rule, written only when the household radio was touched)
+- **apply-scope**: When editing a transaction's category — `single` / `matching_past_and_future` / `future_matching_only` — handled by `editTransaction` in `services/mutations/transaction-mutations.ts`; the Hogar choice of the edit dialog has its own radio with the same three scopes (`householdScope` → `applyHouseholdToSimilar`: a merchant rule, written only when the household radio was touched; ADR-0006)
 
 ## Environment
 

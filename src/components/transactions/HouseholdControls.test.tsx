@@ -919,8 +919,31 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   }
+  // The dialog's two "apply to" radios: the Hogar choice's and the name and
+  // category's.
+  const HOGAR_SCOPE = 'Aplicar “gasto del hogar” a'
   const scope = (name: RegExp | string) =>
-    fireEvent.click(screen.getByLabelText(name))
+    fireEvent.click(
+      within(screen.getByRole('group', { name: HOGAR_SCOPE })).getByLabelText(
+        name
+      )
+    )
+  const categoryScope = (name: RegExp | string) =>
+    fireEvent.click(
+      within(
+        screen.getByRole('group', { name: 'Aplicar nombre y categoría a' })
+      ).getByLabelText(name)
+    )
+  async function pickCategory(label: RegExp) {
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Categoría dropdown' })
+      )
+    })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: label }))
+    })
+  }
   const on = (d: string) => house(d).getAttribute('aria-pressed') === 'true'
 
   it('Todas las similares + Sí turns every look-alike household and says how many', async () => {
@@ -1017,15 +1040,8 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     seed(devotos())
     await openEdit(D1)
 
-    scope(/^Todas las similares/)
-    await act(async () => {
-      fireEvent.click(
-        screen.getByRole('button', { name: 'Categoría dropdown' })
-      )
-    })
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
-    })
+    categoryScope(/^Todas las similares/)
+    await pickCategory(/Alimentación/)
     await save()
 
     await waitFor(() => expect(repo.row(D2)?.category).toBe('groceries'))
@@ -1055,15 +1071,14 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     scope(/^Todas las similares/)
 
     expect(screen.getByLabelText('Según categoría (No)')).toBeChecked()
-    expect(screen.getByText(/Gasto del hogar/)).toHaveTextContent(
-      /se aplica a 3 transacciones \(y a las futuras\)/
-    )
-    expect(screen.getByText(/Gasto del hogar/)).not.toHaveTextContent(
-      /solo esta transacción/
-    )
+    expect(
+      within(screen.getByRole('group', { name: HOGAR_SCOPE })).getByLabelText(
+        'Todas las similares · se aplica a 3 transacciones (y a las futuras)'
+      )
+    ).toBeChecked()
   })
 
-  it('without the rule handler, an untouched radio under Todas leaves a hand choice alone', async () => {
+  it('without the rule handler, the Hogar choice is the row’s only and a category rule leaves it alone', async () => {
     seed(
       devotos().map((t) => (t.id === D1 ? { ...t, household: true } : t)),
       undefined,
@@ -1071,13 +1086,68 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     )
     await openEdit(D1)
 
-    scope(/^Todas las similares/)
+    expect(screen.queryByRole('group', { name: HOGAR_SCOPE })).toBeNull()
+    expect(screen.getByText(/^Gasto del hogar/)).toHaveTextContent(
+      'solo esta transacción'
+    )
+    categoryScope(/^Todas las similares/)
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'Devoto centro' },
     })
     await save()
 
     expect(repo.row(D1)?.household).toBe(true)
+    expect(repo.householdRules.size).toBe(0)
+  })
+
+  it('a rename for this row only with a Hogar rule for all: the rule spreads, the name and category stay put', async () => {
+    seed(devotos().map((t) => ({ ...t, categoryConfidence: 0.6 })))
+    await openEdit(D1)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto centro' },
+    })
+    scope(/^Todas las similares/)
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    await waitFor(() => expect(on(D3)).toBe(true))
+    // D1 now shows its new name; D2 and D3 keep theirs.
+    expect(on('Devoto centro') && on(D2)).toBe(true)
+    expect(repo.householdRules.size).toBe(1)
+    expect(repo.categoryOverrides.size).toBe(0)
+    expect(repo.row(D2)?.category).toBe('restaurants')
+    expect(repo.row(D2)?.categoryConfidence).toBe(0.6)
+    expect(
+      await screen.findByText('Cambios guardados · gasto del hogar en 3')
+    ).toBeVisible()
+  })
+
+  it('a category for all with a Hogar choice for this row only: the category spreads, the choice does not', async () => {
+    seed(devotos())
+    await openEdit(D1)
+
+    categoryScope(/^Todas las similares/)
+    await pickCategory(/Alimentación/)
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    await waitFor(() => expect(repo.row(D2)?.category).toBe('groceries'))
+    expect(repo.row(D1)?.household).toBe(true)
+    expect(repo.row(D2)?.household ?? null).toBeNull()
+    expect(repo.householdRules.size).toBe(0)
+  })
+
+  it('Todas las similares for the category still saves its rule when only the Hogar choice changed', async () => {
+    seed(devotos())
+    await openEdit(D1)
+
+    categoryScope(/^Todas las similares/)
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    await waitFor(() => expect(repo.row(D1)?.household).toBe(true))
+    expect(repo.categoryOverrides.size).toBe(1)
     expect(repo.householdRules.size).toBe(0)
   })
 
