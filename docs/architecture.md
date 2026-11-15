@@ -676,9 +676,10 @@ when today's month rolls over (as `Dashboard.tsx` does), so the cache reads as
 stale on the 1st even with no data change. Hogar computes them over the
 household rows only, with completeness judged from every row (`coverage`), as
 Resumen's Hogar mode does. The model may quote
-`current`, `median` and `delta` (`isKnownAmount` accepts them; a drop's
-`delta` also without its minus sign, never 0), not `pctChange`. `delta` is
-computed from the rounded `current` and `median`, so the three always agree.
+`current`, `median` and `delta` (`knownAmounts` accepts them; a drop's
+`delta` only without its minus sign, never 0), not `pctChange`. `delta` and
+`pctChange` are computed from the rounded `current` and `median`, so the four
+agree.
 
 **Export** (`services/export/export.ts`) writes exactly the rows it is given
 and returns how many it wrote. Configuración exports every row (a full
