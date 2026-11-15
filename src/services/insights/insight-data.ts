@@ -57,7 +57,7 @@ export interface MonthlyTrendPoint {
   expense: number
 }
 
-export interface CategoryChangeInsight {
+export interface CategoryChangeFigure {
   category: string
   /** Spend in referenceMonth. */
   current: number
@@ -75,11 +75,11 @@ export interface CategoryChangeInsight {
  * median of the months just before it — up to 3 biggest increases and the
  * biggest decrease, over a noise floor.
  */
-export interface CategoryChangesInsight {
+export interface CategoryChangesInput {
   referenceMonth: string
   baselineMonths: string[]
-  increases: CategoryChangeInsight[]
-  decrease: CategoryChangeInsight | null
+  increases: CategoryChangeFigure[]
+  decrease: CategoryChangeFigure | null
 }
 
 /**
@@ -125,7 +125,7 @@ export interface InsightInput {
   recurringCharges: RecurringCharge[]
   monthlyTrend: MonthlyTrendPoint[]
   /** null when fewer than 3 complete months can be compared. */
-  categoryChanges: CategoryChangesInsight | null
+  categoryChanges: CategoryChangesInput | null
   /** Set for Hogar only; Todo has no key, so its JSON is what it always was. */
   scope?: InsightScope
 }
@@ -293,7 +293,7 @@ function detectRecurringCharges(
   return charges.sort((a, b) => b.approxAmount - a.approxAmount)
 }
 
-function toChangeInsight(change: CategoryChange): CategoryChangeInsight {
+function toChangeFigure(change: CategoryChange): CategoryChangeFigure {
   const current = round2(change.current)
   const median = round2(change.median)
   const delta = round2(current - median)
@@ -316,9 +316,9 @@ function buildCategoryChanges(
   transactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number,
-  coverage: Transaction[],
-  now?: Date
-): CategoryChangesInsight | null {
+  now: Date | undefined,
+  coverage: Transaction[]
+): CategoryChangesInput | null {
   const changes = categoryChanges(
     transactions,
     homeCurrency,
@@ -330,8 +330,8 @@ function buildCategoryChanges(
   return {
     referenceMonth: changes.reference,
     baselineMonths: changes.baseline,
-    increases: changes.increases.map(toChangeInsight),
-    decrease: changes.decrease ? toChangeInsight(changes.decrease) : null,
+    increases: changes.increases.map(toChangeFigure),
+    decrease: changes.decrease ? toChangeFigure(changes.decrease) : null,
   }
 }
 
@@ -432,8 +432,8 @@ export function buildInsightInput(
       allTransactions,
       homeCurrency,
       fxRate,
-      options.coverage ?? allTransactions,
-      options.now
+      options.now,
+      options.coverage ?? allTransactions
     ),
     ...(hogar && { scope: options.scope }),
   }
