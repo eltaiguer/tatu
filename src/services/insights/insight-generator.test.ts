@@ -144,7 +144,7 @@ describe('parseInsightsResponse', () => {
     expect(result.insights[0].merchant).toBe('Spotify')
   })
 
-  it.each([75.5, 40.25, 35.25, -20])(
+  it.each([75.5, 40.25, 35.25, 10, 30, 20])(
     'accepts an amount echoed from categoryChanges (%s)',
     (amount) => {
       const text = JSON.stringify({
@@ -187,6 +187,31 @@ describe('parseInsightsResponse', () => {
 
     expect(parseInsightsResponse(text, hogarInput).insights[0].amount).toBe(
       75.5
+    )
+  })
+
+  it("rejects a drop's negative delta: the card would show a minus", () => {
+    const text = JSON.stringify({
+      insights: [
+        {
+          type: 'trend',
+          title: 'Alimentación bajó',
+          narrative: 'Gastaste menos en alimentación que en un mes típico.',
+          amount: -20,
+          category: 'groceries',
+          severity: 'low',
+        },
+      ],
+    })
+
+    expect(parseInsightsResponse(text, baseInput).insights[0].amount).toBe(
+      undefined
+    )
+  })
+
+  it('tells the model never to use 0 as an amount', () => {
+    expect(buildInsightSystemPrompt()).toMatch(
+      /never use 0 as the amount.*dejó de gastar/i
     )
   })
 
@@ -525,7 +550,7 @@ describe('generateInsights — scope prompts (#251)', () => {
     const system = client.requests[0].system
     // Pinned: Todo's prompt must not change with Hogar. Was 3251 on main;
     // #239 rewrote the category-changes rule on purpose.
-    expect(system).toHaveLength(4034)
+    expect(system).toHaveLength(4151)
     expect(system).not.toMatch(/hogar|household/i)
     expect(system).toBe(buildInsightSystemPrompt())
   })
