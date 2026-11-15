@@ -52,16 +52,21 @@ export interface EditTransactionDraft {
   description: string
   category: string | null
   tags: string[]
+  // What the name and category reach. The household choice has its own.
   applyScope: ApplyScope
-  // The household choice: this row's own (Solo esta) or, under a rule scope,
-  // the merchant's rule; null follows the category. Unchanged (the row's own)
-  // for a row that cannot be household.
+  // The household choice: this row's own (Solo esta) or, under a rule scope
+  // of `householdScope`, the merchant's rule; null follows the category.
+  // Unchanged (the row's own) for a row that cannot be household.
   household: boolean | null
   // The radio holds something to write: a pick under a rule scope (even the
-  // option already shown), else a choice different from the row's own. The
-  // household part is written only then: a category edit must not create or
-  // delete a rule, nor wipe a hand-set choice.
+  // option already shown, or a Sí / No carried over from Solo esta), else a
+  // choice different from the row's own. The household part is written only
+  // then: a category edit must not create or delete a rule, nor wipe a
+  // hand-set choice.
   householdTouched: boolean
+  // What the household choice reaches ("Aplicar “gasto del hogar” a"):
+  // 'single' whenever no rule can be made for the row.
+  householdScope: ApplyScope
 }
 
 interface EditTransactionDialogProps {
@@ -81,6 +86,9 @@ interface EditTransactionDialogProps {
   // Whether the view can save a household choice; without it the group is
   // not offered.
   canSetHousehold: boolean
+  // Whether the view can save a merchant household rule; without it the
+  // household choice is this row's only.
+  canSetHouseholdRule: boolean
   // Persists a new category; resolves with it, or undefined when it could
   // not be created (the caller reports why).
   onCreateCategory: (label: string) => Promise<{ id: string } | undefined>
@@ -143,6 +151,7 @@ function EditTransactionForm({
   knownTags,
   isSaving,
   canSetHousehold,
+  canSetHouseholdRule,
   onCreateCategory,
   onSave,
   onClose,
@@ -155,9 +164,11 @@ function EditTransactionForm({
   const [category, setCategory] = useState(transaction.category ?? '')
   const [tags, setTags] = useState<string[]>(transaction.tags ?? [])
   const [applyScope, setApplyScope] = useState<ApplyScope>('single')
+  const [householdScope, setHouseholdScope] = useState<ApplyScope>('single')
   // The row's own choice (Solo esta) and the merchant-rule pick (the two
-  // rule scopes; null until the user picks) are separate: a pick under one
-  // scope is not a pick under the other.
+  // rule scopes; null until the user picks) are kept apart: a "Según …"
+  // means "follow" under one and "delete the rule" under the other. A Sí /
+  // No carries across when the household scope changes (pickHouseholdScope).
   const [ownChoice, setOwnChoice] = useState<HouseholdChoice>(() =>
     choiceOf(transaction.household)
   )
@@ -235,14 +246,16 @@ function EditTransactionForm({
     return says === null ? 'Sin definir' : says ? 'Sí' : 'No'
   })()
   // A rule can be made only for a counted expense (judged on the category
-  // being picked) that is not a split part and has a merchant key. Elsewhere
-  // the rule scopes write just this row, and the dialog says so.
-  const canMakeRule = showHousehold && canHaveMerchantRule(transaction)
-  // Under an apply-to-similar scope the radio is the merchant's rule: until
-  // picked it shows the rule (or "según categoría" when none covers the row),
-  // not the row's own choice. Solo esta shows the row's own choice, and
-  // "según comercio" when a rule covers the row.
-  const ruleScope = applyScope !== 'single' && canMakeRule
+  // being picked) that is not a split part and has a merchant key, and only
+  // when the view can save one. Elsewhere the household scope is not
+  // offered, and the dialog says the choice is this row's only.
+  const canMakeRule =
+    showHousehold && canSetHouseholdRule && canHaveMerchantRule(transaction)
+  // Under an apply-to-similar household scope the radio is the merchant's
+  // rule: until picked it shows the rule (or "según categoría" when none
+  // covers the row), not the row's own choice. Solo esta shows the row's own
+  // choice, and "según comercio" when a rule covers the row.
+  const ruleScope = householdScope !== 'single' && canMakeRule
   const merchantRule = merchantRuleOf(transaction, householdRules.merchants)
   const shownChoice: HouseholdChoice = ruleScope
     ? (rulePick ?? choiceOf(merchantRule))
@@ -259,13 +272,6 @@ function EditTransactionForm({
     () => countHouseholdSimilar(draftRow),
     [countHouseholdSimilar, draftRow]
   )
-  const householdReach = !ruleScope
-    ? 'solo esta transacción'
-    : applyScope === 'matching_past_and_future'
-      ? householdSimilarCount > 1
-        ? `se aplica a ${householdSimilarCount} transacciones (y a las futuras)`
-        : 'solo esta por ahora (y las futuras)'
-      : 'esta y las que importes en el futuro'
   // Whether the radio holds something to write: a rule pick under a rule
   // scope, else a different choice than the row's own.
   const householdTouched = ruleScope
@@ -273,6 +279,24 @@ function EditTransactionForm({
     : ownChoice !== choiceOf(transaction.household)
   const pickHousehold = (choice: HouseholdChoice) =>
     ruleScope ? setRulePick(choice) : setOwnChoice(choice)
+  // What the radio shows is what is saved, so changing the scope never turns
+  // a visible Sí / No into a save that writes nothing: it carries over as a
+  // pick. A "Según …" does not (follow vs delete the rule); the radio then
+  // shows the new scope's own starting point, untouched.
+  function pickHouseholdScope(next: ApplyScope) {
+    const nextIsRule = next !== 'single' && canMakeRule
+    if (!ruleScope && nextIsRule) {
+      setRulePick(ownChoice === 'category' ? null : ownChoice)
+    } else if (
+      ruleScope &&
+      !nextIsRule &&
+      rulePick &&
+      rulePick !== 'category'
+    ) {
+      setOwnChoice(rulePick)
+    }
+    setHouseholdScope(next)
+  }
 
   function handleSave() {
     const trimmed = description.trim()
@@ -290,6 +314,7 @@ function EditTransactionForm({
         ? householdOf(shownChoice)
         : (transaction.household ?? null),
       householdTouched: showHousehold && householdTouched,
+      householdScope: ruleScope ? householdScope : 'single',
     })
   }
 
@@ -428,10 +453,13 @@ function EditTransactionForm({
           <RadioGroup
             legend={
               <>
-                Gasto del hogar{' '}
-                <span className="font-normal text-muted-foreground">
-                  · {householdReach}
-                </span>
+                Gasto del hogar
+                {!canMakeRule && (
+                  <span className="font-normal text-muted-foreground">
+                    {' '}
+                    · solo esta transacción
+                  </span>
+                )}
               </>
             }
             name="household"
@@ -442,6 +470,33 @@ function EditTransactionForm({
               { value: 'category', label: followLabel },
               { value: 'yes', label: 'Sí' },
               { value: 'no', label: 'No' },
+            ]}
+          />
+        )}
+
+        {canMakeRule && (
+          <RadioGroup
+            legend="Aplicar “gasto del hogar” a"
+            name="household-scope"
+            value={householdScope}
+            onChange={pickHouseholdScope}
+            options={[
+              { value: 'single', label: 'Solo esta transacción' },
+              {
+                value: 'matching_past_and_future',
+                label:
+                  householdSimilarCount > 1
+                    ? `Todas las similares · se aplica a ${householdSimilarCount} transacciones (y a las futuras)`
+                    : 'Todas las similares · solo esta por ahora (y las futuras)',
+              },
+              {
+                value: 'future_matching_only',
+                label: 'Esta y las que importes en el futuro',
+                hint:
+                  householdSimilarCount > 1
+                    ? 'Las similares de antes quedan como están.'
+                    : undefined,
+              },
             ]}
           />
         )}
