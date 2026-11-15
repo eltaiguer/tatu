@@ -14,8 +14,7 @@ import { countsAsRow } from '../spending/spending-rules'
 // later) is never complete.
 //
 // `currentMonth` is passed in ('YYYY-MM') so callers choose the clock:
-// Resumen passes today's month, Insights the month after its history ends
-// (its input is hashed, so it must not read the clock).
+// Resumen and Insights both pass today's month.
 
 const EDGE_DAYS = 3
 // Longer than a statement cycle plus import delay.

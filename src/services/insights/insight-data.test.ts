@@ -8,6 +8,8 @@ import {
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
 
+const round2 = (n: number) => Math.round(n * 100) / 100
+
 function makeTransaction(
   id: string,
   overrides: Partial<Transaction> = {}
@@ -805,31 +807,53 @@ describe('buildInsightInput — category changes (#239)', () => {
     expect(changes?.decrease?.delta).toBe(-2025)
   })
 
-  it('matches Resumen\'s "what changed" card for the same rows', () => {
-    const card = categoryChanges(
-      rows,
-      'USD',
-      40.5,
-      new Date('2026-06-15T12:00:00.000Z')
-    )
-    const insight = buildInsightInput(rows, 'USD', 40.5).categoryChanges
+  it('matches Resumen\'s "what changed" card for the same rows and clock', () => {
+    const now = new Date('2026-06-15T12:00:00.000Z')
+    const card = categoryChanges(rows, 'USD', 40.5, now)
+    const insight = buildInsightInput(rows, 'USD', 40.5, { now })
     if (card.kind !== 'ok') throw new Error('expected a comparison')
-    expect(insight?.referenceMonth).toBe(card.reference)
-    expect(insight?.baselineMonths).toEqual(card.baseline)
-    expect(insight?.increases.map((c) => [c.category, c.delta])).toEqual(
-      card.increases.map((c) => [c.category, c.delta])
-    )
-    expect(insight?.decrease?.delta).toBe(card.decrease?.delta)
+    expect(insight.categoryChanges).toEqual({
+      referenceMonth: card.reference,
+      baselineMonths: card.baseline,
+      increases: card.increases.map((c) => ({
+        category: c.category,
+        current: round2(c.current),
+        median: round2(c.median),
+        delta: round2(round2(c.current) - round2(c.median)),
+        pctChange: c.pct === null ? null : round2(c.pct * 100),
+      })),
+      decrease: card.decrease
+        ? {
+            category: card.decrease.category,
+            current: round2(card.decrease.current),
+            median: round2(card.decrease.median),
+            delta: round2(
+              round2(card.decrease.current) - round2(card.decrease.median)
+            ),
+            pctChange:
+              card.decrease.pct === null
+                ? null
+                : round2(card.decrease.pct * 100),
+          }
+        : null,
+    })
   })
 
-  it('does not read the clock: the same rows give the same input on any date', () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    // Inside the history's last month: reading the clock would leave April
-    // out as "this month".
-    vi.setSystemTime(new Date('2026-04-30T12:00:00.000Z'))
-    const early = buildInsightInput(rows, 'USD', 40.5)
-    vi.setSystemTime(new Date('2031-01-01T12:00:00.000Z'))
-    expect(buildInsightInput(rows, 'USD', 40.5)).toEqual(early)
+  it('leaves out the month still running by the clock, even when every account covers it to its end', () => {
+    // April is covered to the 30th by both accounts, but today is in April.
+    const now = new Date('2026-04-30T12:00:00.000Z')
+    expect(
+      buildInsightInput(rows, 'USD', 40.5, { now }).categoryChanges
+        ?.referenceMonth
+    ).toBe('2026-03')
+  })
+
+  it('compares that month once the clock has moved on', () => {
+    const now = new Date('2026-05-01T12:00:00.000Z')
+    expect(
+      buildInsightInput(rows, 'USD', 40.5, { now }).categoryChanges
+        ?.referenceMonth
+    ).toBe('2026-04')
   })
 
   it('is null when fewer than 2 complete months precede the latest one', () => {

@@ -7,8 +7,7 @@ import {
   buildMonthlyTrendsConverted,
 } from '../charts/chart-data'
 import {
-  categoryChangesBefore,
-  shiftMonth,
+  categoryChanges,
   type CategoryChange,
 } from '../charts/category-changes'
 import { groupByMerchant } from '../merchants/merchant-key'
@@ -109,6 +108,11 @@ export interface InsightInputOptions {
    * Resumen's Hogar "Mes a mes"). Defaults to the rows given.
    */
   coverage?: Transaction[]
+  /**
+   * The clock decides the month in progress, as on Resumen; tests pass it.
+   * Defaults to now.
+   */
+  now?: Date
 }
 
 export interface InsightInput {
@@ -302,22 +306,22 @@ function toChangeInsight(change: CategoryChange): CategoryChangeInsight {
   }
 }
 
-// The month after the history's last one stands in for "this month", so the
-// result depends on the rows alone, never on the date it is built (the input
-// is hashed for the insights cache). The history's last month still counts
-// only if every account covers it to its end, as in Resumen.
+// Resumen's rule, unchanged: today's month is in progress and never compared,
+// and a month counts only if every account covers it to its end. The input
+// is hashed for the insights cache, so it changes when the month rolls over,
+// which is right: a new month became complete.
 function buildCategoryChanges(
   transactions: Transaction[],
   homeCurrency: Currency,
   fxRate: number,
-  historyEndMonthKey: string,
-  coverage: Transaction[]
+  coverage: Transaction[],
+  now?: Date
 ): CategoryChangesInsight | null {
-  const changes = categoryChangesBefore(
+  const changes = categoryChanges(
     transactions,
     homeCurrency,
     fxRate,
-    shiftMonth(historyEndMonthKey, 1),
+    now,
     coverage
   )
   if (changes.kind !== 'ok') return null
@@ -426,8 +430,8 @@ export function buildInsightInput(
       allTransactions,
       homeCurrency,
       fxRate,
-      historyEndMonthKey,
-      options.coverage ?? allTransactions
+      options.coverage ?? allTransactions,
+      options.now
     ),
     ...(hogar && { scope: options.scope }),
   }
