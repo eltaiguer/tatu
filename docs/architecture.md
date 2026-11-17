@@ -437,9 +437,9 @@ a reload all agree. Split parents never match; rows that don't count toward
 totals match only with `showIgnored`; categories are compared through
 `normalizeCategoryId`, the merchant by its exact merchant key (`merchantKeyOf`,
 see Merchant key below), amounts by absolute value, search over display name +
-raw description + tags. The Hogar filter (`household`: `all` / `household` /
-`unassigned`, `?hogar=si` / `?hogar=sin-definir`) keeps the counted expenses
-whose `rowHouseholdView` status is that value; it takes the user's category
+raw description + tags. The Hogar filter (`household`: `all` / `household`,
+`?hogar=si`; any other value reads as `all`) keeps the counted expenses
+whose `rowHouseholdView` status is household; it takes the user's category
 rules as `options.householdRules` (callers pass
 `currentHouseholdRules()`: category defaults + merchant rules; `useTransactionFiltering` reads it at render, so
 a changed default re-filters). `sortTransactions` orders the result.
@@ -592,7 +592,7 @@ value is Todo; the sidebar's Resumen link goes to `/`). Todo is the whole
 page. Hogar is one cut at the top: `householdRows` = the rows whose
 `rowHouseholdView(tx, currentHouseholdRules())` is `household` (counted
 expenses only, so income, ignored rows and split parents are out), found with
-`partitionByHousehold` (one pass; it also yields the Sin definir rows). Every
+`householdExpenses` (one pass). Every
 memo reads `rows = householdMode ? householdRows : transactions`. The
 category defaults are read at render: nothing subscribes to the category
 store, and the numbers follow a changed default because coming back from
@@ -603,8 +603,9 @@ changing.
 - The hero's month is always the Todo month: `buildCurrentMonthSummary` takes
   an optional reference month, so the household summary of a month with no
   household spend is $0 rather than another month.
-- Sin definir (`status === 'unassigned'`) is summed apart with
-  `sumCountedTotals` / the same month summary, never into the household total.
+- An uncategorized row with no choice or merchant rule is not household
+  (ADR-0007), so it is never in the household total. The "Sin categoría" nudge
+  counts all rows in both modes and opens them without the household filter.
 - "Mes a mes" has the same months as Todo's (`coverage` is every row): a
   month with no household spend is a bar at 0, not a missing month. Which
   months are complete reads every row too (see "Complete months").
@@ -614,7 +615,8 @@ changing.
   Re-selecting Resumen in the sidebar replaces the entry and drops the query
   (`keepsQueryOnReselect` in `src/routes.ts`: only Transacciones keeps its).
 - Drill-throughs go through one wrapper that adds `household: 'household'`
-  (a filter naming its own household, such as Sin definir, keeps it).
+  (a filter naming its own household keeps it; the "Sin categoría" nudge
+  bypasses the wrapper).
 
 ## Merchant key
 
@@ -689,7 +691,7 @@ rows on screen (`filteredTransactions`, so ignored rows only with "show
 ignored" on). Both CSV and PDF end with a `cuenta_en_totales` column (`1` /
 `0`, from `countsTowardTotals`): summing the `1` rows gives the app's totals,
 because a split parent is `0` and its parts are `1`. After it comes `hogar`
-(`si` / `no` / `sin_definir` from `rowHouseholdView`, empty for rows that are
+(`si` / `no` from `rowHouseholdView`, empty for rows that are
 not counted expenses); the callers pass the user's household rules
 (`currentHouseholdRules()`). PDF prints an HTML
 report (every interpolated string HTML-escaped) from a hidden same-origin
