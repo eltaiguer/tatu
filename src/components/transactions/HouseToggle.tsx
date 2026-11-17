@@ -1,15 +1,30 @@
 import { House } from 'lucide-react'
-import type { Transaction } from '../../models'
+import type { HouseholdResolution, Transaction } from '../../models'
 import { resolveCategory } from '../../services/categories/category-registry'
 import { rowHouseholdView } from '../../services/household/household'
 import { useHouseholdRules } from '../../hooks/useHouseholdRules'
 
-// The row's "gasto del hogar" control, next to the category badge. Faint when
-// the row follows its category, solid brand colour when it was set by hand;
-// filled = household, outline = not. Renders nothing for rows that are not
-// counted expenses. The state comes from the saved row (screen mirrors
-// database), so a click only asks; the house moves once the write is
-// confirmed.
+/** "Hogar · según Alimentación" / "No es del hogar · elegido a mano" / "… · según comercio". */
+export function householdLine(
+  category: string | undefined,
+  view: HouseholdResolution
+): string {
+  const value = view.status === 'household' ? 'Hogar' : 'No es del hogar'
+  const source =
+    view.source === 'row'
+      ? 'elegido a mano'
+      : view.source === 'merchant'
+        ? 'según comercio'
+        : `según ${resolveCategory(category).label}`
+  return `${value} · ${source}`
+}
+
+// The row's Hogar control, next to the category badge. The house shows the
+// value only: filled in the brand colour = Hogar, outline in the muted text
+// colour = No, whatever the source. The source is said in words, in the
+// name and tooltip. Renders nothing for rows that are not counted expenses.
+// The state comes from the saved row (screen mirrors database), so a click
+// only asks; the house moves once the write is confirmed.
 export function HouseToggle({
   transaction,
   description,
@@ -29,42 +44,22 @@ export function HouseToggle({
   if (!view) return null
 
   const household = view.status === 'household'
-  const title = `${household ? 'Hogar' : 'No es del hogar'} · ${
-    view.source === 'row'
-      ? 'elegido a mano'
-      : view.source === 'merchant'
-        ? 'según comercio'
-        : `según ${resolveCategory(transaction.category).label}`
-  }`
+  const line = householdLine(transaction.category, view)
 
+  // No aria-pressed: the name carries the value and changes with it.
   return (
     <button
       type="button"
-      aria-label={`Gasto del hogar: ${description}`}
-      aria-pressed={household}
-      title={title}
-      data-origin={view.source === 'row' ? 'hand' : view.source}
+      aria-label={`${description}: ${line}`}
+      title={line}
       disabled={disabled}
       onClick={() => onToggle(transaction)}
-      className={`relative inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--brand-text)] disabled:opacity-50 ${
-        view.source === 'row'
+      className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--brand-text)] disabled:opacity-50 ${
+        household
           ? 'text-[color:var(--brand-text)]'
-          : household
-            ? // A filled house that follows its category is stronger than the
-              // faint outline, so the two read apart at 14px.
-              'text-[color:var(--text-muted)]'
-            : 'text-[color:var(--text-faint)]'
+          : 'text-[color:var(--text-muted)]'
       }`}
     >
-      {view.source === 'row' && (
-        // Set by hand: a small dot as well as the colour, so the difference
-        // does not rest on hue alone.
-        <span
-          data-hand-mark
-          aria-hidden="true"
-          className="absolute right-[1px] bottom-[2px] size-[5px] rounded-full bg-current ring-[1.5px] ring-[var(--surface)]"
-        />
-      )}
       <House
         size={size}
         aria-hidden="true"

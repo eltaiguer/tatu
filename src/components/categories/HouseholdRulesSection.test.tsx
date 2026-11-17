@@ -202,9 +202,9 @@ describe('HouseholdRulesSection', () => {
       </>
     )
     const toggle = screen.getByRole('button', {
-      name: 'Gasto del hogar: DEVOTO 12/03/2026',
+      name: /^DEVOTO 12\/03\/2026: /,
     })
-    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(toggle).toHaveAccessibleName(/: Hogar · /)
 
     fireEvent.click(
       screen.getByRole('button', {
@@ -212,7 +212,9 @@ describe('HouseholdRulesSection', () => {
       })
     )
 
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'false'))
+    await waitFor(() =>
+      expect(toggle).toHaveAccessibleName(/: No es del hogar · /)
+    )
   })
 
   it('"Deshacer" restores the rule with its value and name, in its place', async () => {
@@ -236,20 +238,22 @@ describe('HouseholdRulesSection', () => {
       </>
     )
     const toggle = screen.getByRole('button', {
-      name: 'Gasto del hogar: DEVOTO 12/03/2026',
+      name: /^DEVOTO 12\/03\/2026: /,
     })
-    expect(toggle).toHaveAttribute('aria-pressed', 'false') // rule says no
+    expect(toggle).toHaveAccessibleName(/: No es del hogar · /) // rule says no
 
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Eliminar regla del hogar COMPRA DEVOTO 4521',
       })
     )
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'true'))
+    await waitFor(() => expect(toggle).toHaveAccessibleName(/: Hogar · /))
 
     fireEvent.click(await screen.findByRole('button', { name: 'Deshacer' }))
 
-    await waitFor(() => expect(toggle).toHaveAttribute('aria-pressed', 'false'))
+    await waitFor(() =>
+      expect(toggle).toHaveAccessibleName(/: No es del hogar · /)
+    )
     const names = screen.getAllByRole('listitem').map((li) => li.textContent)
     expect(names[1]).toContain('COMPRA DEVOTO 4521')
     expect(names[1]).toContain('Hogar: No')

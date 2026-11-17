@@ -107,9 +107,15 @@ function seed(
 // Both the desktop row and the mobile card render; [0] is the row.
 function house(description: string, which = 0) {
   return screen.getAllByRole('button', {
-    name: `Gasto del hogar: ${description}`,
+    name: (name) => name.startsWith(`${description}: `),
   })[which]
 }
+// The house's name says its value: "{description}: Hogar · …" / "…: No es del
+// hogar · …" (#265).
+const HOGAR = /: Hogar · /
+const NO_ES_DEL_HOGAR = /: No es del hogar · /
+const isHogar = (el: HTMLElement) =>
+  HOGAR.test(el.getAttribute('aria-label') ?? '')
 
 function select(...descriptions: string[]) {
   for (const description of descriptions) {
@@ -143,31 +149,33 @@ describe('house toggle on rows and cards (#251)', () => {
       tx('Misterio', { category: 'uncategorized' }),
     ])
 
-    expect(house('Devoto')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Devoto')).toHaveAccessibleName(HOGAR)
     expect(house('Devoto')).toHaveAttribute(
       'title',
       'Hogar · según Alimentación'
     )
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(house('Cena')).toHaveAttribute(
       'title',
       'No es del hogar · según Restaurantes'
     )
-    expect(house('Misterio')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Misterio')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(house('Misterio')).toHaveAttribute(
       'title',
       'No es del hogar · según Sin categoría'
     )
     for (const none of ['Sueldo', 'Pago tarjeta', 'Madre']) {
       expect(
-        screen.queryByRole('button', { name: `Gasto del hogar: ${none}` })
+        screen.queryByRole('button', {
+          name: (name) => name.startsWith(`${none}: `),
+        })
       ).toBeNull()
     }
     // The split parent is on screen (above its part), and the part has one.
     expect(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Madre' })
     ).not.toHaveLength(0)
-    expect(house('Parte')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Parte')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
   })
 
   it('marks a row by hand, then goes back to the category on the next click', async () => {
@@ -176,14 +184,14 @@ describe('house toggle on rows and cards (#251)', () => {
     await act(async () => {
       fireEvent.click(house('Cena'))
     })
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Cena')).toHaveAccessibleName(HOGAR)
     expect(house('Cena')).toHaveAttribute('title', 'Hogar · elegido a mano')
     expect(repo.row('Cena')?.household).toBe(true)
 
     await act(async () => {
       fireEvent.click(house('Cena'))
     })
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(house('Cena')).toHaveAttribute(
       'title',
       'No es del hogar · según Restaurantes'
@@ -199,7 +207,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(house('Devoto'))
     })
 
-    expect(house('Devoto')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Devoto')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(house('Devoto')).toHaveAttribute(
       'title',
       'No es del hogar · elegido a mano'
@@ -214,7 +222,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(house('Misterio'))
     })
 
-    expect(house('Misterio')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Misterio')).toHaveAccessibleName(HOGAR)
     expect(repo.row('Misterio')?.household).toBe(true)
   })
 
@@ -229,7 +237,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(house('Misterio'))
     })
 
-    expect(house('Misterio')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Misterio')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(repo.row('Misterio')?.household ?? null).toBeNull()
   })
 
@@ -242,7 +250,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(house('Cena'))
     })
 
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(repo.row('Cena')?.household ?? null).toBeNull()
     expect(
       await screen.findByRole('button', { name: 'Reintentar' })
@@ -252,7 +260,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
     })
     await waitFor(() => expect(repo.row('Cena')?.household).toBe(true))
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Cena')).toHaveAccessibleName(HOGAR)
     expect(screen.queryByText('Cambios guardados')).toBeNull()
     expect(logged).toHaveBeenCalled()
   })
@@ -266,25 +274,25 @@ describe('house toggle on rows and cards (#251)', () => {
     })
     expect(house('Cena')).toBeDisabled()
     expect(house('Cena', 1)).toBeDisabled()
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
 
     await act(async () => {
       gate.release()
     })
     expect(house('Cena')).toBeEnabled()
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Cena')).toHaveAccessibleName(HOGAR)
   })
 
   it('works the same on the mobile card', async () => {
     seed([tx('Cena', { category: 'restaurants' })])
-    expect(house('Cena', 1)).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena', 1)).toHaveAccessibleName(NO_ES_DEL_HOGAR)
 
     await act(async () => {
       fireEvent.click(house('Cena', 1))
     })
 
-    expect(house('Cena', 1)).toHaveAttribute('aria-pressed', 'true')
-    expect(house('Cena', 0)).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Cena', 1)).toHaveAccessibleName(HOGAR)
+    expect(house('Cena', 0)).toHaveAccessibleName(HOGAR)
     expect(repo.row('Cena')?.household).toBe(true)
   })
 })
@@ -332,7 +340,7 @@ describe('household choice in the edit dialog (#251)', () => {
     await save()
 
     await waitFor(() => expect(repo.row('Cena')?.household ?? null).toBeNull())
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
   })
 
   it('does not write the household choice when it was not touched', async () => {
@@ -643,7 +651,7 @@ describe('review round 1 of step 4 (#251)', () => {
     })
 
     expect(repo.row('Cena')?.household ?? null).toBeNull()
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
   })
 
   it('keeps "Recargar" for an error a retry cannot fix', async () => {
@@ -792,8 +800,14 @@ describe('review round 1 of step 4 (#251)', () => {
     ).toBeInTheDocument()
     expect(screen.queryByText('Cambios guardados')).toBeNull()
   })
+})
 
-  it('tells a hand-set house from one following its category by more than colour', () => {
+describe('the house shows Hogar or No (#265)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  it('fills the house in the brand colour for Hogar and outlines it in the muted colour for No, whatever the source', () => {
     seed([
       tx('Devoto'),
       tx('Cena', { category: 'restaurants' }),
@@ -801,13 +815,69 @@ describe('review round 1 of step 4 (#251)', () => {
       tx('Taxi', { category: 'transport', household: false }),
     ])
 
-    expect(house('Devoto')).toHaveAttribute('data-origin', 'category')
-    expect(house('Cena')).toHaveAttribute('data-origin', 'category')
-    expect(house('Luz')).toHaveAttribute('data-origin', 'hand')
-    expect(house('Taxi')).toHaveAttribute('data-origin', 'hand')
-    // The cue is a mark in the button itself, not just a colour.
-    expect(house('Luz').querySelector('[data-hand-mark]')).not.toBeNull()
-    expect(house('Devoto').querySelector('[data-hand-mark]')).toBeNull()
+    const fill = (d: string) =>
+      house(d).querySelector('svg')?.getAttribute('fill')
+    expect(fill('Devoto')).toBe('currentColor')
+    expect(fill('Luz')).toBe('currentColor')
+    expect(fill('Cena')).toBe('none')
+    expect(fill('Taxi')).toBe('none')
+    // Colour encodes the value only, never the source.
+    expect(house('Devoto').className).toBe(house('Luz').className)
+    expect(house('Cena').className).toBe(house('Taxi').className)
+    expect(house('Devoto').className).toContain('--brand-text')
+    expect(house('Cena').className).toContain('--text-muted')
+    expect(document.querySelector('[data-hand-mark]')).toBeNull()
+    expect(document.querySelector('[data-origin]')).toBeNull()
+  })
+
+  it('names the house after the row, its value and where it comes from', () => {
+    putMerchantHouseholdRule(
+      merchantOverrideKey('COMPRA DEVOTO 4521'),
+      true,
+      'COMPRA DEVOTO 4521'
+    )
+    seed([
+      tx('Devoto'),
+      tx('Cena', { category: 'restaurants' }),
+      tx('Luz', { category: 'utilities', household: true }),
+      tx('Taxi', { category: 'transport', household: false }),
+      tx('Misterio', { category: 'uncategorized' }),
+      tx('Madre', { isSplitParent: true }),
+      tx('Parte', { splitParentId: 'Madre', category: 'restaurants' }),
+      tx('COMPRA DEVOTO 4521', { category: 'restaurants' }),
+    ])
+
+    const names = (d: string) => house(d).getAttribute('aria-label')
+    expect(names('Devoto')).toBe('Devoto: Hogar · según Alimentación')
+    expect(names('Cena')).toBe('Cena: No es del hogar · según Restaurantes')
+    expect(names('Luz')).toBe('Luz: Hogar · elegido a mano')
+    expect(names('Taxi')).toBe('Taxi: No es del hogar · elegido a mano')
+    expect(names('Misterio')).toBe(
+      'Misterio: No es del hogar · según Sin categoría'
+    )
+    expect(names('Parte')).toBe('Parte: No es del hogar · según Restaurantes')
+    expect(names('COMPRA DEVOTO 4521')).toBe(
+      'COMPRA DEVOTO 4521: Hogar · según comercio'
+    )
+    expect(house('Cena')).toHaveAttribute(
+      'title',
+      'No es del hogar · según Restaurantes'
+    )
+  })
+
+  it('the house is a plain button, not a pressed toggle', async () => {
+    seed([tx('Cena', { category: 'restaurants' })])
+
+    expect(house('Cena')).not.toHaveAttribute('aria-pressed')
+    expect(house('Cena')).toHaveAccessibleName(
+      'Cena: No es del hogar · según Restaurantes'
+    )
+    await act(async () => {
+      fireEvent.click(house('Cena'))
+    })
+    await waitFor(() =>
+      expect(house('Cena')).toHaveAccessibleName('Cena: Hogar · elegido a mano')
+    )
   })
 })
 
@@ -966,7 +1036,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
       fireEvent.click(screen.getByRole('button', { name: label }))
     })
   }
-  const on = (d: string) => house(d).getAttribute('aria-pressed') === 'true'
+  const on = (d: string) => isHogar(house(d))
   // The merchant remembered as Sí through the dialog, as the user does it.
   async function rememberAsYes(from = D1) {
     await openEdit(from)
@@ -1389,7 +1459,7 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
   const D3 = 'DEVOTO 13/03/2026'
   const devotos = () =>
     [D1, D2, D3].map((d) => tx(d, { category: 'restaurants' }))
-  const on = (d: string) => house(d).getAttribute('aria-pressed') === 'true'
+  const on = (d: string) => isHogar(house(d))
   const offer = (n: number) =>
     screen.queryByRole('button', { name: `Aplicar a las ${n} similares` })
 
@@ -1418,7 +1488,6 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     await waitFor(() => expect(on(D2)).toBe(true), { timeout: 5000 })
     expect(on(D3)).toBe(true)
     expect(house(D2)).toHaveAttribute('title', 'Hogar · según comercio')
-    expect(house(D2).querySelector('[data-hand-mark]')).toBeNull()
     expect(repo.householdRules.size).toBe(1)
     expect(
       await screen.findByText(
