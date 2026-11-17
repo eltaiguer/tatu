@@ -60,8 +60,8 @@ const BUILTIN_IDS: ReadonlySet<string> = new Set(Object.values(Category))
 
 /**
  * Whether a category can have a household default (ADR-0005): not Sin
- * categoría (unassigned) nor Ingresos (income is never an expense), under any
- * alias. The one rule the store's write and the Categorías UI both use.
+ * categoría (it is never household by default) nor Ingresos (income is never
+ * an expense), under any alias. The one rule the store's write and the Categorías UI both use.
  */
 export function canHaveHouseholdDefault(categoryId: string): boolean {
   const id = normalizeCategoryId(categoryId)

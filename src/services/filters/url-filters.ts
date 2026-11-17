@@ -23,7 +23,7 @@ export interface UrlFilterState {
   min: string
   max: string
   showIgnored: boolean
-  // Hogar: only counted expenses that are household / still Sin definir
+  // Hogar: only counted expenses that are household
   // (services/household/household.ts decides which).
   household: HouseholdFilter
   // Undefined when the URL doesn't say; the view picks its default.
@@ -97,7 +97,6 @@ function parsePeriod(params: URLSearchParams): UrlPeriod | undefined {
 // here and nowhere else.
 const HOUSEHOLD_PARAM = 'hogar'
 const HOUSEHOLD_YES = 'si'
-const HOUSEHOLD_UNASSIGNED = 'sin-definir'
 
 export function householdModeFromSearch(search: string): boolean {
   return new URLSearchParams(search).get(HOUSEHOLD_PARAM) === HOUSEHOLD_YES
@@ -134,13 +133,7 @@ export function parseFilterParams(search: string): UrlFilterState {
     // Income has no household answer, so that mix would list nothing: the
     // income type wins and hogar is dropped.
     household:
-      type === 'credit'
-        ? 'all'
-        : hogar === HOUSEHOLD_YES
-          ? 'household'
-          : hogar === HOUSEHOLD_UNASSIGNED
-            ? 'unassigned'
-            : 'all',
+      type === 'credit' ? 'all' : hogar === HOUSEHOLD_YES ? 'household' : 'all',
     ...(parsePeriod(params) && { period: parsePeriod(params) }),
   }
 }
@@ -161,8 +154,6 @@ export function serializeFilterParams(state: UrlFilterState): string {
   if (state.type !== 'credit') {
     if (state.household === 'household')
       params.set(HOUSEHOLD_PARAM, HOUSEHOLD_YES)
-    if (state.household === 'unassigned')
-      params.set(HOUSEHOLD_PARAM, HOUSEHOLD_UNASSIGNED)
   }
   const period = state.period
   if (period?.mode === 'all') params.set('periodo', 'todo')

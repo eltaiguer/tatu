@@ -21,9 +21,6 @@ interface MonthHeroProps {
   // income / balance boxes give way to one link to those rows. The caller's
   // `onNavigateToTransactions` already adds the household filter.
   householdMode?: boolean
-  // Hogar mode: the month's Sin definir expense, shown under the total as a
-  // link to those rows; hidden at zero.
-  unassignedExpense?: number
   // Todo mode: how much of the month's expense was household, as a line under
   // the sentence that switches Resumen to Hogar mode; hidden at zero.
   householdExpense?: number
@@ -36,7 +33,6 @@ export function MonthHero({
   curWord,
   onNavigateToTransactions,
   householdMode = false,
-  unassignedExpense = 0,
   householdExpense = 0,
   onShowHousehold,
 }: MonthHeroProps) {
@@ -45,7 +41,7 @@ export function MonthHero({
     onNavigateToTransactions &&
     monthSummary.y !== undefined &&
     monthSummary.m !== undefined
-      ? (type?: 'credit' | 'debit', household?: 'unassigned') =>
+      ? (type?: 'credit' | 'debit') =>
           onNavigateToTransactions({
             period: {
               mode: 'month',
@@ -53,7 +49,6 @@ export function MonthHero({
               m: monthSummary.m as number,
             },
             ...(type && { type }),
-            ...(household && { household }),
           })
       : undefined
 
@@ -104,24 +99,6 @@ export function MonthHero({
               →
             </span>
           </button>
-        )}
-        {householdMode && unassignedExpense > 0 && (
-          <DrillTarget
-            onOpen={
-              openSummaryMonth &&
-              (() => openSummaryMonth('debit', 'unassigned'))
-            }
-            label="Ver los gastos sin definir del mes"
-            className="mt-1.5 -mx-1 px-1 py-0.5"
-          >
-            <span className="text-small text-muted-foreground">
-              Sin definir este mes:{' '}
-              <span className="font-mono tabular-nums">
-                {formatCurrency(unassignedExpense, homeCurrency)}
-              </span>{' '}
-              · Categorizalos o marcalos con la casita.
-            </span>
-          </DrillTarget>
         )}
         <p className="mt-1.5 mb-0 text-small text-[var(--text-faint)]">
           {!monthSummary.isCurrentMonth &&

@@ -1,12 +1,12 @@
 /**
  * Whether an expense was for the household/family (UI "Hogar"), as every
- * surface reads it. 'unassigned' ("Sin definir") is an uncategorized row
- * nobody has flagged yet: counted on neither side.
+ * surface reads it: Hogar or not (ADR-0007; an uncategorized row nobody has
+ * flagged is not household).
  */
-export type HouseholdStatus = 'household' | 'not_household' | 'unassigned'
+export type HouseholdStatus = 'household' | 'not_household'
 
-/** The Transacciones Hogar filter: everything, or one household status. */
-export type HouseholdFilter = 'all' | 'household' | 'unassigned'
+/** The Transacciones Hogar filter: everything, or only household expenses. */
+export type HouseholdFilter = 'all' | 'household'
 
 /** A row's household status and where it came from. */
 export interface HouseholdResolution {

@@ -111,7 +111,6 @@ export function useHouseholdWrites({
     }
     // The row as the write left it; the others as they were on the click.
     const after = resolveHousehold({ ...transaction, household: choice }, rules)
-    if (after.status === 'unassigned') return
     const value = after.status === 'household'
     const others = rowsChangedByRule(
       transactions,

@@ -7,7 +7,7 @@ import {
   currentHouseholdRules,
   isCategoryHousehold,
   nextHouseholdChoice,
-  partitionByHousehold,
+  householdExpenses,
   resolveHousehold,
   rowsChangedByRule,
   rowsSharingMerchantRule,
@@ -118,7 +118,7 @@ describe('resolveHousehold', () => {
     ).toBe('not_household')
   })
 
-  it('leaves uncategorized rows without a choice of their own as Sin definir', () => {
+  it('leaves uncategorized rows without a choice or rule as not household', () => {
     for (const category of [
       undefined,
       Category.Uncategorized,
@@ -126,7 +126,7 @@ describe('resolveHousehold', () => {
       'other', // pre-rename id of Uncategorized
     ]) {
       expect(resolveHousehold({ category }, NONE)).toEqual({
-        status: 'unassigned',
+        status: 'not_household',
         source: 'category',
       })
     }
@@ -147,7 +147,7 @@ describe('resolveHousehold', () => {
         { category: Category.Uncategorized },
         categoryRules([[Category.Uncategorized, true]])
       ).status
-    ).toBe('unassigned')
+    ).toBe('not_household')
   })
 
   it("lets the row's own choice win over its category, either way", () => {
@@ -377,18 +377,28 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
     expect(nextHouseholdChoice(tx, map)).toBe(false)
   })
 
-  it('an uncategorized expense is Sin definir and a click makes it household', () => {
+  it('an uncategorized expense with no choice or rule is not household, and a click makes it household', () => {
     const tx = expense({ category: Category.Uncategorized })
     expect(rowHouseholdView(tx, NONE)).toEqual({
-      status: 'unassigned',
+      status: 'not_household',
       source: 'category',
     })
     expect(nextHouseholdChoice(tx, NONE)).toBe(true)
   })
 
-  it('an uncategorized row set to household goes to not household, never back to null', () => {
+  it('an uncategorized row set to household goes back to null on the next click', () => {
     const tx = expense({ category: Category.Uncategorized, household: true })
-    expect(nextHouseholdChoice(tx, NONE)).toBe(false)
+    expect(nextHouseholdChoice(tx, NONE)).toBeNull()
+  })
+
+  it('an uncategorized split part: click → true, back → null', () => {
+    const part = expense({
+      category: Category.Uncategorized,
+      description: 'DEVOTO',
+      splitParentId: 'parent',
+    })
+    expect(nextHouseholdChoice(part, NONE)).toBe(true)
+    expect(nextHouseholdChoice({ ...part, household: true }, NONE)).toBeNull()
   })
 
   it('has no view for income, ignored rows and split parents', () => {
@@ -401,8 +411,8 @@ describe('rowHouseholdView / nextHouseholdChoice', () => {
   })
 })
 
-describe('partitionByHousehold', () => {
-  it('splits counted expenses into household and Sin definir, in one pass, keeping order', () => {
+describe('householdExpenses', () => {
+  it('keeps the counted household rows, in order', () => {
     const groceries = expense({ id: 'g' })
     const handMade = expense({
       id: 'h',
@@ -421,13 +431,12 @@ describe('partitionByHousehold', () => {
       category: Category.InternalTransfer,
     })
 
-    const { household, unassigned } = partitionByHousehold(
-      [groceries, plain, loose, income, handMade, transfer],
-      NONE
-    )
-
-    expect(household.map((t) => t.id)).toEqual(['g', 'h'])
-    expect(unassigned.map((t) => t.id)).toEqual(['u'])
+    expect(
+      householdExpenses(
+        [groceries, plain, loose, income, handMade, transfer],
+        NONE
+      ).map((t) => t.id)
+    ).toEqual(['g', 'h'])
   })
 
   it('agrees with rowHouseholdView for every row', () => {
@@ -436,11 +445,10 @@ describe('partitionByHousehold', () => {
       expense({ id: 'b', category: Category.Uncategorized, household: false }),
       expense({ id: 'c', category: Category.Uncategorized, household: true }),
     ]
-    const { household, unassigned } = partitionByHousehold(rows, NONE)
+    const household = householdExpenses(rows, NONE)
     for (const tx of rows) {
       const status = rowHouseholdView(tx, NONE)?.status
       expect(household.includes(tx)).toBe(status === 'household')
-      expect(unassigned.includes(tx)).toBe(status === 'unassigned')
     }
   })
 })
@@ -478,7 +486,7 @@ describe('merchant rules', () => {
     })
   })
 
-  it('a rule covers an uncategorized row, which is then not Sin definir', () => {
+  it('a rule covers an uncategorized row, which is then household', () => {
     const tx = expense({
       description: 'DEVOTO',
       category: Category.Uncategorized,

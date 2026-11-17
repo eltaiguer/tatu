@@ -1008,8 +1008,7 @@ describe('App', () => {
     })
 
     describe('Insights Todo / Hogar mode', () => {
-      // Two Sin definir rows, so Hogar mode has something to say without a
-      // Claude key.
+      // The Hogar subtitle marks Hogar mode, whatever the AI state.
       function seedInsights() {
         seed({
           transactions: [
@@ -1035,7 +1034,9 @@ describe('App', () => {
         renderApp('/insights?hogar=si')
 
         expect(
-          await screen.findByText(/no entran en este análisis/)
+          await screen.findByText(
+            'Solo los gastos del hogar — lo que revisan juntos, toda la historia.'
+          )
         ).toBeInTheDocument()
         expect(
           within(group()).getByRole('radio', { name: 'Hogar' })
@@ -1051,7 +1052,9 @@ describe('App', () => {
           within(group()).getByRole('radio', { name: 'Todo' })
         ).toBeChecked()
         expect(
-          screen.queryByText(/no entran en este análisis/)
+          screen.queryByText(
+            'Solo los gastos del hogar — lo que revisan juntos, toda la historia.'
+          )
         ).not.toBeInTheDocument()
       })
 
@@ -1063,13 +1066,17 @@ describe('App', () => {
         fireEvent.click(within(group()).getByRole('radio', { name: 'Hogar' }))
         await waitFor(() => expect(currentUrl()).toBe('/insights?hogar=si'))
         expect(
-          await screen.findByText(/no entran en este análisis/)
+          await screen.findByText(
+            'Solo los gastos del hogar — lo que revisan juntos, toda la historia.'
+          )
         ).toBeVisible()
 
         fireEvent.click(within(group()).getByRole('radio', { name: 'Todo' }))
         await waitFor(() => expect(currentUrl()).toBe('/insights'))
         expect(
-          screen.queryByText(/no entran en este análisis/)
+          screen.queryByText(
+            'Solo los gastos del hogar — lo que revisan juntos, toda la historia.'
+          )
         ).not.toBeInTheDocument()
 
         fireEvent.click(screen.getByRole('button', { name: 'test-back' }))
@@ -1082,29 +1089,18 @@ describe('App', () => {
       it('the sidebar’s Insights opens Todo', async () => {
         seedInsights()
         renderApp('/insights?hogar=si')
-        await screen.findByText(/no entran en este análisis/)
+        await screen.findByText(
+          'Solo los gastos del hogar — lo que revisan juntos, toda la historia.'
+        )
 
         fireEvent.click(screen.getByRole('button', { name: 'Insights' }))
 
         await waitFor(() => expect(currentUrl()).toBe('/insights'))
         expect(
-          screen.queryByText(/no entran en este análisis/)
+          screen.queryByText(
+            'Solo los gastos del hogar — lo que revisan juntos, toda la historia.'
+          )
         ).not.toBeInTheDocument()
-      })
-
-      it('opens the Sin definir expenses in Transacciones', async () => {
-        seedInsights()
-        renderApp('/insights?hogar=si')
-        await screen.findByText(/no entran en este análisis/)
-
-        fireEvent.click(
-          screen.getByRole('button', { name: 'Ver los gastos sin definir' })
-        )
-
-        await waitFor(() => expect(currentUrl()).toMatch(/^\/transacciones\?/))
-        expect(currentUrl()).toContain('hogar=sin-definir')
-        expect((await screen.findAllByText('Kiosco')).length).toBeGreaterThan(0)
-        expect(screen.queryByText('Devoto marzo')).not.toBeInTheDocument()
       })
     })
 

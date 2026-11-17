@@ -140,7 +140,7 @@ describe('Transactions', () => {
     ]
     const strip = () =>
       screen.getByRole('group', { name: 'Totales del período' })
-    const view = (household: 'all' | 'household' | 'unassigned') =>
+    const view = (household: 'all' | 'household') =>
       render(
         <Transactions
           transactions={rows}
@@ -163,17 +163,6 @@ describe('Transactions', () => {
       for (const gone of ['Ingresos', 'Gastos', 'Balance']) {
         expect(within(strip()).queryByText(gone)).toBeNull()
       }
-    })
-
-    it('Sin definir shows its total, count and what to do', () => {
-      view('unassigned')
-      // $U 2.025 / 40 = US$ 50,63 (50.625 rounds half up)
-      expect(within(strip()).getByText('Sin definir')).toBeInTheDocument()
-      expect(within(strip()).getByText('US$ 50,63')).toBeInTheDocument()
-      expect(within(strip()).getByText('1 gasto')).toBeInTheDocument()
-      expect(
-        within(strip()).getByText('Categorizalos o marcalos con la casita.')
-      ).toBeInTheDocument()
     })
 
     it('keeps the three tiles without the filter', () => {

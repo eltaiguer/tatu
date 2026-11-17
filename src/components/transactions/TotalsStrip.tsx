@@ -1,11 +1,5 @@
 import { useMemo } from 'react'
-import {
-  HelpCircle,
-  House,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-} from 'lucide-react'
+import { House, TrendingDown, TrendingUp, Wallet } from 'lucide-react'
 import type { Currency, HouseholdFilter, Transaction } from '../../models'
 import { fitMonoFontSize, formatCurrency } from '../../utils/formatting'
 import { sumCountedTotals } from '../../services/spending/spending-rules'
@@ -89,7 +83,6 @@ export function TotalsStrip({
     // Under the Hogar filter every row is a counted expense.
     const count = rows.length
     const value = formatCurrency(totals.expense, cur)
-    const unassigned = household === 'unassigned'
     return (
       <div
         role="group"
@@ -97,15 +90,12 @@ export function TotalsStrip({
         className="mb-4 grid grid-cols-1 divide-y divide-[var(--border)]"
       >
         <TotalTile
-          label={unassigned ? 'Sin definir' : 'Gastos del hogar'}
-          icon={unassigned ? <HelpCircle size={14} /> : <House size={14} />}
+          label="Gastos del hogar"
+          icon={<House size={14} />}
           value={value}
           fitTo={value}
           note={[
             <div key="count">{`${count} ${count === 1 ? 'gasto' : 'gastos'}`}</div>,
-            ...(unassigned
-              ? [<div key="hint">Categorizalos o marcalos con la casita.</div>]
-              : []),
           ]}
         />
       </div>

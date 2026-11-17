@@ -34,7 +34,7 @@ function countsLabel(tx: Transaction): string {
   return countsTowardTotals(tx) ? '1' : '0'
 }
 
-// Whether the expense was for the household: si / no / sin_definir, empty
+// Whether the expense was for the household: si / no, empty
 // for rows that are not counted expenses (income, ignored, split parents),
 // so filtering the column on "si" gives the Hogar total.
 export const HOUSEHOLD_HEADER = 'hogar'
@@ -42,7 +42,6 @@ export const HOUSEHOLD_HEADER = 'hogar'
 const HOUSEHOLD_LABELS = {
   household: 'si',
   not_household: 'no',
-  unassigned: 'sin_definir',
 } as const
 
 function householdLabel(

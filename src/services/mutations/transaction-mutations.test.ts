@@ -1870,9 +1870,9 @@ describe('transaction-mutations — household rule for similar rows (#251)', () 
         'future_matching_only'
       )
 
-      // Rows whose shown value changed: the edited row and the Sin definir
-      // look-alike. The pinned past rows look the same as before.
-      expect(result.affected).toBe(2)
+      // Only the edited row's shown value changed; the past rows (d4, and the
+      // uncategorized look-alike d5) are pinned to No, so they look the same.
+      expect(result.affected).toBe(1)
       expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
       // d1: the edited row follows the rule.
       expect(shows('d1')).toEqual({ status: 'household', source: 'merchant' })
@@ -1882,9 +1882,9 @@ describe('transaction-mutations — household rule for similar rows (#251)', () 
       // d2 / d3 keep their own choices, untouched.
       expect(shows('d2')).toEqual({ status: 'not_household', source: 'row' })
       expect(shows('d3')).toEqual({ status: 'household', source: 'row' })
-      // d5 was Sin definir: nothing to keep, it takes the rule.
-      expect(shows('d5')).toEqual({ status: 'household', source: 'merchant' })
-      expect(repo.row('d5')?.household ?? null).toBeNull()
+      // d5 showed No (Sin categoría): pinned to keep showing it.
+      expect(shows('d5')).toEqual({ status: 'not_household', source: 'row' })
+      expect(repo.row('d5')?.household).toBe(false)
     })
 
     it('does not pin a row whose shown value does not change', async () => {

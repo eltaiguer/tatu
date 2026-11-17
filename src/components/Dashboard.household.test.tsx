@@ -347,10 +347,10 @@ describe('Dashboard: Todo / Hogar mode', () => {
     })
   })
 
-  describe('Sin definir, apart', () => {
-    // Uncategorized rows with no choice of their own resolve to Sin definir.
-    // March 30 + Feb 800 UYU (= 20) -> 50 all time; households stay 190.
-    const withUnassigned = () => [
+  describe('Sin categoría in Hogar mode', () => {
+    // Uncategorized rows with no choice are not household: March 30 + Feb
+    // 800 UYU (= 20) -> 50 all time; households stay 190.
+    const withUncategorized = () => [
       ...marchRows(),
       tx({
         description: 'Cosa rara',
@@ -365,8 +365,10 @@ describe('Dashboard: Todo / Hogar mode', () => {
         date: new Date('2026-02-10T00:00:00.000Z'),
       }),
     ]
+    const nudge = () =>
+      screen.getByRole('button', { name: 'Ver los gastos sin categoría' })
 
-    function setup(rows = withUnassigned(), initialHousehold = true) {
+    function setup(rows = withUncategorized(), initialHousehold = true) {
       const go = vi.fn()
       render(
         <Harness
@@ -378,73 +380,43 @@ describe('Dashboard: Todo / Hogar mode', () => {
       return go
     }
 
-    it('keeps them out of the household total', () => {
+    it('keeps uncategorized rows out of the household total', () => {
       setup()
       expect(
         screen.getByRole('heading', { name: /Gastos del hogar/ })
       ).toHaveTextContent('Gastos del hogar US$ 190,00')
     })
 
-    it('names the month’s Sin definir under the hero total, as a link to those rows', () => {
-      const go = setup()
-      const link = screen.getByRole('button', {
-        name: 'Ver los gastos sin definir del mes',
-      })
-      expect(link).toHaveTextContent(
-        'Sin definir este mes: US$ 30,00 · Categorizalos o marcalos con la casita.'
-      )
-      fireEvent.click(link)
-      expect(go).toHaveBeenCalledWith({
-        period: { mode: 'month', y: 2026, m: 2 },
-        type: 'debit',
-        household: 'unassigned',
-      })
-    })
-
-    it('hides the hero line when the month has none', () => {
-      setup(marchRows())
-      expect(
-        screen.queryByRole('button', {
-          name: 'Ver los gastos sin definir del mes',
-        })
-      ).not.toBeInTheDocument()
-    })
-
-    it('shows a Sin definir banner with the all-time total and count', () => {
-      const go = setup()
-      const banner = screen.getByRole('button', {
-        name: 'Ver los gastos sin definir',
-      })
-      expect(banner).toHaveTextContent('Sin definir')
-      expect(banner).toHaveTextContent('US$ 50,00')
-      expect(banner).toHaveTextContent('2 gastos · todo el historial')
-      fireEvent.click(banner)
-      expect(go).toHaveBeenCalledWith({
-        type: 'debit',
-        household: 'unassigned',
-      })
-    })
-
-    it('has no banner when nothing is Sin definir', () => {
-      setup(marchRows())
-      expect(
-        screen.queryByRole('button', { name: 'Ver los gastos sin definir' })
-      ).not.toBeInTheDocument()
-    })
-
-    it('replaces the Sin categoría nudge in Hogar mode, and only there', () => {
+    it('shows the same Sin categoría nudge as Todo (all time, all rows)', () => {
       setup()
+      const hogar = nudge().textContent
+      expect(nudge()).toHaveTextContent('US$ 50,00')
+      expect(nudge()).toHaveTextContent('2 gastos · todo el historial')
+      fireEvent.click(screen.getByRole('radio', { name: 'Todo' }))
+      expect(nudge().textContent).toBe(hogar)
+    })
+
+    it('opens the uncategorized expenses without the household filter', () => {
+      const go = setup()
+      fireEvent.click(nudge())
+      expect(go).toHaveBeenCalledWith({
+        categories: [Category.Uncategorized],
+        type: 'debit',
+      })
+    })
+
+    it('has no nudge when nothing is uncategorized', () => {
+      setup(marchRows())
       expect(
         screen.queryByRole('button', { name: 'Ver los gastos sin categoría' })
       ).not.toBeInTheDocument()
+    })
+
+    it('says nothing of Sin definir, in either mode', () => {
+      setup()
+      expect(screen.queryByText(/Sin definir/)).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole('radio', { name: 'Todo' }))
-      expect(
-        screen.getByRole('button', { name: 'Ver los gastos sin categoría' })
-      ).toBeInTheDocument()
-      expect(
-        screen.queryByRole('button', { name: 'Ver los gastos sin definir' })
-      ).not.toBeInTheDocument()
-      expect(screen.queryByText(/Sin definir este mes/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Sin definir/)).not.toBeInTheDocument()
     })
   })
 
@@ -499,18 +471,6 @@ describe('Dashboard: Todo / Hogar mode', () => {
       expect(screen.queryByText(/gastados$/)).not.toBeInTheDocument()
     })
 
-    it('says nothing of Sin definir in Todo mode', () => {
-      render(
-        <Harness
-          transactions={[
-            ...marchRows(),
-            tx({ category: Category.Uncategorized, amount: 30 }),
-          ]}
-        />
-      )
-      expect(screen.queryByText(/Sin definir/)).not.toBeInTheDocument()
-    })
-
     it('is gone in Hogar mode', () => {
       render(<Harness transactions={marchRows()} initialHousehold />)
       expect(screen.queryByText(/gastados$/)).not.toBeInTheDocument()
@@ -563,7 +523,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
       expect(screen.getByText(/Últimos 3 meses con datos/)).toBeInTheDocument()
     })
 
-    it('keeps the Sin definir banner when there is no household spend yet', () => {
+    it('the empty Hogar state shows the Sin categoría nudge', () => {
       render(
         <Harness
           transactions={[
@@ -578,12 +538,11 @@ describe('Dashboard: Todo / Hogar mode', () => {
         screen.getByText('Todavía no hay gastos del hogar')
       ).toBeInTheDocument()
       expect(
-        screen.getByRole('button', { name: 'Ver los gastos sin definir' })
+        screen.getByRole('button', { name: 'Ver los gastos sin categoría' })
       ).toHaveTextContent('US$ 30,00')
     })
 
-    it('hides the household link at $0 and keeps the Sin definir line', () => {
-      const go = vi.fn()
+    it('hides the household link at $0', () => {
       render(
         <Harness
           transactions={[
@@ -593,14 +552,9 @@ describe('Dashboard: Todo / Hogar mode', () => {
               amount: 80,
               date: new Date('2026-03-20T00:00:00.000Z'),
             }),
-            tx({
-              category: Category.Uncategorized,
-              amount: 30,
-              date: new Date('2026-03-21T00:00:00.000Z'),
-            }),
           ]}
           initialHousehold
-          onNavigateToTransactions={go}
+          onNavigateToTransactions={() => {}}
         />
       )
       expect(
@@ -608,11 +562,6 @@ describe('Dashboard: Todo / Hogar mode', () => {
           name: 'Ver los gastos del hogar del mes',
         })
       ).not.toBeInTheDocument()
-      expect(
-        screen.getByRole('button', {
-          name: 'Ver los gastos sin definir del mes',
-        })
-      ).toBeInTheDocument()
     })
 
     it('moves focus to the hero after the share button switches the mode', () => {
