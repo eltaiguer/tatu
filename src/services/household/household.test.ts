@@ -10,6 +10,7 @@ import {
   householdExpenses,
   resolveHousehold,
   rowsChangedByRule,
+  ruleReachCounts,
   rowsReachedByMerchantKey,
   rowsSharingMerchantRule,
   rowHouseholdView,
@@ -559,6 +560,21 @@ describe('merchant rules', () => {
       )
     ).toEqual(['a', 'b'])
     expect(rowsReachedByMerchantKey([a, b], 'nadie')).toEqual([])
+  })
+
+  it('ruleReachCounts: per key, only rows the rule decides (no own choice), in one pass', () => {
+    const rows = [
+      devoto('DEVOTO 12/03/2026', { id: 'a' }),
+      devoto('DEVOTO 19/03/2026', { id: 'b' }),
+      devoto('DEVOTO 26/03/2026', { id: 'c', household: false }),
+      devoto('DEVOTO', { id: 'd', splitParentId: 'p' }),
+      devoto('DEVOTO', { id: 'e', type: 'credit' }),
+      devoto('TIENDA INGLESA', { id: 'f' }),
+    ]
+    const counts = ruleReachCounts(rows)
+    expect(counts.get(merchantOverrideKey('DEVOTO') as string)).toBe(2)
+    expect(counts.get(merchantOverrideKey('TIENDA INGLESA') as string)).toBe(1)
+    expect(counts.get('nadie')).toBeUndefined()
   })
 })
 

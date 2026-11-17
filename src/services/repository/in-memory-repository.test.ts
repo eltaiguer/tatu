@@ -204,6 +204,27 @@ describe('in-memory repository — household rules', () => {
     expect(rule.updatedAt).not.toBe('2026-03-01T10:00:00.000Z')
   })
 
+  it('restore over an existing rule takes the restored createdAt', async () => {
+    const repo = createInMemoryRepository({
+      householdRules: [
+        {
+          merchantNormalized: 'disco',
+          isHousehold: true,
+          createdAt: '2026-03-01T10:00:00.000Z',
+          updatedAt: '2026-03-01T10:00:00.000Z',
+        },
+      ],
+    })
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      isHousehold: true,
+      createdAt: '2026-01-01T10:00:00.000Z',
+    })
+    expect((await repo.loadWorkspace()).householdRules[0].createdAt).toBe(
+      '2026-01-01T10:00:00.000Z'
+    )
+  })
+
   it('takes a given createdAt on insert', async () => {
     const repo = createInMemoryRepository()
     await repo.upsertHouseholdRule({

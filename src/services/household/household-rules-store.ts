@@ -31,9 +31,11 @@ function replaceRecords(next: ReadonlyMap<string, HouseholdRuleRecord>): void {
   rules = new Map([...next].map(([key, r]) => [key, r.isHousehold]))
   // Newest created first: flipping a rule's value does not move it. Ties by
   // key so the order is deterministic.
+  // By instant, not by string: Postgres and the local mirror format
+  // timestamps differently ("…Z", "…+00:00", with or without milliseconds).
   sortedRecords = [...next.values()].sort(
     (a, b) =>
-      b.createdAt.localeCompare(a.createdAt) ||
+      Date.parse(b.createdAt) - Date.parse(a.createdAt) ||
       a.merchantNormalized.localeCompare(b.merchantNormalized)
   )
   for (const listener of [...listeners]) listener()
@@ -57,9 +59,9 @@ export function loadHouseholdRules(loaded: HouseholdRuleRecord[]): void {
 }
 
 /**
- * Mirrors a saved rule, as Postgres would: a new rule gets its creation date
- * (and the name it was made from); an existing one keeps both and only bumps
- * `updatedAt`.
+ * Mirrors a saved rule, as Postgres does: the row holds exactly what was
+ * sent (name included), a new rule gets its creation date and an existing
+ * one keeps it and only bumps `updatedAt`.
  */
 export function putMerchantHouseholdRule(
   key: string,
@@ -67,13 +69,12 @@ export function putMerchantHouseholdRule(
   merchantOriginal?: string
 ): void {
   const now = new Date().toISOString()
-  const existing = records.get(key)
   replaceRecords(
     new Map(records).set(key, {
       merchantNormalized: key,
-      merchantOriginal: merchantOriginal ?? existing?.merchantOriginal,
+      merchantOriginal,
       isHousehold,
-      createdAt: existing?.createdAt ?? now,
+      createdAt: records.get(key)?.createdAt ?? now,
       updatedAt: now,
     })
   )
@@ -95,6 +96,13 @@ type RuleRepository = Pick<
   'userId' | 'upsertHouseholdRule' | 'deleteHouseholdRule'
 >
 
+// A write starts only for the user who owns the loaded workspace: an undo
+// toast outlives a sign-out, and must not write against the previous user's
+// repository.
+function requireOwner(repo: RuleRepository): void {
+  if (!isWorkspaceOwner(repo.userId)) throw new WorkspaceChangedError()
+}
+
 /**
  * Deletes a merchant's rule: server first, then the screen ("screen mirrors
  * database"), so a failure leaves both as they were. Resolves with the
@@ -106,6 +114,7 @@ export async function deleteHouseholdRuleWithSync(
   repo: RuleRepository,
   key: string
 ): Promise<HouseholdRuleRecord | undefined> {
+  requireOwner(repo)
   const existing = records.get(key)
   if (!existing) return undefined
   await repo.deleteHouseholdRule(key)
@@ -123,6 +132,7 @@ export async function restoreHouseholdRuleWithSync(
   repo: RuleRepository,
   record: HouseholdRuleRecord
 ): Promise<void> {
+  requireOwner(repo)
   await repo.upsertHouseholdRule({
     merchantNormalized: record.merchantNormalized,
     merchantOriginal: record.merchantOriginal,
@@ -130,5 +140,12 @@ export async function restoreHouseholdRuleWithSync(
     createdAt: record.createdAt,
   })
   if (!isWorkspaceOwner(repo.userId)) throw new WorkspaceChangedError()
-  replaceRecords(new Map(records).set(record.merchantNormalized, record))
+  // The upsert returns no row: the server stamped updated_at, so the mirror
+  // does too.
+  replaceRecords(
+    new Map(records).set(record.merchantNormalized, {
+      ...record,
+      updatedAt: new Date().toISOString(),
+    })
+  )
 }

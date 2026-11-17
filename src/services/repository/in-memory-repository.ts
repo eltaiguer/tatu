@@ -481,13 +481,14 @@ export function createInMemoryRepository(
       requireAuthorized()
       const now = new Date().toISOString()
       const existing = repo.householdRules.get(input.merchantNormalized)
-      // Like Postgres: an update keeps created_at, an insert takes the given
-      // one (a restore) or now.
+      // Like the Supabase upsert: it writes every column sent, so a given
+      // createdAt (a restore) wins even over an existing row; without one an
+      // update keeps created_at and an insert takes now.
       repo.householdRules.set(input.merchantNormalized, {
         merchantNormalized: input.merchantNormalized,
         merchantOriginal: input.merchantOriginal,
         isHousehold: input.isHousehold,
-        createdAt: existing?.createdAt ?? input.createdAt ?? now,
+        createdAt: input.createdAt ?? existing?.createdAt ?? now,
         updatedAt: now,
       })
     },

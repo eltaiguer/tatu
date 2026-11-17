@@ -53,19 +53,31 @@ describe('household rules store: records', () => {
     )
   })
 
-  it('a re-saved rule keeps its createdAt and name, and bumps updatedAt', () => {
+  it('a re-saved rule takes the name sent, keeps its createdAt and bumps updatedAt', () => {
     loadHouseholdRules([
       record('devoto', '2026-03-01T10:00:00.000Z', {
         merchantOriginal: 'COMPRA DEVOTO',
       }),
     ])
-    putMerchantHouseholdRule('devoto', false)
+    putMerchantHouseholdRule('devoto', false, 'DEVOTO 19/03')
     const [r] = listHouseholdRuleRecords()
     expect(r.isHousehold).toBe(false)
-    expect(r.merchantOriginal).toBe('COMPRA DEVOTO')
+    expect(r.merchantOriginal).toBe('DEVOTO 19/03')
     expect(r.createdAt).toBe('2026-03-01T10:00:00.000Z')
     expect(r.updatedAt > r.createdAt).toBe(true)
     expect(listMerchantHouseholdRules().get('devoto')).toBe(false)
+  })
+
+  it('sorts by the instant, whatever the timestamp format', () => {
+    loadHouseholdRules([
+      // As strings "…:00Z" sorts after "…:00.500Z", but it is half a second
+      // earlier.
+      record('whole', '2026-03-01T10:00:00Z'),
+      record('half', '2026-03-01T10:00:00.500+00:00'),
+    ])
+    expect(listHouseholdRuleRecords().map((r) => r.merchantNormalized)).toEqual(
+      ['half', 'whole']
+    )
   })
 
   it('a new rule gets the name it was saved with and a creation date', () => {
@@ -150,7 +162,10 @@ describe('household rules store: delete and restore', () => {
     expect(listHouseholdRuleRecords().map((r) => r.merchantNormalized)).toEqual(
       ['disco', 'devoto']
     )
-    expect(listHouseholdRuleRecords()[1]).toEqual(DEVOTO)
+    expect(listHouseholdRuleRecords()[1]).toEqual({
+      ...DEVOTO,
+      updatedAt: expect.not.stringMatching(DEVOTO.updatedAt),
+    })
     const [stored] = (await repo.loadWorkspace()).householdRules
     expect(stored).toMatchObject({
       merchantNormalized: 'devoto',
@@ -166,5 +181,30 @@ describe('household rules store: delete and restore', () => {
     repo.failOn('upsertHouseholdRule')
     await expect(restoreHouseholdRuleWithSync(repo, removed)).rejects.toThrow()
     expect(listHouseholdRuleRecords()).toEqual([])
+  })
+
+  it('delete and restore do not touch the repository after a user switch', async () => {
+    const repo = setup()
+    const removed = (await deleteHouseholdRuleWithSync(repo, 'devoto'))!
+    workspaceStore.setState({ userId: 'someone-else', status: 'ready' })
+    const before = { ...repo.requests }
+    await expect(
+      restoreHouseholdRuleWithSync(repo, removed)
+    ).rejects.toBeInstanceOf(WorkspaceChangedError)
+    await expect(
+      deleteHouseholdRuleWithSync(repo, 'devoto')
+    ).rejects.toBeInstanceOf(WorkspaceChangedError)
+    expect(repo.requests).toEqual(before)
+    expect(listHouseholdRuleRecords()).toEqual([])
+  })
+
+  it('a delete after a user switch never reaches the repository', async () => {
+    const repo = setup()
+    workspaceStore.setState({ userId: 'someone-else', status: 'ready' })
+    await expect(
+      deleteHouseholdRuleWithSync(repo, 'devoto')
+    ).rejects.toBeInstanceOf(WorkspaceChangedError)
+    expect(repo.requests.deleteHouseholdRule).toBeUndefined()
+    expect(listHouseholdRuleRecords()).toEqual([DEVOTO])
   })
 })

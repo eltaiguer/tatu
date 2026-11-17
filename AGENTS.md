@@ -94,7 +94,7 @@ src/
     useUserWorkspace.ts    # Binds the workspace store: hydrates on sign-in, exposes prefs + setters + load status
     useTransactionHandlers.ts  # The transaction mutations bound to the signed-in user's repository (thin; one contract without one)
     useTransactionFiltering.ts # The filters as ONE value (URL shape, period included): `filters` + `update(patch)` + `clear()` + `setDateBound`, plus sort + split grouping + pagination around filterTransactions
-    useHouseholdRules.ts   # The household rules for rendering (useSyncExternalStore over the rules store): re-renders on a merchant rule even when no row was written
+    useHouseholdRules.ts   # The household rules for rendering (useSyncExternalStore over the rules store): re-renders on a merchant rule even when no row was written; useHouseholdRuleRecords = the same rules as records (name, dates), newest first, for the Reglas del hogar list
     useClickOutside.ts     # Dismiss popovers/menus on outside click
   services/
     parsers/               # CSV parsing (credit-card, bank-account, auto-detection)

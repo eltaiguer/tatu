@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Trash } from 'lucide-react'
 import { Section } from '../ui/section'
 import type { Transaction } from '../../models'
 import { useHouseholdRuleRecords } from '../../hooks/useHouseholdRules'
-import { rowsReachedByMerchantKey } from '../../services/household/household'
+import { ruleReachCounts } from '../../services/household/household'
 import {
   deleteHouseholdRuleWithSync,
   restoreHouseholdRuleWithSync,
@@ -33,26 +33,44 @@ export function HouseholdRulesSection({
   // Rules whose delete is in flight (their button is disabled).
   const [deleting, setDeleting] = useState<ReadonlySet<string>>(new Set())
 
-  // Rows each rule reaches: the same list as the "Aplicar a las N similares"
-  // toast. Memoized on the data, not on the in-flight set.
-  const reached = useMemo(
-    () =>
-      new Map(
-        records.map((rule) => [
-          rule.merchantNormalized,
-          rowsReachedByMerchantKey(transactions, rule.merchantNormalized)
-            .length,
-        ])
-      ),
-    [transactions, records]
+  // Rows each rule decides (see ruleReachCounts): one pass for all rules.
+  const reached = useMemo(() => ruleReachCounts(transactions), [transactions])
+
+  // Focus after a delete: its row unmounts, so the next row's delete button,
+  // else the previous one, else the heading. Set before the write (the store
+  // notifies before the await returns) and applied once the row is gone.
+  const buttons = useRef(new Map<string, HTMLButtonElement>())
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const pendingFocus = useRef<{ removed: string; to: string | null } | null>(
+    null
   )
+  useEffect(() => {
+    const pending = pendingFocus.current
+    if (
+      !pending ||
+      records.some((r) => r.merchantNormalized === pending.removed)
+    )
+      return
+    pendingFocus.current = null
+    const target = pending.to ? buttons.current.get(pending.to) : undefined
+    ;(target ?? headingRef.current)?.focus()
+  }, [records])
 
   async function handleDelete(key: string) {
     setDeleting((current) => new Set(current).add(key))
+    const index = records.findIndex((r) => r.merchantNormalized === key)
+    pendingFocus.current = {
+      removed: key,
+      to:
+        (records[index + 1] ?? records[index - 1])?.merchantNormalized ?? null,
+    }
     try {
       const repo = requireRepository(repository)
       const removed = await deleteHouseholdRuleWithSync(repo, key)
-      if (!removed) return
+      if (!removed) {
+        pendingFocus.current = null
+        return
+      }
       toast('Regla eliminada', {
         duration: 8000,
         action: {
@@ -68,6 +86,7 @@ export function HouseholdRulesSection({
         },
       })
     } catch (error) {
+      pendingFocus.current = null
       toast.error(userErrorMessage(error, 'No se pudo eliminar la regla'))
     } finally {
       setDeleting((current) => {
@@ -79,7 +98,7 @@ export function HouseholdRulesSection({
   }
 
   return (
-    <Section title="Reglas del hogar">
+    <Section title="Reglas del hogar" headingRef={headingRef}>
       <div className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--surface)] px-[24px] py-[20px]">
         <p className="mb-[16px] text-[13px] text-[var(--text-muted)]">
           Comercios para los que recordaste si son gastos del hogar.
@@ -113,6 +132,10 @@ export function HouseholdRulesSection({
                     type="button"
                     onClick={() => {
                       void handleDelete(rule.merchantNormalized)
+                    }}
+                    ref={(el) => {
+                      if (el) buttons.current.set(rule.merchantNormalized, el)
+                      else buttons.current.delete(rule.merchantNormalized)
                     }}
                     disabled={deleting.has(rule.merchantNormalized)}
                     aria-label={`Eliminar regla del hogar ${name}`}

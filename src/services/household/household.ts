@@ -172,6 +172,26 @@ export function rowsReachedByMerchantKey(
 }
 
 /**
+ * Per merchant key, how many rows the rule actually decides: the rows
+ * `rowsReachedByMerchantKey` finds that have no Hogar choice of their own
+ * (a row's choice outranks the rule, so the rule neither covers nor, on
+ * delete, changes them). One pass over `all` for any number of rules.
+ */
+export function ruleReachCounts(
+  all: readonly Transaction[]
+): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const row of all) {
+    if (row.household != null) continue
+    if (!isCountedExpense(row) || row.splitParentId) continue
+    const key = householdRuleKey(row.description)
+    if (key === null) continue
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+}
+
+/**
  * The rows a merchant rule would change the shown value of, if it became
  * `household` (null: deleted): `tx` and its similar rows
  * (`rowsSharingMerchantRule`) whose status differs once it is in place.

@@ -147,6 +147,16 @@ describe('HouseholdRulesSection', () => {
     expect(screen.getByText('1 transacción')).toBeInTheDocument()
   })
 
+  it('does not count rows with their own Hogar choice: the rule does not decide them', () => {
+    seed([rule(DEVOTO_KEY, '2026-03-01T10:00:00.000Z')])
+    renderSection([
+      makeTx({ id: 'a' }),
+      makeTx({ id: 'b', description: 'DEVOTO 19/03/2026' }),
+      makeTx({ id: 'c', description: 'DEVOTO 26/03/2026', household: false }),
+    ])
+    expect(screen.getByText('2 transacciones')).toBeInTheDocument()
+  })
+
   it('shows the empty line when there are no rules', () => {
     seed([])
     renderSection()
@@ -289,5 +299,51 @@ describe('HouseholdRulesSection', () => {
 
     expect(screen.getByText('DISCO 03/03')).toBeInTheDocument()
     expect(screen.getByText('Hogar: No')).toBeInTheDocument()
+  })
+
+  it('an undo after a user switch writes nothing and says why', async () => {
+    seed([rule(DEVOTO_KEY, '2026-03-01T10:00:00.000Z')])
+    renderSection([makeTx()])
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Eliminar regla del hogar COMPRA DEVOTO 4521',
+      })
+    )
+    const undo = await screen.findByRole('button', { name: 'Deshacer' })
+    act(() => workspaceStore.setState({ userId: 'someone-else' }))
+
+    fireEvent.click(undo)
+
+    expect(
+      await screen.findByText(
+        'La sesión cambió mientras se guardaba el cambio; no se muestra en esta cuenta.'
+      )
+    ).toBeInTheDocument()
+    expect(repo.requests.upsertHouseholdRule).toBeUndefined()
+    expect(listHouseholdRuleRecords()).toEqual([])
+  })
+
+  it('moves focus to the next rule after a delete, else the previous, else the heading', async () => {
+    seed([
+      rule(DEVOTO_KEY, '2026-03-09T10:00:00.000Z', { merchantOriginal: 'UNO' }),
+      rule(DISCO_KEY, '2026-03-05T10:00:00.000Z', { merchantOriginal: 'DOS' }),
+      rule('tata', '2026-03-01T10:00:00.000Z', { merchantOriginal: 'TRES' }),
+    ])
+    renderSection()
+    const del = (name: string) =>
+      screen.getByRole('button', { name: `Eliminar regla del hogar ${name}` })
+
+    fireEvent.click(del('DOS'))
+    await waitFor(() => expect(del('TRES')).toHaveFocus())
+
+    fireEvent.click(del('TRES'))
+    await waitFor(() => expect(del('UNO')).toHaveFocus())
+
+    fireEvent.click(del('UNO'))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { level: 2, name: 'Reglas del hogar' })
+      ).toHaveFocus()
+    )
   })
 })
