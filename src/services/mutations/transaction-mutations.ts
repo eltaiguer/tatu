@@ -1040,8 +1040,7 @@ export async function setHousehold(
  *   every similar row that has one, so all of them follow the rule.
  * - 'future_matching_only': every other similar row without a choice of its
  *   own whose shown value the rule would change gets that value written as
- *   its own choice first (it keeps what it shows today; a Sin definir row has
- *   nothing to keep and takes the rule), then the rule, then the edited row's
+ *   its own choice first (it keeps what it shows today), then the rule, then the edited row's
  *   own choice is cleared. Pins go first, so a failure part-way leaves every
  *   row showing what it showed.
  *
@@ -1086,9 +1085,7 @@ export async function applyHouseholdToSimilar(
     for (const tx of changed) {
       if (tx.id === transactionId) continue
       const was = resolveHousehold(tx, rules).status
-      // A Sin definir row has nothing to keep: it takes the rule.
-      if (was !== 'unassigned')
-        pins.set(tx.id, { household: was === 'household' })
+      pins.set(tx.id, { household: was === 'household' })
     }
     if (pins.size > 0) {
       const outcome = await writePatches(repo, pins)

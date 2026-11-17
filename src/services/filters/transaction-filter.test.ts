@@ -584,8 +584,8 @@ describe('filterTransactions — Hogar', () => {
     )
   })
 
-  it('Sin definir keeps only the uncategorized expense without a choice', () => {
-    expect(hogar(rows, 'unassigned')).toEqual(['uncategorized'])
+  it('Hogar leaves out an uncategorized expense with no choice', () => {
+    expect(hogar(rows, 'household')).not.toContain('uncategorized')
   })
 
   it("follows the user's category default", () => {

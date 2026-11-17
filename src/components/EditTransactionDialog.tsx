@@ -25,7 +25,7 @@ import {
 } from '../services/suggestions/suggestions'
 import { getAccountLabel } from './TransactionTable'
 import {
-  categoryDefault,
+  isCategoryHousehold,
   currentHouseholdRules,
   canHaveMerchantRule,
   merchantRule as merchantRuleOf,
@@ -241,10 +241,9 @@ function EditTransactionForm({
       { ...transaction, category: category.trim() || undefined },
       householdRules
     ) !== null
-  const categoryDefaultLabel = (() => {
-    const says = categoryDefault(category, householdRules)
-    return says === null ? 'Sin definir' : says ? 'Sí' : 'No'
-  })()
+  const categoryDefaultLabel = isCategoryHousehold(category, householdRules)
+    ? 'Sí'
+    : 'No'
   // A rule can be made only for a counted expense (judged on the category
   // being picked) that is not a split part and has a merchant key, and only
   // when the view can save one. Elsewhere the household scope is not

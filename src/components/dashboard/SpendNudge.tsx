@@ -1,6 +1,6 @@
 // A nudge row in "¿A dónde se fue la plata?": spend that still needs an
-// answer ("Sin categoría" in Todo mode, "Sin definir" in Hogar mode), as one
-// row that opens exactly those rows. The caller decides when it shows.
+// answer ("Sin categoría", in both modes), as one row that opens exactly those
+// rows. The caller decides when it shows.
 
 import type { Currency, TransactionsFilter } from '../../models'
 import { formatCurrency } from '../../utils/formatting'

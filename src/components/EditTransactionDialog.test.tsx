@@ -662,7 +662,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
         name: resolveCategory('uncategorized').label,
       })
     )
-    expect(screen.getByLabelText('Según categoría (Sin definir)')).toBeChecked()
+    expect(screen.getByLabelText('Según categoría (No)')).toBeChecked()
   })
 
   it('has no group for income, ignored rows and split parents, and saves them untouched', () => {

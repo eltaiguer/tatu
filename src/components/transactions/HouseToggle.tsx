@@ -6,7 +6,7 @@ import { useHouseholdRules } from '../../hooks/useHouseholdRules'
 
 // The row's "gasto del hogar" control, next to the category badge. Faint when
 // the row follows its category, solid brand colour when it was set by hand;
-// filled = household, outline = not, dashed = Sin definir. Renders nothing
+// filled = household, outline = not. Renders nothing
 // for rows that are not counted expenses. The state comes from the saved row
 // (screen mirrors database), so a click only asks; the house moves once the
 // write is confirmed.
@@ -29,16 +29,13 @@ export function HouseToggle({
   if (!view) return null
 
   const household = view.status === 'household'
-  const unassigned = view.status === 'unassigned'
-  const title = unassigned
-    ? 'Sin definir: categorizala o marcala'
-    : `${household ? 'Hogar' : 'No es del hogar'} · ${
-        view.source === 'row'
-          ? 'elegido a mano'
-          : view.source === 'merchant'
-            ? 'según comercio'
-            : `según ${resolveCategory(transaction.category).label}`
-      }`
+  const title = `${household ? 'Hogar' : 'No es del hogar'} · ${
+    view.source === 'row'
+      ? 'elegido a mano'
+      : view.source === 'merchant'
+        ? 'según comercio'
+        : `según ${resolveCategory(transaction.category).label}`
+  }`
 
   return (
     <button
@@ -72,9 +69,6 @@ export function HouseToggle({
         size={size}
         aria-hidden="true"
         fill={household ? 'currentColor' : 'none'}
-        // Round caps would close the gaps of a dashed line at this size.
-        strokeDasharray={unassigned ? '3 3' : undefined}
-        strokeLinecap={unassigned ? 'butt' : undefined}
       />
     </button>
   )

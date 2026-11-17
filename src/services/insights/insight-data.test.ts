@@ -8,7 +8,7 @@ import {
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
 import { hashInsightInput } from './insight-cache'
-import { partitionByHousehold } from '../household/household'
+import { householdExpenses } from '../household/household'
 import { merchantOverrideKey } from '../categorizer/category-overrides'
 import { householdRulesOf } from '../../test/household-rules'
 
@@ -1187,7 +1187,7 @@ describe('Hogar input is unchanged by dropping Sin definir (#262)', () => {
   })
 
   it('keeps the same household rows, input and hash', () => {
-    const household = partitionByHousehold(rows, rules).household
+    const household = householdExpenses(rows, rules)
 
     expect(household.map((t) => t.id)).toEqual([
       'groceries',

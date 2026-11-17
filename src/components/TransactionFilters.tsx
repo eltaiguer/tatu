@@ -209,7 +209,7 @@ export function TransactionFilters({
   }
   if (household !== 'all') {
     chips.push({
-      label: household === 'household' ? 'Hogar' : 'Sin definir',
+      label: 'Hogar',
       onClear: () => onChange({ household: 'all' }),
     })
   }
@@ -285,7 +285,6 @@ export function TransactionFilters({
             options={[
               { value: 'all' as const, label: 'Todos' },
               { value: 'household' as const, label: 'Hogar' },
-              { value: 'unassigned' as const, label: 'Sin definir' },
             ]}
             value={household}
             onChange={(next) =>

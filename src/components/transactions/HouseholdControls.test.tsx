@@ -143,9 +143,10 @@ describe('house toggle on rows and cards (#251)', () => {
       'title',
       'No es del hogar · según Restaurantes'
     )
+    expect(house('Misterio')).toHaveAttribute('aria-pressed', 'false')
     expect(house('Misterio')).toHaveAttribute(
       'title',
-      'Sin definir: categorizala o marcala'
+      'No es del hogar · según Sin categoría'
     )
     for (const none of ['Sueldo', 'Pago tarjeta', 'Madre']) {
       expect(
@@ -205,6 +206,21 @@ describe('house toggle on rows and cards (#251)', () => {
 
     expect(house('Misterio')).toHaveAttribute('aria-pressed', 'true')
     expect(repo.row('Misterio')?.household).toBe(true)
+  })
+
+  it("clicking an uncategorized row's house again makes it follow its category", async () => {
+    seed([tx('Misterio', { category: 'uncategorized' })])
+
+    await act(async () => {
+      fireEvent.click(house('Misterio'))
+    })
+    expect(repo.row('Misterio')?.household).toBe(true)
+    await act(async () => {
+      fireEvent.click(house('Misterio'))
+    })
+
+    expect(house('Misterio')).toHaveAttribute('aria-pressed', 'false')
+    expect(repo.row('Misterio')?.household ?? null).toBeNull()
   })
 
   it('does not celebrate a save, and keeps the house when it fails', async () => {
@@ -818,14 +834,14 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(urls[urls.length - 1]).toBe('hogar=si&periodo=todo')
   })
 
-  it('Sin definir shows only the uncategorized expenses', () => {
-    const urls: string[] = []
-    seed(rows(), (search) => urls.push(search))
-    pick('Sin definir')
-
-    expect(listed('Misterio')).toBe(true)
-    expect(listed('Devoto')).toBe(false)
-    expect(urls[urls.length - 1]).toBe('hogar=sin-definir&periodo=todo')
+  it('the filter offers Todos · Hogar only', () => {
+    seed(rows())
+    const group = screen.getByRole('radiogroup', { name: 'Hogar' })
+    expect(
+      within(group)
+        .getAllByRole('radio')
+        .map((r) => r.getAttribute('aria-label') ?? r.textContent)
+    ).toEqual(['Todos', 'Hogar'])
   })
 
   it('picking Hogar while Ingresos is chosen goes back to Todos', () => {
@@ -1025,15 +1041,15 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     expect(on('DEVOTO 20/03/2026')).toBe(true)
   })
 
-  it('"Esta y las que importes" gives a Sin definir look-alike the rule', async () => {
+  it('"Esta y las que importes" pins an uncategorized look-alike to No', async () => {
     seed([...devotos(), tx('DEVOTO 14/03/2026', { category: 'uncategorized' })])
     await openEdit(D1)
     scope('Esta y las que importes en el futuro')
     fireEvent.click(screen.getByLabelText('Sí'))
     await save()
 
-    await waitFor(() => expect(on('DEVOTO 14/03/2026')).toBe(true))
-    expect(repo.row('DEVOTO 14/03/2026')?.household ?? null).toBeNull()
+    await waitFor(() => expect(on('DEVOTO 14/03/2026')).toBe(false))
+    expect(repo.row('DEVOTO 14/03/2026')?.household).toBe(false)
   })
 
   it('a category change with Todas las similares and the radio untouched makes no rule', async () => {

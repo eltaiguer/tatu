@@ -20,11 +20,8 @@ import {
   toCategorySpendRows,
 } from '../services/charts/dashboard-rows'
 import { categoryChanges } from '../services/charts/category-changes'
-import {
-  countsTowardTotals,
-  sumCountedTotals,
-} from '../services/spending/spending-rules'
-import { partitionByHousehold } from '../services/household/household'
+import { countsTowardTotals } from '../services/spending/spending-rules'
+import { householdExpenses } from '../services/household/household'
 import { useHouseholdRules } from '../hooks/useHouseholdRules'
 import { CategoryChangesCard } from './CategoryChangesCard'
 import { FxChip } from './FxChip'
@@ -65,8 +62,6 @@ interface DashboardProps {
   onHouseholdModeChange?: (householdMode: boolean) => void
 }
 
-const NO_ROWS: Transaction[] = []
-
 export function Dashboard({
   transactions,
   userName,
@@ -99,13 +94,11 @@ export function Dashboard({
   // merchant rule does (the hook also re-renders on a rule alone), so either
   // changes `householdRows` and everything under it.
   const householdRules = useHouseholdRules()
-  // One pass: the household rows, and those still Sin definir (shown apart
-  // in Hogar mode, never inside its totals).
-  const { household: householdRows, unassigned: allUnassignedRows } = useMemo(
-    () => partitionByHousehold(transactions, householdRules),
+  // The counted expenses that resolve to household.
+  const householdRows = useMemo(
+    () => householdExpenses(transactions, householdRules),
     [transactions, householdRules]
   )
-  const unassignedRows = householdMode ? allUnassignedRows : NO_ROWS
   const rows = householdMode ? householdRows : transactions
   const countedTransactions = useMemo(
     () => rows.filter(countsTowardTotals),
@@ -120,7 +113,7 @@ export function Dashboard({
     () =>
       onNavigateToTransactions && householdMode
         ? (filter: TransactionsFilter) =>
-            // A filter that names its own household (Sin definir) keeps it.
+            // A filter that names its own household keeps it.
             onNavigateToTransactions({ household: 'household', ...filter })
         : onNavigateToTransactions,
     [onNavigateToTransactions, householdMode]
@@ -179,28 +172,6 @@ export function Dashboard({
     [householdRows, referenceMonth, homeCurrency, fxRate]
   )
   const monthSummary = householdMode ? householdSummary : todoSummary
-  // Sin definir in the hero's month, and over all history for the banner.
-  const unassignedMonthExpense = useMemo(
-    () =>
-      householdMode && unassignedRows.length > 0
-        ? buildCurrentMonthSummary(
-            unassignedRows,
-            homeCurrency,
-            fxRate,
-            undefined,
-            referenceMonth
-          ).expense
-        : 0,
-    [householdMode, unassignedRows, referenceMonth, homeCurrency, fxRate]
-  )
-  const unassignedAllTime = useMemo(
-    () => ({
-      total: sumCountedTotals(unassignedRows, homeCurrency, fxRate).expense,
-      count: unassignedRows.length,
-    }),
-    [unassignedRows, homeCurrency, fxRate]
-  )
-
   // Category breakdown — all history (for donut)
   const categorySpending = useMemo(
     () => buildCategorySpendingConverted(rows, homeCurrency, fxRate),
@@ -224,12 +195,23 @@ export function Dashboard({
     [rows, transactions, homeCurrency, fxRate, currentMonth]
   )
 
-  // Uncategorized expenses: the category list's own row, so the nudge's
-  // numbers equal the rows its link opens.
+  // Uncategorized expenses over every row, in both modes: an uncategorized
+  // row is rarely household, so the household cut would hide the to-do. The
+  // category list's own row, so the nudge's numbers equal the rows its link
+  // opens.
+  const todoCategorySpending = useMemo(
+    () =>
+      householdMode
+        ? buildCategorySpendingConverted(transactions, homeCurrency, fxRate)
+        : categorySpending,
+    [householdMode, transactions, categorySpending, homeCurrency, fxRate]
+  )
   const uncategorizedSpend = useMemo(
     () =>
-      categorySpending.find((row) => row.category === Category.Uncategorized),
-    [categorySpending]
+      todoCategorySpending.find(
+        (row) => row.category === Category.Uncategorized
+      ),
+    [todoCategorySpending]
   )
 
   const totalExpenses = categoryData.reduce((s, c) => s + c.value, 0)
@@ -292,8 +274,9 @@ export function Dashboard({
     [countedTransactions]
   )
 
-  // The nudge of the "¿A dónde se fue la plata?" section: Sin categoría in
-  // Todo mode, Sin definir (household) in Hogar mode.
+  // The nudge of the "¿A dónde se fue la plata?" section: Sin categoría, in
+  // both modes. It opens the rows without the household filter, so what it
+  // opens is what it counts.
   const uncategorizedNudge = uncategorizedSpend && (
     <SpendNudge
       title="Sin categoría"
@@ -303,19 +286,7 @@ export function Dashboard({
       filter={{ categories: [Category.Uncategorized], type: 'debit' }}
       label="Ver los gastos sin categoría"
       cta="Categorizalos →"
-      onNavigateToTransactions={openTransactions}
-    />
-  )
-  const unassignedNudge = unassignedAllTime.count > 0 && (
-    <SpendNudge
-      title="Sin definir"
-      total={unassignedAllTime.total}
-      count={unassignedAllTime.count}
-      homeCurrency={homeCurrency}
-      filter={{ type: 'debit', household: 'unassigned' }}
-      label="Ver los gastos sin definir"
-      cta="Categorizalos o marcalos →"
-      onNavigateToTransactions={openTransactions}
+      onNavigateToTransactions={onNavigateToTransactions}
     />
   )
 
@@ -380,8 +351,8 @@ export function Dashboard({
       {noHouseholdSpend && !allIgnored && (
         <>
           <NoHouseholdState onNavigateToCategories={onNavigateToCategories} />
-          {/* The rows to mark are the way out of the empty state. */}
-          {unassignedNudge}
+          {/* Categorizing these is the way out of the empty state. */}
+          {uncategorizedNudge}
         </>
       )}
 
@@ -399,7 +370,6 @@ export function Dashboard({
             homeCurrency={homeCurrency}
             curWord={curWord}
             householdMode={householdMode}
-            unassignedExpense={unassignedMonthExpense}
             householdExpense={householdSummary.expense}
             onShowHousehold={
               onHouseholdModeChange && (() => onHouseholdModeChange(true))
@@ -411,7 +381,7 @@ export function Dashboard({
             title="¿A dónde se fue la plata?"
             period={periodRange}
           >
-            {householdMode ? unassignedNudge : uncategorizedNudge}
+            {uncategorizedNudge}
             <CategorySpendCard
               donutData={donutData}
               otherCategoryIds={otherCategoryIds}

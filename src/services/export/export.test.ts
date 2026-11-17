@@ -245,12 +245,12 @@ describe('hogar column', () => {
     expect(header.endsWith('"cuenta_en_totales","hogar"')).toBe(true)
   })
 
-  it('says si / no / sin_definir for expenses and nothing for the rest', () => {
+  it('says si / no for counted expenses (an uncategorized one is no) and nothing for the rest', () => {
     expect(hogar()).toEqual({
       groceries: 'si',
       restaurants: 'no',
       'restaurants-yes': 'si',
-      uncategorized: 'sin_definir',
+      uncategorized: 'no',
       income: '',
       transfer: '',
       parent: '',

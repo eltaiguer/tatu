@@ -855,8 +855,12 @@ describe('useTransactionFiltering — Hogar', () => {
     const { result } = setup(transactions)
     act(() => result.current.update({ household: 'household' }))
     expect(idsOf(result.current.filteredTransactions)).toEqual(['super'])
-    act(() => result.current.update({ household: 'unassigned' }))
-    expect(idsOf(result.current.filteredTransactions)).toEqual(['misterio'])
+    act(() => result.current.update({ household: 'all' }))
+    expect(idsOf(result.current.filteredTransactions)).toEqual([
+      'super',
+      'cena',
+      'misterio',
+    ])
     act(() => result.current.clear())
     expect(result.current.filters.household).toBe('all')
     expect(result.current.filteredTransactions).toHaveLength(3)

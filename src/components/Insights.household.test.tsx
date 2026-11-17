@@ -45,7 +45,7 @@ function tx(overrides: Partial<Transaction> = {}): Transaction {
 }
 
 // USD home. Household (seeded groceries): 100. Not household (restaurants):
-// 60. Sin definir (uncategorized, no choice): 2 rows = 30 + 20.
+// 60. Uncategorized with no choice (not household): 2 rows = 30 + 20.
 function rows(): Transaction[] {
   return [
     tx({ id: 'super', description: 'Super Uno', amount: 100 }),
@@ -340,79 +340,12 @@ describe('Insights: Todo / Hogar mode', () => {
     })
   })
 
-  describe('Sin definir', () => {
-    const line = 'Ver los gastos sin definir'
+  it('shows no Sin definir row in Hogar mode', async () => {
+    render(<Harness transactions={rows()} initialHousehold />)
 
-    it('says what is left out of the analysis, with count and amount, and opens it', async () => {
-      render(<Harness transactions={rows()} initialHousehold />)
-
-      const row = await screen.findByRole('button', { name: line })
-      expect(row).toHaveTextContent('no entran en este análisis')
-      expect(row).toHaveTextContent('US$ 50,00')
-      expect(row).toHaveTextContent('2 gastos')
-      // Amounts use the mono style.
-      expect(within(row).getByText('US$ 50,00')).toHaveClass('font-mono')
-
-      fireEvent.click(row)
-      expect(navigations).toEqual([{ type: 'debit', household: 'unassigned' }])
-    })
-
-    it('uses the singular for one expense', async () => {
-      render(
-        <Harness
-          transactions={rows().filter((t) => t.id !== 'sd2')}
-          initialHousehold
-        />
-      )
-
-      expect(
-        await screen.findByRole('button', { name: line })
-      ).toHaveTextContent('1 gasto')
-    })
-
-    it('shows above the Hogar empty state too', async () => {
-      render(
-        <Harness
-          transactions={rows().filter((t) => t.id !== 'super')}
-          initialHousehold
-        />
-      )
-
-      expect(await screen.findByRole('button', { name: line })).toBeVisible()
-      expect(screen.getByText('Todavía no hay gastos del hogar')).toBeVisible()
-    })
-
-    it('is hidden while the AI is not configured', async () => {
-      render(<Harness transactions={rows()} initialHousehold noKey />)
-
-      await screen.findByText('Activá la IA para ver insights')
-      expect(
-        screen.queryByRole('button', { name: line })
-      ).not.toBeInTheDocument()
-    })
-
-    it('is a Hogar thing: Todo does not show it', async () => {
-      render(<Harness transactions={rows()} />)
-      await screen.findByRole('button', { name: /Generar/ })
-
-      expect(
-        screen.queryByRole('button', { name: line })
-      ).not.toBeInTheDocument()
-    })
-
-    it('is left out when nothing is Sin definir', async () => {
-      render(
-        <Harness
-          transactions={rows().filter((t) => !t.id.startsWith('sd'))}
-          initialHousehold
-        />
-      )
-      await screen.findByRole('button', { name: /Generar/ })
-
-      expect(
-        screen.queryByRole('button', { name: line })
-      ).not.toBeInTheDocument()
-    })
+    await screen.findByRole('button', { name: /Generar/ })
+    expect(screen.queryByText(/Sin definir/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no entran en este análisis/)).toBeNull()
   })
 
   it('says there is no household spend yet, with no way to generate', async () => {

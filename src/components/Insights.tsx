@@ -15,14 +15,12 @@ import { Button } from './ui/button'
 import { CategoryBadge } from './CategoryBadge'
 import { HouseholdModeToggle } from './dashboard/HouseholdModeToggle'
 import { NoHouseholdState } from './dashboard/EmptyStates'
-import { SpendNudge } from './dashboard/SpendNudge'
 import { formatCurrency } from '../utils/formatting'
 import { todayAsUtcDate, toMonthKey } from '../utils/date-utils'
 import type { Currency, Transaction, TransactionsFilter } from '../models'
 import type { Repository } from '../services/repository/repository'
 import type { ClaudeClient } from '../services/ai/claude-client'
-import { partitionByHousehold } from '../services/household/household'
-import { sumCountedTotals } from '../services/spending/spending-rules'
+import { householdExpenses } from '../services/household/household'
 import { useHouseholdRules } from '../hooks/useHouseholdRules'
 import {
   buildInsightInput,
@@ -35,10 +33,7 @@ import type {
 } from '../services/insights/insight-generator'
 import { useInsightsByMode } from './insights/useInsightsByMode'
 
-const NO_PARTITION = {
-  household: [] as Transaction[],
-  unassigned: [] as Transaction[],
-}
+const NO_ROWS: Transaction[] = []
 
 interface InsightsProps {
   transactions: Transaction[]
@@ -128,15 +123,13 @@ export function Insights({
   const isConfigured = aiEnabled && Boolean(claudeApiKey)
   const hasTransactions = transactions.length > 0
 
-  // Hogar's rows: the ones that resolve to household; Sin definir apart. The
+  // Hogar's rows: the ones that resolve to household. The
   // rules come through the hook so a merchant rule alone changes them. Todo
   // never looks at them, so a rule never rebuilds Todo's input.
   const householdRules = useHouseholdRules()
-  const { household: householdRows, unassigned: unassignedRows } = useMemo(
+  const householdRows = useMemo(
     () =>
-      householdMode
-        ? partitionByHousehold(transactions, householdRules)
-        : NO_PARTITION,
+      householdMode ? householdExpenses(transactions, householdRules) : NO_ROWS,
     [householdMode, transactions, householdRules]
   )
   const noHouseholdSpend = householdMode && householdRows.length === 0
@@ -189,14 +182,6 @@ export function Insights({
   })
   const handleGenerate = generate
 
-  const unassigned = useMemo(
-    () => ({
-      count: unassignedRows.length,
-      total: sumCountedTotals(unassignedRows, homeCurrency, fxRate).expense,
-    }),
-    [unassignedRows, homeCurrency, fxRate]
-  )
-
   const groups = useMemo(
     () => groupAndSortInsights(cached?.result.insights ?? []),
     [cached]
@@ -233,20 +218,6 @@ export function Insights({
         <p role="alert" className="text-[13px] text-[var(--neg)]">
           {error}
         </p>
-      )}
-
-      {/* The rows Hogar leaves out of the analysis, written by the app. */}
-      {householdMode && isConfigured && unassigned.count > 0 && (
-        <SpendNudge
-          title="Sin definir: no entran en este análisis"
-          total={unassigned.total}
-          count={unassigned.count}
-          homeCurrency={homeCurrency}
-          filter={{ type: 'debit', household: 'unassigned' }}
-          label="Ver los gastos sin definir"
-          cta="Categorizalos o marcalos →"
-          onNavigateToTransactions={onNavigateToTransactions}
-        />
       )}
 
       {hasTransactions && noHouseholdSpend && (

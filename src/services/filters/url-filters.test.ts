@@ -22,7 +22,7 @@ describe('url filters', () => {
       min: '100',
       max: '5000',
       showIgnored: true,
-      household: 'unassigned',
+      household: 'household',
       period: { mode: 'month', y: 2026, m: 2 },
     }
 
@@ -99,9 +99,8 @@ function filters(overrides: Partial<UrlFilterState> = {}): UrlFilterState {
 }
 
 describe('url filters — Hogar', () => {
-  it('reads ?hogar=si and ?hogar=sin-definir, anything else is all', () => {
+  it('reads ?hogar=si, anything else is all', () => {
     expect(parseFilterParams('hogar=si').household).toBe('household')
-    expect(parseFilterParams('hogar=sin-definir').household).toBe('unassigned')
     expect(parseFilterParams('hogar=x').household).toBe('all')
     expect(parseFilterParams('').household).toBe('all')
   })
@@ -111,11 +110,15 @@ describe('url filters — Hogar', () => {
       serializeFilterParams({ ...DEFAULT_URL_FILTERS, household: 'household' })
     ).toBe('hogar=si')
     expect(
-      serializeFilterParams({ ...DEFAULT_URL_FILTERS, household: 'unassigned' })
-    ).toBe('hogar=sin-definir')
-    expect(
       serializeFilterParams({ ...DEFAULT_URL_FILTERS, household: 'all' })
     ).toBe('')
+  })
+
+  it('ignores ?hogar=sin-definir like any unknown value', () => {
+    expect(parseFilterParams('hogar=sin-definir').household).toBe('all')
+    expect(serializeFilterParams(parseFilterParams('hogar=sin-definir'))).toBe(
+      ''
+    )
   })
 
   it('drops hogar when the type is income: that mix lists nothing', () => {
@@ -132,9 +135,6 @@ describe('url filters — Hogar', () => {
   it('builds a deep link that filters all time', () => {
     expect(filterToSearch({ household: 'household' })).toBe(
       'hogar=si&periodo=todo'
-    )
-    expect(filterToSearch({ household: 'unassigned' })).toBe(
-      'hogar=sin-definir&periodo=todo'
     )
   })
 })
@@ -154,7 +154,6 @@ describe('hasActiveFilters', () => {
     ['a minimum amount', { min: '10' }],
     ['a maximum amount', { max: '10' }],
     ['the household filter', { household: 'household' }],
-    ['the unassigned household filter', { household: 'unassigned' }],
   ])('is true with %s', (_, overrides) => {
     expect(hasActiveFilters(filters(overrides))).toBe(true)
   })
