@@ -10,6 +10,7 @@ import {
   householdExpenses,
   resolveHousehold,
   rowsChangedByRule,
+  rowsReachedByMerchantKey,
   rowsSharingMerchantRule,
   rowHouseholdView,
 } from './household'
@@ -543,6 +544,21 @@ describe('merchant rules', () => {
       rowsSharingMerchantRule([a, b, other, part, income], a).map((t) => t.id)
     ).toEqual(['a', 'b'])
     expect(rowsSharingMerchantRule([a, b, part], part)).toEqual([])
+  })
+
+  it('counts counted expenses of the key, not split parts, income or other merchants', () => {
+    const a = devoto('DEVOTO 12/03/2026', { id: 'a' })
+    const b = devoto('DEVOTO 19/03/2026', { id: 'b' })
+    const other = devoto('TIENDA INGLESA', { id: 'c' })
+    const part = devoto('DEVOTO', { id: 'd', splitParentId: 'p' })
+    const income = devoto('DEVOTO', { id: 'e', type: 'credit' })
+    const key = merchantOverrideKey('DEVOTO') as string
+    expect(
+      rowsReachedByMerchantKey([a, b, other, part, income], key).map(
+        (t) => t.id
+      )
+    ).toEqual(['a', 'b'])
+    expect(rowsReachedByMerchantKey([a, b], 'nadie')).toEqual([])
   })
 })
 

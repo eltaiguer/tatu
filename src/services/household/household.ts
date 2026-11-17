@@ -150,6 +150,19 @@ export function rowsSharingMerchantRule(
   if (!isCountedExpense(tx) || tx.splitParentId) return []
   const key = householdRuleKey(tx.description)
   if (key === null) return []
+  return rowsReachedByMerchantKey(all, key)
+}
+
+/**
+ * The same rows by key, for a rule with no transaction in hand (the
+ * Categorías list): counted expenses, split parts excluded, whose merchant
+ * key is `key`. `rowsSharingMerchantRule` delegates here, so the list's count
+ * cannot drift from the toast's.
+ */
+export function rowsReachedByMerchantKey(
+  all: readonly Transaction[],
+  key: string
+): Transaction[] {
   return all.filter(
     (row) =>
       isCountedExpense(row) &&
