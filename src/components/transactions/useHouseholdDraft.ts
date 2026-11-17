@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Transaction } from '../../models'
+import { householdLine } from './HouseToggle'
 import { getDisplayDescription } from '../../utils/transaction-display'
 import {
   isCategoryHousehold,
@@ -166,8 +167,17 @@ export function useHouseholdDraft({
     return { kind: 'row', household: householdOf(ownPick) }
   }
 
+  // What the saved row is now and why: not the draft, so it never moves
+  // while the user edits. Nothing to say when the saved row is not a counted
+  // expense (the group shows only because of the category being picked).
+  const savedView = rowHouseholdView(transaction, householdRules)
+  const savedLine = savedView
+    ? `Ahora: ${householdLine(transaction.category, savedView)}`
+    : undefined
+
   return {
     show: showHousehold,
+    savedLine,
     canMakeRule,
     remembered,
     remember,

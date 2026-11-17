@@ -364,12 +364,76 @@ describe('EditTransactionDialog', () => {
   })
 })
 
-describe('EditTransactionDialog — gasto del hogar (#251)', () => {
+describe('EditTransactionDialog — Hogar (#251)', () => {
   beforeEach(() => {
     replaceCustomCategories([])
+    clearHouseholdRules()
   })
 
-  const group = () => screen.getByRole('group', { name: /^Gasto del hogar/ })
+  const group = () => screen.getByRole('group', { name: /^Hogar/ })
+
+  describe('the "Ahora:" line (#265)', () => {
+    const now = () => screen.queryByText(/^Ahora:/)
+    const pickCategory = (id: string) => {
+      fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+      fireEvent.click(
+        screen.getByRole('button', { name: resolveCategory(id).label })
+      )
+    }
+
+    it('says what the row is now and why, as the Hogar group description', () => {
+      render(<EditTransactionDialog {...baseProps()} />)
+
+      expect(now()).toHaveTextContent('Ahora: Hogar · según Alimentación')
+      expect(group()).toHaveAccessibleName('Hogar')
+      expect(group()).toHaveAccessibleDescription(
+        'Ahora: Hogar · según Alimentación'
+      )
+    })
+
+    it('says "elegido a mano" for the row’s own choice', () => {
+      render(
+        <EditTransactionDialog
+          {...baseProps({ transaction: { ...transaction, household: false } })}
+        />
+      )
+
+      expect(now()).toHaveTextContent('Ahora: No es del hogar · elegido a mano')
+    })
+
+    it('says "según comercio" for a row a merchant rule covers', () => {
+      putMerchantHouseholdRule(
+        merchantOverrideKey(transaction.description) as string,
+        true
+      )
+      render(<EditTransactionDialog {...baseProps()} />)
+
+      expect(now()).toHaveTextContent('Ahora: Hogar · según comercio')
+    })
+
+    it('describes the saved row, not the draft', () => {
+      render(<EditTransactionDialog {...baseProps()} />)
+
+      fireEvent.click(screen.getByLabelText('No'))
+      pickCategory('restaurants')
+
+      expect(now()).toHaveTextContent('Ahora: Hogar · según Alimentación')
+    })
+
+    it('has no line when the saved row is not a counted expense', () => {
+      render(
+        <EditTransactionDialog
+          {...baseProps({
+            transaction: { ...transaction, category: 'internal_transfer' },
+          })}
+        />
+      )
+      pickCategory('groceries')
+
+      expect(group()).toBeInTheDocument()
+      expect(now()).toBeNull()
+    })
+  })
 
   it('offers "Según categoría (Sí)" selected for a row that follows Alimentación', () => {
     render(<EditTransactionDialog {...baseProps()} />)
@@ -442,7 +506,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       ).toBeInTheDocument()
       expect(screen.getByLabelText('Según categoría (Sí)')).toBeChecked()
       // The reach is not on the legend.
-      expect(screen.getByText(/^Gasto del hogar/)).not.toHaveTextContent('·')
+      expect(within(group()).getByText(/^Hogar/)).not.toHaveTextContent('·')
     })
 
     it('says "solo esta por ahora" when the merchant has no other row', () => {
@@ -782,7 +846,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
         const { unmount } = render(<EditTransactionDialog {...props} />)
 
         expect(box()).toBeNull()
-        expect(screen.getByText(/^Gasto del hogar/)).toHaveTextContent(
+        expect(within(group()).getByText(/^Hogar/)).toHaveTextContent(
           'solo esta transacción'
         )
         fireEvent.click(screen.getByLabelText('Sí'))
@@ -799,7 +863,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       render(<EditTransactionDialog {...props} />)
 
       expect(box()).toBeNull()
-      expect(screen.getByText(/^Gasto del hogar/)).toHaveTextContent(
+      expect(within(group()).getByText(/^Hogar/)).toHaveTextContent(
         'solo esta transacción'
       )
       fireEvent.click(screen.getByLabelText('Sí'))
@@ -913,9 +977,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       const props = baseProps({ transaction: row })
       const { unmount } = render(<EditTransactionDialog {...props} />)
 
-      expect(
-        screen.queryByRole('group', { name: /^Gasto del hogar/ })
-      ).toBeNull()
+      expect(screen.queryByRole('group', { name: /^Hogar/ })).toBeNull()
       expect(
         screen.queryByRole('checkbox', { name: /^Recordar para todas las de/ })
       ).toBeNull()
@@ -941,7 +1003,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       })
     )
 
-    expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
+    expect(screen.queryByRole('group', { name: /^Hogar/ })).toBeNull()
     save()
     // The row's own choice is left as it was: nothing to write.
     expect(props.onSave).toHaveBeenCalledWith(
@@ -954,7 +1016,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       transaction: { ...transaction, category: 'internal_transfer' },
     })
     render(<EditTransactionDialog {...props} />)
-    expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
+    expect(screen.queryByRole('group', { name: /^Hogar/ })).toBeNull()
 
     fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     fireEvent.click(
@@ -972,7 +1034,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
   it('has no group without a way to save it', () => {
     render(<EditTransactionDialog {...baseProps({ canSetHousehold: false })} />)
 
-    expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
+    expect(screen.queryByRole('group', { name: /^Hogar/ })).toBeNull()
     expect(
       screen.queryByRole('checkbox', { name: /^Recordar para todas las de/ })
     ).toBeNull()

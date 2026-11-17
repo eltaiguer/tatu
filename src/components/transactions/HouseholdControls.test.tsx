@@ -1350,8 +1350,8 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     await openEdit(D1)
 
     expect(rememberBox()).toBeNull()
-    expect(screen.getByText(/^Gasto del hogar/)).toHaveTextContent(
-      'solo esta transacción'
+    expect(screen.getByRole('group', { name: /^Hogar/ })).toHaveAccessibleName(
+      /solo esta transacción/
     )
     categoryScope(/^Todas las similares/)
     fireEvent.change(screen.getByLabelText('Descripción edición'), {

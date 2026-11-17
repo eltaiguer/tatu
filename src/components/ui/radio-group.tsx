@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { cn } from './utils'
 
 export interface RadioOption<T extends string> {
@@ -22,6 +22,7 @@ export function RadioGroup<T extends string>({
   options,
   variant = 'list',
   className,
+  description,
 }: {
   legend: ReactNode
   name: string
@@ -33,13 +34,26 @@ export function RadioGroup<T extends string>({
   options: RadioOption<T>[]
   variant?: 'list' | 'segmented'
   className?: string
+  // Read with the group's name (aria-describedby), shown under the legend.
+  description?: ReactNode
 }) {
+  const descriptionId = useId()
+  const describedBy = description ? descriptionId : undefined
+  const descriptionLine = description ? (
+    <p id={descriptionId} className="text-caption text-muted-foreground">
+      {description}
+    </p>
+  ) : null
   if (variant === 'segmented') {
     return (
-      <fieldset className={cn('min-w-0', className)}>
+      <fieldset
+        className={cn('min-w-0', className)}
+        aria-describedby={describedBy}
+      >
         <legend className="mb-1.5 text-label font-medium text-muted-foreground">
           {legend}
         </legend>
+        {descriptionLine}
         <div className="flex h-10 overflow-hidden rounded-[var(--radius-sm)] border border-border">
           {options.map((option, i) => (
             <label
@@ -71,8 +85,12 @@ export function RadioGroup<T extends string>({
   }
 
   return (
-    <fieldset className={cn('min-w-0', className)}>
+    <fieldset
+      className={cn('min-w-0', className)}
+      aria-describedby={describedBy}
+    >
       <legend className="text-small font-medium">{legend}</legend>
+      {descriptionLine}
       <div className="mt-2 space-y-2">
         {options.map((option) => (
           <div key={option.value}>

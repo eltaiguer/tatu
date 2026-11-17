@@ -13,7 +13,7 @@ export function HouseholdField({ draft }: { draft: HouseholdDraft }) {
         <RadioGroup
           legend={
             <>
-              Gasto del hogar
+              Hogar
               {!draft.canMakeRule && (
                 <span className="font-normal text-muted-foreground">
                   {' '}
@@ -22,6 +22,7 @@ export function HouseholdField({ draft }: { draft: HouseholdDraft }) {
               )}
             </>
           }
+          description={draft.savedLine}
           name="household"
           value={draft.shownChoice}
           onChange={draft.pick}
