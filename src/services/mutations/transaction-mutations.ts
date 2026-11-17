@@ -1143,7 +1143,7 @@ async function writeHouseholdRule(
   }
   assertOwner(repo)
   if (household === null) deleteMerchantHouseholdRule(key)
-  else putMerchantHouseholdRule(key, household)
+  else putMerchantHouseholdRule(key, household, description)
 }
 
 /**
