@@ -790,22 +790,31 @@ and skip their rollback after a switch.
   `hydrateWorkspace`, cleared on teardown; it keeps the full records, newest
   first, for Categorías' "Reglas del hogar" list, whose delete and Deshacer
   write by key, server first) and persisted in `household_rules`.
-  A split part ignores it. `applyHouseholdToSimilar` (mutations) saves or
-  deletes the rule and applies it to `rowsSharingMerchantRule`: past and future
-  clears the similar rows' own choices; future-only first pins the value each
-  other similar row shows today as its own choice, then writes the rule. The
-  edit dialog's own household scope ("Aplicar “gasto del hogar” a", separate
-  from the name/category one, ADR-0006) drives it (only when the household
-  radio was touched), and the one-click house offers "Aplicar a las N similares". The
-  household toasts, offers and retries live in `useHouseholdWrites`.
+  A split part ignores it. `applyHouseholdToSimilar` (mutations) saves the
+  rule and applies it to `rowsSharingMerchantRule`: it always clears the
+  similar rows' own choices, so all of them follow it (there is no future-only
+  option for Hogar, ADR-0007). `forgetHouseholdRule` is the other way: it
+  writes the row's shown value as its own choice (null when its category, as
+  the save left it, gives the same answer), then deletes the rule through the
+  store's `deleteHouseholdRuleWithSync`, keeping the other rows' own choices
+  (rows that followed the rule go back to their category). The edit dialog's
+  "Recordar para todas las de [comercio]" checkbox drives both (its draft
+  carries one `HouseholdWrite`: none / row / rule / forget; the box is
+  independent of the name/category "apply to"), and the one-click house offers
+  "Aplicar a las N similares". The household toasts, offers and retries live in
+  `useHouseholdWrites`; an explained forget failure keeps the dialog open for a
+  household-only save (saving again replays it), and after a saved edit says so
+  in its message (an error the user can't fix by replaying gets no
+  "Reintentar").
   The household flag is not part of "which rows count"
   (`services/spending/spending-rules.ts`): callers combine the two. Writes are
   `setHousehold` (one or many rows, `services/mutations/transaction-mutations.ts`;
-  the row's house, the bulk "Hogar" menu and, under "Solo esta", the edit
-  dialog call it through `useTransactionHandlers.handleSetHousehold`),
+  the row's house, the bulk "Hogar" menu and the edit dialog with the box
+  unchecked call it through `useTransactionHandlers.handleSetHousehold`),
   `applyHouseholdToSimilar` (a merchant rule and its reach; the edit dialog
-  under the two household rule scopes and the toast's action call it through
-  `handleApplyHouseholdToSimilar`; what a row shows and what a click writes
+  with the box checked and the toast's action call it through
+  `handleApplyHouseholdToSimilar`; `forgetHouseholdRule`, the unchecked box,
+  through `handleForgetHouseholdRule`; what a row shows and what a click writes
   come from `rowHouseholdView` / `nextHouseholdChoice`, so the
   three agree) and `setCategoryHouseholdWithSync` (a category's default, from the tile
   toggle in Categorías; a built-in's lives in its override row, as its ignore

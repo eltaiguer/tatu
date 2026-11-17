@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed. Partially supersedes [0005](0005-household-flag.md) (the
+Accepted. Partially supersedes [0005](0005-household-flag.md) (the
 unassigned value, "Sin definir") and [0006](0006-separate-household-scope.md)
 (the household scope radio).
 
@@ -62,6 +62,26 @@ give:
      choice (none when that equals what its category says).
    - With no rule, the box starts unchecked and the group is this row's own
      choice ("Según categoría" / Sí / No).
+
+   Settled while building it (#263), where the text above was silent:
+   - A row whose own choice contradicts the rule (a house click or the bulk
+     menu after the rule, or an old future-only pin) opens **unchecked** on
+     that choice, with "Según comercio (X)" as the follow option. The row's
+     own choice outranks the rule (ADR-0005), so the rule does not decide
+     this row; leaving the box unchecked never deletes the rule. Checking it
+     makes the value on screen the rule for all.
+   - Unchecking keeps the **other rows' own choices**; only rows that followed
+     the rule go back to their category. The same as deleting a rule from the
+     Categorías list. This row keeps what it shows as its own choice, none
+     when its category (the picked one, if the same save changes it) gives the
+     same answer.
+   - The dialog can no longer make a one-row exception on a rule-covered row
+     (changing Sí / No with the box checked edits the rule); the one-click
+     house still does.
+   - The box's label names the row ("Recordar para todas las de [descripción
+     visible]") with the reach as a hint ("Se aplica a N transacciones y a las
+     que importes"). Checking over "Según categoría" preselects what the row
+     shows; checking then unchecking without a pick writes nothing.
 
 Unchanged from ADR-0005: precedence (row → merchant rule → category default
 → seeded default); rules are read, not stamped; split parts ignore merchant
