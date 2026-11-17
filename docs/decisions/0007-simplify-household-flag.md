@@ -122,3 +122,14 @@ future ones) that does not come up for household spending.
   No, rows reached, delete with undo) ships with this change set.
 - The one-click house and its "Aplicar a las N similares" toast are
   unchanged; the bulk menu stays rows-only.
+- The house shows the value only: filled in the brand colour = Hogar, outlined
+  in the muted text colour = No, whatever the source (#265). The source is
+  said in words: the house's tooltip and accessible name ("Hogar · según
+  Alimentación", "No es del hogar · elegido a mano", "Hogar · según comercio")
+  and the edit dialog's "Ahora: …" line (the saved row, so touch users get it
+  too). This supersedes ADR-0005's step-4 look ("faint when the row follows its
+  category, solid brand colour when it was set by hand"), step 7's dot ("the
+  dot on the house is `row` only"), step 4's bulk labels ("Marcar como hogar" …)
+  and step 6's "group Ver gastos, house icon" (now a visible "Ver:" label). One
+  vocabulary: "Hogar" for the flag and the mode, "Hogar: Sí" / "Hogar: No" for
+  its values, "No es del hogar" for the complement; no "casita".
