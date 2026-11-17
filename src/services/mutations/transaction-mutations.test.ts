@@ -79,6 +79,7 @@ import {
   clearHouseholdRules,
   listMerchantHouseholdRules,
   loadHouseholdRules,
+  putMerchantHouseholdRule,
 } from '../household/household-rules-store'
 import { currentHouseholdRules, resolveHousehold } from '../household/household'
 import { getDisplayDescription } from '../../utils/transaction-display'
@@ -1937,6 +1938,23 @@ describe('transaction-mutations — forgetHouseholdRule (#263)', () => {
     expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
     // The row keeps the choice the forget wrote.
     expect(repo.row('d1')?.household).toBe(true)
+  })
+
+  it('undo restores nothing when the merchant got another rule meanwhile', async () => {
+    const repo = withRule()
+    const { undo } = await forgetHouseholdRule(repo, 'd1', true)
+    // A newer rule (e.g. "Aplicar a las N similares" No from a house click).
+    await repo.upsertHouseholdRule({
+      merchantNormalized: KEY,
+      isHousehold: false,
+    })
+    putMerchantHouseholdRule(KEY, false)
+
+    const restored = await undo!()
+
+    expect(restored).toBe(false)
+    expect(repo.householdRules.get(KEY)?.isHousehold).toBe(false)
+    expect(listMerchantHouseholdRules().get(KEY)).toBe(false)
   })
 
   it('has nothing to undo when no rule was there', async () => {

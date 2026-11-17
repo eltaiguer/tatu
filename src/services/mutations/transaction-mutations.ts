@@ -1122,9 +1122,10 @@ export interface ForgetResult {
   // Other rows the rule decided (no choice of their own): they go back to
   // their category.
   reached: number
-  // Puts the rule back (the row keeps its own choice); null when there was no
-  // rule to delete.
-  undo: (() => Promise<void>) | null
+  // Puts the rule back (the row keeps its own choice); resolves false, and
+  // restores nothing, when the merchant got another rule meanwhile. null when
+  // there was no rule to delete.
+  undo: (() => Promise<boolean>) | null
 }
 
 /**
@@ -1171,7 +1172,13 @@ export async function forgetHouseholdRule(
   }
   return {
     reached,
-    undo: removed ? () => restoreHouseholdRuleWithSync(repo, removed) : null,
+    undo: removed
+      ? async () => {
+          if (listMerchantHouseholdRules().has(key)) return false
+          await restoreHouseholdRuleWithSync(repo, removed)
+          return true
+        }
+      : null,
   }
 }
 

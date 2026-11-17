@@ -310,12 +310,12 @@ export function Transactions({
       const outcome = await saveHouseholdDraft(
         editingId,
         draft.household,
-        draft.description,
+        // The merchant the box named, not the name being typed.
+        getDisplayDescription(editing),
         message
       )
-      if (!outcome.saved && !message) {
-        // Nothing saved at all, or a forget saved only the row (its rule is
-        // still there): keep the dialog open to try again.
+      if (!outcome.saved && !message && !outcome.rowSaved) {
+        // Nothing saved at all: keep the dialog open to try again.
         setPending(editingId, false)
         return
       }

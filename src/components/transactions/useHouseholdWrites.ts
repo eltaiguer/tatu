@@ -186,14 +186,14 @@ export function useHouseholdWrites({
   // else touched the row since: no newer write of this view started (the
   // counter) and the saved row still holds what it did when this one failed
   // (which also covers bulk writes and the dialog). A newer choice is never
-  // overwritten by an old toast. Resolves with the write's result, or null
-  // when it failed (reported).
+  // overwritten by an old toast. Resolves with the write's result, or the
+  // error when it failed (reported).
   async function guardedWrite<T>(
     id: string,
     failure: string,
     run: () => Promise<T>,
     again: () => Promise<unknown>
-  ): Promise<{ value: T } | null> {
+  ): Promise<{ value: T } | { error: unknown }> {
     const seq = startHouseholdWrite(id)
     setPending(id, true)
     try {
@@ -218,7 +218,7 @@ export function useHouseholdWrites({
           if (mayReplay(id, seq, heldWhenFailed)) void again()
         }
       )
-      return null
+      return { error }
     } finally {
       setPending(id, false)
     }
@@ -237,7 +237,7 @@ export function useHouseholdWrites({
       () => onSetHousehold([id], household),
       () => writeHousehold(id, household, failure)
     )
-    return done !== null
+    return 'value' in done
   }
 
   // Saves the merchant's household rule from the edit dialog and applies it
@@ -255,17 +255,17 @@ export function useHouseholdWrites({
       () => onApplyHouseholdToSimilar(id, household),
       () => writeHouseholdRule(id, household, failure)
     )
-    return done ? done.value.affected : null
+    return 'value' in done ? done.value.affected : null
   }
 
   // The edit dialog's unchecked "Recordar…": the row keeps `shown`, then the
-  // merchant's rule is deleted. Resolves with what the forget did, or null
-  // when it failed (reported).
+  // merchant's rule is deleted. Resolves with what the forget did, the error
+  // when it failed (reported), or null without a handler.
   async function forgetHouseholdRule(
     id: string,
     shown: boolean | null,
     failure: string
-  ): Promise<ForgetResult | null> {
+  ): Promise<ForgetResult | { error: unknown } | null> {
     if (!onForgetHouseholdRule) return null
     const done = await guardedWrite(
       id,
@@ -273,18 +273,17 @@ export function useHouseholdWrites({
       () => onForgetHouseholdRule(id, shown),
       () => forgetHouseholdRule(id, shown, failure)
     )
-    return done ? done.value : null
+    return 'value' in done ? done.value : done
   }
 
   // Whether the view can write this kind of household change.
   const canSaveHousehold = (write: HouseholdWrite) =>
-    write.kind === 'row'
-      ? Boolean(onSetHousehold)
-      : write.kind === 'rule'
-        ? Boolean(onApplyHouseholdToSimilar)
-        : write.kind === 'forget'
-          ? Boolean(onForgetHouseholdRule)
-          : false
+    ({
+      none: false,
+      row: Boolean(onSetHousehold),
+      rule: Boolean(onApplyHouseholdToSimilar),
+      forget: Boolean(onForgetHouseholdRule),
+    })[write.kind]
 
   // The household part of the edit dialog's save, after its category edit
   // (`message` is that edit's success, null for a household-only save). One
@@ -299,6 +298,9 @@ export function useHouseholdWrites({
     saved: boolean
     message: string | null
     options?: ExternalToast
+    // The row saved though the save as a whole failed (a failed rule delete,
+    // whose toast carries Reintentar): the dialog can close.
+    rowSaved?: boolean
   }> {
     const failure = message
       ? AFTER_EDIT
@@ -327,6 +329,13 @@ export function useHouseholdWrites({
       // vanish without any row changing visibly, so it says so and can undo.
       const forgot = await forgetHouseholdRule(id, write.household, failure)
       if (forgot === null) return { saved: false, message: null }
+      if ('error' in forgot) {
+        return {
+          saved: false,
+          message: null,
+          rowSaved: forgot.error instanceof RuleDeleteFailedError,
+        }
+      }
       const { reached, undo } = forgot
       if (!undo) return { saved: true, message }
       return {
@@ -335,6 +344,7 @@ export function useHouseholdWrites({
           ? `${message} · ya no se recuerda ${name}`
           : `Ya no se recuerda ${name}`,
         options: {
+          duration: 8000,
           description:
             reached > 0
               ? `${reached === 1 ? '1 transacción vuelve' : `${reached} transacciones vuelven`} a su categoría`
@@ -342,8 +352,13 @@ export function useHouseholdWrites({
           action: {
             label: 'Deshacer',
             onClick: () => {
-              undo().catch((error: unknown) =>
-                reportError(error, 'No se pudo deshacer')
+              undo().then(
+                (restored) => {
+                  if (!restored) {
+                    toast(`Ya hay otra regla para ${name}; no se restauró.`)
+                  }
+                },
+                (error: unknown) => reportError(error, 'No se pudo deshacer')
               )
             },
           },

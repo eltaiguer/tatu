@@ -117,10 +117,8 @@ export function merchantRule(
   tx: { description?: string; splitParentId?: string },
   merchants: MerchantHousehold
 ): boolean | undefined {
-  if (merchants.size === 0 || tx.splitParentId || !tx.description) {
-    return undefined
-  }
-  const key = householdRuleKey(tx.description)
+  if (merchants.size === 0) return undefined
+  const key = merchantRuleKey(tx)
   return key === null ? undefined : merchants.get(key)
 }
 
@@ -165,11 +163,7 @@ export function canHaveMerchantRule(tx: {
   description?: string
   splitParentId?: string
 }): boolean {
-  return (
-    !tx.splitParentId &&
-    !!tx.description &&
-    householdRuleKey(tx.description) !== null
-  )
+  return merchantRuleKey(tx) !== null
 }
 
 /**
@@ -184,7 +178,7 @@ export function rowsSharingMerchantRule(
   tx: Transaction
 ): Transaction[] {
   if (!isCountedExpense(tx) || tx.splitParentId) return []
-  const key = householdRuleKey(tx.description)
+  const key = merchantRuleKey(tx)
   if (key === null) return []
   return rowsReachedByMerchantKey(all, key)
 }
@@ -200,10 +194,7 @@ export function rowsReachedByMerchantKey(
   key: string
 ): Transaction[] {
   return all.filter(
-    (row) =>
-      isCountedExpense(row) &&
-      !row.splitParentId &&
-      householdRuleKey(row.description) === key
+    (row) => isCountedExpense(row) && merchantRuleKey(row) === key
   )
 }
 
@@ -219,8 +210,8 @@ export function ruleReachCounts(
   const counts = new Map<string, number>()
   for (const row of all) {
     if (row.household != null) continue
-    if (!isCountedExpense(row) || row.splitParentId) continue
-    const key = householdRuleKey(row.description)
+    if (!isCountedExpense(row)) continue
+    const key = merchantRuleKey(row)
     if (key === null) continue
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
@@ -240,7 +231,7 @@ export function rowsChangedByRule(
   household: boolean,
   householdRules: HouseholdRules
 ): Transaction[] {
-  const key = householdRuleKey(tx.description)
+  const key = merchantRuleKey(tx)
   if (key === null) return []
   const after: HouseholdRules = {
     ...householdRules,

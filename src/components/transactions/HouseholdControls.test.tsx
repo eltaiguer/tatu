@@ -21,7 +21,12 @@ import {
 } from '../../services/mutations/transaction-mutations'
 import { replaceDescriptionOverrides } from '../../services/descriptions/description-overrides'
 import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
-import { clearHouseholdRules } from '../../services/household/household-rules-store'
+import {
+  clearHouseholdRules,
+  listMerchantHouseholdRules,
+  putMerchantHouseholdRule,
+} from '../../services/household/household-rules-store'
+import { merchantOverrideKey } from '../../services/categorizer/category-overrides'
 import {
   createInMemoryRepository,
   type InMemoryRepository,
@@ -1097,10 +1102,10 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     expect(
       await screen.findByText(/pero no se pudo quitar la regla — reintentar/)
     ).toBeVisible()
-    // The row saved, the rule stayed, and the dialog is still there.
+    // The row saved and the rule stayed: the dialog closes, one retry route.
     expect(repo.householdRules.size).toBe(1)
     expect(repo.row(D1)?.household).toBe(true)
-    expect(screen.getByRole('dialog')).toBeVisible()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     await act(async () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
     })
@@ -1158,6 +1163,32 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     expect(repo.row(D1)?.household).toBe(true)
   })
 
+  it('Deshacer does not overwrite a rule saved for the merchant meanwhile', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+
+    await openEdit(D1)
+    remember()
+    await save()
+    const undo = await screen.findByRole('button', { name: 'Deshacer' })
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+    // A newer rule for the same merchant lands before the click.
+    act(() =>
+      putMerchantHouseholdRule(merchantOverrideKey(D1) as string, false)
+    )
+    await act(async () => {
+      fireEvent.click(undo)
+    })
+
+    expect(
+      await screen.findByText(`Ya hay otra regla para ${D1}; no se restauró.`)
+    ).toBeVisible()
+    expect(listMerchantHouseholdRules().get(merchantOverrideKey(D1)!)).toBe(
+      false
+    )
+  })
+
   it('unchecking together with an edit makes one toast', async () => {
     seed(devotos())
     await rememberAsYes()
@@ -1171,9 +1202,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     await save()
 
     expect(
-      await screen.findByText(
-        'Cambios guardados · ya no se recuerda Devoto centro'
-      )
+      await screen.findByText(`Cambios guardados · ya no se recuerda ${D1}`)
     ).toBeVisible()
     expect(screen.getAllByRole('button', { name: 'Deshacer' })).toHaveLength(1)
   })
