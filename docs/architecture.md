@@ -787,7 +787,9 @@ and skip their rollback after a switch.
   rule is read at resolution time and never stamped on rows: it is keyed by
   `merchantOverrideKey` (the key category rules use), kept in
   `household-rules-store.ts` (replaced on every write, loaded by
-  `hydrateWorkspace`, cleared on teardown) and persisted in `household_rules`.
+  `hydrateWorkspace`, cleared on teardown; it keeps the full records, newest
+  first, for Categorías' "Reglas del hogar" list, whose delete and Deshacer
+  write by key, server first) and persisted in `household_rules`.
   A split part ignores it. `applyHouseholdToSimilar` (mutations) saves or
   deletes the rule and applies it to `rowsSharingMerchantRule`: past and future
   clears the similar rows' own choices; future-only first pins the value each
