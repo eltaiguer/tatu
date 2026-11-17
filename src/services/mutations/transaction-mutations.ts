@@ -1040,8 +1040,8 @@ export async function setHousehold(
  *   every similar row that has one, so all of them follow the rule.
  * - 'future_matching_only': every other similar row without a choice of its
  *   own whose shown value the rule would change gets that value written as
- *   its own choice first (it keeps what it shows today), then the rule, then the edited row's
- *   own choice is cleared. Pins go first, so a failure part-way leaves every
+ *   its own choice first (it keeps what it shows today), then the rule, then
+ *   the edited row's own choice is cleared. Pins go first, so a failure part-way leaves every
  *   row showing what it showed.
  *
  * A row with no merchant key (or a split part) gets no rule: only that row is

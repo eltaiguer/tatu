@@ -18,9 +18,10 @@ import { merchantOverrideKey } from '../categorizer/category-overrides'
 import { isCountedExpense } from '../spending/spending-rules'
 import type { Transaction } from '../../models'
 
-// THE answer to "is this a household expense?" (Hogar sí / no). Every surface (the row toggle, the Hogar filter, the Resumen
-// mode) calls resolveHousehold; never re-derive it. It says nothing about
-// whether a row counts toward totals: callers combine it with
+// THE answer to "is this a household expense?" (Hogar sí / no). Every
+// surface (the row toggle, the Hogar filter, the Resumen mode) calls
+// resolveHousehold; never re-derive it. It says nothing about whether a row
+// counts toward totals: callers combine it with
 // services/spending/spending-rules.ts (Hogar mode shows counted expenses).
 
 /**
@@ -82,10 +83,8 @@ export function resolveHousehold(
     return { status: statusOf(merchant), source: 'merchant' }
   }
   const id = normalizeCategoryId(tx.category)
-  if (id === Category.Uncategorized) {
-    return { status: 'not_household', source: 'category' }
-  }
-  // Ingresos cannot have a default: a stray stored one is ignored.
+  // Sin categoría and Ingresos cannot have a default: a stray stored one is
+  // ignored.
   const stored = canHaveHouseholdDefault(id)
     ? householdRules.categories.get(id)
     : undefined

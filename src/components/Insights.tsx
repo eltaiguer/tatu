@@ -123,9 +123,9 @@ export function Insights({
   const isConfigured = aiEnabled && Boolean(claudeApiKey)
   const hasTransactions = transactions.length > 0
 
-  // Hogar's rows: the ones that resolve to household. The
-  // rules come through the hook so a merchant rule alone changes them. Todo
-  // never looks at them, so a rule never rebuilds Todo's input.
+  // Hogar's rows: the ones that resolve to household. The rules come through
+  // the hook so a merchant rule alone changes them. Todo never looks at them,
+  // so a rule never rebuilds Todo's input.
   const householdRules = useHouseholdRules()
   const householdRows = useMemo(
     () =>

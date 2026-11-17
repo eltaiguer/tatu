@@ -1120,7 +1120,7 @@ describe('buildInsightInput — Hogar scope (#251)', () => {
   })
 })
 
-describe('Hogar input is unchanged by dropping Sin definir (#262)', () => {
+describe('Hogar input over uncategorized, own-choice, rule and split rows (#262)', () => {
   // Characterization: green before and after #262 by design. Which rows are
   // household does not depend on how an uncategorized row with no choice is
   // named, so the Hogar input and its cache hash must not move.

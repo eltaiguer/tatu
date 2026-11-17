@@ -113,7 +113,6 @@ export function Dashboard({
     () =>
       onNavigateToTransactions && householdMode
         ? (filter: TransactionsFilter) =>
-            // A filter that names its own household keeps it.
             onNavigateToTransactions({ household: 'household', ...filter })
         : onNavigateToTransactions,
     [onNavigateToTransactions, householdMode]
@@ -199,7 +198,7 @@ export function Dashboard({
   // row is rarely household, so the household cut would hide the to-do. The
   // category list's own row, so the nudge's numbers equal the rows its link
   // opens.
-  const todoCategorySpending = useMemo(
+  const allRowsCategorySpending = useMemo(
     () =>
       householdMode
         ? buildCategorySpendingConverted(transactions, homeCurrency, fxRate)
@@ -208,10 +207,10 @@ export function Dashboard({
   )
   const uncategorizedSpend = useMemo(
     () =>
-      todoCategorySpending.find(
+      allRowsCategorySpending.find(
         (row) => row.category === Category.Uncategorized
       ),
-    [todoCategorySpending]
+    [allRowsCategorySpending]
   )
 
   const totalExpenses = categoryData.reduce((s, c) => s + c.value, 0)
@@ -351,7 +350,7 @@ export function Dashboard({
       {noHouseholdSpend && !allIgnored && (
         <>
           <NoHouseholdState onNavigateToCategories={onNavigateToCategories} />
-          {/* Categorizing these is the way out of the empty state. */}
+          {/* The same all-history Sin categoría to-do as Todo. */}
           {uncategorizedNudge}
         </>
       )}

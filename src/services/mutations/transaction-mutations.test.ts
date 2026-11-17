@@ -1870,9 +1870,8 @@ describe('transaction-mutations — household rule for similar rows (#251)', () 
         'future_matching_only'
       )
 
-      // Rows whose shown value changed: the edited row and the uncategorized
-      // look-alike, which is pinned too (it showed No). The pinned past rows
-      // look the same as before.
+      // Only the edited row's shown value changed; the past rows (d4, and the
+      // uncategorized look-alike d5) are pinned to No, so they look the same.
       expect(result.affected).toBe(1)
       expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
       // d1: the edited row follows the rule.

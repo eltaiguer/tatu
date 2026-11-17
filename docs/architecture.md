@@ -615,8 +615,7 @@ changing.
   Re-selecting Resumen in the sidebar replaces the entry and drops the query
   (`keepsQueryOnReselect` in `src/routes.ts`: only Transacciones keeps its).
 - Drill-throughs go through one wrapper that adds `household: 'household'`
-  (a filter naming its own household keeps it; the "Sin categoría" nudge
-  bypasses the wrapper).
+  (the "Sin categoría" nudge bypasses the wrapper).
 
 ## Merchant key
 

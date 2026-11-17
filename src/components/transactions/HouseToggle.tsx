@@ -6,10 +6,10 @@ import { useHouseholdRules } from '../../hooks/useHouseholdRules'
 
 // The row's "gasto del hogar" control, next to the category badge. Faint when
 // the row follows its category, solid brand colour when it was set by hand;
-// filled = household, outline = not. Renders nothing
-// for rows that are not counted expenses. The state comes from the saved row
-// (screen mirrors database), so a click only asks; the house moves once the
-// write is confirmed.
+// filled = household, outline = not. Renders nothing for rows that are not
+// counted expenses. The state comes from the saved row (screen mirrors
+// database), so a click only asks; the house moves once the write is
+// confirmed.
 export function HouseToggle({
   transaction,
   description,
