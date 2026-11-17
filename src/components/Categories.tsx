@@ -33,6 +33,7 @@ import {
 } from './categories/CategoryForm'
 import { CategoryCard } from './categories/CategoryCard'
 import { PatternRulesCard } from './categories/PatternRulesCard'
+import { HouseholdRulesSection } from './categories/HouseholdRulesSection'
 import {
   requireRepository,
   type Repository,
@@ -325,6 +326,12 @@ export function Categories({
       <PatternRulesCard
         transactions={transactions}
         onApplyPatternToPast={onApplyPatternToPast}
+        repository={repository}
+      />
+
+      {/* Household rules */}
+      <HouseholdRulesSection
+        transactions={transactions}
         repository={repository}
       />
     </div>
