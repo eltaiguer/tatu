@@ -57,6 +57,13 @@ interface BaseTransactionsProps {
     household: boolean | null,
     scope: RuleScope
   ) => Promise<{ affected: number }>
+  // Deletes the merchant's household rule and keeps `shown` as this row's own
+  // choice (null: it follows its category; forgetHouseholdRule). Without it
+  // the edit dialog does not offer "Recordar para todas las de …".
+  onForgetHouseholdRule?: (
+    transactionId: string,
+    shown: boolean | null
+  ) => Promise<void>
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void
   // The signed-in user's repository: a category created inline saves there.

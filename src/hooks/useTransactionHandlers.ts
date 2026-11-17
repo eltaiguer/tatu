@@ -12,6 +12,7 @@ import {
   deleteTransactions,
   editTransaction,
   applyHouseholdToSimilar,
+  forgetHouseholdRule,
   restoreDeleted,
   setHousehold,
   splitTransaction,
@@ -115,6 +116,10 @@ export function useTransactionHandlers({
         household: boolean | null,
         scope: RuleScope
       ) => applyHouseholdToSimilar(repo, transactionId, household, scope)
+    ),
+    handleForgetHouseholdRule: run(
+      (repo, transactionId: string, shown: boolean | null) =>
+        forgetHouseholdRule(repo, transactionId, shown)
     ),
     handleAutoCategorizeTransactions: run((repo, transactionIds: string[]) =>
       autoCategorize(repo, transactionIds)

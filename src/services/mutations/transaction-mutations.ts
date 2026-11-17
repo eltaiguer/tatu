@@ -56,13 +56,14 @@ import { currentUserRules, hasUserRule } from '../categorizer/user-rules'
 import { categorizeImportedTransactions } from '../categorizer/import-categorization'
 import { listCustomCategories } from '../categories/category-store'
 import {
+  canHaveMerchantRule,
   currentHouseholdRules,
   resolveHousehold,
   rowsChangedByRule,
   rowsSharingMerchantRule,
 } from '../household/household'
 import {
-  deleteMerchantHouseholdRule,
+  deleteHouseholdRuleWithSync,
   listMerchantHouseholdRules,
   putMerchantHouseholdRule,
 } from '../household/household-rules-store'
@@ -1133,17 +1134,62 @@ async function writeHouseholdRule(
 ): Promise<void> {
   if (listMerchantHouseholdRules().get(key) === (household ?? undefined)) return
   if (household === null) {
-    await repo.deleteHouseholdRule(key)
-  } else {
-    await repo.upsertHouseholdRule({
-      merchantNormalized: key,
-      merchantOriginal: description,
-      isHousehold: household,
-    })
+    // The store's one delete path: server first, then the screen.
+    await deleteHouseholdRuleWithSync(repo, key)
+    return
   }
+  await repo.upsertHouseholdRule({
+    merchantNormalized: key,
+    merchantOriginal: description,
+    isHousehold: household,
+  })
   assertOwner(repo)
-  if (household === null) deleteMerchantHouseholdRule(key)
-  else putMerchantHouseholdRule(key, household, description)
+  putMerchantHouseholdRule(key, household, description)
+}
+
+/**
+ * The edit dialog's unchecked "Recordar para todas las de …": this row keeps
+ * `shown` as its own choice (null when that is what it shows without the rule,
+ * i.e. its category's answer), then the merchant's rule is deleted. Other rows
+ * keep their own choices; rows that followed the rule go back to their
+ * category. The row is written first, so a failed delete leaves it showing
+ * what the dialog showed; a retry replays the whole thing (idempotent).
+ *
+ * Read after the category edit of the same save, so "its category" is the one
+ * the row has now.
+ */
+export async function forgetHouseholdRule(
+  repo: Repository,
+  transactionId: string,
+  shown: boolean | null
+): Promise<void> {
+  assertOwner(repo)
+  const row = store().transactions.find((tx) => tx.id === transactionId)
+  if (!row) throw MISSING_TRANSACTION
+  const key = canHaveMerchantRule(row)
+    ? merchantOverrideKey(row.description)
+    : null
+  if (!key) {
+    await setHousehold(repo, [transactionId], shown)
+    return
+  }
+  const rules = currentHouseholdRules()
+  const merchants = new Map(rules.merchants)
+  merchants.delete(key)
+  const inherited =
+    resolveHousehold({ ...row, household: null }, { ...rules, merchants })
+      .status === 'household'
+  const keep = shown === null || shown === inherited ? null : shown
+  await setHousehold(repo, [transactionId], keep)
+  try {
+    await deleteHouseholdRuleWithSync(repo, key)
+  } catch (error) {
+    assertOwner(repo)
+    throw new UserFacingError(
+      'Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla. Intentá de nuevo.',
+      { cause: error }
+    )
+  }
 }
 
 /**
