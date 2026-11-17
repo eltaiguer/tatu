@@ -921,17 +921,17 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(urls[urls.length - 1]).toBe('hogar=si&periodo=todo')
   })
 
-  it('the filter offers Todos · Hogar only', () => {
+  it('the filter offers Todo · Hogar only', () => {
     seed(rows())
     const group = screen.getByRole('radiogroup', { name: 'Hogar' })
     expect(
       within(group)
         .getAllByRole('radio')
         .map((r) => r.getAttribute('aria-label') ?? r.textContent)
-    ).toEqual(['Todos', 'Hogar'])
+    ).toEqual(['Todo', 'Hogar'])
   })
 
-  it('picking Hogar while Ingresos is chosen goes back to Todos', () => {
+  it('picking Hogar while Ingresos is chosen goes back to Ambos', () => {
     seed(rows())
     fireEvent.click(
       within(
@@ -944,12 +944,12 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(
       within(
         screen.getByRole('radiogroup', { name: 'Tipo de transacción' })
-      ).getByRole('radio', { name: 'Todos' })
+      ).getByRole('radio', { name: 'Ambos' })
     ).toBeChecked()
     expect(listed('Devoto')).toBe(true)
   })
 
-  it('picking Ingresos while Hogar is on goes back to Todos in Hogar', () => {
+  it('picking Ingresos while Hogar is on goes back to Todo in Hogar', () => {
     seed(rows())
     pick('Hogar')
     fireEvent.click(
@@ -961,13 +961,13 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(
       within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
         'radio',
-        { name: 'Todos' }
+        { name: 'Todo' }
       )
     ).toBeChecked()
     expect(listed('Sueldo')).toBe(true)
   })
 
-  it('Limpiar todo brings Hogar back to Todos', () => {
+  it('Limpiar todo brings Hogar back to Todo', () => {
     seed(rows())
     pick('Hogar')
     fireEvent.click(screen.getByRole('button', { name: 'Limpiar todo' }))
@@ -975,7 +975,7 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(
       within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
         'radio',
-        { name: 'Todos' }
+        { name: 'Todo' }
       )
     ).toBeChecked()
     expect(listed('Cena')).toBe(true)
