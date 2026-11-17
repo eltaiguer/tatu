@@ -16,11 +16,17 @@ import type { Transaction } from '../../models'
 import {
   applyHouseholdToSimilar,
   editTransaction,
+  forgetHouseholdRule,
   setHousehold,
 } from '../../services/mutations/transaction-mutations'
 import { replaceDescriptionOverrides } from '../../services/descriptions/description-overrides'
 import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
-import { clearHouseholdRules } from '../../services/household/household-rules-store'
+import {
+  clearHouseholdRules,
+  listMerchantHouseholdRules,
+  putMerchantHouseholdRule,
+} from '../../services/household/household-rules-store'
+import { merchantOverrideKey } from '../../services/categorizer/category-overrides'
 import {
   createInMemoryRepository,
   type InMemoryRepository,
@@ -47,7 +53,7 @@ function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
 
 let repo: InMemoryRepository
 
-// Edits under a rule scope write module-level rule stores: start clean.
+// Remembering a merchant writes module-level rule stores: start clean.
 beforeEach(() => {
   clearHouseholdRules()
   replaceDescriptionOverrides({})
@@ -73,8 +79,12 @@ function Harness({
         onSetHousehold={(ids, household) => setHousehold(repo, ids, household)}
         onApplyHouseholdToSimilar={
           withRules
-            ? (id, household, scope) =>
-                applyHouseholdToSimilar(repo, id, household, scope)
+            ? (id, household) => applyHouseholdToSimilar(repo, id, household)
+            : undefined
+        }
+        onForgetHouseholdRule={
+          withRules
+            ? (id, shown) => forgetHouseholdRule(repo, id, shown)
             : undefined
         }
       />
@@ -906,7 +916,7 @@ describe('Hogar filter in Transacciones (#251)', () => {
   })
 })
 
-describe('household rule from the edit dialog (#251, step 7)', () => {
+describe('household rule from the edit dialog (#251, #263)', () => {
   beforeEach(() => {
     replaceCustomCategories([])
   })
@@ -935,15 +945,11 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   }
-  // The dialog's two "apply to" radios: the Hogar choice's and the name and
-  // category's.
-  const HOGAR_SCOPE = 'Aplicar “gasto del hogar” a'
-  const scope = (name: RegExp | string) =>
-    fireEvent.click(
-      within(screen.getByRole('group', { name: HOGAR_SCOPE })).getByLabelText(
-        name
-      )
-    )
+  // The dialog's "Recordar para todas las de …" box.
+  const REMEMBER = /^Recordar para todas las de/
+  const remember = () =>
+    fireEvent.click(screen.getByRole('checkbox', { name: REMEMBER }))
+  const rememberBox = () => screen.queryByRole('checkbox', { name: REMEMBER })
   const categoryScope = (name: RegExp | string) =>
     fireEvent.click(
       within(
@@ -961,12 +967,20 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     })
   }
   const on = (d: string) => house(d).getAttribute('aria-pressed') === 'true'
+  // The merchant remembered as Sí through the dialog, as the user does it.
+  async function rememberAsYes(from = D1) {
+    await openEdit(from)
+    remember()
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+    await waitFor(() => expect(repo.householdRules.size).toBe(1))
+  }
 
-  it('Todas las similares + Sí turns every look-alike household and says how many', async () => {
+  it('Recordar + Sí turns every look-alike household and says how many', async () => {
     seed(devotos())
     await openEdit(D1)
 
-    scope(/^Todas las similares/)
+    remember()
     fireEvent.click(screen.getByLabelText('Sí'))
     await save()
 
@@ -977,82 +991,245 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     expect(await screen.findByText('Se aplicó a 3 transacciones')).toBeVisible()
   })
 
-  it('an exception made afterwards with Solo esta leaves the other rows alone', async () => {
+  it('a covered row opens checked on the rule; switching to No turns the whole merchant off', async () => {
     seed(devotos())
-    await openEdit(D1)
-    scope(/^Todas las similares/)
-    fireEvent.click(screen.getByLabelText('Sí'))
-    await save()
-    await waitFor(() => expect(on(D2)).toBe(true))
-
-    await openEdit(D1)
-    expect(screen.getByLabelText('Según comercio (Sí)')).toBeChecked()
-    fireEvent.click(screen.getByLabelText('No'))
-    await save()
-
-    await waitFor(() => expect(on(D1)).toBe(false))
-    expect(on(D2)).toBe(true)
-    expect(on(D3)).toBe(true)
-    expect(repo.row(D1)?.household).toBe(false)
-  })
-
-  it('Según categoría with Todas las similares removes the rule', async () => {
-    seed(devotos())
-    await openEdit(D1)
-    scope(/^Todas las similares/)
-    fireEvent.click(screen.getByLabelText('Sí'))
-    await save()
+    await rememberAsYes()
     await waitFor(() => expect(on(D3)).toBe(true))
 
     await openEdit(D2)
-    scope(/^Todas las similares/)
-    // Under a rule scope the radio starts at the rule.
+    expect(rememberBox()).toBeChecked()
     expect(screen.getByLabelText('Sí')).toBeChecked()
-    fireEvent.click(screen.getByLabelText('Según categoría (No)'))
+    expect(screen.queryByLabelText(/^Según/)).toBeNull()
+    fireEvent.click(screen.getByLabelText('No'))
     await save()
 
     await waitFor(() => expect(on(D3)).toBe(false))
-    expect(repo.householdRules.size).toBe(0)
     expect(on(D1) || on(D2)).toBe(false)
+    expect(repo.householdRules.size).toBe(1)
   })
 
-  it('"Esta y las que importes" keeps the past rows and a later row follows the rule', async () => {
+  it('unchecking deletes the rule: the others go back to their category, this row keeps what it showed', async () => {
     seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+
     await openEdit(D1)
-    scope('Esta y las que importes en el futuro')
-    fireEvent.click(screen.getByLabelText('Sí'))
+    remember()
     await save()
 
-    await waitFor(() => expect(on(D1)).toBe(true))
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+    expect(on(D1)).toBe(true)
+    expect(repo.row(D1)?.household).toBe(true)
     expect(on(D2) || on(D3)).toBe(false)
-    expect(repo.row(D2)?.household).toBe(false)
-    // One row changed what it shows: the pinned past rows look the same.
-    expect(await screen.findByText('Cambios guardados')).toBeVisible()
-    expect(screen.queryByText(/Se aplicó a/)).toBeNull()
-    // A row imported later: it reads the rule.
-    await act(async () => {
-      transactionStore
-        .getState()
-        .setTransactions([
-          ...transactionStore.getState().transactions,
-          tx('DEVOTO 20/03/2026', { category: 'restaurants' }),
-        ])
-    })
-    expect(on('DEVOTO 20/03/2026')).toBe(true)
   })
 
-  it('"Esta y las que importes" pins an uncategorized look-alike to No', async () => {
-    seed([...devotos(), tx('DEVOTO 14/03/2026', { category: 'uncategorized' })])
+  it('unchecking on a row whose category gives the same value leaves it following its category', async () => {
+    seed([tx(D1), tx(D2), tx(D3)])
+    await rememberAsYes()
+
     await openEdit(D1)
-    scope('Esta y las que importes en el futuro')
+    remember()
+    await save()
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+    expect(repo.row(D1)?.household ?? null).toBeNull()
+    expect(on(D1)).toBe(true)
+  })
+
+  it('unchecking compares with the category picked in the same save', async () => {
+    seed(devotos())
+    await rememberAsYes()
+
+    await openEdit(D1)
+    remember()
+    await pickCategory(/Alimentación/)
+    await save()
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+    expect(repo.row(D1)?.category).toBe('groceries')
+    expect(repo.row(D1)?.household ?? null).toBeNull()
+    expect(on(D1)).toBe(true)
+  })
+
+  it("unchecking keeps other rows' own choices", async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D2)).toBe(true))
+    await act(async () => {
+      fireEvent.click(house(D2))
+    })
+    await waitFor(() => expect(on(D2)).toBe(false))
+
+    await openEdit(D1)
+    remember()
+    await save()
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+    expect(repo.row(D2)?.household).toBe(false)
+    expect(on(D2)).toBe(false)
+  })
+
+  it('a house-click exception opens unchecked on its own choice with "Según comercio"', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D2)).toBe(true))
+    await act(async () => {
+      fireEvent.click(house(D2))
+    })
+    await waitFor(() => expect(on(D2)).toBe(false))
+
+    await openEdit(D2)
+
+    expect(rememberBox()).not.toBeChecked()
+    expect(screen.getByLabelText('No')).toBeChecked()
+    expect(screen.getByLabelText('Según comercio (Sí)')).toBeInTheDocument()
+    await save()
+    expect(repo.householdRules.size).toBe(1)
+  })
+
+  it('a failed rule delete after the row saved says so and offers Reintentar; the retry removes the rule', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+    repo.failOn('deleteHouseholdRule', { error: new Error('boom'), times: 1 })
+
+    await openEdit(D1)
+    remember()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    })
+
+    expect(
+      await screen.findByText(/pero no se pudo quitar la regla — reintentar/)
+    ).toBeVisible()
+    // The row saved and the rule stayed: the dialog closes, one retry route.
+    expect(repo.householdRules.size).toBe(1)
+    expect(repo.row(D1)?.household).toBe(true)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+    })
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+    expect(repo.row(D1)?.household).toBe(true)
+  })
+
+  it('rename + uncheck with a failed delete: the edit saved, the dialog closes, and the message says what stayed, with Reintentar', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+    repo.failOn('deleteHouseholdRule', { error: new Error('boom'), times: 1 })
+
+    await openEdit(D1)
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto centro' },
+    })
+    remember()
+    await save()
+
+    expect(
+      await screen.findByText(
+        'Se guardaron los cambios. Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla — reintentar'
+      )
+    ).toBeVisible()
+    expect(repo.householdRules.size).toBe(1)
+    expect(on('Devoto centro')).toBe(true)
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+    })
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+  })
+
+  it('unchecking says the rule is gone and how many rows go back, and Deshacer puts it back', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+
+    await openEdit(D1)
+    remember()
+    await save()
+
+    expect(await screen.findByText(`Ya no se recuerda ${D1}`)).toBeVisible()
+    expect(
+      screen.getByText('2 transacciones vuelven a su categoría')
+    ).toBeVisible()
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+    })
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(1))
+    expect(on(D2) && on(D3)).toBe(true)
+    // The row keeps the choice the forget wrote.
+    expect(repo.row(D1)?.household).toBe(true)
+  })
+
+  it('Deshacer does not overwrite a rule saved for the merchant meanwhile', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+
+    await openEdit(D1)
+    remember()
+    await save()
+    const undo = await screen.findByRole('button', { name: 'Deshacer' })
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+    // A newer rule for the same merchant lands before the click.
+    act(() =>
+      putMerchantHouseholdRule(merchantOverrideKey(D1) as string, false)
+    )
+    await act(async () => {
+      fireEvent.click(undo)
+    })
+
+    expect(
+      await screen.findByText(`Ya hay otra regla para ${D1}; no se restauró.`)
+    ).toBeVisible()
+    expect(listMerchantHouseholdRules().get(merchantOverrideKey(D1)!)).toBe(
+      false
+    )
+  })
+
+  it('unchecking together with an edit makes one toast', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+
+    await openEdit(D1)
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto centro' },
+    })
+    remember()
+    await save()
+
+    expect(
+      await screen.findByText(`Cambios guardados · ya no se recuerda ${D1}`)
+    ).toBeVisible()
+    expect(screen.getAllByRole('button', { name: 'Deshacer' })).toHaveLength(1)
+  })
+
+  it('re-clicking the value shown on a covered row writes nothing: the exceptions keep their No', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D2)).toBe(true))
+    await act(async () => {
+      fireEvent.click(house(D3))
+    })
+    await waitFor(() => expect(on(D3)).toBe(false))
+    expect(repo.row(D3)?.household).toBe(false)
+
+    await openEdit(D1)
     fireEvent.click(screen.getByLabelText('Sí'))
     await save()
 
-    await waitFor(() => expect(on('DEVOTO 14/03/2026')).toBe(false))
-    expect(repo.row('DEVOTO 14/03/2026')?.household).toBe(false)
+    expect(repo.row(D3)?.household).toBe(false)
+    expect(on(D3)).toBe(false)
+    expect(
+      repo.householdRules.get(repo.householdRules.keys().next().value!)
+        ?.isHousehold
+    ).toBe(true)
   })
 
-  it('a category change with Todas las similares and the radio untouched makes no rule', async () => {
+  it('a category change with the box untouched makes no rule', async () => {
     seed(devotos())
     await openEdit(D1)
 
@@ -1064,11 +1241,11 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     expect(repo.householdRules.size).toBe(0)
   })
 
-  it('a household-only save with Todas leaves categories and confidence alone', async () => {
+  it('a household-only save leaves categories and confidence alone', async () => {
     seed(devotos().map((t) => ({ ...t, categoryConfidence: 0.6 })))
     await openEdit(D1)
 
-    scope(/^Todas las similares/)
+    remember()
     fireEvent.click(screen.getByLabelText('Sí'))
     await save()
 
@@ -1080,21 +1257,21 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     expect(repo.categoryOverrides.size).toBe(0)
   })
 
-  it('under Todas the radio starts at the rule, and offers the category when there is none', async () => {
+  it('checking the box offers the reach as a hint and no "Aplicar “gasto del hogar” a" group', async () => {
     seed(devotos())
     await openEdit(D1)
 
-    scope(/^Todas las similares/)
-
-    expect(screen.getByLabelText('Según categoría (No)')).toBeChecked()
     expect(
-      within(screen.getByRole('group', { name: HOGAR_SCOPE })).getByLabelText(
-        'Todas las similares · se aplica a 3 transacciones (y a las futuras)'
-      )
-    ).toBeChecked()
+      screen.getByText('Se aplica a 3 transacciones y a las que importes')
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('group', { name: 'Aplicar “gasto del hogar” a' })
+    ).toBeNull()
+    remember()
+    expect(screen.getByLabelText('No')).toBeChecked()
   })
 
-  it('without the rule handler, the Hogar choice is the row’s only and a category rule leaves it alone', async () => {
+  it('without the rule handlers, the Hogar choice is the row’s only and a category rule leaves it alone', async () => {
     seed(
       devotos().map((t) => (t.id === D1 ? { ...t, household: true } : t)),
       undefined,
@@ -1102,7 +1279,7 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     )
     await openEdit(D1)
 
-    expect(screen.queryByRole('group', { name: HOGAR_SCOPE })).toBeNull()
+    expect(rememberBox()).toBeNull()
     expect(screen.getByText(/^Gasto del hogar/)).toHaveTextContent(
       'solo esta transacción'
     )
@@ -1123,7 +1300,7 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'Devoto centro' },
     })
-    scope(/^Todas las similares/)
+    remember()
     fireEvent.click(screen.getByLabelText('Sí'))
     await save()
 
@@ -1154,7 +1331,41 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     expect(repo.householdRules.size).toBe(0)
   })
 
-  it('Todas las similares for the category still saves its rule when only the Hogar choice changed', async () => {
+  it('a category for all + remember in one save says how many each reached', async () => {
+    seed(devotos())
+    await openEdit(D1)
+
+    categoryScope(/^Todas las similares/)
+    await pickCategory(/Alimentación/)
+    remember()
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(1))
+    expect(repo.row(D2)?.category).toBe('groceries')
+    expect(
+      await screen.findByText(
+        'Cambios aplicados a 3 transacciones · gasto del hogar en 3'
+      )
+    ).toBeVisible()
+  })
+
+  it('category Solo esta + remember in one save: the category stays on this row, the rule spreads', async () => {
+    seed(devotos())
+    await openEdit(D1)
+
+    await pickCategory(/Alimentación/)
+    remember()
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(1))
+    expect(repo.row(D1)?.category).toBe('groceries')
+    expect(repo.row(D2)?.category).toBe('restaurants')
+    await waitFor(() => expect(on(D2)).toBe(true))
+  })
+
+  it('the category scope still saves its rule when only the Hogar choice changed', async () => {
     seed(devotos())
     await openEdit(D1)
 
@@ -1165,19 +1376,6 @@ describe('household rule from the edit dialog (#251, step 7)', () => {
     await waitFor(() => expect(repo.row(D1)?.household).toBe(true))
     expect(repo.categoryOverrides.size).toBe(1)
     expect(repo.householdRules.size).toBe(0)
-  })
-
-  it('on a covered row, Solo esta offers "Según comercio"', async () => {
-    seed(devotos())
-    await openEdit(D1)
-    scope(/^Todas las similares/)
-    fireEvent.click(screen.getByLabelText('No'))
-    await save()
-    await waitFor(() => expect(repo.householdRules.size).toBe(1))
-
-    await openEdit(D2)
-
-    expect(screen.getByLabelText('Según comercio (No)')).toBeChecked()
   })
 })
 
@@ -1234,7 +1432,7 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
   it('offers nothing when the click only returns to following an existing rule', async () => {
     seed(devotos())
     await act(async () => {
-      await applyHouseholdToSimilar(repo, D1, true, 'matching_past_and_future')
+      await applyHouseholdToSimilar(repo, D1, true)
       await setHousehold(repo, [D1], false)
     })
     expect(on(D1)).toBe(false)

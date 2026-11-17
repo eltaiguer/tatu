@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from './ui/page-header'
-import { toast } from 'sonner'
+import { toast, type ExternalToast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import { Download, X } from 'lucide-react'
@@ -41,10 +41,7 @@ import { TransactionsPagination } from './transactions/TransactionsPagination'
 import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
-import {
-  AFTER_EDIT,
-  useHouseholdWrites,
-} from './transactions/useHouseholdWrites'
+import { useHouseholdWrites } from './transactions/useHouseholdWrites'
 import {
   currentHouseholdRules,
   rowsSharingMerchantRule,
@@ -71,6 +68,7 @@ export function Transactions({
   onUnsplitTransaction,
   onSetHousehold,
   onApplyHouseholdToSimilar,
+  onForgetHouseholdRule,
   onRestoreTransactions,
   onReload,
   repository,
@@ -214,11 +212,12 @@ export function Transactions({
     deleteWithConfirmation,
   })
 
-  const { handleToggleHousehold, writeHousehold, writeHouseholdRule } =
+  const { handleToggleHousehold, canSaveHousehold, saveHouseholdDraft } =
     useHouseholdWrites({
       transactions,
       onSetHousehold,
       onApplyHouseholdToSimilar,
+      onForgetHouseholdRule,
       setPending,
       reportError,
     })
@@ -275,14 +274,11 @@ export function Transactions({
     if (!onUpdateTransaction || !editingTransaction) return
     const editing = editingTransaction
     const editingId = editing.id
-    // The household part is written only when the dialog says the radio holds
-    // something to write (a category edit must not create or delete a rule,
-    // nor wipe a hand-set choice), under every scope.
-    const householdChanged = Boolean(onSetHousehold) && draft.householdTouched
-    // A household-only save must not re-write the category as the user's own
-    // confirmed one (confidence 1): nothing about name, category or tags
-    // changed. Under a rule scope for the name and category the write still
-    // runs: the user asked for that rule.
+    // The household part runs only when the dialog says there is something to
+    // write and the view can write that kind of it. A household-only save
+    // must not re-write the category as the user's own (confidence 1): nothing
+    // about name, category or tags changed (a name/category scope still runs).
+    const householdChanged = canSaveHousehold(draft.household)
     const unchanged =
       draft.description === getDisplayDescription(editing) &&
       draft.category === ((editing.category ?? '').trim() || null) &&
@@ -308,43 +304,25 @@ export function Transactions({
       setPending(editingId, false)
       return
     }
-    // The choice is this row's own, written after the edit it came with. One
-    // outcome is reported: the success only once everything saved, or one
-    // error that says what did.
+    // Written after the edit it came with; one outcome is reported.
+    let toastOptions: ExternalToast | undefined
     if (householdChanged) {
-      const failure = message
-        ? AFTER_EDIT
-        : 'No se pudo guardar el gasto del hogar'
-      let saved: boolean
-      // Under an apply-to-similar household scope the choice is the
-      // merchant's rule.
-      if (draft.householdScope !== 'single' && onApplyHouseholdToSimilar) {
-        const applied = await writeHouseholdRule(
-          editingId,
-          draft.household,
-          draft.householdScope,
-          failure
-        )
-        saved = applied !== null
-        if (applied !== null && !message) {
-          message =
-            applied > 1
-              ? `Se aplicó a ${applied} transacciones`
-              : 'Cambios guardados'
-        } else if (applied !== null && applied > 1) {
-          message = `${message} · gasto del hogar en ${applied}`
-        }
-      } else {
-        saved = await writeHousehold(editingId, draft.household, failure)
-      }
-      if (!saved && !message) {
+      const outcome = await saveHouseholdDraft(
+        editingId,
+        draft.household,
+        // The merchant the box named, not the name being typed.
+        getDisplayDescription(editing),
+        message
+      )
+      if (!outcome.saved && !message && !outcome.rowSaved) {
         // Nothing saved at all: keep the dialog open to try again.
         setPending(editingId, false)
         return
       }
-      if (!saved) message = null
+      message = outcome.message
+      toastOptions = outcome.options
     }
-    if (message) toast.success(message)
+    if (message) toast.success(message, toastOptions)
     setEditingTransaction(null)
     setPending(editingId, false)
   }
@@ -563,7 +541,9 @@ export function Transactions({
         countHouseholdSimilar={countHouseholdSimilar}
         knownTags={tagSuggestions}
         canSetHousehold={Boolean(onSetHousehold)}
-        canSetHouseholdRule={Boolean(onApplyHouseholdToSimilar)}
+        canSetHouseholdRule={Boolean(
+          onApplyHouseholdToSimilar && onForgetHouseholdRule
+        )}
         isSaving={
           editingTransaction !== null &&
           pendingTransactionIds.has(editingTransaction.id)

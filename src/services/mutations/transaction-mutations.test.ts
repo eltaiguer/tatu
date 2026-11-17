@@ -42,6 +42,8 @@ vi.mock('../ai/correction-context', () => ({
 
 import {
   applyHouseholdToSimilar,
+  forgetHouseholdRule,
+  RuleDeleteFailedError,
   applyPatternToPast,
   autoCategorize,
   bulkCategorize,
@@ -76,6 +78,8 @@ import {
 import {
   clearHouseholdRules,
   listMerchantHouseholdRules,
+  loadHouseholdRules,
+  putMerchantHouseholdRule,
 } from '../household/household-rules-store'
 import { currentHouseholdRules, resolveHousehold } from '../household/household'
 import { getDisplayDescription } from '../../utils/transaction-display'
@@ -1699,266 +1703,315 @@ describe('transaction-mutations — household rule for similar rows (#251)', () 
     expect(merchantOverrideKey(devoto('d9').description)).toBe(KEY)
   })
 
-  describe("'matching_past_and_future'", () => {
-    it('saves the rule on both sides and clears the own choice of every similar row', async () => {
-      const repo = signedIn(rows())
+  it('saves the rule on both sides and clears the own choice of every similar row', async () => {
+    const repo = signedIn(rows())
 
-      const result = await applyHouseholdToSimilar(
-        repo,
-        'd1',
-        true,
-        'matching_past_and_future'
-      )
+    const result = await applyHouseholdToSimilar(repo, 'd1', true)
 
-      expect(result.affected).toBe(4)
-      expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
-      expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
-      for (const id of ['d1', 'd2', 'd3', 'd4']) {
-        expect(shows(id)).toEqual({ status: 'household', source: 'merchant' })
-        expect(repo.row(id)?.household ?? null).toBeNull()
-      }
-    })
+    expect(result.affected).toBe(4)
+    expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
+    expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
+    for (const id of ['d1', 'd2', 'd3', 'd4']) {
+      expect(shows(id)).toEqual({ status: 'household', source: 'merchant' })
+      expect(repo.row(id)?.household ?? null).toBeNull()
+    }
+  })
 
-    it('never writes a split part or another merchant', async () => {
-      const repo = signedIn(rows())
+  it('never writes a split part or another merchant', async () => {
+    const repo = signedIn(rows())
 
-      await applyHouseholdToSimilar(
-        repo,
-        'd1',
-        true,
-        'matching_past_and_future'
-      )
+    await applyHouseholdToSimilar(repo, 'd1', true)
 
-      expect(shows('part').source).toBe('category')
-      expect(shows('other').source).toBe('category')
-    })
+    expect(shows('part').source).toBe('category')
+    expect(shows('other').source).toBe('category')
+  })
 
-    it('a no rule turns a groceries merchant off', async () => {
-      const repo = signedIn([
-        makeTransaction('g1', { description: 'DISCO 11/03/2026' }),
-        makeTransaction('g2', {
-          description: 'DISCO 12/03/2026',
-          household: true,
-        }),
-      ])
+  it('a no rule turns a groceries merchant off', async () => {
+    const repo = signedIn([
+      makeTransaction('g1', { description: 'DISCO 11/03/2026' }),
+      makeTransaction('g2', {
+        description: 'DISCO 12/03/2026',
+        household: true,
+      }),
+    ])
 
-      await applyHouseholdToSimilar(
-        repo,
-        'g1',
-        false,
-        'matching_past_and_future'
-      )
+    await applyHouseholdToSimilar(repo, 'g1', false)
 
-      expect(shows('g1').status).toBe('not_household')
-      expect(shows('g2')).toEqual({
-        status: 'not_household',
-        source: 'merchant',
-      })
-    })
-
-    it('null deletes the rule and clears the choices: rows go back to their category', async () => {
-      const repo = signedIn(rows(), {
-        householdRules: [
-          {
-            merchantNormalized: KEY,
-            isHousehold: true,
-            createdAt: '',
-            updatedAt: '',
-          },
-        ],
-      })
-      // The store side of a loaded rule.
-      const { loadHouseholdRules } =
-        await import('../household/household-rules-store')
-      loadHouseholdRules([
-        {
-          merchantNormalized: KEY,
-          isHousehold: true,
-          createdAt: '',
-          updatedAt: '',
-        },
-      ])
-
-      await applyHouseholdToSimilar(
-        repo,
-        'd1',
-        null,
-        'matching_past_and_future'
-      )
-
-      expect(repo.householdRules.size).toBe(0)
-      expect(listMerchantHouseholdRules().size).toBe(0)
-      expect(shows('d3')).toEqual({
-        status: 'not_household',
-        source: 'category',
-      })
-      expect(repo.row('d3')?.household ?? null).toBeNull()
-    })
-
-    it('a partial failure keeps the rule and retries only the rows that failed', async () => {
-      const repo = signedIn(rows())
-      repo.failOn('update', {
-        when: (chunk) => chunk.includes('d2'),
-        times: 1,
-        error: new Error('429 too many requests'),
-      })
-
-      const error = await applyHouseholdToSimilar(
-        repo,
-        'd1',
-        true,
-        'matching_past_and_future'
-      ).catch((e: unknown) => e)
-
-      expect(error).toBeInstanceOf(PartialWriteError)
-      expect((error as PartialWriteError).message).toMatch(
-        /Se guardó la regla, pero se actualizaron \d de \d transacciones/
-      )
-      expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
-      await (error as PartialWriteError).retry!()
-      expect(repo.row('d2')?.household ?? null).toBeNull()
-      expect(repo.row('d3')?.household ?? null).toBeNull()
-    })
-
-    it('drops its local changes when another user signed in mid-write', async () => {
-      const repo = signedIn(rows())
-      const gate = repo.hold('upsertHouseholdRule')
-      const pending = applyHouseholdToSimilar(
-        repo,
-        'd1',
-        true,
-        'matching_past_and_future'
-      ).catch((e: unknown) => e)
-      await Promise.resolve()
-
-      workspaceStore.setState({ userId: 'user-b', status: 'ready' })
-      gate.release()
-      const error = await pending
-
-      expect(error).toBeInstanceOf(UserFacingError)
-      expect(listMerchantHouseholdRules().size).toBe(0)
-      expect(stored('d2')?.household).toBe(false)
-    })
-
-    it('a row imported afterwards follows the rule', async () => {
-      const repo = signedIn(rows())
-      await applyHouseholdToSimilar(
-        repo,
-        'd1',
-        true,
-        'matching_past_and_future'
-      )
-
-      const later = devoto('d9')
-      transactionStore.getState().setTransactions([...storedAll(), later])
-
-      expect(shows('d9')).toEqual({ status: 'household', source: 'merchant' })
+    expect(shows('g1').status).toBe('not_household')
+    expect(shows('g2')).toEqual({
+      status: 'not_household',
+      source: 'merchant',
     })
   })
 
-  describe("'future_matching_only'", () => {
-    it('keeps what past rows show: pins them, keeps own choices, the edited row follows the rule', async () => {
-      const repo = signedIn([
-        ...rows(),
-        devoto('d5', { category: 'uncategorized' }),
-      ])
-
-      const result = await applyHouseholdToSimilar(
-        repo,
-        'd1',
-        true,
-        'future_matching_only'
-      )
-
-      // Only the edited row's shown value changed; the past rows (d4, and the
-      // uncategorized look-alike d5) are pinned to No, so they look the same.
-      expect(result.affected).toBe(1)
-      expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
-      // d1: the edited row follows the rule.
-      expect(shows('d1')).toEqual({ status: 'household', source: 'merchant' })
-      // d4 showed "no" (its category): pinned to keep showing it.
-      expect(shows('d4')).toEqual({ status: 'not_household', source: 'row' })
-      expect(repo.row('d4')?.household).toBe(false)
-      // d2 / d3 keep their own choices, untouched.
-      expect(shows('d2')).toEqual({ status: 'not_household', source: 'row' })
-      expect(shows('d3')).toEqual({ status: 'household', source: 'row' })
-      // d5 showed No (Sin categoría): pinned to keep showing it.
-      expect(shows('d5')).toEqual({ status: 'not_household', source: 'row' })
-      expect(repo.row('d5')?.household).toBe(false)
+  it('a partial failure keeps the rule and retries only the rows that failed', async () => {
+    const repo = signedIn(rows())
+    repo.failOn('update', {
+      when: (chunk) => chunk.includes('d2'),
+      times: 1,
+      error: new Error('429 too many requests'),
     })
 
-    it('does not pin a row whose shown value does not change', async () => {
-      const repo = signedIn([
-        makeTransaction('g1', { description: 'DISCO 11/03/2026' }),
-        makeTransaction('g2', { description: 'DISCO 12/03/2026' }),
-      ])
+    const error = await applyHouseholdToSimilar(repo, 'd1', true).catch(
+      (e: unknown) => e
+    )
 
-      // Groceries already show household: a yes rule changes nothing for g2.
-      await applyHouseholdToSimilar(repo, 'g1', true, 'future_matching_only')
+    expect(error).toBeInstanceOf(PartialWriteError)
+    expect((error as PartialWriteError).message).toMatch(
+      /Se guardó la regla, pero se actualizaron \d de \d transacciones/
+    )
+    expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
+    await (error as PartialWriteError).retry!()
+    expect(repo.row('d2')?.household ?? null).toBeNull()
+    expect(repo.row('d3')?.household ?? null).toBeNull()
+  })
 
-      expect(repo.row('g2')?.household ?? null).toBeNull()
-    })
+  it('drops its local changes when another user signed in mid-write', async () => {
+    const repo = signedIn(rows())
+    const gate = repo.hold('upsertHouseholdRule')
+    const pending = applyHouseholdToSimilar(repo, 'd1', true).catch(
+      (e: unknown) => e
+    )
+    await Promise.resolve()
 
-    it('null deletes the rule and pins the rows that showed it', async () => {
-      const repo = signedIn(rows())
-      const { loadHouseholdRules } =
-        await import('../household/household-rules-store')
-      const record = {
-        merchantNormalized: KEY,
-        isHousehold: true,
-        createdAt: '',
-        updatedAt: '',
-      }
-      await repo.upsertHouseholdRule({
-        merchantNormalized: KEY,
-        isHousehold: true,
-      })
-      loadHouseholdRules([record])
-      expect(shows('d4').status).toBe('household')
+    workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+    gate.release()
+    const error = await pending
 
-      await applyHouseholdToSimilar(repo, 'd1', null, 'future_matching_only')
+    expect(error).toBeInstanceOf(UserFacingError)
+    expect(listMerchantHouseholdRules().size).toBe(0)
+    expect(stored('d2')?.household).toBe(false)
+  })
 
-      expect(repo.householdRules.size).toBe(0)
-      expect(shows('d4')).toEqual({ status: 'household', source: 'row' })
-      expect(shows('d1')).toEqual({
-        status: 'not_household',
-        source: 'category',
-      })
-    })
+  it('a row imported afterwards follows the rule', async () => {
+    const repo = signedIn(rows())
+    await applyHouseholdToSimilar(repo, 'd1', true)
 
-    it('a failure while pinning leaves the rule unsaved and the rows as they were', async () => {
-      const repo = signedIn(rows())
-      failChunksWith(repo, 'update', 'd4')
+    const later = devoto('d9')
+    transactionStore.getState().setTransactions([...storedAll(), later])
 
-      const error = await applyHouseholdToSimilar(
-        repo,
-        'd1',
-        true,
-        'future_matching_only'
-      ).catch((e: unknown) => e)
-
-      expect(error).toBeDefined()
-      expect(repo.householdRules.size).toBe(0)
-      expect(shows('d4')).toEqual({
-        status: 'not_household',
-        source: 'category',
-      })
-    })
+    expect(shows('d9')).toEqual({ status: 'household', source: 'merchant' })
   })
 
   it('without a merchant key it writes only the row and no rule', async () => {
     const repo = signedIn([makeTransaction('n1', { description: '' })])
 
-    const result = await applyHouseholdToSimilar(
-      repo,
-      'n1',
-      true,
-      'matching_past_and_future'
-    )
+    const result = await applyHouseholdToSimilar(repo, 'n1', true)
 
     expect(result.affected).toBe(1)
     expect(repo.householdRules.size).toBe(0)
     expect(repo.row('n1')?.household).toBe(true)
+  })
+})
+
+describe('transaction-mutations — forgetHouseholdRule (#263)', () => {
+  const KEY = merchantOverrideKey('DEVOTO') as string
+  const devoto = (id: string, overrides: Partial<Transaction> = {}) =>
+    makeTransaction(id, {
+      description: `DEVOTO ${10 + (id.charCodeAt(id.length - 1) % 18)}/03/2026`,
+      category: 'restaurants',
+      ...overrides,
+    })
+  // d1 is the edited row; d2 has its own "no"; d3 its own "yes"; d4 none.
+  const rows = () => [
+    devoto('d1'),
+    devoto('d2', { household: false }),
+    devoto('d3', { household: true }),
+    devoto('d4'),
+  ]
+  const record = {
+    merchantNormalized: KEY,
+    isHousehold: true,
+    createdAt: '',
+    updatedAt: '',
+  }
+  // A merchant rule "Sí" on both sides, as a loaded workspace has it.
+  const withRule = (list: Transaction[] = rows()) => {
+    const repo = signedIn(list, { householdRules: [record] })
+    loadHouseholdRules([record])
+    return repo
+  }
+  const shows = (id: string) =>
+    resolveHousehold(stored(id)!, currentHouseholdRules())
+
+  it('deletes the rule on both sides; rows that followed it go back to their category', async () => {
+    const repo = withRule()
+    expect(shows('d4')).toEqual({ status: 'household', source: 'merchant' })
+
+    await forgetHouseholdRule(repo, 'd1', true)
+
+    expect(repo.householdRules.size).toBe(0)
+    expect(listMerchantHouseholdRules().size).toBe(0)
+    expect(shows('d4')).toEqual({ status: 'not_household', source: 'category' })
+  })
+
+  it('the row keeps the value it showed as its own choice', async () => {
+    const repo = withRule()
+
+    await forgetHouseholdRule(repo, 'd1', true)
+
+    expect(shows('d1')).toEqual({ status: 'household', source: 'row' })
+    expect(repo.row('d1')?.household).toBe(true)
+  })
+
+  it("stores no own choice when the row's category already gives that value", async () => {
+    const repo = withRule([
+      makeTransaction('g1', { description: 'DEVOTO 11/03/2026' }),
+    ])
+
+    await forgetHouseholdRule(repo, 'g1', true)
+
+    expect(repo.row('g1')?.household ?? null).toBeNull()
+    expect(stored('g1')?.household ?? null).toBeNull()
+    expect(repo.householdRules.size).toBe(0)
+  })
+
+  it('null lets the row follow its category', async () => {
+    const repo = withRule(rows().map((tx) => ({ ...tx, household: undefined })))
+
+    await forgetHouseholdRule(repo, 'd1', null)
+
+    expect(repo.row('d1')?.household ?? null).toBeNull()
+    expect(shows('d1')).toEqual({ status: 'not_household', source: 'category' })
+  })
+
+  it("keeps the other rows' own choices", async () => {
+    const repo = withRule()
+
+    await forgetHouseholdRule(repo, 'd1', true)
+
+    expect(shows('d2')).toEqual({ status: 'not_household', source: 'row' })
+    expect(shows('d3')).toEqual({ status: 'household', source: 'row' })
+    expect(repo.row('d2')?.household).toBe(false)
+    expect(repo.row('d3')?.household).toBe(true)
+  })
+
+  it('compares with the category the row has now, after a category edit', async () => {
+    const repo = withRule()
+    await editTransaction(repo, 'd1', {
+      category: 'groceries',
+      applyScope: 'single',
+    })
+
+    await forgetHouseholdRule(repo, 'd1', true)
+
+    // Groceries is a household category: Sí is already what it follows.
+    expect(repo.row('d1')?.household ?? null).toBeNull()
+    expect(shows('d1')).toEqual({ status: 'household', source: 'category' })
+  })
+
+  it('writes the row before deleting the rule: a failed delete keeps the rule, the row shows the same, and the error says so with a retry', async () => {
+    const repo = withRule()
+    repo.failOn('deleteHouseholdRule', {
+      times: 1,
+      error: new Error('429 too many requests'),
+    })
+
+    const error = await forgetHouseholdRule(repo, 'd1', true).catch(
+      (e: unknown) => e
+    )
+
+    expect(error).toBeInstanceOf(RuleDeleteFailedError)
+    expect((error as RuleDeleteFailedError).kept).toBe(true)
+    expect((error as Error).message).toMatch(/no se pudo quitar la regla/)
+    expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
+    expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
+    expect(shows('d1').status).toBe('household')
+
+    // The error's retry replays the whole forget.
+    await (error as RuleDeleteFailedError).retry!()
+    expect(repo.householdRules.size).toBe(0)
+    expect(listMerchantHouseholdRules().size).toBe(0)
+    expect(repo.row('d1')?.household).toBe(true)
+  })
+
+  it('says how many other rows the rule decided, and can put the rule back', async () => {
+    const repo = withRule()
+
+    const { reached, undo } = await forgetHouseholdRule(repo, 'd1', true)
+
+    // d4 followed the rule; d2 / d3 have their own choice, d1 is this row.
+    expect(reached).toBe(1)
+    expect(repo.householdRules.size).toBe(0)
+    await undo!()
+    expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
+    expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
+    // The row keeps the choice the forget wrote.
+    expect(repo.row('d1')?.household).toBe(true)
+  })
+
+  it('undo restores nothing when the merchant got another rule meanwhile', async () => {
+    const repo = withRule()
+    const { undo } = await forgetHouseholdRule(repo, 'd1', true)
+    // A newer rule (e.g. "Aplicar a las N similares" No from a house click).
+    await repo.upsertHouseholdRule({
+      merchantNormalized: KEY,
+      isHousehold: false,
+    })
+    putMerchantHouseholdRule(KEY, false)
+
+    const restored = await undo!()
+
+    expect(restored).toBe(false)
+    expect(repo.householdRules.get(KEY)?.isHousehold).toBe(false)
+    expect(listMerchantHouseholdRules().get(KEY)).toBe(false)
+  })
+
+  it('has nothing to undo when no rule was there', async () => {
+    const repo = signedIn(rows())
+
+    const { undo } = await forgetHouseholdRule(repo, 'd1', true)
+
+    expect(undo).toBeNull()
+  })
+
+  it('a failed row write deletes nothing', async () => {
+    const repo = withRule()
+    failChunksWith(repo, 'update', 'd1')
+
+    const error = await forgetHouseholdRule(repo, 'd1', true).catch(
+      (e: unknown) => e
+    )
+
+    expect(error).toBeDefined()
+    expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
+    expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
+  })
+
+  it('without a merchant key it writes only the row', async () => {
+    const repo = signedIn([makeTransaction('n1', { description: '' })])
+
+    await forgetHouseholdRule(repo, 'n1', true)
+
+    expect(repo.row('n1')?.household).toBe(true)
+    expect(repo.householdRules.size).toBe(0)
+  })
+
+  it('drops its local changes when another user signed in mid-write', async () => {
+    const repo = withRule()
+    const gate = repo.hold('deleteHouseholdRule')
+    const pending = forgetHouseholdRule(repo, 'd1', true).catch(
+      (e: unknown) => e
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+    gate.release()
+    const error = await pending
+
+    expect(error).toBeInstanceOf(UserFacingError)
+    expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
+  })
+
+  it('a missing row says so and writes nothing', async () => {
+    const repo = withRule()
+
+    const error = await forgetHouseholdRule(repo, 'gone', true).catch(
+      (e: unknown) => e
+    )
+
+    expect(error).toBeInstanceOf(UserFacingError)
+    expect(repo.householdRules.size).toBe(1)
   })
 })
 

@@ -48,13 +48,9 @@ function save() {
   fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
 }
 
-// The two "apply to" radios: name and category, and the Hogar choice.
+// The "apply to" radio of the name and category (the Hogar choice has none).
 const categoryScope = () =>
   within(screen.getByRole('group', { name: 'Aplicar nombre y categoría a' }))
-const HOGAR_SCOPE = 'Aplicar “gasto del hogar” a'
-const hogarScope = () =>
-  within(screen.getByRole('group', { name: HOGAR_SCOPE }))
-const queryHogarScope = () => screen.queryByRole('group', { name: HOGAR_SCOPE })
 
 describe('EditTransactionDialog', () => {
   const restaurants = resolveCategory('restaurants').label
@@ -93,9 +89,7 @@ describe('EditTransactionDialog', () => {
       category: 'groceries',
       tags: ['super'],
       applyScope: 'single',
-      household: null,
-      householdTouched: false,
-      householdScope: 'single',
+      household: { kind: 'none' },
     })
   })
 
@@ -118,9 +112,7 @@ describe('EditTransactionDialog', () => {
       category: 'restaurants',
       tags: ['super', 'viaje'],
       applyScope: 'matching_past_and_future',
-      household: null,
-      householdTouched: false,
-      householdScope: 'single',
+      household: { kind: 'none' },
     })
   })
 
@@ -397,9 +389,8 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
 
     expect(props.onSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        household: false,
+        household: { kind: 'row', household: false },
         applyScope: 'single',
-        householdScope: 'single',
       })
     )
   })
@@ -415,32 +406,42 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
     save()
 
     expect(props.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ household: null })
+      expect.objectContaining({ household: { kind: 'row', household: null } })
     )
   })
 
-  describe('its own "apply to" (separate from name and category)', () => {
+  describe('the "Recordar para todas las de …" checkbox (ADR-0007)', () => {
     const rule = (value: boolean) =>
       putMerchantHouseholdRule(
         merchantOverrideKey(transaction.description) as string,
         value
       )
+    const box = () =>
+      screen.queryByRole('checkbox', { name: /^Recordar para todas las de/ })
+    const hogar = (written: object) =>
+      expect.objectContaining({ household: written })
+    const pickCategory = (id: string) => {
+      fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+      fireEvent.click(
+        screen.getByRole('button', { name: resolveCategory(id).label })
+      )
+    }
 
     beforeEach(() => clearHouseholdRules())
 
-    it('starts at Solo esta, with the Hogar reach on its options', () => {
+    it('no rule: the box is unchecked, named after the merchant, with the reach as a hint', () => {
       render(<EditTransactionDialog {...baseProps()} />)
 
-      expect(hogarScope().getByLabelText('Solo esta transacción')).toBeChecked()
       expect(
-        hogarScope().getByLabelText(
-          'Todas las similares · se aplica a 3 transacciones (y a las futuras)'
-        )
-      ).toBeInTheDocument()
+        screen.getByRole('checkbox', {
+          name: 'Recordar para todas las de Disco',
+        })
+      ).not.toBeChecked()
       expect(
-        hogarScope().getByLabelText('Esta y las que importes en el futuro')
+        screen.getByText('Se aplica a 3 transacciones y a las que importes')
       ).toBeInTheDocument()
-      // The reach lives on the options, not after the choice's legend.
+      expect(screen.getByLabelText('Según categoría (Sí)')).toBeChecked()
+      // The reach is not on the legend.
       expect(screen.getByText(/^Gasto del hogar/)).not.toHaveTextContent('·')
     })
 
@@ -452,170 +453,373 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       )
 
       expect(
-        hogarScope().getByLabelText(
-          'Todas las similares · solo esta por ahora (y las futuras)'
-        )
+        screen.getByText('Por ahora solo esta, y las que importes')
       ).toBeInTheDocument()
     })
 
-    it('the category scope leaves the Hogar choice for this row only', () => {
+    it('no rule: nothing touched saves no Hogar write', () => {
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it("no rule: a Sí for this row is saved as the row's own choice", () => {
       const props = baseProps()
       render(<EditTransactionDialog {...props} />)
 
       fireEvent.click(screen.getByLabelText('Sí'))
-      fireEvent.click(categoryScope().getByLabelText(/^Todas las similares/))
-
-      expect(screen.getByLabelText('Sí')).toBeChecked()
-      expect(hogarScope().getByLabelText('Solo esta transacción')).toBeChecked()
       save()
+
       expect(props.onSave).toHaveBeenCalledWith(
-        expect.objectContaining({
-          applyScope: 'matching_past_and_future',
-          household: true,
-          householdTouched: true,
-          householdScope: 'single',
-        })
+        hogar({ kind: 'row', household: true })
       )
     })
 
-    it('a Hogar rule leaves the name and category for this row only', () => {
+    it('no rule: checking the box with Sí saves the rule', () => {
       const props = baseProps()
       render(<EditTransactionDialog {...props} />)
 
-      fireEvent.click(hogarScope().getByLabelText(/^Todas las similares/))
+      fireEvent.click(box()!)
       fireEvent.click(screen.getByLabelText('Sí'))
-
-      expect(
-        categoryScope().getByLabelText('Solo esta transacción')
-      ).toBeChecked()
       save()
+
       expect(props.onSave).toHaveBeenCalledWith(
-        expect.objectContaining({
-          applyScope: 'single',
-          household: true,
-          householdTouched: true,
-          householdScope: 'matching_past_and_future',
-        })
+        hogar({ kind: 'rule', household: true })
       )
     })
 
-    it('saves the future-only Hogar scope when chosen', () => {
+    it('no rule: checking the box with No saves a No rule', () => {
       const props = baseProps()
       render(<EditTransactionDialog {...props} />)
 
-      fireEvent.click(
-        hogarScope().getByLabelText('Esta y las que importes en el futuro')
-      )
+      fireEvent.click(box()!)
       fireEvent.click(screen.getByLabelText('No'))
       save()
 
       expect(props.onSave).toHaveBeenCalledWith(
+        hogar({ kind: 'rule', household: false })
+      )
+    })
+
+    it('checking over "Según categoría" preselects what the row shows, hides "Según categoría", and saves that as the rule', () => {
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(box()!)
+
+      expect(box()).toBeChecked()
+      expect(screen.getByLabelText('Sí')).toBeChecked()
+      expect(screen.queryByLabelText(/^Según/)).toBeNull()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(
+        hogar({ kind: 'rule', household: true })
+      )
+    })
+
+    it('the preselect follows the category being picked', () => {
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      pickCategory('restaurants')
+      fireEvent.click(box()!)
+
+      expect(screen.getByLabelText('No')).toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(
         expect.objectContaining({
-          household: false,
-          householdTouched: true,
-          householdScope: 'future_matching_only',
+          category: 'restaurants',
+          household: { kind: 'rule', household: false },
         })
       )
     })
 
-    it('a Sí on screen carries into Todas las similares and is saved as the rule', () => {
-      const props = baseProps({
-        transaction: { ...transaction, household: true },
-      })
+    it('checking then unchecking without a pick writes nothing', () => {
+      const props = baseProps()
       render(<EditTransactionDialog {...props} />)
 
-      fireEvent.click(hogarScope().getByLabelText(/^Todas las similares/))
+      fireEvent.click(box()!)
+      fireEvent.click(box()!)
+
+      expect(screen.getByLabelText('Según categoría (Sí)')).toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it("a pick made while checked stays on screen after unchecking, as the row's own", () => {
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(box()!)
+      fireEvent.click(screen.getByLabelText('No'))
+      fireEvent.click(box()!)
+
+      expect(screen.getByLabelText('No')).toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(
+        hogar({ kind: 'row', household: false })
+      )
+    })
+
+    it('rechecking after picking "Según categoría" preselects what the row shows, not the earlier pick', () => {
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(box()!)
+      fireEvent.click(screen.getByLabelText('No'))
+      fireEvent.click(box()!)
+      fireEvent.click(screen.getByLabelText('Según categoría (Sí)'))
+      fireEvent.click(box()!)
 
       expect(screen.getByLabelText('Sí')).toBeChecked()
       save()
       expect(props.onSave).toHaveBeenCalledWith(
-        expect.objectContaining({
-          household: true,
-          householdTouched: true,
-          householdScope: 'matching_past_and_future',
-        })
+        hogar({ kind: 'rule', household: true })
       )
     })
 
-    it('a Sí picked under Todas stays when going back to Solo esta, as the row’s own', () => {
+    it('a rule covers the row: the box starts checked on the rule\'s value, without "Según categoría"', () => {
+      rule(false)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      expect(box()).toBeChecked()
+      expect(screen.getByLabelText('No')).toBeChecked()
+      expect(screen.queryByLabelText(/^Según/)).toBeNull()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it('a rule covers the row: switching Sí/No saves the rule', () => {
+      rule(false)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText('Sí'))
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(
+        hogar({ kind: 'rule', household: true })
+      )
+    })
+
+    it('a rule covers the row: re-picking the value shown is no change, so it writes nothing', () => {
+      rule(true)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText('Sí'))
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it('uncheck, pick the rule’s own value, recheck: still no change', () => {
+      rule(true)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(box()!)
+      fireEvent.click(screen.getByLabelText('Sí'))
+      fireEvent.click(box()!)
+
+      expect(box()).toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it('a rule-covered row opened in an ignored category and moved to a counted one is still decided by its rule', () => {
+      rule(true)
+      const props = baseProps({
+        transaction: { ...transaction, category: 'internal_transfer' },
+      })
+      render(<EditTransactionDialog {...props} />)
+      expect(box()).toBeNull()
+
+      pickCategory('groceries')
+
+      expect(box()).toBeChecked()
+      expect(screen.getByLabelText('Sí')).toBeChecked()
+      expect(screen.queryByLabelText(/^Según/)).toBeNull()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it('after unchecking a box that started checked, the hint says the rule is dropped on save', () => {
+      rule(true)
+      render(<EditTransactionDialog {...baseProps()} />)
+      expect(
+        screen.getByText('Se aplica a 3 transacciones y a las que importes')
+      ).toBeInTheDocument()
+
+      fireEvent.click(box()!)
+
+      expect(
+        screen.getByText('Al guardar, se deja de recordar')
+      ).toBeInTheDocument()
+      fireEvent.click(box()!)
+      expect(
+        screen.getByText('Se aplica a 3 transacciones y a las que importes')
+      ).toBeInTheDocument()
+    })
+
+    it('a rule covers the row: unchecking forgets the rule and keeps the value on screen', () => {
+      rule(true)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(box()!)
+
+      expect(box()).not.toBeChecked()
+      expect(screen.getByLabelText('Sí')).toBeChecked()
+      // The rule goes with this save: the follow option is the category's.
+      expect(screen.getByLabelText('Según categoría (Sí)')).toBeInTheDocument()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(
+        hogar({ kind: 'forget', household: true })
+      )
+    })
+
+    it('after unchecking, "Según categoría" is offered again and picking it forgets the rule with null', () => {
+      rule(true)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(box()!)
+      fireEvent.click(screen.getByLabelText('Según categoría (Sí)'))
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(
+        hogar({ kind: 'forget', household: null })
+      )
+    })
+
+    it('a switch made while checked is the value kept after unchecking', () => {
+      rule(true)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText('No'))
+      fireEvent.click(box()!)
+
+      expect(screen.getByLabelText('No')).toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(
+        hogar({ kind: 'forget', household: false })
+      )
+    })
+
+    it('unchecking then rechecking without a pick writes nothing', () => {
+      rule(true)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(box()!)
+      fireEvent.click(box()!)
+
+      expect(box()).toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it('a rule written while the dialog is open does not flip the box', () => {
+      const props = baseProps()
+      const { rerender } = render(<EditTransactionDialog {...props} />)
+
+      act(() => rule(true))
+      rerender(<EditTransactionDialog {...props} />)
+
+      expect(box()).not.toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it('a row whose own choice contradicts the rule starts unchecked on its own choice, offering "Según comercio" (the rule is not deleted by leaving it)', () => {
+      rule(true)
       const props = baseProps({
         transaction: { ...transaction, household: false },
       })
       render(<EditTransactionDialog {...props} />)
 
-      fireEvent.click(hogarScope().getByLabelText(/^Todas las similares/))
-      fireEvent.click(screen.getByLabelText('Sí'))
-      fireEvent.click(hogarScope().getByLabelText('Solo esta transacción'))
-
-      expect(screen.getByLabelText('Sí')).toBeChecked()
+      expect(box()).not.toBeChecked()
+      expect(screen.getByLabelText('No')).toBeChecked()
+      expect(screen.getByLabelText('Según comercio (Sí)')).toBeInTheDocument()
       save()
-      expect(props.onSave).toHaveBeenCalledWith(
-        expect.objectContaining({
-          household: true,
-          householdTouched: true,
-          householdScope: 'single',
-        })
-      )
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
     })
 
-    it('"Según comercio" does not carry: under Todas the radio shows the rule, untouched', () => {
+    it('a contradicting row: "Según comercio" saves the row following the rule, and checking makes its own value the rule', () => {
       rule(true)
-      const props = baseProps()
-      render(<EditTransactionDialog {...props} />)
-      expect(screen.getByLabelText('Según comercio (Sí)')).toBeChecked()
+      const props = baseProps({
+        transaction: { ...transaction, household: false },
+      })
+      const { unmount } = render(<EditTransactionDialog {...props} />)
 
-      fireEvent.click(hogarScope().getByLabelText(/^Todas las similares/))
-
-      expect(screen.getByLabelText('Sí')).toBeChecked()
+      fireEvent.click(screen.getByLabelText('Según comercio (Sí)'))
       save()
-      expect(props.onSave).toHaveBeenCalledWith(
-        expect.objectContaining({ householdTouched: false })
+      expect(props.onSave).toHaveBeenLastCalledWith(
+        hogar({ kind: 'row', household: null })
       )
-    })
+      unmount()
 
-    it('choosing the option that is already shown still counts as a pick', () => {
-      rule(true)
-      const props = baseProps()
       render(<EditTransactionDialog {...props} />)
-
-      fireEvent.click(hogarScope().getByLabelText(/^Todas las similares/))
-      expect(screen.getByLabelText('Sí')).toBeChecked()
-      fireEvent.click(screen.getByLabelText('Sí'))
+      fireEvent.click(box()!)
+      expect(screen.getByLabelText('No')).toBeChecked()
       save()
-
-      expect(props.onSave).toHaveBeenCalledWith(
-        expect.objectContaining({ household: true, householdTouched: true })
+      expect(props.onSave).toHaveBeenLastCalledWith(
+        hogar({ kind: 'rule', household: false })
       )
     })
 
-    it('is not offered where no rule can be made', () => {
-      render(
-        <EditTransactionDialog
-          {...baseProps({
-            transaction: { ...transaction, splitParentId: 'parent' },
-          })}
-        />
-      )
+    it('no box for a split part or a row with no merchant key; the legend says "solo esta transacción"', () => {
+      for (const row of [
+        { ...transaction, splitParentId: 'parent' },
+        { ...transaction, description: '' },
+      ]) {
+        const props = baseProps({ transaction: row })
+        const { unmount } = render(<EditTransactionDialog {...props} />)
 
-      expect(queryHogarScope()).toBeNull()
-      expect(screen.getByText(/^Gasto del hogar/)).toHaveTextContent(
-        'solo esta transacción'
-      )
+        expect(box()).toBeNull()
+        expect(screen.getByText(/^Gasto del hogar/)).toHaveTextContent(
+          'solo esta transacción'
+        )
+        fireEvent.click(screen.getByLabelText('Sí'))
+        save()
+        expect(props.onSave).toHaveBeenCalledWith(
+          hogar({ kind: 'row', household: true })
+        )
+        unmount()
+      }
     })
 
-    it('is not offered when the view cannot save a rule', () => {
+    it('no box when the view cannot save rules', () => {
       const props = baseProps({ canSetHouseholdRule: false })
       render(<EditTransactionDialog {...props} />)
 
-      expect(queryHogarScope()).toBeNull()
+      expect(box()).toBeNull()
       expect(screen.getByText(/^Gasto del hogar/)).toHaveTextContent(
         'solo esta transacción'
       )
       fireEvent.click(screen.getByLabelText('Sí'))
       save()
       expect(props.onSave).toHaveBeenCalledWith(
-        expect.objectContaining({ householdScope: 'single' })
+        hogar({ kind: 'row', household: true })
       )
+    })
+
+    it('the box follows the category being picked: hidden on an ignored category, and nothing written', () => {
+      rule(true)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+      expect(box()).toBeChecked()
+
+      pickCategory('internal_transfer')
+
+      expect(box()).toBeNull()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
     })
 
     it('the reach follows the category being picked, not the saved one', () => {
@@ -627,23 +831,58 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
         <EditTransactionDialog {...baseProps({ countHouseholdSimilar })} />
       )
       expect(
-        hogarScope().getByLabelText(
-          'Todas las similares · se aplica a 2 transacciones (y a las futuras)'
-        )
+        screen.getByText('Se aplica a 2 transacciones y a las que importes')
       ).toBeInTheDocument()
 
-      fireEvent.click(screen.getByLabelText('Categoría dropdown'))
-      fireEvent.click(
-        screen.getByRole('button', {
-          name: resolveCategory('restaurants').label,
-        })
-      )
+      pickCategory('restaurants')
 
       expect(
-        hogarScope().getByLabelText(
-          'Todas las similares · se aplica a 5 transacciones (y a las futuras)'
-        )
+        screen.getByText('Se aplica a 5 transacciones y a las que importes')
       ).toBeInTheDocument()
+    })
+
+    it('the category radio is unchanged, and category "Solo esta" + remember come in one draft', () => {
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      expect(
+        categoryScope().getByLabelText('Solo esta transacción')
+      ).toBeChecked()
+      pickCategory('restaurants')
+      fireEvent.click(box()!)
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: 'restaurants',
+          applyScope: 'single',
+          household: { kind: 'rule', household: false },
+        })
+      )
+    })
+
+    it('the category scope leaves the Hogar choice for this row only', () => {
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(screen.getByLabelText('Sí'))
+      fireEvent.click(categoryScope().getByLabelText(/^Todas las similares/))
+      save()
+
+      expect(props.onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applyScope: 'matching_past_and_future',
+          household: { kind: 'row', household: true },
+        })
+      )
+    })
+
+    it('has no "Aplicar “gasto del hogar” a" group', () => {
+      render(<EditTransactionDialog {...baseProps()} />)
+
+      expect(
+        screen.queryByRole('group', { name: 'Aplicar “gasto del hogar” a' })
+      ).toBeNull()
     })
   })
 
@@ -677,10 +916,12 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       expect(
         screen.queryByRole('group', { name: /^Gasto del hogar/ })
       ).toBeNull()
-      expect(queryHogarScope()).toBeNull()
+      expect(
+        screen.queryByRole('checkbox', { name: /^Recordar para todas las de/ })
+      ).toBeNull()
       save()
       expect(props.onSave).toHaveBeenCalledWith(
-        expect.objectContaining({ household: null })
+        expect.objectContaining({ household: { kind: 'none' } })
       )
       unmount()
     }
@@ -704,7 +945,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
     save()
     // The row's own choice is left as it was: nothing to write.
     expect(props.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ household: true })
+      expect.objectContaining({ household: { kind: 'none' } })
     )
   })
 
@@ -724,7 +965,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
     fireEvent.click(screen.getByLabelText('No'))
     save()
     expect(props.onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ household: false })
+      expect.objectContaining({ household: { kind: 'row', household: false } })
     )
   })
 
@@ -732,6 +973,8 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
     render(<EditTransactionDialog {...baseProps({ canSetHousehold: false })} />)
 
     expect(screen.queryByRole('group', { name: /^Gasto del hogar/ })).toBeNull()
-    expect(queryHogarScope()).toBeNull()
+    expect(
+      screen.queryByRole('checkbox', { name: /^Recordar para todas las de/ })
+    ).toBeNull()
   })
 })

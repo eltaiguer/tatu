@@ -117,11 +117,45 @@ export function merchantRule(
   tx: { description?: string; splitParentId?: string },
   merchants: MerchantHousehold
 ): boolean | undefined {
-  if (merchants.size === 0 || tx.splitParentId || !tx.description) {
-    return undefined
-  }
-  const key = householdRuleKey(tx.description)
+  if (merchants.size === 0) return undefined
+  const key = merchantRuleKey(tx)
   return key === null ? undefined : merchants.get(key)
+}
+
+/**
+ * The key of the merchant rule this row can have, or null (a split part, or no
+ * key). The one place that says which rule a row belongs to.
+ */
+export function merchantRuleKey(tx: {
+  description?: string
+  splitParentId?: string
+}): string | null {
+  if (tx.splitParentId || !tx.description) return null
+  return householdRuleKey(tx.description)
+}
+
+/**
+ * Whether the row would show household with no choice of its own and without
+ * its merchant's rule: what its category (or the seeded default) says. What
+ * "forgetting" a rule leaves a row following.
+ */
+export function inheritedWithoutMerchantRule(
+  tx: {
+    category?: string | null
+    description?: string
+    splitParentId?: string
+  },
+  householdRules: HouseholdRules
+): boolean {
+  const key = merchantRuleKey(tx)
+  const merchants = new Map(householdRules.merchants)
+  if (key !== null) merchants.delete(key)
+  return (
+    resolveHousehold(
+      { ...tx, household: null },
+      { ...householdRules, merchants }
+    ).status === 'household'
+  )
 }
 
 /** Whether a merchant rule can cover this row: it has a key and is not a split part. */
@@ -129,11 +163,7 @@ export function canHaveMerchantRule(tx: {
   description?: string
   splitParentId?: string
 }): boolean {
-  return (
-    !tx.splitParentId &&
-    !!tx.description &&
-    householdRuleKey(tx.description) !== null
-  )
+  return merchantRuleKey(tx) !== null
 }
 
 /**
@@ -148,7 +178,7 @@ export function rowsSharingMerchantRule(
   tx: Transaction
 ): Transaction[] {
   if (!isCountedExpense(tx) || tx.splitParentId) return []
-  const key = householdRuleKey(tx.description)
+  const key = merchantRuleKey(tx)
   if (key === null) return []
   return rowsReachedByMerchantKey(all, key)
 }
@@ -164,10 +194,7 @@ export function rowsReachedByMerchantKey(
   key: string
 ): Transaction[] {
   return all.filter(
-    (row) =>
-      isCountedExpense(row) &&
-      !row.splitParentId &&
-      householdRuleKey(row.description) === key
+    (row) => isCountedExpense(row) && merchantRuleKey(row) === key
   )
 }
 
@@ -183,8 +210,8 @@ export function ruleReachCounts(
   const counts = new Map<string, number>()
   for (const row of all) {
     if (row.household != null) continue
-    if (!isCountedExpense(row) || row.splitParentId) continue
-    const key = householdRuleKey(row.description)
+    if (!isCountedExpense(row)) continue
+    const key = merchantRuleKey(row)
     if (key === null) continue
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
@@ -193,34 +220,28 @@ export function ruleReachCounts(
 
 /**
  * The rows a merchant rule would change the shown value of, if it became
- * `household` (null: deleted): `tx` and its similar rows
- * (`rowsSharingMerchantRule`) whose status differs once it is in place.
- * `tx`'s own choice is always cleared (it follows the rule); the others'
- * only when `clearsOwnChoices` (past and future), else they keep it. The one
- * list behind the one-click toast's count, the future-only pins and the
- * count a save reports, so they cannot disagree.
+ * `household`: `tx` and its similar rows (`rowsSharingMerchantRule`) whose
+ * status differs once it is in place. A rule save clears every similar row's
+ * own choice (they follow it), so each is judged without its own. The one
+ * list behind the one-click toast's count.
  */
 export function rowsChangedByRule(
   all: readonly Transaction[],
   tx: Transaction,
-  household: boolean | null,
-  householdRules: HouseholdRules,
-  clearsOwnChoices: boolean
+  household: boolean,
+  householdRules: HouseholdRules
 ): Transaction[] {
-  const key = householdRuleKey(tx.description)
+  const key = merchantRuleKey(tx)
   if (key === null) return []
-  const merchants = new Map(householdRules.merchants)
-  if (household === null) merchants.delete(key)
-  else merchants.set(key, household)
-  const after: HouseholdRules = { ...householdRules, merchants }
-  return rowsSharingMerchantRule(all, tx).filter((row) => {
-    const next =
-      clearsOwnChoices || row.id === tx.id ? { ...row, household: null } : row
-    return (
+  const after: HouseholdRules = {
+    ...householdRules,
+    merchants: new Map(householdRules.merchants).set(key, household),
+  }
+  return rowsSharingMerchantRule(all, tx).filter(
+    (row) =>
       resolveHousehold(row, householdRules).status !==
-      resolveHousehold(next, after).status
-    )
-  })
+      resolveHousehold({ ...row, household: null }, after).status
+  )
 }
 
 /** The effective household default of a category (false for Sin categoría). */

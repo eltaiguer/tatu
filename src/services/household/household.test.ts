@@ -9,6 +9,8 @@ import {
   nextHouseholdChoice,
   householdExpenses,
   resolveHousehold,
+  inheritedWithoutMerchantRule,
+  merchantRuleKey,
   rowsChangedByRule,
   ruleReachCounts,
   rowsReachedByMerchantKey,
@@ -578,6 +580,43 @@ describe('merchant rules', () => {
   })
 })
 
+describe('merchantRuleKey and inheritedWithoutMerchantRule', () => {
+  const KEY = merchantOverrideKey('DEVOTO 1/03/2026') as string
+  const devoto = (overrides = {}) => ({
+    ...expense({ category: Category.Restaurants }),
+    description: 'DEVOTO 11/03/2026',
+    ...overrides,
+  })
+
+  it('the key is the merchant key, null for a split part or no description', () => {
+    expect(merchantRuleKey(devoto())).toBe(KEY)
+    expect(merchantRuleKey(devoto({ splitParentId: 'p' }))).toBeNull()
+    expect(merchantRuleKey(devoto({ description: '' }))).toBeNull()
+  })
+
+  it("what a row follows without its merchant's rule is its category's answer", () => {
+    const withRule = householdRulesOf({ merchants: [[KEY, true]] })
+
+    // The rule says Sí; Restaurantes says No.
+    expect(inheritedWithoutMerchantRule(devoto(), withRule)).toBe(false)
+    expect(
+      inheritedWithoutMerchantRule(
+        devoto({ category: Category.Groceries }),
+        householdRulesOf({ merchants: [[KEY, false]] })
+      )
+    ).toBe(true)
+  })
+
+  it("ignores the row's own choice", () => {
+    expect(
+      inheritedWithoutMerchantRule(
+        devoto({ household: true }),
+        householdRulesOf()
+      )
+    ).toBe(false)
+  })
+})
+
 describe('rowsChangedByRule', () => {
   const at = (id: string, day: number, overrides = {}) =>
     ({
@@ -595,8 +634,8 @@ describe('rowsChangedByRule', () => {
   const all = [target, plain, own, loose, expense({ description: 'OTRO' })]
   const ids = (rows: Transaction[]) => rows.map((r) => r.id)
 
-  it('clearing own choices: every similar row whose shown value changes', () => {
-    expect(ids(rowsChangedByRule(all, target, true, none, true))).toEqual([
+  it('every similar row whose shown value changes, own choices cleared', () => {
+    expect(ids(rowsChangedByRule(all, target, true, none))).toEqual([
       't',
       'p',
       'o',
@@ -604,25 +643,8 @@ describe('rowsChangedByRule', () => {
     ])
   })
 
-  it('keeping own choices: those keep what they show, the rest follow the rule', () => {
-    // The target's own choice is cleared in both; "o" keeps its own No.
-    expect(ids(rowsChangedByRule(all, target, true, none, false))).toEqual([
-      't',
-      'p',
-      'u',
-    ])
-  })
-
-  it('leaves out rows that already show the value, and deleting a rule reverts', () => {
+  it('leaves out rows that already show the value', () => {
     const withRule = householdRulesOf({ merchants: [[KEY, true]] })
-    expect(ids(rowsChangedByRule(all, target, true, withRule, true))).toEqual([
-      'o',
-    ])
-    // Rule Sí deleted: "p" and "u" showed the rule, go back to the category.
-    expect(ids(rowsChangedByRule(all, target, null, withRule, false))).toEqual([
-      't',
-      'p',
-      'u',
-    ])
+    expect(ids(rowsChangedByRule(all, target, true, withRule))).toEqual(['o'])
   })
 })

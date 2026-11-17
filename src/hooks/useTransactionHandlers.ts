@@ -12,12 +12,12 @@ import {
   deleteTransactions,
   editTransaction,
   applyHouseholdToSimilar,
+  forgetHouseholdRule,
   restoreDeleted,
   setHousehold,
   splitTransaction,
   unsplitTransaction,
   type DeleteResult,
-  type RuleScope,
   type SplitPart,
   type TransactionEdit,
 } from '../services/mutations/transaction-mutations'
@@ -109,12 +109,12 @@ export function useTransactionHandlers({
         setHousehold(repo, transactionIds, household)
     ),
     handleApplyHouseholdToSimilar: run(
-      (
-        repo,
-        transactionId: string,
-        household: boolean | null,
-        scope: RuleScope
-      ) => applyHouseholdToSimilar(repo, transactionId, household, scope)
+      (repo, transactionId: string, household: boolean) =>
+        applyHouseholdToSimilar(repo, transactionId, household)
+    ),
+    handleForgetHouseholdRule: run(
+      (repo, transactionId: string, shown: boolean | null) =>
+        forgetHouseholdRule(repo, transactionId, shown)
     ),
     handleAutoCategorizeTransactions: run((repo, transactionIds: string[]) =>
       autoCategorize(repo, transactionIds)

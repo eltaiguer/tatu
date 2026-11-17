@@ -12,6 +12,7 @@
 //   is checked: if another user signed in meanwhile, nothing lands in their
 //   store and a WorkspaceChangedError is thrown instead.
 import type { Transaction } from '../../models'
+import type { HouseholdRuleRecord } from '../supabase/household-rules'
 import { transactionStore } from '../../stores/transaction-store'
 import { isWorkspaceOwner } from '../../stores/workspace-state'
 import {
@@ -57,14 +58,16 @@ import { categorizeImportedTransactions } from '../categorizer/import-categoriza
 import { listCustomCategories } from '../categories/category-store'
 import {
   currentHouseholdRules,
-  resolveHousehold,
-  rowsChangedByRule,
+  inheritedWithoutMerchantRule,
+  merchantRuleKey,
+  rowsReachedByMerchantKey,
   rowsSharingMerchantRule,
 } from '../household/household'
 import {
-  deleteMerchantHouseholdRule,
+  deleteHouseholdRuleWithSync,
   listMerchantHouseholdRules,
   putMerchantHouseholdRule,
+  restoreHouseholdRuleWithSync,
 } from '../household/household-rules-store'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
@@ -513,9 +516,6 @@ export type ApplyScope =
   | 'single'
   | 'matching_past_and_future'
   | 'future_matching_only'
-
-/** The scopes that make a rule: everything but one row. */
-export type RuleScope = Exclude<ApplyScope, 'single'>
 
 export interface TransactionEdit {
   displayDescription?: string
@@ -1031,18 +1031,12 @@ export async function setHousehold(
 }
 
 /**
- * Remembers the Hogar choice for a merchant (a rule, `household` true / false;
- * null deletes it) and applies it to the rows that share the merchant, split
- * parts and other merchants left alone. Rows are never stamped by the rule:
- * they read it when resolved, so rows imported later follow it too.
- *
- * - 'matching_past_and_future': saves the rule, then clears the own choice of
- *   every similar row that has one, so all of them follow the rule.
- * - 'future_matching_only': every other similar row without a choice of its
- *   own whose shown value the rule would change gets that value written as
- *   its own choice first (it keeps what it shows today), then the rule, then
- *   the edited row's own choice is cleared. Pins go first, so a failure part-way leaves every
- *   row showing what it showed.
+ * Remembers the Hogar choice for a merchant (a rule, `household` true / false)
+ * and applies it to the rows that share the merchant, split parts and other
+ * merchants left alone: saves the rule, then clears the own choice of every
+ * similar row that has one, so all of them follow it. Rows are never stamped
+ * by the rule: they read it when resolved, so rows imported later follow it
+ * too. Deleting a rule is `forgetHouseholdRule`.
  *
  * A row with no merchant key (or a split part) gets no rule: only that row is
  * written, as `setHousehold` does.
@@ -1050,8 +1044,7 @@ export async function setHousehold(
 export async function applyHouseholdToSimilar(
   repo: Repository,
   transactionId: string,
-  household: boolean | null,
-  scope: RuleScope
+  household: boolean
 ): Promise<{ affected: number }> {
   assertOwner(repo)
   const all = store().transactions
@@ -1065,85 +1058,128 @@ export async function applyHouseholdToSimilar(
     await setHousehold(repo, [transactionId], household)
     return { affected: 1 }
   }
-  const retryAll = () =>
-    applyHouseholdToSimilar(repo, transactionId, household, scope)
-  const hasOwnChoice = (tx: Transaction) => typeof tx.household === 'boolean'
 
-  // Rows whose shown value the rule changes; computed before anything is
-  // written, from the rows as this save's category edit left them.
-  const changed = rowsChangedByRule(
-    all,
-    target,
-    household,
-    currentHouseholdRules(),
-    scope === 'matching_past_and_future'
-  )
-
-  const pins = new Map<string, TransactionPatch>()
-  if (scope === 'future_matching_only') {
-    const rules = currentHouseholdRules()
-    for (const tx of changed) {
-      if (tx.id === transactionId) continue
-      const was = resolveHousehold(tx, rules).status
-      pins.set(tx.id, { household: was === 'household' })
-    }
-    if (pins.size > 0) {
-      const outcome = await writePatches(repo, pins)
-      settle(outcome, { message: updatedMessage, retry: retryAll })
-    }
-  }
-
-  await writeHouseholdRule(repo, key, target.description, household)
+  await saveHouseholdRule(repo, key, target.description, household)
 
   const clears = new Map<string, TransactionPatch>()
   for (const tx of similar) {
-    const reached =
-      scope === 'matching_past_and_future' || tx.id === transactionId
-    if (reached && hasOwnChoice(tx)) clears.set(tx.id, { household: null })
+    if (typeof tx.household === 'boolean')
+      clears.set(tx.id, { household: null })
   }
   if (clears.size > 0) {
     const outcome = await writePatches(repo, clears)
     settle(outcome, {
-      message:
-        scope === 'matching_past_and_future'
-          ? (done, total) =>
-              `Se guardó la regla, pero se actualizaron ${done} de ${total} transacciones`
-          : () =>
-              'Se guardó la regla, pero no se pudo actualizar la transacción',
+      message: (done, total) =>
+        `Se guardó la regla, pero se actualizaron ${done} de ${total} transacciones`,
       retry: (failed) => retryPatches(repo, clears, failed),
       alwaysPartial: true,
     })
   }
-  // Past and future reaches every similar row; future-only only the rows
-  // whose shown value changed (the pinned past rows look the same).
-  return {
-    affected:
-      scope === 'matching_past_and_future'
-        ? similar.length
-        : changed.length - pins.size,
-  }
+  return { affected: similar.length }
 }
 
-/** Saves (or, for null, deletes) a merchant's rule, then mirrors it locally. */
-async function writeHouseholdRule(
+/** Saves a merchant's rule, then mirrors it locally. */
+async function saveHouseholdRule(
   repo: Repository,
   key: string,
   description: string,
-  household: boolean | null
+  household: boolean
 ): Promise<void> {
-  if (listMerchantHouseholdRules().get(key) === (household ?? undefined)) return
-  if (household === null) {
-    await repo.deleteHouseholdRule(key)
-  } else {
-    await repo.upsertHouseholdRule({
-      merchantNormalized: key,
-      merchantOriginal: description,
-      isHousehold: household,
-    })
-  }
+  if (listMerchantHouseholdRules().get(key) === household) return
+  await repo.upsertHouseholdRule({
+    merchantNormalized: key,
+    merchantOriginal: description,
+    isHousehold: household,
+  })
   assertOwner(repo)
-  if (household === null) deleteMerchantHouseholdRule(key)
-  else putMerchantHouseholdRule(key, household, description)
+  putMerchantHouseholdRule(key, household, description)
+}
+
+/**
+ * The forget's rule delete failed after the row was written: the row shows
+ * what the dialog showed (`kept`) and the rule is still there. `retry` replays
+ * the whole forget (idempotent).
+ */
+export class RuleDeleteFailedError extends PartialWriteError {
+  constructor(
+    readonly kept: boolean | null,
+    retry: () => Promise<unknown>,
+    cause: unknown
+  ) {
+    super(
+      'Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla',
+      1,
+      2,
+      retry,
+      undefined,
+      cause
+    )
+    this.name = 'RuleDeleteFailedError'
+  }
+}
+
+export interface ForgetResult {
+  // Other rows the rule decided (no choice of their own): they go back to
+  // their category.
+  reached: number
+  // Puts the rule back (the row keeps its own choice); resolves false, and
+  // restores nothing, when the merchant got another rule meanwhile. null when
+  // there was no rule to delete.
+  undo: (() => Promise<boolean>) | null
+}
+
+/**
+ * The edit dialog's unchecked "Recordar para todas las de …": this row keeps
+ * `shown` as its own choice (null when that is what it shows without the rule,
+ * i.e. its category's answer), then the merchant's rule is deleted. Other rows
+ * keep their own choices; rows that followed the rule go back to their
+ * category. The row is written first, so a failed delete leaves it showing
+ * what the dialog showed (a `RuleDeleteFailedError` whose retry replays the
+ * whole thing, idempotent).
+ *
+ * Read after the category edit of the same save, so "its category" is the one
+ * the row has now.
+ */
+export async function forgetHouseholdRule(
+  repo: Repository,
+  transactionId: string,
+  shown: boolean | null
+): Promise<ForgetResult> {
+  assertOwner(repo)
+  const row = store().transactions.find((tx) => tx.id === transactionId)
+  if (!row) throw MISSING_TRANSACTION
+  const key = merchantRuleKey(row)
+  if (!key) {
+    await setHousehold(repo, [transactionId], shown)
+    return { reached: 0, undo: null }
+  }
+  const reached = rowsReachedByMerchantKey(store().transactions, key).filter(
+    (tx) => tx.id !== transactionId && tx.household == null
+  ).length
+  const inherited = inheritedWithoutMerchantRule(row, currentHouseholdRules())
+  const keep = shown === null || shown === inherited ? null : shown
+  await setHousehold(repo, [transactionId], keep)
+  let removed: HouseholdRuleRecord | undefined
+  try {
+    removed = await deleteHouseholdRuleWithSync(repo, key)
+  } catch (error) {
+    assertOwner(repo)
+    throw new RuleDeleteFailedError(
+      keep,
+      () => forgetHouseholdRule(repo, transactionId, shown),
+      error
+    )
+  }
+  return {
+    reached,
+    undo: removed
+      ? async () => {
+          if (listMerchantHouseholdRules().has(key)) return false
+          await restoreHouseholdRuleWithSync(repo, removed)
+          return true
+        }
+      : null,
+  }
 }
 
 /**

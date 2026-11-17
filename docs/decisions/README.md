@@ -15,7 +15,7 @@ stays readable. For how the system works today, see
 | [0004](0004-sentry-error-reporting.md)             | Report client errors to Sentry, scrubbed in the browser               | Proposed                                                                                                            | 2026-10-04 |
 | [0005](0005-household-flag.md)                     | Household expenses as a yes/no flag beside the category               | Proposed. Partially superseded by [0006](0006-separate-household-scope.md), [0007](0007-simplify-household-flag.md) | 2026-11-08 |
 | [0006](0006-separate-household-scope.md)           | A separate "apply to" for the household choice in the edit dialog     | Proposed. Partially superseded by [0007](0007-simplify-household-flag.md)                                           | 2026-11-15 |
-| [0007](0007-simplify-household-flag.md)            | Simplify the household flag to Hogar / No and one "remember" checkbox | Proposed                                                                                                            | 2026-11-16 |
+| [0007](0007-simplify-household-flag.md)            | Simplify the household flag to Hogar / No and one "remember" checkbox | Accepted                                                                                                            | 2026-11-16 |
 
 ADR-0002 replaced 0001's per-period navigation, per-period cache key and
 `deltaVsPriorPeriod`. ADR-0001's client-side BYO-key pattern, its model choice

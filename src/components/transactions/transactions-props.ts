@@ -1,8 +1,8 @@
 import type { Transaction } from '../../models'
+import type { ForgetResult } from '../../services/mutations/transaction-mutations'
 import type { Repository } from '../../services/repository/repository'
 import type { UrlFilterState } from '../../services/filters/url-filters'
 import type { DeleteResult } from './useMutationFeedback'
-import type { RuleScope } from '../../services/mutations/transaction-mutations'
 
 // The Transacciones view's public props.
 interface BaseTransactionsProps {
@@ -49,14 +49,20 @@ interface BaseTransactionsProps {
     transactionIds: string[],
     household: boolean | null
   ) => Promise<{ updated: number }>
-  // Saves (true / false) or removes (null) the merchant's household rule and
+  // Saves (true / false) the merchant's household rule and
   // applies it to the similar rows (applyHouseholdToSimilar). Without it the
   // edit dialog only offers the row's own choice.
   onApplyHouseholdToSimilar?: (
     transactionId: string,
-    household: boolean | null,
-    scope: RuleScope
+    household: boolean
   ) => Promise<{ affected: number }>
+  // Deletes the merchant's household rule and keeps `shown` as this row's own
+  // choice (null: it follows its category; forgetHouseholdRule). Without it
+  // the edit dialog does not offer "Recordar para todas las de …".
+  onForgetHouseholdRule?: (
+    transactionId: string,
+    shown: boolean | null
+  ) => Promise<ForgetResult>
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void
   // The signed-in user's repository: a category created inline saves there.
