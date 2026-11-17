@@ -257,7 +257,7 @@ export function TransactionFilters({
         {/* Type filter */}
         <SegmentedToggle
           options={[
-            { value: 'all' as const, label: 'Todos' },
+            { value: 'all' as const, label: 'Ambos' },
             { value: 'credit' as const, label: 'Ingresos' },
             { value: 'debit' as const, label: 'Gastos' },
           ]}
@@ -283,7 +283,7 @@ export function TransactionFilters({
           />
           <SegmentedToggle
             options={[
-              { value: 'all' as const, label: 'Todos' },
+              { value: 'all' as const, label: 'Todo' },
               { value: 'household' as const, label: 'Hogar' },
             ]}
             value={household}
@@ -302,7 +302,7 @@ export function TransactionFilters({
         {/* Currency filter */}
         <SegmentedToggle
           options={[
-            { value: 'all' as const, label: 'Todo' },
+            { value: 'all' as const, label: 'Ambas' },
             { value: 'UYU' as const, label: '$U' },
             { value: 'USD' as const, label: 'US$' },
           ]}

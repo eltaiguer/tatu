@@ -184,6 +184,18 @@ describe('Insights: Todo / Hogar mode', () => {
     ).not.toBeChecked()
   })
 
+  it('labels the Todo / Hogar toggle "Ver:" on Insights', async () => {
+    render(<Harness transactions={rows()} />)
+    await screen.findByRole('button', { name: /Generar/ })
+    const group = screen.getByRole('radiogroup', { name: 'Ver gastos' })
+    const label = screen.getByText('Ver:')
+
+    expect(
+      label.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(label.parentElement?.querySelector('svg')).toBeNull()
+  })
+
   it('sends Claude only the household figures in Hogar, with the household prompt', async () => {
     const client = modeClient()
     render(<Harness transactions={rows()} claudeClient={client} />)

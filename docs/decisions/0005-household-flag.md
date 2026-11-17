@@ -5,7 +5,8 @@
 Proposed. Partially superseded by
 [0006](0006-separate-household-scope.md): the edit dialog's single "Aplicar a"
 for category and Hogar (the Hogar choice now has its own); and by
-[0007](0007-simplify-household-flag.md): the unassigned value ("Sin definir").
+[0007](0007-simplify-household-flag.md): the unassigned value ("Sin definir")
+and the house's look and the Hogar copy (see 0007's consequences, #265).
 
 ## Date
 

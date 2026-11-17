@@ -4,6 +4,7 @@ import { Category } from '../../models'
 import type { CategoryDefinition } from '../../services/categories/category-registry'
 import { normalizeCategoryId } from '../../services/categories/category-aliases'
 import type { CategorySpendingDatum } from '../../services/charts/chart-data'
+import { householdValueLabel } from '../../services/household/household-copy'
 import { formatCurrency } from '../../utils/formatting'
 
 // A defined category, or an orphan: a category whose definition was deleted
@@ -127,12 +128,12 @@ export function CategoryCard({
             }}
             aria-disabled={householdSaving || undefined}
             aria-pressed={household}
-            aria-label={`Gasto del hogar: ${cat.label}`}
-            title={household ? 'Gasto del hogar' : 'No es gasto del hogar'}
+            aria-label={`Hogar: ${cat.label}`}
+            title={householdValueLabel(household)}
             className={`grid cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--brand)] aria-disabled:cursor-default aria-disabled:opacity-50 ${
               household
                 ? 'text-[color:var(--brand-text)]'
-                : 'text-[var(--text-faint)]'
+                : 'text-[color:var(--text-muted)]'
             }`}
           >
             <House

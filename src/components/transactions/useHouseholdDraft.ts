@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react'
 import type { Transaction } from '../../models'
+import {
+  followOptionLabel,
+  householdLine,
+} from '../../services/household/household-copy'
+import { useHouseholdRules } from '../../hooks/useHouseholdRules'
 import { getDisplayDescription } from '../../utils/transaction-display'
 import {
   isCategoryHousehold,
@@ -61,6 +66,10 @@ export function useHouseholdDraft({
   // copied into state) so the label follows the category picker above and a
   // default changed in Categorías.
   const householdRules = currentHouseholdRules()
+  // Subscribed, for the saved line only: a rule saved while the dialog is
+  // open (a toast action on a similar row) updates it. `startedRemembered`
+  // stays frozen at open.
+  const liveRules = useHouseholdRules()
   // Judged on the category being picked, not the saved one: an ignored
   // category has no house, and an ignored row given a counted one gets it.
   const showHousehold =
@@ -69,9 +78,10 @@ export function useHouseholdDraft({
       { ...transaction, category: category.trim() || undefined },
       householdRules
     ) !== null
-  const categoryDefaultLabel = isCategoryHousehold(category, householdRules)
-    ? 'Sí'
-    : 'No'
+  const categoryDefaultIsHousehold = isCategoryHousehold(
+    category,
+    householdRules
+  )
   // A rule can be made only for a counted expense (judged on the category
   // being picked) that is not a split part and has a merchant key, and only
   // when the view can save one. Elsewhere the box is not offered, and the
@@ -129,8 +139,8 @@ export function useHouseholdDraft({
   // save; a box that started checked deletes it when unchecked.
   const followLabel =
     merchantRule !== undefined && !startedRemembered
-      ? `Según comercio (${merchantRule ? 'Sí' : 'No'})`
-      : `Según categoría (${categoryDefaultLabel})`
+      ? followOptionLabel('comercio', merchantRule)
+      : followOptionLabel('categoría', categoryDefaultIsHousehold)
   const pickHousehold = (choice: HouseholdChoice) =>
     remembered
       ? setRulePick(choice === 'category' ? null : choice)
@@ -166,8 +176,17 @@ export function useHouseholdDraft({
     return { kind: 'row', household: householdOf(ownPick) }
   }
 
+  // What the saved row is now and why: not the draft, so it never moves
+  // while the user edits. Nothing to say when the saved row is not a counted
+  // expense (the group shows only because of the category being picked).
+  const savedView = rowHouseholdView(transaction, liveRules)
+  const savedLine = savedView
+    ? `Ahora: ${householdLine(transaction.category, savedView)}`
+    : undefined
+
   return {
     show: showHousehold,
+    savedLine,
     canMakeRule,
     remembered,
     remember,

@@ -4,6 +4,7 @@ import { Trash } from 'lucide-react'
 import { Section } from '../ui/section'
 import type { Transaction } from '../../models'
 import { useHouseholdRuleRecords } from '../../hooks/useHouseholdRules'
+import { householdValueLabel } from '../../services/household/household-copy'
 import { ruleReachCounts } from '../../services/household/household'
 import {
   deleteHouseholdRuleWithSync,
@@ -122,7 +123,7 @@ export function HouseholdRulesSection({
                       {name}
                     </span>
                     <span className="text-[12px] whitespace-nowrap text-[var(--text-muted)]">
-                      {rule.isHousehold ? 'Hogar: Sí' : 'Hogar: No'}
+                      {householdValueLabel(rule.isHousehold)}
                     </span>
                     <span className="text-[12px] whitespace-nowrap text-[var(--text-muted)]">
                       {count} {count === 1 ? 'transacción' : 'transacciones'}

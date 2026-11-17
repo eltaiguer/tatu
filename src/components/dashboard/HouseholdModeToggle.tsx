@@ -1,7 +1,6 @@
 // Resumen's Todo / Hogar switch: every figure below is either all counted
 // expenses or only the household ones (ADR-0005). The mode lives in the URL.
 
-import { House } from 'lucide-react'
 import { SegmentedToggle } from '../ui/segmented-toggle'
 
 const OPTIONS = [
@@ -18,11 +17,15 @@ export function HouseholdModeToggle({
 }) {
   return (
     <div className="inline-flex items-center gap-[6px]">
-      <House
-        size={14}
+      {/* The group keeps its name "Ver gastos" (it contains the visible
+          "Ver", WCAG 2.5.3); aria-hidden stops a double reading. Keep this
+          text and the group's aria-label in sync. */}
+      <span
         aria-hidden="true"
-        className="shrink-0 text-[var(--text-muted)]"
-      />
+        className="shrink-0 text-[12px] text-[var(--text-muted)] select-none"
+      >
+        Ver:
+      </span>
       <SegmentedToggle
         options={OPTIONS}
         value={householdMode ? 'household' : 'all'}

@@ -189,9 +189,7 @@ export function Categories({
           : f
       )
       toast.success(
-        next
-          ? `${label}: ahora es gasto del hogar`
-          : `${label}: ya no es gasto del hogar`
+        next ? `${label}: ahora es del hogar` : `${label}: ya no es del hogar`
       )
     } catch (error) {
       toast.error(userErrorMessage(error, 'No se pudo guardar el cambio'))
@@ -290,8 +288,8 @@ export function Categories({
       {/* Category grid: tiles straight on the page, no wrapping card */}
       <Section title="Tus categorías">
         <p className="text-[13px] text-[var(--text-faint)]">
-          La casita marca los gastos del hogar. Podés cambiarlo en cada
-          transacción.
+          El ícono de la casa marca las categorías del hogar; podés cambiarlo en
+          cada transacción.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
           {categoryCards.map((cat) => (

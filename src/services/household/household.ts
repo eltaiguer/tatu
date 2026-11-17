@@ -200,7 +200,7 @@ export function rowsReachedByMerchantKey(
 
 /**
  * Per merchant key, how many rows the rule actually decides: the rows
- * `rowsReachedByMerchantKey` finds that have no Hogar choice of their own
+ * `rowsReachedByMerchantKey` finds without a choice of their own
  * (a row's choice outranks the rule, so the rule neither covers nor, on
  * delete, changes them). One pass over `all` for any number of rules.
  */

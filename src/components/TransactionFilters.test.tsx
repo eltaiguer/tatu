@@ -256,21 +256,38 @@ describe('TransactionFilters', () => {
     })
   })
 
+  describe('the first option of each group (#265)', () => {
+    it('reads Ambos for the type, Todo for Hogar and Ambas for the currency', () => {
+      renderFilters()
+      const first = (group: string) =>
+        within(screen.getByRole('radiogroup', { name: group }))
+          .getAllByRole('radio')
+          .map((r) => r.getAttribute('aria-label') ?? r.textContent)
+      expect(first('Tipo de transacción')).toEqual([
+        'Ambos',
+        'Ingresos',
+        'Gastos',
+      ])
+      expect(first('Hogar')).toEqual(['Todo', 'Hogar'])
+      expect(first('Moneda')).toEqual(['Ambas', '$U', 'US$'])
+    })
+  })
+
   describe('Hogar', () => {
-    it('is a group of Todos / Hogar that sets the filter', () => {
+    it('is a group of Todo / Hogar that sets the filter', () => {
       const props = renderFilters()
       const group = screen.getByRole('radiogroup', { name: 'Hogar' })
       expect(
         within(group)
           .getAllByRole('radio')
           .map((r) => r.getAttribute('aria-label') ?? r.textContent)
-      ).toEqual(['Todos', 'Hogar'])
+      ).toEqual(['Todo', 'Hogar'])
 
       fireEvent.click(segment('Hogar', 'Hogar'))
       expect(props.onChange).toHaveBeenCalledWith({ household: 'household' })
     })
 
-    it('puts the type back to Todos when income would leave nothing', () => {
+    it('puts the type back to Ambos when income would leave nothing', () => {
       const props = renderFilters({ type: 'credit' })
       fireEvent.click(segment('Hogar', 'Hogar'))
       expect(props.onChange).toHaveBeenCalledWith({
@@ -279,7 +296,7 @@ describe('TransactionFilters', () => {
       })
     })
 
-    it('picking Ingresos while Hogar is on goes back to Todos in Hogar', () => {
+    it('picking Ingresos while Hogar is on goes back to Todo in Hogar', () => {
       const props = renderFilters({ household: 'household' })
       fireEvent.click(segment('Tipo de transacción', 'Ingresos'))
       expect(props.onChange).toHaveBeenCalledWith({
@@ -294,9 +311,9 @@ describe('TransactionFilters', () => {
       expect(props.onChange).toHaveBeenCalledWith({ type: 'debit' })
     })
 
-    it('keeps the type when going back to Todos', () => {
+    it('keeps the type when going back to Todo', () => {
       const props = renderFilters({ type: 'credit', household: 'household' })
-      fireEvent.click(segment('Hogar', 'Todos'))
+      fireEvent.click(segment('Hogar', 'Todo'))
       expect(props.onChange).toHaveBeenCalledWith({ household: 'all' })
     })
 

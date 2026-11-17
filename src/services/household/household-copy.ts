@@ -1,0 +1,36 @@
+import type { HouseholdResolution } from '../../models'
+import { resolveCategory } from '../categories/category-registry'
+
+// THE Spanish copy of a Hogar answer, so every surface says it the same way
+// (CONTEXT.md, "Hogar"). Never hand-build these strings in a component.
+
+/** A value in compact form: "Hogar: Sí" / "Hogar: No". */
+export function householdValueLabel(isHousehold: boolean): string {
+  return isHousehold ? 'Hogar: Sí' : 'Hogar: No'
+}
+
+/**
+ * A row's status line: "Hogar · según Alimentación",
+ * "No es del hogar · elegido a mano", "Hogar · según comercio".
+ */
+export function householdLine(
+  category: string | undefined,
+  view: HouseholdResolution
+): string {
+  const value = view.status === 'household' ? 'Hogar' : 'No es del hogar'
+  const source =
+    view.source === 'row'
+      ? 'elegido a mano'
+      : view.source === 'merchant'
+        ? 'según comercio'
+        : `según ${resolveCategory(category).label}`
+  return `${value} · ${source}`
+}
+
+/** The edit dialog's "follow" option: "Según comercio (Sí)". */
+export function followOptionLabel(
+  source: 'comercio' | 'categoría',
+  isHousehold: boolean
+): string {
+  return `Según ${source} (${isHousehold ? 'Sí' : 'No'})`
+}

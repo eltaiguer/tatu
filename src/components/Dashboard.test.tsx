@@ -667,7 +667,7 @@ describe('Dashboard', () => {
 
     // The month is part of the heading, so the outline reads on its own.
     const hero = screen.getByRole('heading', { name: /Gastaste/ })
-    expect(hero).toHaveTextContent(/todo en dólares\s*Gastaste US\$ 150,00$/)
+    expect(hero).toHaveTextContent(/· en dólares\s*Gastaste US\$ 150,00$/)
   })
 
   it('shows no uncategorized nudge when everything has a category', () => {

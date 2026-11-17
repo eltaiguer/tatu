@@ -64,7 +64,7 @@ export function MonthHero({
             {monthSummary.isCurrentMonth
               ? 'Este mes'
               : capitalize(monthSummary.monthLabel)}{' '}
-            · todo en {curWord}
+            · en {curWord}
           </span>
           <span className="mt-1.5 block font-display text-[34px] leading-[1.15] font-semibold tracking-[-0.02em]">
             {householdMode ? 'Gastos del hogar' : 'Gastaste'}{' '}

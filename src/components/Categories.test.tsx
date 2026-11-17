@@ -478,8 +478,8 @@ describe('Categories', () => {
 
   describe('household checkbox in the category form (#251)', () => {
     const tile = (label: string) =>
-      screen.getByRole('button', { name: `Gasto del hogar: ${label}` })
-    const box = () => screen.getByRole('checkbox', { name: /Gasto del hogar/ })
+      screen.getByRole('button', { name: `Hogar: ${label}` })
+    const box = () => screen.getByRole('checkbox', { name: /^Hogar/ })
     const edit = (label: string) =>
       fireEvent.click(
         screen.getByRole('button', { name: `Editar categoría ${label}` })
@@ -560,7 +560,7 @@ describe('Categories', () => {
           screen.getByRole('checkbox', { name: /Ignorar en totales/ })
         ).toBeInTheDocument()
         expect(
-          screen.queryByRole('checkbox', { name: /Gasto del hogar/ })
+          screen.queryByRole('checkbox', { name: /^Hogar/ })
         ).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
       }
@@ -580,7 +580,7 @@ describe('Categories', () => {
           screen.getByRole('checkbox', { name: /Ignorar en totales/ })
         ).toBeChecked()
         expect(
-          screen.queryByRole('checkbox', { name: /Gasto del hogar/ })
+          screen.queryByRole('checkbox', { name: /^Hogar/ })
         ).not.toBeInTheDocument()
         fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
       }
@@ -595,7 +595,7 @@ describe('Categories', () => {
 
       fireEvent.click(ignore())
       expect(
-        screen.queryByRole('checkbox', { name: /Gasto del hogar/ })
+        screen.queryByRole('checkbox', { name: /^Hogar/ })
       ).not.toBeInTheDocument()
 
       fireEvent.click(ignore())
@@ -761,7 +761,7 @@ describe('Categories', () => {
 
   describe('household toggle on each tile (#251)', () => {
     const toggle = (label: string) =>
-      screen.getByRole('button', { name: `Gasto del hogar: ${label}` })
+      screen.getByRole('button', { name: `Hogar: ${label}` })
 
     function renderWithToasts(transactions: Transaction[] = []) {
       return render(
@@ -779,7 +779,7 @@ describe('Categories', () => {
         within(
           screen.getByRole('region', { name: 'Tus categorías' })
         ).getByText(
-          'La casita marca los gastos del hogar. Podés cambiarlo en cada transacción.'
+          'El ícono de la casa marca las categorías del hogar; podés cambiarlo en cada transacción.'
         )
       ).toBeInTheDocument()
     })
@@ -804,7 +804,7 @@ describe('Categories', () => {
       expect(screen.getByText('Viajes familia')).toBeInTheDocument()
       for (const label of ['Sin categoría', 'Ingresos', 'Viajes familia']) {
         expect(
-          screen.queryByRole('button', { name: `Gasto del hogar: ${label}` })
+          screen.queryByRole('button', { name: `Hogar: ${label}` })
         ).not.toBeInTheDocument()
       }
     })
@@ -820,7 +820,7 @@ describe('Categories', () => {
         'Ahorro',
       ]) {
         expect(
-          screen.queryByRole('button', { name: `Gasto del hogar: ${label}` })
+          screen.queryByRole('button', { name: `Hogar: ${label}` })
         ).not.toBeInTheDocument()
       }
       expect(toggle('Restaurantes')).toBeInTheDocument()
@@ -829,11 +829,16 @@ describe('Categories', () => {
     it('says the state in the tooltip and keeps the name constant', () => {
       render(<Categories repository={repo} transactions={[]} />)
 
-      expect(toggle('Alimentación')).toHaveAttribute('title', 'Gasto del hogar')
-      expect(toggle('Restaurantes')).toHaveAttribute(
-        'title',
-        'No es gasto del hogar'
-      )
+      expect(toggle('Alimentación')).toHaveAttribute('title', 'Hogar: Sí')
+      expect(toggle('Restaurantes')).toHaveAttribute('title', 'Hogar: No')
+    })
+
+    it('looks like the row house: brand when Hogar, muted outline when No (#265)', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+
+      expect(toggle('Alimentación').className).toContain('--brand-text')
+      expect(toggle('Restaurantes').className).toContain('--text-muted')
+      expect(toggle('Restaurantes').className).not.toContain('--text-faint')
     })
 
     it('marks a category as household, saves it, and a second click goes back to the app default', async () => {
@@ -842,7 +847,7 @@ describe('Categories', () => {
       fireEvent.click(toggle('Restaurantes'))
 
       expect(
-        await screen.findByText('Restaurantes: ahora es gasto del hogar')
+        await screen.findByText('Restaurantes: ahora es del hogar')
       ).toBeInTheDocument()
       expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'true')
       expect(repo.customCategories.get('restaurants')?.isHousehold).toBe(true)
@@ -850,7 +855,7 @@ describe('Categories', () => {
       fireEvent.click(toggle('Restaurantes'))
 
       expect(
-        await screen.findByText('Restaurantes: ya no es gasto del hogar')
+        await screen.findByText('Restaurantes: ya no es del hogar')
       ).toBeInTheDocument()
       expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'false')
       expect(
@@ -864,7 +869,7 @@ describe('Categories', () => {
       fireEvent.click(toggle('Alimentación'))
 
       expect(
-        await screen.findByText('Alimentación: ya no es gasto del hogar')
+        await screen.findByText('Alimentación: ya no es del hogar')
       ).toBeInTheDocument()
       expect(toggle('Alimentación')).toHaveAttribute('aria-pressed', 'false')
       expect(repo.customCategories.get('groceries')?.isHousehold).toBe(false)
@@ -925,7 +930,7 @@ describe('Categories', () => {
         )
       )
       expect(
-        screen.queryByText('Restaurantes: ahora es gasto del hogar')
+        screen.queryByText('Restaurantes: ahora es del hogar')
       ).not.toBeInTheDocument()
     })
 

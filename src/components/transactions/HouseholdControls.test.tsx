@@ -107,9 +107,15 @@ function seed(
 // Both the desktop row and the mobile card render; [0] is the row.
 function house(description: string, which = 0) {
   return screen.getAllByRole('button', {
-    name: `Gasto del hogar: ${description}`,
+    name: (name) => name.startsWith(`${description}: `),
   })[which]
 }
+// The house's name says its value (#265):
+// "{description}: Hogar · …" or "{description}: No es del hogar · …".
+const HOGAR = /: Hogar · /
+const NO_ES_DEL_HOGAR = /: No es del hogar · /
+const isHogar = (el: HTMLElement) =>
+  HOGAR.test(el.getAttribute('aria-label') ?? '')
 
 function select(...descriptions: string[]) {
   for (const description of descriptions) {
@@ -143,31 +149,33 @@ describe('house toggle on rows and cards (#251)', () => {
       tx('Misterio', { category: 'uncategorized' }),
     ])
 
-    expect(house('Devoto')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Devoto')).toHaveAccessibleName(HOGAR)
     expect(house('Devoto')).toHaveAttribute(
       'title',
       'Hogar · según Alimentación'
     )
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(house('Cena')).toHaveAttribute(
       'title',
       'No es del hogar · según Restaurantes'
     )
-    expect(house('Misterio')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Misterio')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(house('Misterio')).toHaveAttribute(
       'title',
       'No es del hogar · según Sin categoría'
     )
     for (const none of ['Sueldo', 'Pago tarjeta', 'Madre']) {
       expect(
-        screen.queryByRole('button', { name: `Gasto del hogar: ${none}` })
+        screen.queryByRole('button', {
+          name: (name) => name.startsWith(`${none}: `),
+        })
       ).toBeNull()
     }
     // The split parent is on screen (above its part), and the part has one.
     expect(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Madre' })
     ).not.toHaveLength(0)
-    expect(house('Parte')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Parte')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
   })
 
   it('marks a row by hand, then goes back to the category on the next click', async () => {
@@ -176,14 +184,14 @@ describe('house toggle on rows and cards (#251)', () => {
     await act(async () => {
       fireEvent.click(house('Cena'))
     })
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Cena')).toHaveAccessibleName(HOGAR)
     expect(house('Cena')).toHaveAttribute('title', 'Hogar · elegido a mano')
     expect(repo.row('Cena')?.household).toBe(true)
 
     await act(async () => {
       fireEvent.click(house('Cena'))
     })
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(house('Cena')).toHaveAttribute(
       'title',
       'No es del hogar · según Restaurantes'
@@ -199,7 +207,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(house('Devoto'))
     })
 
-    expect(house('Devoto')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Devoto')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(house('Devoto')).toHaveAttribute(
       'title',
       'No es del hogar · elegido a mano'
@@ -214,7 +222,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(house('Misterio'))
     })
 
-    expect(house('Misterio')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Misterio')).toHaveAccessibleName(HOGAR)
     expect(repo.row('Misterio')?.household).toBe(true)
   })
 
@@ -229,7 +237,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(house('Misterio'))
     })
 
-    expect(house('Misterio')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Misterio')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(repo.row('Misterio')?.household ?? null).toBeNull()
   })
 
@@ -242,7 +250,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(house('Cena'))
     })
 
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
     expect(repo.row('Cena')?.household ?? null).toBeNull()
     expect(
       await screen.findByRole('button', { name: 'Reintentar' })
@@ -252,7 +260,7 @@ describe('house toggle on rows and cards (#251)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
     })
     await waitFor(() => expect(repo.row('Cena')?.household).toBe(true))
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Cena')).toHaveAccessibleName(HOGAR)
     expect(screen.queryByText('Cambios guardados')).toBeNull()
     expect(logged).toHaveBeenCalled()
   })
@@ -266,25 +274,25 @@ describe('house toggle on rows and cards (#251)', () => {
     })
     expect(house('Cena')).toBeDisabled()
     expect(house('Cena', 1)).toBeDisabled()
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
 
     await act(async () => {
       gate.release()
     })
     expect(house('Cena')).toBeEnabled()
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Cena')).toHaveAccessibleName(HOGAR)
   })
 
   it('works the same on the mobile card', async () => {
     seed([tx('Cena', { category: 'restaurants' })])
-    expect(house('Cena', 1)).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena', 1)).toHaveAccessibleName(NO_ES_DEL_HOGAR)
 
     await act(async () => {
       fireEvent.click(house('Cena', 1))
     })
 
-    expect(house('Cena', 1)).toHaveAttribute('aria-pressed', 'true')
-    expect(house('Cena', 0)).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Cena', 1)).toHaveAccessibleName(HOGAR)
+    expect(house('Cena', 0)).toHaveAccessibleName(HOGAR)
     expect(repo.row('Cena')?.household).toBe(true)
   })
 })
@@ -332,7 +340,7 @@ describe('household choice in the edit dialog (#251)', () => {
     await save()
 
     await waitFor(() => expect(repo.row('Cena')?.household ?? null).toBeNull())
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
   })
 
   it('does not write the household choice when it was not touched', async () => {
@@ -380,6 +388,21 @@ describe('bulk Hogar menu (#251)', () => {
     replaceCustomCategories([])
   })
 
+  it('offers "Hogar: Sí", "Hogar: No" and "Según categoría" (#265)', () => {
+    seed([tx('Cena', { category: 'restaurants' })])
+    select('Cena')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hogar' }))
+
+    const options = screen
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+      .filter((t) =>
+        ['Hogar: Sí', 'Hogar: No', 'Según categoría'].includes(t ?? '')
+      )
+    expect(options).toEqual(['Hogar: Sí', 'Hogar: No', 'Según categoría'])
+  })
+
   it('marks the selected expenses and says what it skipped', async () => {
     seed([
       tx('Cena', { category: 'restaurants' }),
@@ -389,7 +412,7 @@ describe('bulk Hogar menu (#251)', () => {
     ])
     select('Cena', 'Taxi', 'Cine', 'Sueldo')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     for (const id of ['Cena', 'Taxi', 'Cine']) {
       expect(repo.row(id)?.household).toBe(true)
@@ -397,7 +420,7 @@ describe('bulk Hogar menu (#251)', () => {
     expect(repo.row('Sueldo')?.household ?? null).toBeNull()
     expect(
       await screen.findByText(
-        '3 marcadas como hogar, 1 no cuenta como gasto, sin cambios'
+        'Hogar: Sí en 3 transacciones, 1 no cuenta como gasto, sin cambios'
       )
     ).toBeInTheDocument()
     // The selection is cleared like after the other bulk actions.
@@ -410,12 +433,12 @@ describe('bulk Hogar menu (#251)', () => {
     seed([tx('Devoto'), tx('Luz', { category: 'utilities' })])
     select('Devoto', 'Luz')
 
-    await choose('Marcar como no hogar')
+    await choose('Hogar: No')
 
     expect(repo.row('Devoto')?.household).toBe(false)
     expect(repo.row('Luz')?.household).toBe(false)
     expect(
-      await screen.findByText('2 marcadas como no hogar')
+      await screen.findByText('Hogar: No en 2 transacciones')
     ).toBeInTheDocument()
   })
 
@@ -431,8 +454,27 @@ describe('bulk Hogar menu (#251)', () => {
     expect(repo.row('Cena')?.household ?? null).toBeNull()
     expect(repo.row('Devoto')?.household ?? null).toBeNull()
     expect(
-      await screen.findByText('2 vuelven a seguir su categoría')
+      await screen.findByText('Elección quitada en 2 transacciones')
     ).toBeInTheDocument()
+  })
+
+  it('says the choice was removed, true for rows a merchant rule covers too', async () => {
+    putMerchantHouseholdRule(
+      merchantOverrideKey('COMPRA DEVOTO 4521') as string,
+      true,
+      'COMPRA DEVOTO 4521'
+    )
+    seed([
+      tx('COMPRA DEVOTO 4521', { category: 'restaurants', household: false }),
+    ])
+    select('COMPRA DEVOTO 4521')
+
+    await choose('Según categoría')
+
+    expect(
+      await screen.findByText('Elección quitada en 1 transacción')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/vuelve/)).toBeNull()
   })
 
   it('counts rows already at the value as done, not skipped', async () => {
@@ -442,9 +484,11 @@ describe('bulk Hogar menu (#251)', () => {
     ])
     select('Devoto', 'Luz')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
-    expect(await screen.findByText('2 marcadas como hogar')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Hogar: Sí en 2 transacciones')
+    ).toBeInTheDocument()
   })
 
   it('uses singular forms', async () => {
@@ -458,7 +502,7 @@ describe('bulk Hogar menu (#251)', () => {
 
     expect(
       await screen.findByText(
-        '1 vuelve a seguir su categoría, 1 no cuenta como gasto, sin cambios'
+        'Elección quitada en 1 transacción, 1 no cuenta como gasto, sin cambios'
       )
     ).toBeInTheDocument()
   })
@@ -467,7 +511,7 @@ describe('bulk Hogar menu (#251)', () => {
     seed([tx('Sueldo', { type: 'credit', category: 'income' })])
     select('Sueldo')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(
       await screen.findByText(
@@ -500,7 +544,7 @@ describe('bulk Hogar menu (#251)', () => {
     )
     select('Cena', 'Taxi')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(
       await screen.findByText('Se actualizaron 1 de 2 — reintentar')
@@ -522,12 +566,12 @@ describe('bulk Hogar menu (#251)', () => {
     screen.getByRole('button', { name: 'Hogar' }).focus()
     await user.keyboard('{Enter}')
     await user.tab()
-    expect(
-      screen.getByRole('button', { name: 'Marcar como hogar' })
-    ).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Hogar: Sí' })).toHaveFocus()
     await user.keyboard('{Enter}')
 
-    expect(await screen.findByText('1 marcada como hogar')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Hogar: Sí en 1 transacción')
+    ).toBeInTheDocument()
     expect(repo.row('Cena')?.household).toBe(true)
   })
 
@@ -537,15 +581,11 @@ describe('bulk Hogar menu (#251)', () => {
     select('Cena')
     const trigger = screen.getByRole('button', { name: 'Hogar' })
     await user.click(trigger)
-    expect(
-      screen.getByRole('button', { name: 'Marcar como no hogar' })
-    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Hogar: No' })).toBeVisible()
 
     await user.keyboard('{Escape}')
 
-    expect(
-      screen.queryByRole('button', { name: 'Marcar como no hogar' })
-    ).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Hogar: No' })).toBeNull()
     expect(trigger).toHaveFocus()
   })
 })
@@ -608,9 +648,7 @@ describe('review round 1 of step 4 (#251)', () => {
     await saveDialog()
 
     expect(
-      await screen.findByText(
-        'Se guardaron los cambios, pero no el gasto del hogar'
-      )
+      await screen.findByText('Se guardaron los cambios, pero no el de Hogar')
     ).toBeInTheDocument()
     expect(screen.queryByText('Cambios guardados')).toBeNull()
     expect(screen.getAllByRole('button', { name: 'Reintentar' })).toHaveLength(
@@ -643,7 +681,7 @@ describe('review round 1 of step 4 (#251)', () => {
     })
 
     expect(repo.row('Cena')?.household ?? null).toBeNull()
-    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Cena')).toHaveAccessibleName(NO_ES_DEL_HOGAR)
   })
 
   it('keeps "Recargar" for an error a retry cannot fix', async () => {
@@ -683,14 +721,10 @@ describe('review round 1 of step 4 (#251)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hogar' }))
 
     expect(screen.queryByRole('button', { name: 'Alimentación' })).toBeNull()
-    expect(
-      screen.getByRole('button', { name: 'Marcar como hogar' })
-    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Hogar: Sí' })).toBeVisible()
     // ...and the other way round.
     fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
-    expect(
-      screen.queryByRole('button', { name: 'Marcar como hogar' })
-    ).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Hogar: Sí' })).toBeNull()
   })
 
   it('does not start a second bulk write while one is saving', async () => {
@@ -699,7 +733,7 @@ describe('review round 1 of step 4 (#251)', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Cena' })[0]
     )
     const gate = repo.hold('update')
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(screen.getByRole('button', { name: 'Hogar' })).toBeDisabled()
 
@@ -717,11 +751,11 @@ describe('review round 1 of step 4 (#251)', () => {
     ])
     select('Cena', 'Madre')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(
       await screen.findByText(
-        '1 marcada como hogar, 1 no cuenta como gasto, sin cambios'
+        'Hogar: Sí en 1 transacción, 1 no cuenta como gasto, sin cambios'
       )
     ).toBeInTheDocument()
   })
@@ -735,11 +769,11 @@ describe('review round 1 of step 4 (#251)', () => {
     ])
     select('Cena', 'Sueldo', 'Madre')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(
       await screen.findByText(
-        '1 marcada como hogar, 2 no cuentan como gasto, sin cambios'
+        'Hogar: Sí en 1 transacción, 2 no cuentan como gasto, sin cambios'
       )
     ).toBeInTheDocument()
   })
@@ -754,7 +788,7 @@ describe('review round 1 of step 4 (#251)', () => {
     const stale = await screen.findByRole('button', { name: 'Reintentar' })
 
     select('Cena')
-    await choose('Marcar como no hogar')
+    await choose('Hogar: No')
     expect(repo.row('Cena')?.household).toBe(false)
 
     await act(async () => {
@@ -787,33 +821,110 @@ describe('review round 1 of step 4 (#251)', () => {
 
     expect(
       await screen.findByText(
-        /Se guardaron los cambios, pero no el gasto del hogar\..*La transacción ya no existe/
+        /Se guardaron los cambios, pero no el de Hogar\..*La transacción ya no existe/
       )
     ).toBeInTheDocument()
     expect(screen.queryByText('Cambios guardados')).toBeNull()
   })
+})
 
-  it('tells a hand-set house from one following its category by more than colour', () => {
+describe('the house shows Hogar or No (#265)', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  it('fills the house in the brand colour for Hogar and outlines it in the muted colour for No, whatever the source', () => {
+    putMerchantHouseholdRule(
+      merchantOverrideKey('COMPRA DEVOTO 4521') as string,
+      true,
+      'COMPRA DEVOTO 4521'
+    )
+    putMerchantHouseholdRule(
+      merchantOverrideKey('CINE 99') as string,
+      false,
+      'CINE 99'
+    )
     seed([
+      tx('COMPRA DEVOTO 4521', { category: 'restaurants' }),
+      tx('CINE 99'),
       tx('Devoto'),
       tx('Cena', { category: 'restaurants' }),
       tx('Luz', { category: 'utilities', household: true }),
       tx('Taxi', { category: 'transport', household: false }),
     ])
 
-    expect(house('Devoto')).toHaveAttribute('data-origin', 'category')
-    expect(house('Cena')).toHaveAttribute('data-origin', 'category')
-    expect(house('Luz')).toHaveAttribute('data-origin', 'hand')
-    expect(house('Taxi')).toHaveAttribute('data-origin', 'hand')
-    // The cue is a mark in the button itself, not just a colour.
-    expect(house('Luz').querySelector('[data-hand-mark]')).not.toBeNull()
-    expect(house('Devoto').querySelector('[data-hand-mark]')).toBeNull()
+    const fill = (d: string) =>
+      house(d).querySelector('svg')?.getAttribute('fill')
+    expect(fill('Devoto')).toBe('currentColor')
+    expect(fill('Luz')).toBe('currentColor')
+    expect(fill('Cena')).toBe('none')
+    expect(fill('Taxi')).toBe('none')
+    // Colour encodes the value only, never the source.
+    const look = (d: string) => [
+      house(d).className,
+      house(d).querySelector('svg')?.getAttribute('fill'),
+    ]
+    // Category, hand and merchant rule: the same look for the same value.
+    expect(look('Devoto')).toEqual(look('Luz'))
+    expect(look('Devoto')).toEqual(look('COMPRA DEVOTO 4521'))
+    expect(look('Cena')).toEqual(look('Taxi'))
+    expect(look('Cena')).toEqual(look('CINE 99'))
+    expect(house('Devoto').className).toContain('--brand-text')
+    expect(house('Cena').className).toContain('--text-muted')
+    expect(document.querySelector('[data-hand-mark]')).toBeNull()
+    expect(document.querySelector('[data-origin]')).toBeNull()
   })
-})
 
-describe('Hogar filter in Transacciones (#251)', () => {
-  beforeEach(() => {
-    replaceCustomCategories([])
+  it('names the house after the row, its value and where it comes from', () => {
+    putMerchantHouseholdRule(
+      merchantOverrideKey('COMPRA DEVOTO 4521') as string,
+      true,
+      'COMPRA DEVOTO 4521'
+    )
+    seed([
+      tx('Devoto'),
+      tx('Cena', { category: 'restaurants' }),
+      tx('Luz', { category: 'utilities', household: true }),
+      tx('Taxi', { category: 'transport', household: false }),
+      tx('Misterio', { category: 'uncategorized' }),
+      tx('Madre', { isSplitParent: true }),
+      tx('Parte', { splitParentId: 'Madre', category: 'restaurants' }),
+      tx('COMPRA DEVOTO 4521', { category: 'restaurants' }),
+    ])
+
+    const names = (d: string) => house(d).getAttribute('aria-label')
+    expect(names('Devoto')).toBe('Devoto: Hogar · según Alimentación')
+    expect(names('Cena')).toBe('Cena: No es del hogar · según Restaurantes')
+    expect(names('Luz')).toBe('Luz: Hogar · elegido a mano')
+    expect(names('Taxi')).toBe('Taxi: No es del hogar · elegido a mano')
+    expect(names('Misterio')).toBe(
+      'Misterio: No es del hogar · según Sin categoría'
+    )
+    expect(names('Parte')).toBe('Parte: No es del hogar · según Restaurantes')
+    expect(names('COMPRA DEVOTO 4521')).toBe(
+      'COMPRA DEVOTO 4521: Hogar · según comercio'
+    )
+    expect(house('Cena')).toHaveAttribute(
+      'title',
+      'No es del hogar · según Restaurantes'
+    )
+  })
+
+  it('the house is a toggle button: pressed for Hogar, with a name that holds value and source', async () => {
+    seed([tx('Cena', { category: 'restaurants' }), tx('Devoto')])
+
+    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Devoto')).toHaveAttribute('aria-pressed', 'true')
+    expect(house('Cena')).toHaveAccessibleName(
+      'Cena: No es del hogar · según Restaurantes'
+    )
+    await act(async () => {
+      fireEvent.click(house('Cena'))
+    })
+    await waitFor(() =>
+      expect(house('Cena')).toHaveAccessibleName('Cena: Hogar · elegido a mano')
+    )
+    expect(house('Cena')).toHaveAttribute('aria-pressed', 'true')
   })
 
   const rows = () => [
@@ -844,17 +955,17 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(urls[urls.length - 1]).toBe('hogar=si&periodo=todo')
   })
 
-  it('the filter offers Todos · Hogar only', () => {
+  it('the filter offers Todo · Hogar only', () => {
     seed(rows())
     const group = screen.getByRole('radiogroup', { name: 'Hogar' })
     expect(
       within(group)
         .getAllByRole('radio')
         .map((r) => r.getAttribute('aria-label') ?? r.textContent)
-    ).toEqual(['Todos', 'Hogar'])
+    ).toEqual(['Todo', 'Hogar'])
   })
 
-  it('picking Hogar while Ingresos is chosen goes back to Todos', () => {
+  it('picking Hogar while Ingresos is chosen goes back to Ambos', () => {
     seed(rows())
     fireEvent.click(
       within(
@@ -867,12 +978,12 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(
       within(
         screen.getByRole('radiogroup', { name: 'Tipo de transacción' })
-      ).getByRole('radio', { name: 'Todos' })
+      ).getByRole('radio', { name: 'Ambos' })
     ).toBeChecked()
     expect(listed('Devoto')).toBe(true)
   })
 
-  it('picking Ingresos while Hogar is on goes back to Todos in Hogar', () => {
+  it('picking Ingresos while Hogar is on goes back to Todo in Hogar', () => {
     seed(rows())
     pick('Hogar')
     fireEvent.click(
@@ -884,13 +995,13 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(
       within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
         'radio',
-        { name: 'Todos' }
+        { name: 'Todo' }
       )
     ).toBeChecked()
     expect(listed('Sueldo')).toBe(true)
   })
 
-  it('Limpiar todo brings Hogar back to Todos', () => {
+  it('Limpiar todo brings Hogar back to Todo', () => {
     seed(rows())
     pick('Hogar')
     fireEvent.click(screen.getByRole('button', { name: 'Limpiar todo' }))
@@ -898,7 +1009,7 @@ describe('Hogar filter in Transacciones (#251)', () => {
     expect(
       within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
         'radio',
-        { name: 'Todos' }
+        { name: 'Todo' }
       )
     ).toBeChecked()
     expect(listed('Cena')).toBe(true)
@@ -966,7 +1077,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
       fireEvent.click(screen.getByRole('button', { name: label }))
     })
   }
-  const on = (d: string) => house(d).getAttribute('aria-pressed') === 'true'
+  const on = (d: string) => isHogar(house(d))
   // The merchant remembered as Sí through the dialog, as the user does it.
   async function rememberAsYes(from = D1) {
     await openEdit(from)
@@ -1128,7 +1239,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
 
     expect(
       await screen.findByText(
-        'Se guardaron los cambios. Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla — reintentar'
+        'Se guardaron los cambios. Se guardó Hogar en esta transacción, pero no se pudo quitar la regla — reintentar'
       )
     ).toBeVisible()
     expect(repo.householdRules.size).toBe(1)
@@ -1280,8 +1391,8 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     await openEdit(D1)
 
     expect(rememberBox()).toBeNull()
-    expect(screen.getByText(/^Gasto del hogar/)).toHaveTextContent(
-      'solo esta transacción'
+    expect(screen.getByRole('group', { name: /^Hogar/ })).toHaveAccessibleName(
+      /solo esta transacción/
     )
     categoryScope(/^Todas las similares/)
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
@@ -1312,7 +1423,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     expect(repo.row(D2)?.category).toBe('restaurants')
     expect(repo.row(D2)?.categoryConfidence).toBe(0.6)
     expect(
-      await screen.findByText('Cambios guardados · gasto del hogar en 3')
+      await screen.findByText('Cambios guardados · Hogar: Sí en 3')
     ).toBeVisible()
   })
 
@@ -1345,7 +1456,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     expect(repo.row(D2)?.category).toBe('groceries')
     expect(
       await screen.findByText(
-        'Cambios aplicados a 3 transacciones · gasto del hogar en 3'
+        'Cambios aplicados a 3 transacciones · Hogar: Sí en 3'
       )
     ).toBeVisible()
   })
@@ -1389,7 +1500,7 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
   const D3 = 'DEVOTO 13/03/2026'
   const devotos = () =>
     [D1, D2, D3].map((d) => tx(d, { category: 'restaurants' }))
-  const on = (d: string) => house(d).getAttribute('aria-pressed') === 'true'
+  const on = (d: string) => isHogar(house(d))
   const offer = (n: number) =>
     screen.queryByRole('button', { name: `Aplicar a las ${n} similares` })
 
@@ -1398,6 +1509,26 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
       fireEvent.click(house(description))
     })
   }
+
+  it('a click that can reach similar rows says "Hogar: Sí en esta transacción" (#265)', async () => {
+    seed(devotos())
+
+    await click(D1)
+
+    expect(
+      await screen.findByText('Hogar: Sí en esta transacción')
+    ).toBeVisible()
+  })
+
+  it('and "Hogar: No en esta transacción" when the click turns it off', async () => {
+    seed(devotos().map((t) => ({ ...t, category: 'groceries' })))
+
+    await click(D1)
+
+    expect(
+      await screen.findByText('Hogar: No en esta transacción')
+    ).toBeVisible()
+  })
 
   it('offers to apply the click to the look-alikes, and the action makes them household by rule', async () => {
     seed(devotos())
@@ -1418,7 +1549,6 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     await waitFor(() => expect(on(D2)).toBe(true), { timeout: 5000 })
     expect(on(D3)).toBe(true)
     expect(house(D2)).toHaveAttribute('title', 'Hogar · según comercio')
-    expect(house(D2).querySelector('[data-hand-mark]')).toBeNull()
     expect(repo.householdRules.size).toBe(1)
     expect(
       await screen.findByText(
@@ -1527,7 +1657,7 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     // The bulk bar does not start a single-row write, so only the row's
     // current choice tells the offer is out of date.
     select(D1)
-    await choose('Marcar como no hogar')
+    await choose('Hogar: No')
     await waitFor(() => expect(repo.row(D1)?.household).toBe(false), {
       timeout: 5000,
     })
