@@ -71,6 +71,7 @@ export function Transactions({
   onUnsplitTransaction,
   onSetHousehold,
   onApplyHouseholdToSimilar,
+  onForgetHouseholdRule,
   onRestoreTransactions,
   onReload,
   repository,
@@ -214,14 +215,19 @@ export function Transactions({
     deleteWithConfirmation,
   })
 
-  const { handleToggleHousehold, writeHousehold, writeHouseholdRule } =
-    useHouseholdWrites({
-      transactions,
-      onSetHousehold,
-      onApplyHouseholdToSimilar,
-      setPending,
-      reportError,
-    })
+  const {
+    handleToggleHousehold,
+    writeHousehold,
+    writeHouseholdRule,
+    forgetHouseholdRule,
+  } = useHouseholdWrites({
+    transactions,
+    onSetHousehold,
+    onApplyHouseholdToSimilar,
+    onForgetHouseholdRule,
+    setPending,
+    reportError,
+  })
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
@@ -275,10 +281,18 @@ export function Transactions({
     if (!onUpdateTransaction || !editingTransaction) return
     const editing = editingTransaction
     const editingId = editing.id
-    // The household part is written only when the dialog says the radio holds
+    // The household part is written only when the dialog says there is
     // something to write (a category edit must not create or delete a rule,
-    // nor wipe a hand-set choice), under every scope.
-    const householdChanged = Boolean(onSetHousehold) && draft.householdTouched
+    // nor wipe a hand-set choice), and the view can write that kind of it.
+    const write = draft.household
+    const householdChanged =
+      write.kind === 'row'
+        ? Boolean(onSetHousehold)
+        : write.kind === 'rule'
+          ? Boolean(onApplyHouseholdToSimilar)
+          : write.kind === 'forget'
+            ? Boolean(onForgetHouseholdRule)
+            : false
     // A household-only save must not re-write the category as the user's own
     // confirmed one (confidence 1): nothing about name, category or tags
     // changed. Under a rule scope for the name and category the write still
@@ -311,18 +325,16 @@ export function Transactions({
     // The choice is this row's own, written after the edit it came with. One
     // outcome is reported: the success only once everything saved, or one
     // error that says what did.
-    if (householdChanged) {
+    if (householdChanged && write.kind !== 'none') {
       const failure = message
         ? AFTER_EDIT
         : 'No se pudo guardar el gasto del hogar'
       let saved: boolean
-      // Under an apply-to-similar household scope the choice is the
-      // merchant's rule.
-      if (draft.householdScope !== 'single' && onApplyHouseholdToSimilar) {
+      if (write.kind === 'rule') {
+        // The checked box: the merchant's rule, applied to the similar rows.
         const applied = await writeHouseholdRule(
           editingId,
-          draft.household,
-          draft.householdScope,
+          write.household,
           failure
         )
         saved = applied !== null
@@ -334,11 +346,15 @@ export function Transactions({
         } else if (applied !== null && applied > 1) {
           message = `${message} · gasto del hogar en ${applied}`
         }
+      } else if (write.kind === 'forget') {
+        // The unchecked box: the row keeps its value, the rule goes.
+        saved = await forgetHouseholdRule(editingId, write.household, failure)
       } else {
-        saved = await writeHousehold(editingId, draft.household, failure)
+        saved = await writeHousehold(editingId, write.household, failure)
       }
       if (!saved && !message) {
-        // Nothing saved at all: keep the dialog open to try again.
+        // Nothing saved at all, or a forget saved only the row (its rule is
+        // still there): keep the dialog open to try again.
         setPending(editingId, false)
         return
       }
@@ -563,7 +579,9 @@ export function Transactions({
         countHouseholdSimilar={countHouseholdSimilar}
         knownTags={tagSuggestions}
         canSetHousehold={Boolean(onSetHousehold)}
-        canSetHouseholdRule={Boolean(onApplyHouseholdToSimilar)}
+        canSetHouseholdRule={Boolean(
+          onApplyHouseholdToSimilar && onForgetHouseholdRule
+        )}
         isSaving={
           editingTransaction !== null &&
           pendingTransactionIds.has(editingTransaction.id)

@@ -7,7 +7,6 @@ import {
   resolveHousehold,
   rowsChangedByRule,
 } from '../../services/household/household'
-import type { RuleScope } from '../../services/mutations/transaction-mutations'
 import { PartialWriteError, UserFacingError } from '../../utils/user-error'
 import type { TransactionsProps } from './transactions-props'
 
@@ -27,12 +26,14 @@ export function useHouseholdWrites({
   transactions,
   onSetHousehold,
   onApplyHouseholdToSimilar,
+  onForgetHouseholdRule,
   setPending,
   reportError,
 }: {
   transactions: Transaction[]
   onSetHousehold: TransactionsProps['onSetHousehold']
   onApplyHouseholdToSimilar: TransactionsProps['onApplyHouseholdToSimilar']
+  onForgetHouseholdRule: TransactionsProps['onForgetHouseholdRule']
   setPending: (transactionId: string, pending: boolean) => void
   reportError: (
     error: unknown,
@@ -154,7 +155,7 @@ export function useHouseholdWrites({
     if (!onApplyHouseholdToSimilar) return
     const seq = startHouseholdWrite(id)
     try {
-      await onApplyHouseholdToSimilar(id, value, 'matching_past_and_future')
+      await onApplyHouseholdToSimilar(id, value)
       toast.success(
         others === 1
           ? 'Se aplicó a la otra similar'
@@ -173,78 +174,104 @@ export function useHouseholdWrites({
     }
   }
 
-  // Writes one row's choice; true when it saved. A failure that saved nothing
-  // offers the same write again, but only if nothing else touched the row
-  // since: no newer write of this view started (the counter) and the saved
-  // row still holds what it did when this one failed (which also covers bulk
-  // writes and the dialog). A newer choice is never overwritten by an old
-  // toast.
-  async function writeHousehold(
+  // Runs one household write of a row, reporting a failure. A failure that
+  // saved nothing offers the same write again (`again`), but only if nothing
+  // else touched the row since: no newer write of this view started (the
+  // counter) and the saved row still holds what it did when this one failed
+  // (which also covers bulk writes and the dialog). A newer choice is never
+  // overwritten by an old toast. Resolves with the write's result, or null
+  // when it failed (reported).
+  async function guardedWrite<T>(
     id: string,
-    household: boolean | null,
-    failure: string
-  ): Promise<boolean> {
-    if (!onSetHousehold) return false
+    failure: string,
+    run: () => Promise<T>,
+    again: () => Promise<unknown>,
+    // What leads an explained error after a saved edit.
+    afterEdit = `${AFTER_EDIT}. `
+  ): Promise<{ value: T } | null> {
     const seq = startHouseholdWrite(id)
     setPending(id, true)
     try {
-      await onSetHousehold([id], household)
-      return true
+      return { value: await run() }
     } catch (error) {
       const heldWhenFailed = rowChoice(id)
       // After a saved edit, say so even when the error brings its own words.
       const prefix =
         failure === AFTER_EDIT && error instanceof UserFacingError
-          ? `${AFTER_EDIT}. `
+          ? afterEdit
           : ''
       reportError(
         guarded(error, id, seq, heldWhenFailed),
         failure,
         prefix,
         () => {
-          if (mayReplay(id, seq, heldWhenFailed)) {
-            void writeHousehold(id, household, failure)
-          }
+          if (mayReplay(id, seq, heldWhenFailed)) void again()
         }
       )
-      return false
-    } finally {
-      setPending(id, false)
-    }
-  }
-
-  // Saves the merchant's household rule from the edit dialog and applies it
-  // to the similar rows; resolves with how many rows it reaches, or null when
-  // it failed (reported). A failure that saved nothing offers the same write
-  // again; a partial one offers to retry just the rest.
-  async function writeHouseholdRule(
-    id: string,
-    household: boolean | null,
-    scope: RuleScope,
-    failure: string
-  ): Promise<number | null> {
-    if (!onApplyHouseholdToSimilar) return null
-    const seq = startHouseholdWrite(id)
-    setPending(id, true)
-    try {
-      const { affected } = await onApplyHouseholdToSimilar(id, household, scope)
-      return affected
-    } catch (error) {
-      const prefix =
-        failure === AFTER_EDIT && error instanceof UserFacingError
-          ? `${AFTER_EDIT}. `
-          : ''
-      const held = rowChoice(id)
-      reportError(guarded(error, id, seq, held), failure, prefix, () => {
-        if (mayReplay(id, seq, held)) {
-          void writeHouseholdRule(id, household, scope, failure)
-        }
-      })
       return null
     } finally {
       setPending(id, false)
     }
   }
 
-  return { handleToggleHousehold, writeHousehold, writeHouseholdRule }
+  // Writes one row's choice; true when it saved.
+  async function writeHousehold(
+    id: string,
+    household: boolean | null,
+    failure: string
+  ): Promise<boolean> {
+    if (!onSetHousehold) return false
+    const done = await guardedWrite(
+      id,
+      failure,
+      () => onSetHousehold([id], household),
+      () => writeHousehold(id, household, failure)
+    )
+    return done !== null
+  }
+
+  // Saves the merchant's household rule from the edit dialog and applies it
+  // to the similar rows; resolves with how many rows it reaches, or null when
+  // it failed (reported). A partial failure offers to retry just the rest.
+  async function writeHouseholdRule(
+    id: string,
+    household: boolean,
+    failure: string
+  ): Promise<number | null> {
+    if (!onApplyHouseholdToSimilar) return null
+    const done = await guardedWrite(
+      id,
+      failure,
+      () => onApplyHouseholdToSimilar(id, household),
+      () => writeHouseholdRule(id, household, failure)
+    )
+    return done ? done.value.affected : null
+  }
+
+  // The edit dialog's unchecked "Recordar…": the row keeps `shown`, then the
+  // merchant's rule is deleted. True when both saved.
+  async function forgetHouseholdRule(
+    id: string,
+    shown: boolean | null,
+    failure: string
+  ): Promise<boolean> {
+    if (!onForgetHouseholdRule) return false
+    const done = await guardedWrite(
+      id,
+      failure,
+      () => onForgetHouseholdRule(id, shown),
+      () => forgetHouseholdRule(id, shown, failure),
+      // Its error already says the row saved but the rule stayed: "no el gasto
+      // del hogar" would contradict it.
+      'Se guardaron los cambios. '
+    )
+    return done !== null
+  }
+
+  return {
+    handleToggleHousehold,
+    writeHousehold,
+    writeHouseholdRule,
+    forgetHouseholdRule,
+  }
 }

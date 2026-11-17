@@ -2,7 +2,6 @@ import type { Transaction } from '../../models'
 import type { Repository } from '../../services/repository/repository'
 import type { UrlFilterState } from '../../services/filters/url-filters'
 import type { DeleteResult } from './useMutationFeedback'
-import type { RuleScope } from '../../services/mutations/transaction-mutations'
 
 // The Transacciones view's public props.
 interface BaseTransactionsProps {
@@ -49,13 +48,12 @@ interface BaseTransactionsProps {
     transactionIds: string[],
     household: boolean | null
   ) => Promise<{ updated: number }>
-  // Saves (true / false) or removes (null) the merchant's household rule and
+  // Saves (true / false) the merchant's household rule and
   // applies it to the similar rows (applyHouseholdToSimilar). Without it the
   // edit dialog only offers the row's own choice.
   onApplyHouseholdToSimilar?: (
     transactionId: string,
-    household: boolean | null,
-    scope: RuleScope
+    household: boolean
   ) => Promise<{ affected: number }>
   // Deletes the merchant's household rule and keeps `shown` as this row's own
   // choice (null: it follows its category; forgetHouseholdRule). Without it

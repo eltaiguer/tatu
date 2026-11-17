@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { RadioGroup } from './ui/radio-group'
+import { Checkbox } from './ui/checkbox'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import {
@@ -29,6 +30,7 @@ import {
   currentHouseholdRules,
   canHaveMerchantRule,
   merchantRule as merchantRuleOf,
+  resolveHousehold,
   rowHouseholdView,
 } from '../services/household/household'
 
@@ -45,6 +47,21 @@ export type ApplyScope =
   | 'matching_past_and_future'
   | 'future_matching_only'
 
+// What the household part of a save writes. The dialog decides the kind, and
+// "untouched" is `none`: a category edit must not create or delete a rule, nor
+// wipe a hand-set choice.
+export type HouseholdWrite =
+  // Nothing household is written.
+  | { kind: 'none' }
+  // This row's own choice (null follows its category); no rule involved.
+  | { kind: 'row'; household: boolean | null }
+  // "Recordar para todas las de …" checked: the merchant's rule, applied to
+  // every similar row.
+  | { kind: 'rule'; household: boolean }
+  // The box started checked and was unchecked: the value on screen for this
+  // row (null follows its category), then the rule is deleted.
+  | { kind: 'forget'; household: boolean | null }
+
 // What the user saved. `description` is trimmed and never empty;
 // `category` is null for "sin categoría", which clears it (on the server
 // too, #119).
@@ -54,19 +71,9 @@ export interface EditTransactionDraft {
   tags: string[]
   // What the name and category reach. The household choice has its own.
   applyScope: ApplyScope
-  // The household choice: this row's own (Solo esta) or, under a rule scope
-  // of `householdScope`, the merchant's rule; null follows the category.
-  // Unchanged (the row's own) for a row that cannot be household.
-  household: boolean | null
-  // The radio holds something to write: a pick under a rule scope (even the
-  // option already shown, or a Sí / No carried over from Solo esta), else a
-  // choice different from the row's own. The household part is written only
-  // then: a category edit must not create or delete a rule, nor wipe a
-  // hand-set choice.
-  householdTouched: boolean
-  // What the household choice reaches ("Aplicar “gasto del hogar” a"):
-  // 'single' whenever no rule can be made for the row.
-  householdScope: ApplyScope
+  // The Hogar choice. It has no scope of its own: the "Recordar para todas las
+  // de …" checkbox makes it the merchant's rule.
+  household: HouseholdWrite
 }
 
 interface EditTransactionDialogProps {
@@ -81,7 +88,7 @@ interface EditTransactionDialogProps {
   knownTags: string[]
   isSaving: boolean
   // Counted rows a merchant household rule would reach (rowsSharingMerchantRule),
-  // for the household legend.
+  // for the "Recordar para todas las de …" hint.
   countHouseholdSimilar: (transaction: Transaction) => number
   // Whether the view can save a household choice; without it the group is
   // not offered.
@@ -164,15 +171,12 @@ function EditTransactionForm({
   const [category, setCategory] = useState(transaction.category ?? '')
   const [tags, setTags] = useState<string[]>(transaction.tags ?? [])
   const [applyScope, setApplyScope] = useState<ApplyScope>('single')
-  const [householdScope, setHouseholdScope] = useState<ApplyScope>('single')
-  // The row's own choice (Solo esta) and the merchant-rule pick (the two
-  // rule scopes; null until the user picks) are kept apart: a "Según …"
-  // means "follow" under one and "delete the rule" under the other. A Sí /
-  // No carries across when the household scope changes (pickHouseholdScope).
-  const [ownChoice, setOwnChoice] = useState<HouseholdChoice>(() =>
-    choiceOf(transaction.household)
-  )
-  const [rulePick, setRulePick] = useState<HouseholdChoice | null>(null)
+  // The Hogar choice is held as picks, never as derived values: `ownPick` is
+  // the row's own choice while the box is unchecked, `rulePick` the merchant's
+  // rule while it is checked (a rule is always a Sí or a No, so "Según …" is
+  // not offered then). null = not picked yet.
+  const [ownPick, setOwnPick] = useState<HouseholdChoice | null>(null)
+  const [rulePick, setRulePick] = useState<'yes' | 'no' | null>(null)
   const [error, setError] = useState('')
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
   const [tagPickerOpen, setTagPickerOpen] = useState(false)
@@ -246,23 +250,11 @@ function EditTransactionForm({
     : 'No'
   // A rule can be made only for a counted expense (judged on the category
   // being picked) that is not a split part and has a merchant key, and only
-  // when the view can save one. Elsewhere the household scope is not
-  // offered, and the dialog says the choice is this row's only.
+  // when the view can save one. Elsewhere the box is not offered, and the
+  // dialog says the choice is this row's only.
   const canMakeRule =
     showHousehold && canSetHouseholdRule && canHaveMerchantRule(transaction)
-  // Under an apply-to-similar household scope the radio is the merchant's
-  // rule: until picked it shows the rule (or "según categoría" when none
-  // covers the row), not the row's own choice. Solo esta shows the row's own
-  // choice, and "según comercio" when a rule covers the row.
-  const ruleScope = householdScope !== 'single' && canMakeRule
   const merchantRule = merchantRuleOf(transaction, householdRules.merchants)
-  const shownChoice: HouseholdChoice = ruleScope
-    ? (rulePick ?? choiceOf(merchantRule))
-    : ownChoice
-  const followLabel =
-    !ruleScope && merchantRule !== undefined
-      ? `Según comercio (${merchantRule ? 'Sí' : 'No'})`
-      : `Según categoría (${categoryDefaultLabel})`
   const draftRow = useMemo(
     () => ({ ...transaction, category: category.trim() || undefined }),
     [transaction, category]
@@ -271,30 +263,78 @@ function EditTransactionForm({
     () => countHouseholdSimilar(draftRow),
     [countHouseholdSimilar, draftRow]
   )
-  // Whether the radio holds something to write: a rule pick under a rule
-  // scope, else a different choice than the row's own.
-  const householdTouched = ruleScope
-    ? rulePick !== null
-    : ownChoice !== choiceOf(transaction.household)
+  // Whether a rule covered the row when the dialog opened: the box starts
+  // checked then. Fixed at open (the rules are read here without a
+  // subscription, and a toast action can write one while the dialog is
+  // open). A row whose own choice contradicts the rule is not covered by it:
+  // the box starts unchecked on that choice.
+  const [startedRemembered] = useState(
+    () =>
+      canMakeRule &&
+      merchantRule !== undefined &&
+      (transaction.household == null || transaction.household === merchantRule)
+  )
+  const [remember, setRemember] = useState(startedRemembered)
+  const remembered = canMakeRule && remember
+  // What the row shows now, given the pending own choice and the category
+  // being picked: what checking the box preselects.
+  const shownNow: 'yes' | 'no' =
+    ownPick === 'yes' || ownPick === 'no'
+      ? ownPick
+      : resolveHousehold(
+            {
+              ...draftRow,
+              household: ownPick === 'category' ? null : transaction.household,
+            },
+            householdRules
+          ).status === 'household'
+        ? 'yes'
+        : 'no'
+  // Unchecked, the radio is the row's own choice: where it started is the
+  // rule's value when the rule covered it.
+  const ownStart: HouseholdChoice = startedRemembered
+    ? choiceOf(merchantRule)
+    : choiceOf(transaction.household)
+  const shownChoice: HouseholdChoice = remembered
+    ? (rulePick ?? (startedRemembered ? choiceOf(merchantRule) : shownNow))
+    : (ownPick ?? ownStart)
+  // The "follow" option is the merchant's only while a rule survives this
+  // save; a box that started checked deletes it when unchecked.
+  const followLabel =
+    merchantRule !== undefined && !startedRemembered
+      ? `Según comercio (${merchantRule ? 'Sí' : 'No'})`
+      : `Según categoría (${categoryDefaultLabel})`
   const pickHousehold = (choice: HouseholdChoice) =>
-    ruleScope ? setRulePick(choice) : setOwnChoice(choice)
-  // What the radio shows is what is saved, so changing the scope never turns
-  // a visible Sí / No into a save that writes nothing: it carries over as a
-  // pick. A "Según …" does not (follow vs delete the rule); the radio then
-  // shows the new scope's own starting point, untouched.
-  function pickHouseholdScope(next: ApplyScope) {
-    const nextIsRule = next !== 'single' && canMakeRule
-    if (!ruleScope && nextIsRule) {
-      setRulePick(ownChoice === 'category' ? null : ownChoice)
-    } else if (
-      ruleScope &&
-      !nextIsRule &&
-      rulePick &&
-      rulePick !== 'category'
-    ) {
-      setOwnChoice(rulePick)
+    remembered
+      ? setRulePick(choice === 'category' ? null : choice)
+      : setOwnPick(choice)
+  // What the radio shows is what is saved: a pick carries across the box in
+  // both directions. A preselect alone does not, so checking then unchecking
+  // writes nothing; a "Según …" does not either (follow vs delete the rule).
+  function toggleRemember(next: boolean) {
+    if (next)
+      setRulePick(ownPick === 'yes' || ownPick === 'no' ? ownPick : null)
+    else if (rulePick !== null) setOwnPick(rulePick)
+    setRemember(next)
+  }
+
+  function householdWrite(): HouseholdWrite {
+    if (!showHousehold) return { kind: 'none' }
+    if (remembered) {
+      if (startedRemembered) {
+        return rulePick === null
+          ? { kind: 'none' }
+          : { kind: 'rule', household: rulePick === 'yes' }
+      }
+      return { kind: 'rule', household: shownChoice === 'yes' }
     }
-    setHouseholdScope(next)
+    if (canMakeRule && startedRemembered) {
+      return { kind: 'forget', household: householdOf(shownChoice) }
+    }
+    if (ownPick === null || ownPick === choiceOf(transaction.household)) {
+      return { kind: 'none' }
+    }
+    return { kind: 'row', household: householdOf(ownPick) }
   }
 
   function handleSave() {
@@ -309,11 +349,7 @@ function EditTransactionForm({
       category: category.trim() || null,
       tags,
       applyScope,
-      household: showHousehold
-        ? householdOf(shownChoice)
-        : (transaction.household ?? null),
-      householdTouched: showHousehold && householdTouched,
-      householdScope: ruleScope ? householdScope : 'single',
+      household: householdWrite(),
     })
   }
 
@@ -466,7 +502,9 @@ function EditTransactionForm({
             onChange={pickHousehold}
             onReselect={pickHousehold}
             options={[
-              { value: 'category', label: followLabel },
+              ...(remembered
+                ? []
+                : [{ value: 'category' as const, label: followLabel }]),
               { value: 'yes', label: 'Sí' },
               { value: 'no', label: 'No' },
             ]}
@@ -474,30 +512,31 @@ function EditTransactionForm({
         )}
 
         {canMakeRule && (
-          <RadioGroup
-            legend="Aplicar “gasto del hogar” a"
-            name="household-scope"
-            value={householdScope}
-            onChange={pickHouseholdScope}
-            options={[
-              { value: 'single', label: 'Solo esta transacción' },
-              {
-                value: 'matching_past_and_future',
-                label:
-                  householdSimilarCount > 1
-                    ? `Todas las similares · se aplica a ${householdSimilarCount} transacciones (y a las futuras)`
-                    : 'Todas las similares · solo esta por ahora (y las futuras)',
-              },
-              {
-                value: 'future_matching_only',
-                label: 'Esta y las que importes en el futuro',
-                hint:
-                  householdSimilarCount > 1
-                    ? 'Las similares de antes quedan como están.'
-                    : undefined,
-              },
-            ]}
-          />
+          <div className="flex items-start gap-2">
+            <Checkbox
+              id="household-remember"
+              className="mt-0.5"
+              checked={remember}
+              onCheckedChange={(checked) => toggleRemember(checked === true)}
+              aria-describedby="household-remember-hint"
+            />
+            <div className="min-w-0">
+              <label
+                htmlFor="household-remember"
+                className="cursor-pointer text-sm [overflow-wrap:anywhere]"
+              >
+                {`Recordar para todas las de ${getDisplayDescription(transaction)}`}
+              </label>
+              <p
+                id="household-remember-hint"
+                className="text-xs text-muted-foreground"
+              >
+                {householdSimilarCount > 1
+                  ? `Se aplica a ${householdSimilarCount} transacciones y a las que importes`
+                  : 'Por ahora solo esta, y las que importes'}
+              </p>
+            </div>
+          </div>
         )}
 
         <div>
