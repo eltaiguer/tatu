@@ -57,9 +57,10 @@ give:
      group shows the rule's value; "Según categoría" is hidden while the box
      is checked (a rule is always a yes or a no). Changing Sí / No edits the
      rule.
-   - Unchecking it deletes the rule: the merchant's other rows go back to
-     their category, and this row keeps the value on screen as its own
-     choice (none when that equals what its category says).
+   - Unchecking it deletes the rule: rows that followed it go back to their
+     category and rows with their own choice keep it; this row keeps the value
+     on screen as its own choice (none when that equals what its category
+     says).
    - With no rule, the box starts unchecked and the group is this row's own
      choice ("Según categoría" / Sí / No).
 
@@ -81,7 +82,12 @@ give:
    - The box's label names the row ("Recordar para todas las de [descripción
      visible]") with the reach as a hint ("Se aplica a N transacciones y a las
      que importes"). Checking over "Según categoría" preselects what the row
-     shows; checking then unchecking without a pick writes nothing.
+     shows; checking then unchecking without a pick writes nothing, and
+     neither does re-picking the rule's own value (a visibly unchanged save
+     never clears the exceptions).
+   - Unchecking toasts "Ya no se recuerda …" with how many rows go back to
+     their category and "Deshacer", which puts the rule back (the row keeps
+     the choice the forget wrote).
 
 Unchanged from ADR-0005: precedence (row → merchant rule → category default
 → seeded default); rules are read, not stamped; split parts ignore merchant

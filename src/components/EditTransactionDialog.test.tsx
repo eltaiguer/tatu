@@ -605,7 +605,7 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       )
     })
 
-    it('a rule covers the row: re-picking the value shown still re-applies the rule', () => {
+    it('a rule covers the row: re-picking the value shown is no change, so it writes nothing', () => {
       rule(true)
       const props = baseProps()
       render(<EditTransactionDialog {...props} />)
@@ -613,9 +613,56 @@ describe('EditTransactionDialog — gasto del hogar (#251)', () => {
       fireEvent.click(screen.getByLabelText('Sí'))
       save()
 
-      expect(props.onSave).toHaveBeenCalledWith(
-        hogar({ kind: 'rule', household: true })
-      )
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it('uncheck, pick the rule’s own value, recheck: still no change', () => {
+      rule(true)
+      const props = baseProps()
+      render(<EditTransactionDialog {...props} />)
+
+      fireEvent.click(box()!)
+      fireEvent.click(screen.getByLabelText('Sí'))
+      fireEvent.click(box()!)
+
+      expect(box()).toBeChecked()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it('a rule-covered row opened in an ignored category and moved to a counted one is still decided by its rule', () => {
+      rule(true)
+      const props = baseProps({
+        transaction: { ...transaction, category: 'internal_transfer' },
+      })
+      render(<EditTransactionDialog {...props} />)
+      expect(box()).toBeNull()
+
+      pickCategory('groceries')
+
+      expect(box()).toBeChecked()
+      expect(screen.getByLabelText('Sí')).toBeChecked()
+      expect(screen.queryByLabelText(/^Según/)).toBeNull()
+      save()
+      expect(props.onSave).toHaveBeenCalledWith(hogar({ kind: 'none' }))
+    })
+
+    it('after unchecking a box that started checked, the hint says the rule is dropped on save', () => {
+      rule(true)
+      render(<EditTransactionDialog {...baseProps()} />)
+      expect(
+        screen.getByText('Se aplica a 3 transacciones y a las que importes')
+      ).toBeInTheDocument()
+
+      fireEvent.click(box()!)
+
+      expect(
+        screen.getByText('Al guardar, se deja de recordar')
+      ).toBeInTheDocument()
+      fireEvent.click(box()!)
+      expect(
+        screen.getByText('Se aplica a 3 transacciones y a las que importes')
+      ).toBeInTheDocument()
     })
 
     it('a rule covers the row: unchecking forgets the rule and keeps the value on screen', () => {

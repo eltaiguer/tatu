@@ -12,6 +12,7 @@
 //   is checked: if another user signed in meanwhile, nothing lands in their
 //   store and a WorkspaceChangedError is thrown instead.
 import type { Transaction } from '../../models'
+import type { HouseholdRuleRecord } from '../supabase/household-rules'
 import { transactionStore } from '../../stores/transaction-store'
 import { isWorkspaceOwner } from '../../stores/workspace-state'
 import {
@@ -56,15 +57,17 @@ import { currentUserRules, hasUserRule } from '../categorizer/user-rules'
 import { categorizeImportedTransactions } from '../categorizer/import-categorization'
 import { listCustomCategories } from '../categories/category-store'
 import {
-  canHaveMerchantRule,
   currentHouseholdRules,
-  resolveHousehold,
+  inheritedWithoutMerchantRule,
+  merchantRuleKey,
+  rowsReachedByMerchantKey,
   rowsSharingMerchantRule,
 } from '../household/household'
 import {
   deleteHouseholdRuleWithSync,
   listMerchantHouseholdRules,
   putMerchantHouseholdRule,
+  restoreHouseholdRuleWithSync,
 } from '../household/household-rules-store'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
@@ -1093,12 +1096,45 @@ async function saveHouseholdRule(
 }
 
 /**
+ * The forget's rule delete failed after the row was written: the row shows
+ * what the dialog showed (`kept`) and the rule is still there. `retry` replays
+ * the whole forget (idempotent).
+ */
+export class RuleDeleteFailedError extends PartialWriteError {
+  constructor(
+    readonly kept: boolean | null,
+    retry: () => Promise<unknown>,
+    cause: unknown
+  ) {
+    super(
+      'Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla',
+      1,
+      2,
+      retry,
+      undefined,
+      cause
+    )
+    this.name = 'RuleDeleteFailedError'
+  }
+}
+
+export interface ForgetResult {
+  // Other rows the rule decided (no choice of their own): they go back to
+  // their category.
+  reached: number
+  // Puts the rule back (the row keeps its own choice); null when there was no
+  // rule to delete.
+  undo: (() => Promise<void>) | null
+}
+
+/**
  * The edit dialog's unchecked "Recordar para todas las de …": this row keeps
  * `shown` as its own choice (null when that is what it shows without the rule,
  * i.e. its category's answer), then the merchant's rule is deleted. Other rows
  * keep their own choices; rows that followed the rule go back to their
  * category. The row is written first, so a failed delete leaves it showing
- * what the dialog showed; a retry replays the whole thing (idempotent).
+ * what the dialog showed (a `RuleDeleteFailedError` whose retry replays the
+ * whole thing, idempotent).
  *
  * Read after the category edit of the same save, so "its category" is the one
  * the row has now.
@@ -1107,33 +1143,35 @@ export async function forgetHouseholdRule(
   repo: Repository,
   transactionId: string,
   shown: boolean | null
-): Promise<void> {
+): Promise<ForgetResult> {
   assertOwner(repo)
   const row = store().transactions.find((tx) => tx.id === transactionId)
   if (!row) throw MISSING_TRANSACTION
-  const key = canHaveMerchantRule(row)
-    ? merchantOverrideKey(row.description)
-    : null
+  const key = merchantRuleKey(row)
   if (!key) {
     await setHousehold(repo, [transactionId], shown)
-    return
+    return { reached: 0, undo: null }
   }
-  const rules = currentHouseholdRules()
-  const merchants = new Map(rules.merchants)
-  merchants.delete(key)
-  const inherited =
-    resolveHousehold({ ...row, household: null }, { ...rules, merchants })
-      .status === 'household'
+  const reached = rowsReachedByMerchantKey(store().transactions, key).filter(
+    (tx) => tx.id !== transactionId && tx.household == null
+  ).length
+  const inherited = inheritedWithoutMerchantRule(row, currentHouseholdRules())
   const keep = shown === null || shown === inherited ? null : shown
   await setHousehold(repo, [transactionId], keep)
+  let removed: HouseholdRuleRecord | undefined
   try {
-    await deleteHouseholdRuleWithSync(repo, key)
+    removed = await deleteHouseholdRuleWithSync(repo, key)
   } catch (error) {
     assertOwner(repo)
-    throw new UserFacingError(
-      'Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla. Intentá de nuevo.',
-      { cause: error }
+    throw new RuleDeleteFailedError(
+      keep,
+      () => forgetHouseholdRule(repo, transactionId, shown),
+      error
     )
+  }
+  return {
+    reached,
+    undo: removed ? () => restoreHouseholdRuleWithSync(repo, removed) : null,
   }
 }
 

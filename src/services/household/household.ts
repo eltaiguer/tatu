@@ -124,6 +124,42 @@ export function merchantRule(
   return key === null ? undefined : merchants.get(key)
 }
 
+/**
+ * The key of the merchant rule this row can have, or null (a split part, or no
+ * key). The one place that says which rule a row belongs to.
+ */
+export function merchantRuleKey(tx: {
+  description?: string
+  splitParentId?: string
+}): string | null {
+  if (tx.splitParentId || !tx.description) return null
+  return householdRuleKey(tx.description)
+}
+
+/**
+ * Whether the row would show household with no choice of its own and without
+ * its merchant's rule: what its category (or the seeded default) says. What
+ * "forgetting" a rule leaves a row following.
+ */
+export function inheritedWithoutMerchantRule(
+  tx: {
+    category?: string | null
+    description?: string
+    splitParentId?: string
+  },
+  householdRules: HouseholdRules
+): boolean {
+  const key = merchantRuleKey(tx)
+  const merchants = new Map(householdRules.merchants)
+  if (key !== null) merchants.delete(key)
+  return (
+    resolveHousehold(
+      { ...tx, household: null },
+      { ...householdRules, merchants }
+    ).status === 'household'
+  )
+}
+
 /** Whether a merchant rule can cover this row: it has a key and is not a split part. */
 export function canHaveMerchantRule(tx: {
   description?: string

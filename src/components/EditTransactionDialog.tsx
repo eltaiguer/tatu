@@ -268,10 +268,13 @@ function EditTransactionForm({
   // checked then. Fixed at open (the rules are read here without a
   // subscription, and a toast action can write one while the dialog is
   // open). A row whose own choice contradicts the rule is not covered by it:
-  // the box starts unchecked on that choice.
+  // the box starts unchecked on that choice. Independent of the category at
+  // open: a row opened in an ignored category and moved to a counted one is
+  // still decided by its rule (the box's visibility follows `canMakeRule`).
   const [startedRemembered] = useState(
     () =>
-      canMakeRule &&
+      canSetHouseholdRule &&
+      canHaveMerchantRule(transaction) &&
       merchantRule !== undefined &&
       (transaction.household == null || transaction.household === merchantRule)
   )
@@ -323,7 +326,9 @@ function EditTransactionForm({
     if (!showHousehold) return { kind: 'none' }
     if (remembered) {
       if (startedRemembered) {
-        return rulePick === null
+        // Only a value different from the rule's is a change: re-picking the
+        // one on screen must not clear the exceptions it never showed.
+        return rulePick === null || rulePick === choiceOf(merchantRule)
           ? { kind: 'none' }
           : { kind: 'rule', household: rulePick === 'yes' }
       }
@@ -532,9 +537,11 @@ function EditTransactionForm({
                 id="household-remember-hint"
                 className="text-xs text-muted-foreground"
               >
-                {householdSimilarCount > 1
-                  ? `Se aplica a ${householdSimilarCount} transacciones y a las que importes`
-                  : 'Por ahora solo esta, y las que importes'}
+                {startedRemembered && !remember
+                  ? 'Al guardar, se deja de recordar'
+                  : householdSimilarCount > 1
+                    ? `Se aplica a ${householdSimilarCount} transacciones y a las que importes`
+                    : 'Por ahora solo esta, y las que importes'}
               </p>
             </div>
           </div>

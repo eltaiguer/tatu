@@ -1,4 +1,5 @@
 import type { Transaction } from '../../models'
+import type { ForgetResult } from '../../services/mutations/transaction-mutations'
 import type { Repository } from '../../services/repository/repository'
 import type { UrlFilterState } from '../../services/filters/url-filters'
 import type { DeleteResult } from './useMutationFeedback'
@@ -61,7 +62,7 @@ interface BaseTransactionsProps {
   onForgetHouseholdRule?: (
     transactionId: string,
     shown: boolean | null
-  ) => Promise<void>
+  ) => Promise<ForgetResult>
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void
   // The signed-in user's repository: a category created inline saves there.

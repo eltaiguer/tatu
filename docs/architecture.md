@@ -802,10 +802,13 @@ and skip their rollback after a switch.
   carries one `HouseholdWrite`: none / row / rule / forget; the box is
   independent of the name/category "apply to"), and the one-click house offers
   "Aplicar a las N similares". The household toasts, offers and retries live in
-  `useHouseholdWrites`; an explained forget failure keeps the dialog open for a
-  household-only save (saving again replays it), and after a saved edit says so
-  in its message (an error the user can't fix by replaying gets no
-  "Reintentar").
+  `useHouseholdWrites`. A forget whose rule delete fails after the row was
+  written throws `RuleDeleteFailedError` (a `PartialWriteError`): the toast
+  offers "Reintentar", whose retry replays the forget (idempotent) and is
+  guarded like the other retries, comparing the row's choice with the value
+  the forget wrote. A forget that succeeds toasts "Ya no se recuerda …" with
+  how many rows go back to their category and "Deshacer" (puts the rule back
+  with `restoreHouseholdRuleWithSync`; the row keeps its own choice).
   The household flag is not part of "which rows count"
   (`services/spending/spending-rules.ts`): callers combine the two. Writes are
   `setHousehold` (one or many rows, `services/mutations/transaction-mutations.ts`;

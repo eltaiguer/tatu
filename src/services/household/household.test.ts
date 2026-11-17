@@ -9,6 +9,8 @@ import {
   nextHouseholdChoice,
   householdExpenses,
   resolveHousehold,
+  inheritedWithoutMerchantRule,
+  merchantRuleKey,
   rowsChangedByRule,
   ruleReachCounts,
   rowsReachedByMerchantKey,
@@ -575,6 +577,43 @@ describe('merchant rules', () => {
     expect(counts.get(merchantOverrideKey('DEVOTO') as string)).toBe(2)
     expect(counts.get(merchantOverrideKey('TIENDA INGLESA') as string)).toBe(1)
     expect(counts.get('nadie')).toBeUndefined()
+  })
+})
+
+describe('merchantRuleKey and inheritedWithoutMerchantRule', () => {
+  const KEY = merchantOverrideKey('DEVOTO 1/03/2026') as string
+  const devoto = (overrides = {}) => ({
+    ...expense({ category: Category.Restaurants }),
+    description: 'DEVOTO 11/03/2026',
+    ...overrides,
+  })
+
+  it('the key is the merchant key, null for a split part or no description', () => {
+    expect(merchantRuleKey(devoto())).toBe(KEY)
+    expect(merchantRuleKey(devoto({ splitParentId: 'p' }))).toBeNull()
+    expect(merchantRuleKey(devoto({ description: '' }))).toBeNull()
+  })
+
+  it("what a row follows without its merchant's rule is its category's answer", () => {
+    const withRule = householdRulesOf({ merchants: [[KEY, true]] })
+
+    // The rule says Sí; Restaurantes says No.
+    expect(inheritedWithoutMerchantRule(devoto(), withRule)).toBe(false)
+    expect(
+      inheritedWithoutMerchantRule(
+        devoto({ category: Category.Groceries }),
+        householdRulesOf({ merchants: [[KEY, false]] })
+      )
+    ).toBe(true)
+  })
+
+  it("ignores the row's own choice", () => {
+    expect(
+      inheritedWithoutMerchantRule(
+        devoto({ household: true }),
+        householdRulesOf()
+      )
+    ).toBe(false)
   })
 })
 

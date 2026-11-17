@@ -1082,7 +1082,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     expect(repo.householdRules.size).toBe(1)
   })
 
-  it('a failed rule delete after the row saved says so and keeps the dialog open; saving again deletes it', async () => {
+  it('a failed rule delete after the row saved says so and offers Reintentar; the retry removes the rule', async () => {
     seed(devotos())
     await rememberAsYes()
     await waitFor(() => expect(on(D3)).toBe(true))
@@ -1095,18 +1095,20 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     })
 
     expect(
-      await screen.findByText(/pero no se pudo quitar la regla/)
+      await screen.findByText(/pero no se pudo quitar la regla — reintentar/)
     ).toBeVisible()
-    // The row saved, the rule stayed, and the dialog is still there to retry.
+    // The row saved, the rule stayed, and the dialog is still there.
     expect(repo.householdRules.size).toBe(1)
     expect(repo.row(D1)?.household).toBe(true)
     expect(screen.getByRole('dialog')).toBeVisible()
-    await save()
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+    })
     await waitFor(() => expect(repo.householdRules.size).toBe(0))
-    expect(on(D1)).toBe(true)
+    expect(repo.row(D1)?.household).toBe(true)
   })
 
-  it('rename + uncheck with a failed delete: the edit saved, so the dialog closes and the message says what stayed', async () => {
+  it('rename + uncheck with a failed delete: the edit saved, the dialog closes, and the message says what stayed, with Reintentar', async () => {
     seed(devotos())
     await rememberAsYes()
     await waitFor(() => expect(on(D3)).toBe(true))
@@ -1119,16 +1121,83 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     remember()
     await save()
 
-    // One sentence that does not contradict itself, no "Reintentar" (the
-    // error cannot be fixed by replaying it): do it again from the dialog.
     expect(
       await screen.findByText(
-        'Se guardaron los cambios. Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla. Intentá de nuevo.'
+        'Se guardaron los cambios. Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla — reintentar'
       )
     ).toBeVisible()
-    expect(screen.queryByRole('button', { name: 'Reintentar' })).toBeNull()
     expect(repo.householdRules.size).toBe(1)
     expect(on('Devoto centro')).toBe(true)
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+    })
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+  })
+
+  it('unchecking says the rule is gone and how many rows go back, and Deshacer puts it back', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+
+    await openEdit(D1)
+    remember()
+    await save()
+
+    expect(await screen.findByText(`Ya no se recuerda ${D1}`)).toBeVisible()
+    expect(
+      screen.getByText('2 transacciones vuelven a su categoría')
+    ).toBeVisible()
+    await waitFor(() => expect(repo.householdRules.size).toBe(0))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Deshacer' }))
+    })
+
+    await waitFor(() => expect(repo.householdRules.size).toBe(1))
+    expect(on(D2) && on(D3)).toBe(true)
+    // The row keeps the choice the forget wrote.
+    expect(repo.row(D1)?.household).toBe(true)
+  })
+
+  it('unchecking together with an edit makes one toast', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+
+    await openEdit(D1)
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Devoto centro' },
+    })
+    remember()
+    await save()
+
+    expect(
+      await screen.findByText(
+        'Cambios guardados · ya no se recuerda Devoto centro'
+      )
+    ).toBeVisible()
+    expect(screen.getAllByRole('button', { name: 'Deshacer' })).toHaveLength(1)
+  })
+
+  it('re-clicking the value shown on a covered row writes nothing: the exceptions keep their No', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D2)).toBe(true))
+    await act(async () => {
+      fireEvent.click(house(D3))
+    })
+    await waitFor(() => expect(on(D3)).toBe(false))
+    expect(repo.row(D3)?.household).toBe(false)
+
+    await openEdit(D1)
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    expect(repo.row(D3)?.household).toBe(false)
+    expect(on(D3)).toBe(false)
+    expect(
+      repo.householdRules.get(repo.householdRules.keys().next().value!)
+        ?.isHousehold
+    ).toBe(true)
   })
 
   it('a category change with the box untouched makes no rule', async () => {

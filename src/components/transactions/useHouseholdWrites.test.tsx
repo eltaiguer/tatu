@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { Transaction } from '../../models'
-import { useHouseholdWrites } from './useHouseholdWrites'
+import {
+  AFTER_EDIT,
+  AFTER_EDIT_RULE_KEPT,
+  useHouseholdWrites,
+} from './useHouseholdWrites'
 import {
   applyHouseholdToSimilar,
   forgetHouseholdRule,
@@ -93,15 +97,17 @@ describe('useHouseholdWrites — a partial write’s retry (#251, review 2)', ()
     expect(repo.householdRules.get(KEY)?.isHousehold).toBe(false)
   })
 
-  it('forget: an old Reintentar does not replay after a newer write of the row', async () => {
-    const record = {
-      merchantNormalized: KEY,
-      isHousehold: true,
-      createdAt: '',
-      updatedAt: '',
-    }
-    const { repo, reportError, hook } = setup({ householdRules: [record] })
-    loadHouseholdRules([record])
+  const rule = {
+    merchantNormalized: KEY,
+    isHousehold: true,
+    createdAt: '',
+    updatedAt: '',
+  }
+  // A forget whose rule delete fails once: reported as a guarded partial write
+  // whose retry replays the forget.
+  async function failedForget() {
+    const { repo, reportError, hook } = setup({ householdRules: [rule] })
+    loadHouseholdRules([rule])
     repo.failOn('deleteHouseholdRule', {
       times: 1,
       error: new Error('429 too many requests'),
@@ -109,42 +115,83 @@ describe('useHouseholdWrites — a partial write’s retry (#251, review 2)', ()
     await act(async () => {
       await hook.result.current.forgetHouseholdRule('d000', true, FAILURE)
     })
-    const [error, , , retry] = reportError.mock.calls[0]
-    expect(error).toBeInstanceOf(UserFacingError)
+    // The screen re-renders with the row the forget wrote.
+    hook.rerender()
+    const [error] = reportError.mock.calls[0]
+    expect(error).toBeInstanceOf(PartialWriteError)
     expect(repo.householdRules.size).toBe(1)
+    return { repo, reportError, hook, error: error as PartialWriteError }
+  }
+
+  it('forget: the Reintentar of a failed delete replays it while nothing else changed', async () => {
+    const { repo, error } = await failedForget()
+
+    await act(async () => {
+      await error.retry!()
+    })
+
+    expect(repo.householdRules.size).toBe(0)
+  })
+
+  it('forget: an old Reintentar does not replay after a newer write of the row', async () => {
+    const { repo, hook, error } = await failedForget()
 
     // The user then decides something else for the same row.
     await act(async () => {
       await hook.result.current.writeHousehold('d000', false, FAILURE)
     })
-    act(() => (retry as () => void)())
+    hook.rerender()
 
+    await expect(error.retry!()).rejects.toBeInstanceOf(UserFacingError)
     // The old retry did not delete the rule.
     expect(repo.householdRules.size).toBe(1)
   })
 
-  it('forget: the retry of a failed delete replays it while nothing else changed', async () => {
-    const record = {
-      merchantNormalized: KEY,
-      isHousehold: true,
-      createdAt: '',
-      updatedAt: '',
-    }
-    const { repo, reportError, hook } = setup({ householdRules: [record] })
-    loadHouseholdRules([record])
-    repo.failOn('deleteHouseholdRule', {
-      times: 1,
-      error: new Error('429 too many requests'),
-    })
+  it('forget: an old Reintentar does not replay once the row was changed elsewhere', async () => {
+    const { repo, hook, error } = await failedForget()
+
+    // Something that does not start a write of this view (the bulk bar).
     await act(async () => {
-      await hook.result.current.forgetHouseholdRule('d000', true, FAILURE)
+      await setHousehold(repo, ['d000'], false)
     })
-    const [, , , retry] = reportError.mock.calls[0]
+    hook.rerender()
+
+    await expect(error.retry!()).rejects.toBeInstanceOf(UserFacingError)
+    expect(repo.householdRules.size).toBe(1)
+  })
+
+  it('after a saved edit, a forget that failed before the delete keeps the "pero no el gasto del hogar" prefix', async () => {
+    const { reportError, hook } = setup()
+    // The hook above has no way to fail the forget itself: drive it with a
+    // missing row, which the mutation reports as an explained error.
+    await act(async () => {
+      await hook.result.current.saveHouseholdDraft(
+        'gone',
+        { kind: 'forget', household: true },
+        'Devoto',
+        'Cambios guardados'
+      )
+    })
+
+    const [, , prefix] = reportError.mock.calls[0]
+    expect(prefix).toBe(`${AFTER_EDIT}. `)
+  })
+
+  it('after a saved edit, a failed rule delete leads with the short prefix', async () => {
+    const { repo, reportError, hook } = setup({ householdRules: [rule] })
+    loadHouseholdRules([rule])
+    repo.failOn('deleteHouseholdRule', { times: 1, error: new Error('boom') })
 
     await act(async () => {
-      ;(retry as () => void)()
+      await hook.result.current.saveHouseholdDraft(
+        'd000',
+        { kind: 'forget', household: true },
+        'Devoto',
+        'Cambios guardados'
+      )
     })
 
-    await vi.waitFor(() => expect(repo.householdRules.size).toBe(0))
+    const [, , prefix] = reportError.mock.calls[0]
+    expect(prefix).toBe(AFTER_EDIT_RULE_KEPT)
   })
 })

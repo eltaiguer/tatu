@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from './ui/page-header'
-import { toast } from 'sonner'
+import { toast, type ExternalToast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import { Download, X } from 'lucide-react'
@@ -41,10 +41,7 @@ import { TransactionsPagination } from './transactions/TransactionsPagination'
 import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
-import {
-  AFTER_EDIT,
-  useHouseholdWrites,
-} from './transactions/useHouseholdWrites'
+import { useHouseholdWrites } from './transactions/useHouseholdWrites'
 import {
   currentHouseholdRules,
   rowsSharingMerchantRule,
@@ -215,19 +212,15 @@ export function Transactions({
     deleteWithConfirmation,
   })
 
-  const {
-    handleToggleHousehold,
-    writeHousehold,
-    writeHouseholdRule,
-    forgetHouseholdRule,
-  } = useHouseholdWrites({
-    transactions,
-    onSetHousehold,
-    onApplyHouseholdToSimilar,
-    onForgetHouseholdRule,
-    setPending,
-    reportError,
-  })
+  const { handleToggleHousehold, canSaveHousehold, saveHouseholdDraft } =
+    useHouseholdWrites({
+      transactions,
+      onSetHousehold,
+      onApplyHouseholdToSimilar,
+      onForgetHouseholdRule,
+      setPending,
+      reportError,
+    })
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
@@ -285,14 +278,7 @@ export function Transactions({
     // something to write (a category edit must not create or delete a rule,
     // nor wipe a hand-set choice), and the view can write that kind of it.
     const write = draft.household
-    const householdChanged =
-      write.kind === 'row'
-        ? Boolean(onSetHousehold)
-        : write.kind === 'rule'
-          ? Boolean(onApplyHouseholdToSimilar)
-          : write.kind === 'forget'
-            ? Boolean(onForgetHouseholdRule)
-            : false
+    const householdChanged = canSaveHousehold(write)
     // A household-only save must not re-write the category as the user's own
     // confirmed one (confidence 1): nothing about name, category or tags
     // changed. Under a rule scope for the name and category the write still
@@ -325,42 +311,24 @@ export function Transactions({
     // The choice is this row's own, written after the edit it came with. One
     // outcome is reported: the success only once everything saved, or one
     // error that says what did.
-    if (householdChanged && write.kind !== 'none') {
-      const failure = message
-        ? AFTER_EDIT
-        : 'No se pudo guardar el gasto del hogar'
-      let saved: boolean
-      if (write.kind === 'rule') {
-        // The checked box: the merchant's rule, applied to the similar rows.
-        const applied = await writeHouseholdRule(
-          editingId,
-          write.household,
-          failure
-        )
-        saved = applied !== null
-        if (applied !== null && !message) {
-          message =
-            applied > 1
-              ? `Se aplicó a ${applied} transacciones`
-              : 'Cambios guardados'
-        } else if (applied !== null && applied > 1) {
-          message = `${message} · gasto del hogar en ${applied}`
-        }
-      } else if (write.kind === 'forget') {
-        // The unchecked box: the row keeps its value, the rule goes.
-        saved = await forgetHouseholdRule(editingId, write.household, failure)
-      } else {
-        saved = await writeHousehold(editingId, write.household, failure)
-      }
-      if (!saved && !message) {
+    let toastOptions: ExternalToast | undefined
+    if (householdChanged) {
+      const outcome = await saveHouseholdDraft(
+        editingId,
+        write,
+        draft.description,
+        message
+      )
+      if (!outcome.saved && !message) {
         // Nothing saved at all, or a forget saved only the row (its rule is
         // still there): keep the dialog open to try again.
         setPending(editingId, false)
         return
       }
-      if (!saved) message = null
+      message = outcome.message
+      toastOptions = outcome.options
     }
-    if (message) toast.success(message)
+    if (message) toast.success(message, toastOptions)
     setEditingTransaction(null)
     setPending(editingId, false)
   }

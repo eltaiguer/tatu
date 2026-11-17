@@ -1,18 +1,26 @@
 import { useRef } from 'react'
-import { toast } from 'sonner'
+import { toast, type ExternalToast } from 'sonner'
 import type { Transaction } from '../../models'
+import type { HouseholdWrite } from '../EditTransactionDialog'
 import {
   currentHouseholdRules,
   nextHouseholdChoice,
   resolveHousehold,
   rowsChangedByRule,
 } from '../../services/household/household'
+import {
+  RuleDeleteFailedError,
+  type ForgetResult,
+} from '../../services/mutations/transaction-mutations'
 import { PartialWriteError, UserFacingError } from '../../utils/user-error'
 import type { TransactionsProps } from './transactions-props'
 
 const SUPERSEDED =
   'Mientras tanto se hizo otro cambio en esta transacción; no se reintentó.'
 export const AFTER_EDIT = 'Se guardaron los cambios, pero no el gasto del hogar'
+// Leads a failed rule delete after a saved edit: its message already says the
+// row saved, so "pero no el gasto del hogar" would contradict it.
+export const AFTER_EDIT_RULE_KEPT = 'Se guardaron los cambios. '
 
 /**
  * Every household write the Transacciones view starts: the row's house, the
@@ -184,21 +192,24 @@ export function useHouseholdWrites({
     id: string,
     failure: string,
     run: () => Promise<T>,
-    again: () => Promise<unknown>,
-    // What leads an explained error after a saved edit.
-    afterEdit = `${AFTER_EDIT}. `
+    again: () => Promise<unknown>
   ): Promise<{ value: T } | null> {
     const seq = startHouseholdWrite(id)
     setPending(id, true)
     try {
       return { value: await run() }
     } catch (error) {
-      const heldWhenFailed = rowChoice(id)
+      // A failed rule delete knows the value its forget wrote; any other
+      // failure reads the row's choice as the screen has it.
+      const heldWhenFailed =
+        error instanceof RuleDeleteFailedError ? error.kept : rowChoice(id)
       // After a saved edit, say so even when the error brings its own words.
       const prefix =
-        failure === AFTER_EDIT && error instanceof UserFacingError
-          ? afterEdit
-          : ''
+        failure !== AFTER_EDIT || !(error instanceof UserFacingError)
+          ? ''
+          : error instanceof RuleDeleteFailedError
+            ? AFTER_EDIT_RULE_KEPT
+            : `${AFTER_EDIT}. `
       reportError(
         guarded(error, id, seq, heldWhenFailed),
         failure,
@@ -248,27 +259,106 @@ export function useHouseholdWrites({
   }
 
   // The edit dialog's unchecked "Recordar…": the row keeps `shown`, then the
-  // merchant's rule is deleted. True when both saved.
+  // merchant's rule is deleted. Resolves with what the forget did, or null
+  // when it failed (reported).
   async function forgetHouseholdRule(
     id: string,
     shown: boolean | null,
     failure: string
-  ): Promise<boolean> {
-    if (!onForgetHouseholdRule) return false
+  ): Promise<ForgetResult | null> {
+    if (!onForgetHouseholdRule) return null
     const done = await guardedWrite(
       id,
       failure,
       () => onForgetHouseholdRule(id, shown),
-      () => forgetHouseholdRule(id, shown, failure),
-      // Its error already says the row saved but the rule stayed: "no el gasto
-      // del hogar" would contradict it.
-      'Se guardaron los cambios. '
+      () => forgetHouseholdRule(id, shown, failure)
     )
-    return done !== null
+    return done ? done.value : null
+  }
+
+  // Whether the view can write this kind of household change.
+  const canSaveHousehold = (write: HouseholdWrite) =>
+    write.kind === 'row'
+      ? Boolean(onSetHousehold)
+      : write.kind === 'rule'
+        ? Boolean(onApplyHouseholdToSimilar)
+        : write.kind === 'forget'
+          ? Boolean(onForgetHouseholdRule)
+          : false
+
+  // The household part of the edit dialog's save, after its category edit
+  // (`message` is that edit's success, null for a household-only save). One
+  // outcome is reported: `saved` false means a failure was reported, and
+  // `message` is what to toast otherwise (one toast, with its options).
+  async function saveHouseholdDraft(
+    id: string,
+    write: HouseholdWrite,
+    name: string,
+    message: string | null
+  ): Promise<{
+    saved: boolean
+    message: string | null
+    options?: ExternalToast
+  }> {
+    const failure = message
+      ? AFTER_EDIT
+      : 'No se pudo guardar el gasto del hogar'
+    if (write.kind === 'rule') {
+      // The checked box: the merchant's rule, applied to the similar rows.
+      const applied = await writeHouseholdRule(id, write.household, failure)
+      if (applied === null) return { saved: false, message: null }
+      if (!message) {
+        return {
+          saved: true,
+          message:
+            applied > 1
+              ? `Se aplicó a ${applied} transacciones`
+              : 'Cambios guardados',
+        }
+      }
+      return {
+        saved: true,
+        message:
+          applied > 1 ? `${message} · gasto del hogar en ${applied}` : message,
+      }
+    }
+    if (write.kind === 'forget') {
+      // The unchecked box: the row keeps its value, the rule goes. Rules
+      // vanish without any row changing visibly, so it says so and can undo.
+      const forgot = await forgetHouseholdRule(id, write.household, failure)
+      if (forgot === null) return { saved: false, message: null }
+      const { reached, undo } = forgot
+      if (!undo) return { saved: true, message }
+      return {
+        saved: true,
+        message: message
+          ? `${message} · ya no se recuerda ${name}`
+          : `Ya no se recuerda ${name}`,
+        options: {
+          description:
+            reached > 0
+              ? `${reached === 1 ? '1 transacción vuelve' : `${reached} transacciones vuelven`} a su categoría`
+              : undefined,
+          action: {
+            label: 'Deshacer',
+            onClick: () => {
+              undo().catch((error: unknown) =>
+                reportError(error, 'No se pudo deshacer')
+              )
+            },
+          },
+        },
+      }
+    }
+    if (write.kind === 'none') return { saved: true, message }
+    const saved = await writeHousehold(id, write.household, failure)
+    return { saved, message: saved ? message : null }
   }
 
   return {
     handleToggleHousehold,
+    canSaveHousehold,
+    saveHouseholdDraft,
     writeHousehold,
     writeHouseholdRule,
     forgetHouseholdRule,

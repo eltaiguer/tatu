@@ -43,6 +43,7 @@ vi.mock('../ai/correction-context', () => ({
 import {
   applyHouseholdToSimilar,
   forgetHouseholdRule,
+  RuleDeleteFailedError,
   applyPatternToPast,
   autoCategorize,
   bulkCategorize,
@@ -1898,7 +1899,7 @@ describe('transaction-mutations — forgetHouseholdRule (#263)', () => {
     expect(shows('d1')).toEqual({ status: 'household', source: 'category' })
   })
 
-  it('writes the row before deleting the rule: a failed delete keeps the rule, the row shows the same, and the error says so', async () => {
+  it('writes the row before deleting the rule: a failed delete keeps the rule, the row shows the same, and the error says so with a retry', async () => {
     const repo = withRule()
     repo.failOn('deleteHouseholdRule', {
       times: 1,
@@ -1909,16 +1910,41 @@ describe('transaction-mutations — forgetHouseholdRule (#263)', () => {
       (e: unknown) => e
     )
 
-    expect(error).toBeInstanceOf(UserFacingError)
+    expect(error).toBeInstanceOf(RuleDeleteFailedError)
+    expect((error as RuleDeleteFailedError).kept).toBe(true)
     expect((error as Error).message).toMatch(/no se pudo quitar la regla/)
     expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
     expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
     expect(shows('d1').status).toBe('household')
 
-    // The retry replays the whole forget.
-    await forgetHouseholdRule(repo, 'd1', true)
+    // The error's retry replays the whole forget.
+    await (error as RuleDeleteFailedError).retry!()
     expect(repo.householdRules.size).toBe(0)
     expect(listMerchantHouseholdRules().size).toBe(0)
+    expect(repo.row('d1')?.household).toBe(true)
+  })
+
+  it('says how many other rows the rule decided, and can put the rule back', async () => {
+    const repo = withRule()
+
+    const { reached, undo } = await forgetHouseholdRule(repo, 'd1', true)
+
+    // d4 followed the rule; d2 / d3 have their own choice, d1 is this row.
+    expect(reached).toBe(1)
+    expect(repo.householdRules.size).toBe(0)
+    await undo!()
+    expect(repo.householdRules.get(KEY)?.isHousehold).toBe(true)
+    expect(listMerchantHouseholdRules().get(KEY)).toBe(true)
+    // The row keeps the choice the forget wrote.
+    expect(repo.row('d1')?.household).toBe(true)
+  })
+
+  it('has nothing to undo when no rule was there', async () => {
+    const repo = signedIn(rows())
+
+    const { undo } = await forgetHouseholdRule(repo, 'd1', true)
+
+    expect(undo).toBeNull()
   })
 
   it('a failed row write deletes nothing', async () => {
