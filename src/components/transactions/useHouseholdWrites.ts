@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { toast, type ExternalToast } from 'sonner'
 import type { Transaction } from '../../models'
-import type { HouseholdWrite } from '../EditTransactionDialog'
+import type { HouseholdWrite } from './useHouseholdDraft'
 import {
   currentHouseholdRules,
   nextHouseholdChoice,

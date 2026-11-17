@@ -274,15 +274,11 @@ export function Transactions({
     if (!onUpdateTransaction || !editingTransaction) return
     const editing = editingTransaction
     const editingId = editing.id
-    // The household part is written only when the dialog says there is
-    // something to write (a category edit must not create or delete a rule,
-    // nor wipe a hand-set choice), and the view can write that kind of it.
-    const write = draft.household
-    const householdChanged = canSaveHousehold(write)
-    // A household-only save must not re-write the category as the user's own
-    // confirmed one (confidence 1): nothing about name, category or tags
-    // changed. Under a rule scope for the name and category the write still
-    // runs: the user asked for that rule.
+    // The household part runs only when the dialog says there is something to
+    // write and the view can write that kind of it. A household-only save
+    // must not re-write the category as the user's own (confidence 1): nothing
+    // about name, category or tags changed (a name/category scope still runs).
+    const householdChanged = canSaveHousehold(draft.household)
     const unchanged =
       draft.description === getDisplayDescription(editing) &&
       draft.category === ((editing.category ?? '').trim() || null) &&
@@ -308,14 +304,12 @@ export function Transactions({
       setPending(editingId, false)
       return
     }
-    // The choice is this row's own, written after the edit it came with. One
-    // outcome is reported: the success only once everything saved, or one
-    // error that says what did.
+    // Written after the edit it came with; one outcome is reported.
     let toastOptions: ExternalToast | undefined
     if (householdChanged) {
       const outcome = await saveHouseholdDraft(
         editingId,
-        write,
+        draft.household,
         draft.description,
         message
       )
