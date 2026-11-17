@@ -46,12 +46,7 @@ function setup(seed: Parameters<typeof createInMemoryRepository>[0] = {}) {
       transactions: transactionStore.getState().transactions,
       onSetHousehold: (ids, household) => setHousehold(repo, ids, household),
       onApplyHouseholdToSimilar: (id, household) =>
-        applyHouseholdToSimilar(
-          repo,
-          id,
-          household,
-          'matching_past_and_future'
-        ),
+        applyHouseholdToSimilar(repo, id, household),
       onForgetHouseholdRule: (id, shown) =>
         forgetHouseholdRule(repo, id, shown),
       setPending: () => {},

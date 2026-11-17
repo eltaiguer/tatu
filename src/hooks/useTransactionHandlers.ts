@@ -110,12 +110,7 @@ export function useTransactionHandlers({
     ),
     handleApplyHouseholdToSimilar: run(
       (repo, transactionId: string, household: boolean) =>
-        applyHouseholdToSimilar(
-          repo,
-          transactionId,
-          household,
-          'matching_past_and_future'
-        )
+        applyHouseholdToSimilar(repo, transactionId, household)
     ),
     handleForgetHouseholdRule: run(
       (repo, transactionId: string, shown: boolean | null) =>

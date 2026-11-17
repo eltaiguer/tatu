@@ -595,8 +595,8 @@ describe('rowsChangedByRule', () => {
   const all = [target, plain, own, loose, expense({ description: 'OTRO' })]
   const ids = (rows: Transaction[]) => rows.map((r) => r.id)
 
-  it('clearing own choices: every similar row whose shown value changes', () => {
-    expect(ids(rowsChangedByRule(all, target, true, none, true))).toEqual([
+  it('every similar row whose shown value changes, own choices cleared', () => {
+    expect(ids(rowsChangedByRule(all, target, true, none))).toEqual([
       't',
       'p',
       'o',
@@ -604,25 +604,8 @@ describe('rowsChangedByRule', () => {
     ])
   })
 
-  it('keeping own choices: those keep what they show, the rest follow the rule', () => {
-    // The target's own choice is cleared in both; "o" keeps its own No.
-    expect(ids(rowsChangedByRule(all, target, true, none, false))).toEqual([
-      't',
-      'p',
-      'u',
-    ])
-  })
-
-  it('leaves out rows that already show the value, and deleting a rule reverts', () => {
+  it('leaves out rows that already show the value', () => {
     const withRule = householdRulesOf({ merchants: [[KEY, true]] })
-    expect(ids(rowsChangedByRule(all, target, true, withRule, true))).toEqual([
-      'o',
-    ])
-    // Rule Sí deleted: "p" and "u" showed the rule, go back to the category.
-    expect(ids(rowsChangedByRule(all, target, null, withRule, false))).toEqual([
-      't',
-      'p',
-      'u',
-    ])
+    expect(ids(rowsChangedByRule(all, target, true, withRule))).toEqual(['o'])
   })
 })

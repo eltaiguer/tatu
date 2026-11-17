@@ -117,8 +117,7 @@ export function useHouseholdWrites({
       transactions,
       transaction,
       value,
-      rules,
-      true
+      rules
     ).filter((row) => row.id !== transaction.id).length
     if (others < 1) return
     const offered = householdWrites.current.get(transaction.id)

@@ -193,34 +193,28 @@ export function ruleReachCounts(
 
 /**
  * The rows a merchant rule would change the shown value of, if it became
- * `household` (null: deleted): `tx` and its similar rows
- * (`rowsSharingMerchantRule`) whose status differs once it is in place.
- * `tx`'s own choice is always cleared (it follows the rule); the others'
- * only when `clearsOwnChoices` (past and future), else they keep it. The one
- * list behind the one-click toast's count, the future-only pins and the
- * count a save reports, so they cannot disagree.
+ * `household`: `tx` and its similar rows (`rowsSharingMerchantRule`) whose
+ * status differs once it is in place. A rule save clears every similar row's
+ * own choice (they follow it), so each is judged without its own. The one
+ * list behind the one-click toast's count.
  */
 export function rowsChangedByRule(
   all: readonly Transaction[],
   tx: Transaction,
-  household: boolean | null,
-  householdRules: HouseholdRules,
-  clearsOwnChoices: boolean
+  household: boolean,
+  householdRules: HouseholdRules
 ): Transaction[] {
   const key = householdRuleKey(tx.description)
   if (key === null) return []
-  const merchants = new Map(householdRules.merchants)
-  if (household === null) merchants.delete(key)
-  else merchants.set(key, household)
-  const after: HouseholdRules = { ...householdRules, merchants }
-  return rowsSharingMerchantRule(all, tx).filter((row) => {
-    const next =
-      clearsOwnChoices || row.id === tx.id ? { ...row, household: null } : row
-    return (
+  const after: HouseholdRules = {
+    ...householdRules,
+    merchants: new Map(householdRules.merchants).set(key, household),
+  }
+  return rowsSharingMerchantRule(all, tx).filter(
+    (row) =>
       resolveHousehold(row, householdRules).status !==
-      resolveHousehold(next, after).status
-    )
-  })
+      resolveHousehold({ ...row, household: null }, after).status
+  )
 }
 
 /** The effective household default of a category (false for Sin categoría). */

@@ -74,13 +74,7 @@ function Harness({
         onSetHousehold={(ids, household) => setHousehold(repo, ids, household)}
         onApplyHouseholdToSimilar={
           withRules
-            ? (id, household) =>
-                applyHouseholdToSimilar(
-                  repo,
-                  id,
-                  household,
-                  'matching_past_and_future'
-                )
+            ? (id, household) => applyHouseholdToSimilar(repo, id, household)
             : undefined
         }
         onForgetHouseholdRule={
@@ -1340,7 +1334,7 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
   it('offers nothing when the click only returns to following an existing rule', async () => {
     seed(devotos())
     await act(async () => {
-      await applyHouseholdToSimilar(repo, D1, true, 'matching_past_and_future')
+      await applyHouseholdToSimilar(repo, D1, true)
       await setHousehold(repo, [D1], false)
     })
     expect(on(D1)).toBe(false)

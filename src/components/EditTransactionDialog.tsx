@@ -69,7 +69,8 @@ export interface EditTransactionDraft {
   description: string
   category: string | null
   tags: string[]
-  // What the name and category reach. The household choice has its own.
+  // What the name and category reach. The Hogar choice has no scope: its box
+  // is the merchant rule.
   applyScope: ApplyScope
   // The Hogar choice. It has no scope of its own: the "Recordar para todas las
   // de …" checkbox makes it the merchant's rule.
