@@ -7,6 +7,10 @@ import {
 } from '../descriptions/description-overrides'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
+import { hashInsightInput } from './insight-cache'
+import { partitionByHousehold } from '../household/household'
+import { merchantOverrideKey } from '../categorizer/category-overrides'
+import { householdRulesOf } from '../../test/household-rules'
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
@@ -1113,5 +1117,90 @@ describe('buildInsightInput — Hogar scope (#251)', () => {
       expect(result.historyEnd).toBe('2026-08-05')
       expect(result.recurringCharges[0].monthsSinceLastSeen).toBe(0)
     })
+  })
+})
+
+describe('Hogar input is unchanged by dropping Sin definir (#262)', () => {
+  // Characterization: green before and after #262 by design. Which rows are
+  // household does not depend on how an uncategorized row with no choice is
+  // named, so the Hogar input and its cache hash must not move.
+  const rows = [
+    makeTransaction('groceries', {
+      date: new Date('2026-03-10T00:00:00.000Z'),
+      amount: 100,
+      category: Category.Groceries,
+      description: 'TIENDA INGLESA',
+    }),
+    makeTransaction('restaurants', {
+      date: new Date('2026-04-02T00:00:00.000Z'),
+      amount: 60,
+      category: Category.Restaurants,
+      description: 'LA PASIVA',
+    }),
+    makeTransaction('loose', {
+      date: new Date('2026-04-03T00:00:00.000Z'),
+      amount: 30,
+      category: Category.Uncategorized,
+      description: 'KIOSCO UNO',
+    }),
+    makeTransaction('own-true', {
+      date: new Date('2026-04-04T00:00:00.000Z'),
+      amount: 25,
+      category: Category.Uncategorized,
+      description: 'FERRETERIA DOS',
+      household: true,
+    }),
+    makeTransaction('own-false', {
+      date: new Date('2026-04-05T00:00:00.000Z'),
+      amount: 15,
+      category: Category.Uncategorized,
+      description: 'LIBRERIA TRES',
+      household: false,
+    }),
+    makeTransaction('merchant-rule', {
+      date: new Date('2026-04-06T00:00:00.000Z'),
+      amount: 12,
+      category: Category.Uncategorized,
+      description: 'DEVOTO 14/03/2026',
+    }),
+    makeTransaction('split-part', {
+      date: new Date('2026-04-07T00:00:00.000Z'),
+      amount: 8,
+      category: Category.Uncategorized,
+      description: 'DEVOTO 15/03/2026',
+      splitParentId: 'split-parent',
+    }),
+    makeTransaction('pay', {
+      date: new Date('2026-03-01T00:00:00.000Z'),
+      amount: 900,
+      type: 'credit',
+      category: Category.Income,
+    }),
+    makeTransaction('transfer', {
+      date: new Date('2026-04-08T00:00:00.000Z'),
+      amount: 500,
+      category: Category.InternalTransfer,
+    }),
+  ]
+  const rules = householdRulesOf({
+    merchants: [[merchantOverrideKey('DEVOTO 14/03/2026')!, true]],
+  })
+
+  it('keeps the same household rows, input and hash', () => {
+    const household = partitionByHousehold(rows, rules).household
+
+    expect(household.map((t) => t.id)).toEqual([
+      'groceries',
+      'own-true',
+      'merchant-rule',
+    ])
+
+    const input = buildInsightInput(household, 'USD', 40, {
+      scope: 'hogar',
+      coverage: rows,
+      now: new Date('2026-04-15T00:00:00.000Z'),
+    })
+
+    expect(hashInsightInput(input)).toBe('ec3c4359')
   })
 })
