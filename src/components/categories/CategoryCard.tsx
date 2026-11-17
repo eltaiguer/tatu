@@ -127,12 +127,12 @@ export function CategoryCard({
             }}
             aria-disabled={householdSaving || undefined}
             aria-pressed={household}
-            aria-label={`Gasto del hogar: ${cat.label}`}
-            title={household ? 'Gasto del hogar' : 'No es gasto del hogar'}
+            aria-label={`Hogar: ${cat.label}`}
+            title={household ? 'Hogar: Sí' : 'Hogar: No'}
             className={`grid cursor-pointer place-items-center rounded-[6px] border-none bg-none p-[4px] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--brand)] aria-disabled:cursor-default aria-disabled:opacity-50 ${
               household
                 ? 'text-[color:var(--brand-text)]'
-                : 'text-[var(--text-faint)]'
+                : 'text-[color:var(--text-muted)]'
             }`}
           >
             <House

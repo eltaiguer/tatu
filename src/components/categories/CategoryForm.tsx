@@ -155,7 +155,7 @@ export function CategoryForm({
                 }
               />
               <div>
-                <span className="text-[13px] font-medium">Gasto del hogar</span>
+                <span className="text-[13px] font-medium">Hogar</span>
                 <span className="ml-[6px] text-[12px] text-[var(--text-faint)]">
                   Sus transacciones cuentan como gastos del hogar, salvo las que
                   cambies a mano.
