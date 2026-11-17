@@ -1,7 +1,11 @@
 import { useSyncExternalStore } from 'react'
 import type { HouseholdRules } from '../models'
 import { currentHouseholdRules } from '../services/household/household'
-import { subscribeHouseholdRules } from '../services/household/household-rules-store'
+import {
+  listHouseholdRuleRecords,
+  subscribeHouseholdRules,
+} from '../services/household/household-rules-store'
+import type { HouseholdRuleRecord } from '../services/supabase/household-rules'
 
 /**
  * The user's household rules for rendering. Re-renders when a merchant rule
@@ -11,4 +15,12 @@ import { subscribeHouseholdRules } from '../services/household/household-rules-s
  */
 export function useHouseholdRules(): HouseholdRules {
   return useSyncExternalStore(subscribeHouseholdRules, currentHouseholdRules)
+}
+
+/**
+ * The household rules as records (name, dates), newest first, for the
+ * Categorías list. Re-renders on any change to them, from anywhere.
+ */
+export function useHouseholdRuleRecords(): readonly HouseholdRuleRecord[] {
+  return useSyncExternalStore(subscribeHouseholdRules, listHouseholdRuleRecords)
 }

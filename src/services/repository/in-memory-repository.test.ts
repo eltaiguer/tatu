@@ -182,6 +182,40 @@ describe('in-memory repository — household rules', () => {
     expect((await repo.loadWorkspace()).householdRules).toEqual([])
   })
 
+  it('keeps createdAt when a rule is updated', async () => {
+    const repo = createInMemoryRepository({
+      householdRules: [
+        {
+          merchantNormalized: 'disco',
+          merchantOriginal: 'DISCO',
+          isHousehold: true,
+          createdAt: '2026-03-01T10:00:00.000Z',
+          updatedAt: '2026-03-01T10:00:00.000Z',
+        },
+      ],
+    })
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      isHousehold: false,
+    })
+    const [rule] = (await repo.loadWorkspace()).householdRules
+    expect(rule.isHousehold).toBe(false)
+    expect(rule.createdAt).toBe('2026-03-01T10:00:00.000Z')
+    expect(rule.updatedAt).not.toBe('2026-03-01T10:00:00.000Z')
+  })
+
+  it('takes a given createdAt on insert', async () => {
+    const repo = createInMemoryRepository()
+    await repo.upsertHouseholdRule({
+      merchantNormalized: 'disco',
+      isHousehold: true,
+      createdAt: '2026-02-01T10:00:00.000Z',
+    })
+    expect((await repo.loadWorkspace()).householdRules[0].createdAt).toBe(
+      '2026-02-01T10:00:00.000Z'
+    )
+  })
+
   it('fails like the other writes when told to', async () => {
     const repo = createInMemoryRepository()
     repo.failOn('upsertHouseholdRule')

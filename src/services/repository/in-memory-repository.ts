@@ -480,11 +480,14 @@ export function createInMemoryRepository(
       await request('upsertHouseholdRule', [input.merchantNormalized])
       requireAuthorized()
       const now = new Date().toISOString()
+      const existing = repo.householdRules.get(input.merchantNormalized)
+      // Like Postgres: an update keeps created_at, an insert takes the given
+      // one (a restore) or now.
       repo.householdRules.set(input.merchantNormalized, {
         merchantNormalized: input.merchantNormalized,
         merchantOriginal: input.merchantOriginal,
         isHousehold: input.isHousehold,
-        createdAt: now,
+        createdAt: existing?.createdAt ?? input.createdAt ?? now,
         updatedAt: now,
       })
     },

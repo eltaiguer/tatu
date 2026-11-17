@@ -65,6 +65,7 @@ export async function upsertHouseholdRule(
     merchantNormalized: string
     merchantOriginal?: string
     isHousehold: boolean
+    createdAt?: string
   }
 ): Promise<void> {
   const client = getSupabaseClient()
@@ -74,6 +75,9 @@ export async function upsertHouseholdRule(
       merchant_normalized: input.merchantNormalized,
       merchant_original: input.merchantOriginal ?? null,
       is_household: input.isHousehold,
+      // Only to restore a deleted rule: the column's default (now) is right
+      // for a new one, and an update must not touch it.
+      ...(input.createdAt ? { created_at: input.createdAt } : {}),
     },
     { onConflict: 'user_id,merchant_normalized' }
   )

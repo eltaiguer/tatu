@@ -95,6 +95,24 @@ describe('supabase household rules service', () => {
     )
   })
 
+  it('sends created_at only when given', async () => {
+    const { upsertHouseholdRule } = await import('./household-rules')
+    await upsertHouseholdRule(userId, {
+      merchantNormalized: 'devoto',
+      isHousehold: true,
+    })
+    expect(upsertMock.mock.calls[0][0]).not.toHaveProperty('created_at')
+
+    await upsertHouseholdRule(userId, {
+      merchantNormalized: 'devoto',
+      isHousehold: true,
+      createdAt: '2026-02-01T10:00:00.000Z',
+    })
+    expect(upsertMock.mock.calls[1][0]).toMatchObject({
+      created_at: '2026-02-01T10:00:00.000Z',
+    })
+  })
+
   it('deletes a rule', async () => {
     const { deleteHouseholdRule } = await import('./household-rules')
     await deleteHouseholdRule(userId, 'devoto')
