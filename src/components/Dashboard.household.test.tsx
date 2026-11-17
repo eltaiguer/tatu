@@ -366,7 +366,9 @@ describe('Dashboard: Todo / Hogar mode', () => {
       expect(
         screen.getByText('Todavía no hay gastos del hogar')
       ).toBeInTheDocument()
-      expect(screen.getByText(/marcá Hogar en cada transacción/)).toBeVisible()
+      expect(
+        screen.getByText(/tocá el ícono de la casa en cada transacción/)
+      ).toBeVisible()
       expect(screen.queryByText(/casita/i)).toBeNull()
       expect(screen.queryByText('Gasto por categoría')).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: /Categorías/ }))

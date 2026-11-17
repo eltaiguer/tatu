@@ -1,23 +1,8 @@
 import { House } from 'lucide-react'
-import type { HouseholdResolution, Transaction } from '../../models'
-import { resolveCategory } from '../../services/categories/category-registry'
+import type { Transaction } from '../../models'
+import { householdLine } from '../../services/household/household-copy'
 import { rowHouseholdView } from '../../services/household/household'
 import { useHouseholdRules } from '../../hooks/useHouseholdRules'
-
-/** "Hogar · según Alimentación" / "No es del hogar · elegido a mano" / "… · según comercio". */
-export function householdLine(
-  category: string | undefined,
-  view: HouseholdResolution
-): string {
-  const value = view.status === 'household' ? 'Hogar' : 'No es del hogar'
-  const source =
-    view.source === 'row'
-      ? 'elegido a mano'
-      : view.source === 'merchant'
-        ? 'según comercio'
-        : `según ${resolveCategory(category).label}`
-  return `${value} · ${source}`
-}
 
 // The row's Hogar control, next to the category badge. The house shows the
 // value only: filled in the brand colour = Hogar, outline in the muted text
@@ -46,11 +31,12 @@ export function HouseToggle({
   const household = view.status === 'household'
   const line = householdLine(transaction.category, view)
 
-  // No aria-pressed: the name carries the value and changes with it.
+  // The name carries value and source; aria-pressed says it is a toggle.
   return (
     <button
       type="button"
       aria-label={`${description}: ${line}`}
+      aria-pressed={household}
       title={line}
       disabled={disabled}
       onClick={() => onToggle(transaction)}

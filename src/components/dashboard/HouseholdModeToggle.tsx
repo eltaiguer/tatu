@@ -18,7 +18,8 @@ export function HouseholdModeToggle({
   return (
     <div className="inline-flex items-center gap-[6px]">
       {/* The group keeps its name "Ver gastos" (it contains the visible
-          "Ver", WCAG 2.5.3); aria-hidden stops a double reading. */}
+          "Ver", WCAG 2.5.3); aria-hidden stops a double reading. Keep this
+          text and the group's aria-label in sync. */}
       <span
         aria-hidden="true"
         className="shrink-0 text-[12px] text-[var(--text-muted)] select-none"

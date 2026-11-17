@@ -110,8 +110,8 @@ function house(description: string, which = 0) {
     name: (name) => name.startsWith(`${description}: `),
   })[which]
 }
-// The house's name says its value: "{description}: Hogar · …" / "…: No es del
-// hogar · …" (#265).
+// The house's name says its value (#265):
+// "{description}: Hogar · …" or "{description}: No es del hogar · …".
 const HOGAR = /: Hogar · /
 const NO_ES_DEL_HOGAR = /: No es del hogar · /
 const isHogar = (el: HTMLElement) =>
@@ -454,8 +454,27 @@ describe('bulk Hogar menu (#251)', () => {
     expect(repo.row('Cena')?.household ?? null).toBeNull()
     expect(repo.row('Devoto')?.household ?? null).toBeNull()
     expect(
-      await screen.findByText('2 vuelven a seguir su categoría')
+      await screen.findByText('Elección quitada en 2 transacciones')
     ).toBeInTheDocument()
+  })
+
+  it('says the choice was removed, true for rows a merchant rule covers too', async () => {
+    putMerchantHouseholdRule(
+      merchantOverrideKey('COMPRA DEVOTO 4521') as string,
+      true,
+      'COMPRA DEVOTO 4521'
+    )
+    seed([
+      tx('COMPRA DEVOTO 4521', { category: 'restaurants', household: false }),
+    ])
+    select('COMPRA DEVOTO 4521')
+
+    await choose('Según categoría')
+
+    expect(
+      await screen.findByText('Elección quitada en 1 transacción')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/vuelve/)).toBeNull()
   })
 
   it('counts rows already at the value as done, not skipped', async () => {
@@ -483,7 +502,7 @@ describe('bulk Hogar menu (#251)', () => {
 
     expect(
       await screen.findByText(
-        '1 vuelve a seguir su categoría, 1 no cuenta como gasto, sin cambios'
+        'Elección quitada en 1 transacción, 1 no cuenta como gasto, sin cambios'
       )
     ).toBeInTheDocument()
   })
@@ -815,7 +834,19 @@ describe('the house shows Hogar or No (#265)', () => {
   })
 
   it('fills the house in the brand colour for Hogar and outlines it in the muted colour for No, whatever the source', () => {
+    putMerchantHouseholdRule(
+      merchantOverrideKey('COMPRA DEVOTO 4521') as string,
+      true,
+      'COMPRA DEVOTO 4521'
+    )
+    putMerchantHouseholdRule(
+      merchantOverrideKey('CINE 99') as string,
+      false,
+      'CINE 99'
+    )
     seed([
+      tx('COMPRA DEVOTO 4521', { category: 'restaurants' }),
+      tx('CINE 99'),
       tx('Devoto'),
       tx('Cena', { category: 'restaurants' }),
       tx('Luz', { category: 'utilities', household: true }),
@@ -829,8 +860,15 @@ describe('the house shows Hogar or No (#265)', () => {
     expect(fill('Cena')).toBe('none')
     expect(fill('Taxi')).toBe('none')
     // Colour encodes the value only, never the source.
-    expect(house('Devoto').className).toBe(house('Luz').className)
-    expect(house('Cena').className).toBe(house('Taxi').className)
+    const look = (d: string) => [
+      house(d).className,
+      house(d).querySelector('svg')?.getAttribute('fill'),
+    ]
+    // Category, hand and merchant rule: the same look for the same value.
+    expect(look('Devoto')).toEqual(look('Luz'))
+    expect(look('Devoto')).toEqual(look('COMPRA DEVOTO 4521'))
+    expect(look('Cena')).toEqual(look('Taxi'))
+    expect(look('Cena')).toEqual(look('CINE 99'))
     expect(house('Devoto').className).toContain('--brand-text')
     expect(house('Cena').className).toContain('--text-muted')
     expect(document.querySelector('[data-hand-mark]')).toBeNull()
@@ -872,10 +910,11 @@ describe('the house shows Hogar or No (#265)', () => {
     )
   })
 
-  it('the house is a plain button, not a pressed toggle', async () => {
-    seed([tx('Cena', { category: 'restaurants' })])
+  it('the house is a toggle button: pressed for Hogar, with a name that holds value and source', async () => {
+    seed([tx('Cena', { category: 'restaurants' }), tx('Devoto')])
 
-    expect(house('Cena')).not.toHaveAttribute('aria-pressed')
+    expect(house('Cena')).toHaveAttribute('aria-pressed', 'false')
+    expect(house('Devoto')).toHaveAttribute('aria-pressed', 'true')
     expect(house('Cena')).toHaveAccessibleName(
       'Cena: No es del hogar · según Restaurantes'
     )
@@ -885,12 +924,7 @@ describe('the house shows Hogar or No (#265)', () => {
     await waitFor(() =>
       expect(house('Cena')).toHaveAccessibleName('Cena: Hogar · elegido a mano')
     )
-  })
-})
-
-describe('Hogar filter in Transacciones (#251)', () => {
-  beforeEach(() => {
-    replaceCustomCategories([])
+    expect(house('Cena')).toHaveAttribute('aria-pressed', 'true')
   })
 
   const rows = () => [

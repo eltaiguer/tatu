@@ -12,6 +12,7 @@ import {
   RuleDeleteFailedError,
   type ForgetResult,
 } from '../../services/mutations/transaction-mutations'
+import { householdValueLabel } from '../../services/household/household-copy'
 import { PartialWriteError, UserFacingError } from '../../utils/user-error'
 import type { TransactionsProps } from './transactions-props'
 
@@ -130,30 +131,27 @@ export function useHouseholdWrites({
     ).filter((row) => row.id !== transaction.id).length
     if (others < 1) return
     const offered = householdWrites.current.get(transaction.id)
-    const offer = toast(
-      value ? 'Hogar: Sí en esta transacción' : 'Hogar: No en esta transacción',
-      {
-        duration: 8000,
-        action: {
-          label:
-            others === 1
-              ? 'Aplicar a la otra similar'
-              : `Aplicar a las ${others} similares`,
-          onClick: () => {
-            // A newer click or write of the row withdrew this offer, and so did
-            // a write that does not start one here (the bulk bar): the row
-            // must still hold the choice this click wrote.
-            if (
-              householdWrites.current.get(transaction.id) !== offered ||
-              rowChoice(transaction.id) !== choice
-            ) {
-              return
-            }
-            void applyToSimilar(transaction.id, value, others)
-          },
+    const offer = toast(`${householdValueLabel(value)} en esta transacción`, {
+      duration: 8000,
+      action: {
+        label:
+          others === 1
+            ? 'Aplicar a la otra similar'
+            : `Aplicar a las ${others} similares`,
+        onClick: () => {
+          // A newer click or write of the row withdrew this offer, and so did
+          // a write that does not start one here (the bulk bar): the row
+          // must still hold the choice this click wrote.
+          if (
+            householdWrites.current.get(transaction.id) !== offered ||
+            rowChoice(transaction.id) !== choice
+          ) {
+            return
+          }
+          void applyToSimilar(transaction.id, value, others)
         },
-      }
-    )
+      },
+    })
     offers.current.set(transaction.id, offer)
   }
 
@@ -319,7 +317,7 @@ export function useHouseholdWrites({
         saved: true,
         message:
           applied > 1
-            ? `${message} · Hogar: ${write.household ? 'Sí' : 'No'} en ${applied}`
+            ? `${message} · ${householdValueLabel(write.household)} en ${applied}`
             : message,
       }
     }

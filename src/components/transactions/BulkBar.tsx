@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { resolveCategory } from '../../services/categories/category-registry'
+import { householdValueLabel } from '../../services/household/household-copy'
 
 /* ---- BulkBar ---- */
 export function BulkBar({
@@ -163,8 +164,8 @@ export function BulkBar({
                 <div className="absolute bottom-[calc(100%+10px)] left-0 z-[80] w-[200px] rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[6px] shadow-[var(--shadow-lg)]">
                   {(
                     [
-                      ['Hogar: Sí', true],
-                      ['Hogar: No', false],
+                      [householdValueLabel(true), true],
+                      [householdValueLabel(false), false],
                       ['Según categoría', null],
                     ] as const
                   ).map(([label, value]) => (

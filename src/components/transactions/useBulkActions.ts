@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type { Transaction } from '../../models'
+import { householdValueLabel } from '../../services/household/household-copy'
 import { PartialWriteError, userErrorMessage } from '../../utils/user-error'
 import {
   currentHouseholdRules,
@@ -155,8 +156,8 @@ export function useBulkActions({
       const n = eligible.length
       const done =
         household === null
-          ? `${n} ${n === 1 ? 'vuelve' : 'vuelven'} a seguir su categoría`
-          : `Hogar: ${household ? 'Sí' : 'No'} en ${n} ${
+          ? `Elección quitada en ${n} ${n === 1 ? 'transacción' : 'transacciones'}`
+          : `${householdValueLabel(household)} en ${n} ${
               n === 1 ? 'transacción' : 'transacciones'
             }`
       toast.success(

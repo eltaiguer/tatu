@@ -80,8 +80,8 @@ export function NoHouseholdState({
       <div>
         <h2 className="mb-2">Todavía no hay gastos del hogar</h2>
         <p className="text-muted-foreground max-w-md mx-auto">
-          Marcá qué categorías son del hogar, o marcá Hogar en cada transacción,
-          y acá vas a ver cuánto se va en la casa.
+          Elegí en Categorías cuáles son del hogar, o tocá el ícono de la casa
+          en cada transacción, y acá vas a ver cuánto se va en la casa.
         </p>
       </div>
       {onNavigateToCategories && (

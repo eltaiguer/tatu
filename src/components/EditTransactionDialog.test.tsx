@@ -420,6 +420,20 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
       expect(now()).toHaveTextContent('Ahora: Hogar · según Alimentación')
     })
 
+    it('follows a rule saved while the dialog is open', () => {
+      render(<EditTransactionDialog {...baseProps()} />)
+      expect(now()).toHaveTextContent('Ahora: Hogar · según Alimentación')
+
+      act(() => {
+        putMerchantHouseholdRule(
+          merchantOverrideKey(transaction.description) as string,
+          false
+        )
+      })
+
+      expect(now()).toHaveTextContent('Ahora: No es del hogar · según comercio')
+    })
+
     it('has no line when the saved row is not a counted expense', () => {
       render(
         <EditTransactionDialog
