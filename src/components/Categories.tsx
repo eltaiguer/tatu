@@ -73,9 +73,11 @@ export function Categories({
   // are the part Categorías edits): memoized, never cached in state.
   const householdRules = currentHouseholdRules()
   const isEditing = form.id.length > 0
-  // A new category can always have one; an edited one unless it is Sin
-  // categoría or Ingresos.
-  const canHaveHousehold = !isEditing || canHaveHouseholdDefault(form.id)
+  // A new category can have one; an edited one unless it is Sin categoría or
+  // Ingresos. Never while the form's own "Ignorar en totales" is on: rows of an
+  // ignored category are not counted expenses, so the default could do nothing.
+  const canHaveHousehold =
+    !form.isIgnored && (!isEditing || canHaveHouseholdDefault(form.id))
 
   function resetForm() {
     setForm(EMPTY_FORM)
@@ -305,7 +307,9 @@ export function Categories({
               household={isCategoryHousehold(cat.id, householdRules)}
               householdSaving={savingHousehold.has(cat.id)}
               onToggleHousehold={
-                cat.isOrphan || !canHaveHouseholdDefault(cat.id)
+                cat.isOrphan ||
+                cat.isIgnored ||
+                !canHaveHouseholdDefault(cat.id)
                   ? undefined
                   : (id) => void handleToggleHousehold(id)
               }
