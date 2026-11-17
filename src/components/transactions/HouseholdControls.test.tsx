@@ -388,6 +388,21 @@ describe('bulk Hogar menu (#251)', () => {
     replaceCustomCategories([])
   })
 
+  it('offers "Hogar: Sí", "Hogar: No" and "Según categoría" (#265)', () => {
+    seed([tx('Cena', { category: 'restaurants' })])
+    select('Cena')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hogar' }))
+
+    const options = screen
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+      .filter((t) =>
+        ['Hogar: Sí', 'Hogar: No', 'Según categoría'].includes(t ?? '')
+      )
+    expect(options).toEqual(['Hogar: Sí', 'Hogar: No', 'Según categoría'])
+  })
+
   it('marks the selected expenses and says what it skipped', async () => {
     seed([
       tx('Cena', { category: 'restaurants' }),
@@ -397,7 +412,7 @@ describe('bulk Hogar menu (#251)', () => {
     ])
     select('Cena', 'Taxi', 'Cine', 'Sueldo')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     for (const id of ['Cena', 'Taxi', 'Cine']) {
       expect(repo.row(id)?.household).toBe(true)
@@ -405,7 +420,7 @@ describe('bulk Hogar menu (#251)', () => {
     expect(repo.row('Sueldo')?.household ?? null).toBeNull()
     expect(
       await screen.findByText(
-        '3 marcadas como hogar, 1 no cuenta como gasto, sin cambios'
+        'Hogar: Sí en 3 transacciones, 1 no cuenta como gasto, sin cambios'
       )
     ).toBeInTheDocument()
     // The selection is cleared like after the other bulk actions.
@@ -418,12 +433,12 @@ describe('bulk Hogar menu (#251)', () => {
     seed([tx('Devoto'), tx('Luz', { category: 'utilities' })])
     select('Devoto', 'Luz')
 
-    await choose('Marcar como no hogar')
+    await choose('Hogar: No')
 
     expect(repo.row('Devoto')?.household).toBe(false)
     expect(repo.row('Luz')?.household).toBe(false)
     expect(
-      await screen.findByText('2 marcadas como no hogar')
+      await screen.findByText('Hogar: No en 2 transacciones')
     ).toBeInTheDocument()
   })
 
@@ -450,9 +465,11 @@ describe('bulk Hogar menu (#251)', () => {
     ])
     select('Devoto', 'Luz')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
-    expect(await screen.findByText('2 marcadas como hogar')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Hogar: Sí en 2 transacciones')
+    ).toBeInTheDocument()
   })
 
   it('uses singular forms', async () => {
@@ -475,7 +492,7 @@ describe('bulk Hogar menu (#251)', () => {
     seed([tx('Sueldo', { type: 'credit', category: 'income' })])
     select('Sueldo')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(
       await screen.findByText(
@@ -508,7 +525,7 @@ describe('bulk Hogar menu (#251)', () => {
     )
     select('Cena', 'Taxi')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(
       await screen.findByText('Se actualizaron 1 de 2 — reintentar')
@@ -530,12 +547,12 @@ describe('bulk Hogar menu (#251)', () => {
     screen.getByRole('button', { name: 'Hogar' }).focus()
     await user.keyboard('{Enter}')
     await user.tab()
-    expect(
-      screen.getByRole('button', { name: 'Marcar como hogar' })
-    ).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Hogar: Sí' })).toHaveFocus()
     await user.keyboard('{Enter}')
 
-    expect(await screen.findByText('1 marcada como hogar')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Hogar: Sí en 1 transacción')
+    ).toBeInTheDocument()
     expect(repo.row('Cena')?.household).toBe(true)
   })
 
@@ -545,15 +562,11 @@ describe('bulk Hogar menu (#251)', () => {
     select('Cena')
     const trigger = screen.getByRole('button', { name: 'Hogar' })
     await user.click(trigger)
-    expect(
-      screen.getByRole('button', { name: 'Marcar como no hogar' })
-    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Hogar: No' })).toBeVisible()
 
     await user.keyboard('{Escape}')
 
-    expect(
-      screen.queryByRole('button', { name: 'Marcar como no hogar' })
-    ).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Hogar: No' })).toBeNull()
     expect(trigger).toHaveFocus()
   })
 })
@@ -616,9 +629,7 @@ describe('review round 1 of step 4 (#251)', () => {
     await saveDialog()
 
     expect(
-      await screen.findByText(
-        'Se guardaron los cambios, pero no el gasto del hogar'
-      )
+      await screen.findByText('Se guardaron los cambios, pero no el de Hogar')
     ).toBeInTheDocument()
     expect(screen.queryByText('Cambios guardados')).toBeNull()
     expect(screen.getAllByRole('button', { name: 'Reintentar' })).toHaveLength(
@@ -691,14 +702,10 @@ describe('review round 1 of step 4 (#251)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hogar' }))
 
     expect(screen.queryByRole('button', { name: 'Alimentación' })).toBeNull()
-    expect(
-      screen.getByRole('button', { name: 'Marcar como hogar' })
-    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Hogar: Sí' })).toBeVisible()
     // ...and the other way round.
     fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
-    expect(
-      screen.queryByRole('button', { name: 'Marcar como hogar' })
-    ).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Hogar: Sí' })).toBeNull()
   })
 
   it('does not start a second bulk write while one is saving', async () => {
@@ -707,7 +714,7 @@ describe('review round 1 of step 4 (#251)', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Cena' })[0]
     )
     const gate = repo.hold('update')
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(screen.getByRole('button', { name: 'Hogar' })).toBeDisabled()
 
@@ -725,11 +732,11 @@ describe('review round 1 of step 4 (#251)', () => {
     ])
     select('Cena', 'Madre')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(
       await screen.findByText(
-        '1 marcada como hogar, 1 no cuenta como gasto, sin cambios'
+        'Hogar: Sí en 1 transacción, 1 no cuenta como gasto, sin cambios'
       )
     ).toBeInTheDocument()
   })
@@ -743,11 +750,11 @@ describe('review round 1 of step 4 (#251)', () => {
     ])
     select('Cena', 'Sueldo', 'Madre')
 
-    await choose('Marcar como hogar')
+    await choose('Hogar: Sí')
 
     expect(
       await screen.findByText(
-        '1 marcada como hogar, 2 no cuentan como gasto, sin cambios'
+        'Hogar: Sí en 1 transacción, 2 no cuentan como gasto, sin cambios'
       )
     ).toBeInTheDocument()
   })
@@ -762,7 +769,7 @@ describe('review round 1 of step 4 (#251)', () => {
     const stale = await screen.findByRole('button', { name: 'Reintentar' })
 
     select('Cena')
-    await choose('Marcar como no hogar')
+    await choose('Hogar: No')
     expect(repo.row('Cena')?.household).toBe(false)
 
     await act(async () => {
@@ -795,7 +802,7 @@ describe('review round 1 of step 4 (#251)', () => {
 
     expect(
       await screen.findByText(
-        /Se guardaron los cambios, pero no el gasto del hogar\..*La transacción ya no existe/
+        /Se guardaron los cambios, pero no el de Hogar\..*La transacción ya no existe/
       )
     ).toBeInTheDocument()
     expect(screen.queryByText('Cambios guardados')).toBeNull()
@@ -1198,7 +1205,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
 
     expect(
       await screen.findByText(
-        'Se guardaron los cambios. Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla — reintentar'
+        'Se guardaron los cambios. Se guardó Hogar en esta transacción, pero no se pudo quitar la regla — reintentar'
       )
     ).toBeVisible()
     expect(repo.householdRules.size).toBe(1)
@@ -1382,7 +1389,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     expect(repo.row(D2)?.category).toBe('restaurants')
     expect(repo.row(D2)?.categoryConfidence).toBe(0.6)
     expect(
-      await screen.findByText('Cambios guardados · gasto del hogar en 3')
+      await screen.findByText('Cambios guardados · Hogar: Sí en 3')
     ).toBeVisible()
   })
 
@@ -1415,7 +1422,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     expect(repo.row(D2)?.category).toBe('groceries')
     expect(
       await screen.findByText(
-        'Cambios aplicados a 3 transacciones · gasto del hogar en 3'
+        'Cambios aplicados a 3 transacciones · Hogar: Sí en 3'
       )
     ).toBeVisible()
   })
@@ -1468,6 +1475,26 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
       fireEvent.click(house(description))
     })
   }
+
+  it('a click that can reach similar rows says "Hogar: Sí en esta transacción" (#265)', async () => {
+    seed(devotos())
+
+    await click(D1)
+
+    expect(
+      await screen.findByText('Hogar: Sí en esta transacción')
+    ).toBeVisible()
+  })
+
+  it('and "Hogar: No en esta transacción" when the click turns it off', async () => {
+    seed(devotos().map((t) => ({ ...t, category: 'groceries' })))
+
+    await click(D1)
+
+    expect(
+      await screen.findByText('Hogar: No en esta transacción')
+    ).toBeVisible()
+  })
 
   it('offers to apply the click to the look-alikes, and the action makes them household by rule', async () => {
     seed(devotos())
@@ -1596,7 +1623,7 @@ describe('applying a house click to similar rows (#251, step 7)', () => {
     // The bulk bar does not start a single-row write, so only the row's
     // current choice tells the offer is out of date.
     select(D1)
-    await choose('Marcar como no hogar')
+    await choose('Hogar: No')
     await waitFor(() => expect(repo.row(D1)?.household).toBe(false), {
       timeout: 5000,
     })

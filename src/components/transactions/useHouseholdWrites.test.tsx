@@ -60,7 +60,7 @@ function setup(seed: Parameters<typeof createInMemoryRepository>[0] = {}) {
   return { repo, reportError, hook }
 }
 
-const FAILURE = 'No se pudo guardar el gasto del hogar'
+const FAILURE = 'No se pudo guardar el cambio de Hogar'
 
 describe('useHouseholdWrites — a partial write’s retry (#251, review 2)', () => {
   beforeEach(() => {
@@ -160,7 +160,7 @@ describe('useHouseholdWrites — a partial write’s retry (#251, review 2)', ()
     expect(repo.householdRules.size).toBe(1)
   })
 
-  it('after a saved edit, a forget that failed before the delete keeps the "pero no el gasto del hogar" prefix', async () => {
+  it('after a saved edit, a forget that failed before the delete keeps the "pero no el de Hogar" prefix', async () => {
     const { reportError, hook } = setup()
     // The hook above has no way to fail the forget itself: drive it with a
     // missing row, which the mutation reports as an explained error.

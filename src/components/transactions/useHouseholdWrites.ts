@@ -17,9 +17,10 @@ import type { TransactionsProps } from './transactions-props'
 
 const SUPERSEDED =
   'Mientras tanto se hizo otro cambio en esta transacción; no se reintentó.'
-export const AFTER_EDIT = 'Se guardaron los cambios, pero no el gasto del hogar'
+export const HOUSEHOLD_SAVE_FAILED = 'No se pudo guardar el cambio de Hogar'
+export const AFTER_EDIT = 'Se guardaron los cambios, pero no el de Hogar'
 // Leads a failed rule delete after a saved edit: its message already says the
-// row saved, so "pero no el gasto del hogar" would contradict it.
+// row saved, so "pero no el de Hogar" would contradict it.
 export const AFTER_EDIT_RULE_KEPT = 'Se guardaron los cambios. '
 
 /**
@@ -113,7 +114,7 @@ export function useHouseholdWrites({
     const saved = await writeHousehold(
       transaction.id,
       choice,
-      'No se pudo guardar el gasto del hogar'
+      HOUSEHOLD_SAVE_FAILED
     )
     if (!saved || !onApplyHouseholdToSimilar || transaction.splitParentId) {
       return
@@ -130,9 +131,7 @@ export function useHouseholdWrites({
     if (others < 1) return
     const offered = householdWrites.current.get(transaction.id)
     const offer = toast(
-      value
-        ? 'Transacción marcada como hogar'
-        : 'Transacción marcada como no hogar',
+      value ? 'Hogar: Sí en esta transacción' : 'Hogar: No en esta transacción',
       {
         duration: 8000,
         action: {
@@ -302,9 +301,7 @@ export function useHouseholdWrites({
     // whose toast carries Reintentar): the dialog can close.
     rowSaved?: boolean
   }> {
-    const failure = message
-      ? AFTER_EDIT
-      : 'No se pudo guardar el gasto del hogar'
+    const failure = message ? AFTER_EDIT : HOUSEHOLD_SAVE_FAILED
     if (write.kind === 'rule') {
       // The checked box: the merchant's rule, applied to the similar rows.
       const applied = await writeHouseholdRule(id, write.household, failure)
@@ -321,7 +318,9 @@ export function useHouseholdWrites({
       return {
         saved: true,
         message:
-          applied > 1 ? `${message} · gasto del hogar en ${applied}` : message,
+          applied > 1
+            ? `${message} · Hogar: ${write.household ? 'Sí' : 'No'} en ${applied}`
+            : message,
       }
     }
     if (write.kind === 'forget') {

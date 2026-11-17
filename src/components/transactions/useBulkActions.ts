@@ -14,6 +14,7 @@ import {
 } from '../../services/mutations/bulk-steps'
 import { txDone, type useMutationFeedback } from './useMutationFeedback'
 import type { DeleteResult } from './useMutationFeedback'
+import { HOUSEHOLD_SAVE_FAILED } from './useHouseholdWrites'
 
 type MutationFeedback = ReturnType<typeof useMutationFeedback>
 
@@ -155,8 +156,8 @@ export function useBulkActions({
       const done =
         household === null
           ? `${n} ${n === 1 ? 'vuelve' : 'vuelven'} a seguir su categoría`
-          : `${n} ${n === 1 ? 'marcada' : 'marcadas'} como ${
-              household ? 'hogar' : 'no hogar'
+          : `Hogar: ${household ? 'Sí' : 'No'} en ${n} ${
+              n === 1 ? 'transacción' : 'transacciones'
             }`
       toast.success(
         skipped > 0
@@ -166,7 +167,7 @@ export function useBulkActions({
           : done
       )
     } catch (error) {
-      reportError(error, 'No se pudo guardar el gasto del hogar')
+      reportError(error, HOUSEHOLD_SAVE_FAILED)
     } finally {
       setIsBulkOperating(false)
     }

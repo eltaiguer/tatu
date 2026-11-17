@@ -1107,7 +1107,7 @@ export class RuleDeleteFailedError extends PartialWriteError {
     cause: unknown
   ) {
     super(
-      'Se guardó el gasto del hogar de esta transacción, pero no se pudo quitar la regla',
+      'Se guardó Hogar en esta transacción, pero no se pudo quitar la regla',
       1,
       2,
       retry,
