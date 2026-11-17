@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import { useId, type ReactNode, type Ref } from 'react'
 import { cn } from './utils'
 
 // A titled part of a page: a display-font h2 above its content, as a named
@@ -12,6 +12,7 @@ export function Section({
   size = 'subhead',
   children,
   className,
+  headingRef,
 }: {
   title: string
   aside?: ReactNode
@@ -20,6 +21,9 @@ export function Section({
   size?: 'subhead' | 'heading-lg'
   children: ReactNode
   className?: string
+  // For a section that moves focus to its heading (e.g. after its last row
+  // is deleted): the heading then takes programmatic focus only.
+  headingRef?: Ref<HTMLHeadingElement>
 }) {
   const id = useId()
   return (
@@ -27,6 +31,8 @@ export function Section({
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2
           id={id}
+          ref={headingRef}
+          tabIndex={headingRef ? -1 : undefined}
           className={cn(
             'm-0 font-display leading-tight font-semibold tracking-[-0.01em]',
             size === 'heading-lg' ? 'text-heading-lg' : 'text-subhead'

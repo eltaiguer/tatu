@@ -79,6 +79,12 @@ describe('Categories', () => {
         name: 'Reglas de auto-categorización',
       })
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Reglas del hogar' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: 'Reglas del hogar' })
+    ).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
     expect(

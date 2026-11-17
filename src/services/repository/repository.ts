@@ -226,6 +226,8 @@ export interface Repository {
     merchantNormalized: string
     merchantOriginal?: string
     isHousehold: boolean
+    /** Only to restore a deleted rule with its original date (Deshacer). */
+    createdAt?: string
   }): Promise<void>
   deleteHouseholdRule(merchantNormalized: string): Promise<void>
   upsertCustomPattern(pattern: CustomPattern): Promise<void>

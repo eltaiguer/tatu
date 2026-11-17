@@ -10,6 +10,8 @@ import {
   householdExpenses,
   resolveHousehold,
   rowsChangedByRule,
+  ruleReachCounts,
+  rowsReachedByMerchantKey,
   rowsSharingMerchantRule,
   rowHouseholdView,
 } from './household'
@@ -543,6 +545,36 @@ describe('merchant rules', () => {
       rowsSharingMerchantRule([a, b, other, part, income], a).map((t) => t.id)
     ).toEqual(['a', 'b'])
     expect(rowsSharingMerchantRule([a, b, part], part)).toEqual([])
+  })
+
+  it('counts counted expenses of the key, not split parts, income or other merchants', () => {
+    const a = devoto('DEVOTO 12/03/2026', { id: 'a' })
+    const b = devoto('DEVOTO 19/03/2026', { id: 'b' })
+    const other = devoto('TIENDA INGLESA', { id: 'c' })
+    const part = devoto('DEVOTO', { id: 'd', splitParentId: 'p' })
+    const income = devoto('DEVOTO', { id: 'e', type: 'credit' })
+    const key = merchantOverrideKey('DEVOTO') as string
+    expect(
+      rowsReachedByMerchantKey([a, b, other, part, income], key).map(
+        (t) => t.id
+      )
+    ).toEqual(['a', 'b'])
+    expect(rowsReachedByMerchantKey([a, b], 'nadie')).toEqual([])
+  })
+
+  it('ruleReachCounts: per key, only rows the rule decides (no own choice), in one pass', () => {
+    const rows = [
+      devoto('DEVOTO 12/03/2026', { id: 'a' }),
+      devoto('DEVOTO 19/03/2026', { id: 'b' }),
+      devoto('DEVOTO 26/03/2026', { id: 'c', household: false }),
+      devoto('DEVOTO', { id: 'd', splitParentId: 'p' }),
+      devoto('DEVOTO', { id: 'e', type: 'credit' }),
+      devoto('TIENDA INGLESA', { id: 'f' }),
+    ]
+    const counts = ruleReachCounts(rows)
+    expect(counts.get(merchantOverrideKey('DEVOTO') as string)).toBe(2)
+    expect(counts.get(merchantOverrideKey('TIENDA INGLESA') as string)).toBe(1)
+    expect(counts.get('nadie')).toBeUndefined()
   })
 })
 
