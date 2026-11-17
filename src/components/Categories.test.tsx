@@ -560,6 +560,77 @@ describe('Categories', () => {
       }
     })
 
+    it('has no household box on an ignored category (#261)', () => {
+      addCustomCategory({ label: 'Ahorro', color: '#112233', isIgnored: true })
+      render(<Categories repository={repo} transactions={[]} />)
+
+      for (const label of [
+        'Transferencias externas',
+        'Transferencias internas',
+        'Ahorro',
+      ]) {
+        edit(label)
+        expect(
+          screen.getByRole('checkbox', { name: /Ignorar en totales/ })
+        ).toBeChecked()
+        expect(
+          screen.queryByRole('checkbox', { name: /Gasto del hogar/ })
+        ).not.toBeInTheDocument()
+        fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+      }
+    })
+
+    it('hides the box while Ignorar en totales is ticked and shows it again when unticked (#261)', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+      edit('Restaurantes')
+      const ignore = () =>
+        screen.getByRole('checkbox', { name: /Ignorar en totales/ })
+      expect(box()).toBeInTheDocument()
+
+      fireEvent.click(ignore())
+      expect(
+        screen.queryByRole('checkbox', { name: /Gasto del hogar/ })
+      ).not.toBeInTheDocument()
+
+      fireEvent.click(ignore())
+      expect(box()).toBeInTheDocument()
+    })
+
+    it('does not save a household change made before ticking Ignorar en totales (#261)', async () => {
+      render(<Categories repository={repo} transactions={[]} />)
+      edit('Restaurantes')
+
+      fireEvent.click(box())
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: /Ignorar en totales/ })
+      )
+      save()
+
+      await formClosed()
+      const stored = repo.customCategories.get('restaurants')
+      expect(stored?.isIgnored).toBe(true)
+      expect(stored?.isHousehold).toBeUndefined()
+    })
+
+    it('does not store a household default on a new category created ignored (#261)', async () => {
+      render(<Categories repository={repo} transactions={[]} />)
+      fireEvent.click(screen.getByRole('button', { name: /Nueva categoría/ }))
+      fireEvent.change(screen.getByLabelText('Nombre de categoría'), {
+        target: { value: 'Ahorro' },
+      })
+
+      fireEvent.click(box())
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: /Ignorar en totales/ })
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar categoría' }))
+
+      await formClosed()
+      const stored = repo.customCategories.get('ahorro')
+      expect(stored?.isIgnored).toBe(true)
+      expect(stored?.isHousehold).toBeFalsy()
+    })
+
     it('leaves the stored default as it was when the box is not touched', async () => {
       await setCategoryHouseholdWithSync(repo, 'groceries', false)
       await setCategoryHouseholdWithSync(repo, 'restaurants', true)
@@ -714,10 +785,6 @@ describe('Categories', () => {
         expect(toggle(label)).toHaveAttribute('aria-pressed', 'true')
       }
       expect(toggle('Restaurantes')).toHaveAttribute('aria-pressed', 'false')
-      expect(toggle('Transferencias internas')).toHaveAttribute(
-        'aria-pressed',
-        'false'
-      )
     })
 
     it('has no toggle on Sin categoría, Ingresos or a deleted category', () => {
@@ -734,6 +801,23 @@ describe('Categories', () => {
           screen.queryByRole('button', { name: `Gasto del hogar: ${label}` })
         ).not.toBeInTheDocument()
       }
+    })
+
+    it('has no toggle on an ignored category, built-in or custom (#261)', () => {
+      addCustomCategory({ label: 'Ahorro', color: '#112233', isIgnored: true })
+      render(<Categories repository={repo} transactions={[]} />)
+
+      expect(screen.getByText('Ahorro')).toBeInTheDocument()
+      for (const label of [
+        'Transferencias externas',
+        'Transferencias internas',
+        'Ahorro',
+      ]) {
+        expect(
+          screen.queryByRole('button', { name: `Gasto del hogar: ${label}` })
+        ).not.toBeInTheDocument()
+      }
+      expect(toggle('Restaurantes')).toBeInTheDocument()
     })
 
     it('says the state in the tooltip and keeps the name constant', () => {

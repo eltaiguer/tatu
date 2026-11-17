@@ -16,7 +16,7 @@ interface CategoryCardProps {
   spend: CategorySpendingDatum | undefined
   homeCurrency: Currency
   // Whether the category is a household one (ADR-0005); the toggle shows only
-  // when onToggleHousehold is given (not for Sin categoría, Ingresos, orphans).
+  // when onToggleHousehold is given (not for Sin categoría, Ingresos, ignored categories, orphans).
   household?: boolean
   householdSaving?: boolean
   onToggleHousehold?: (categoryId: string) => void
