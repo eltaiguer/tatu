@@ -475,10 +475,11 @@ calls `filterTransactions`.
   `updated_at`, `createdAt`, the PDF "Generated" line) are timestamps, not
   calendar days, and are shown in local time (`formatLocalDate`).
 
-Tests run with `TZ` pinned to `America/Montevideo` (`vite.config.ts`);
-`npm run test:tz` reruns the suite in `Europe/Madrid` (east of UTC) and
-`America/Los_Angeles` (west of Uruguay, where a `T03:00Z` row read in local
-time falls on the previous day). `TZ` can't be switched inside a test: test
+Tests run with `TZ` pinned to `America/Montevideo` (`vite.config.ts`), the
+only zone Tatu is used in. UTC midnight is 21:00 the day before there, so a
+date read in local time already fails in that run. `npm run test:tz` reruns the
+suite in `Europe/Madrid` and `America/Los_Angeles`; it is optional and not part
+of `tdd:verify` or CI (#267). `TZ` can't be switched inside a test: test
 workers inherit it from the main process.
 
 ## Money conversion

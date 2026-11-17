@@ -1,10 +1,19 @@
 name: CI
 
 on:
+  # Docs-only changes skip CI: nothing they touch is tested or built (#267).
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.claude/**'
   push:
     branches:
       - main
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.claude/**'
 
 jobs:
   verify:
