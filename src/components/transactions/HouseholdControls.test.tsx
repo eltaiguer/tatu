@@ -832,7 +832,7 @@ describe('the house shows Hogar or No (#265)', () => {
 
   it('names the house after the row, its value and where it comes from', () => {
     putMerchantHouseholdRule(
-      merchantOverrideKey('COMPRA DEVOTO 4521'),
+      merchantOverrideKey('COMPRA DEVOTO 4521') as string,
       true,
       'COMPRA DEVOTO 4521'
     )
