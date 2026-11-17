@@ -65,10 +65,12 @@ function marchRows(): Transaction[] {
 function Harness({
   transactions,
   initialHousehold = false,
+  homeCurrency = 'USD',
   onNavigateToTransactions,
   onNavigateToCategories,
 }: {
   transactions: Transaction[]
+  homeCurrency?: 'USD' | 'UYU'
   initialHousehold?: boolean
   onNavigateToTransactions?: (filter: TransactionsFilter) => void
   onNavigateToCategories?: () => void
@@ -77,7 +79,7 @@ function Harness({
   return (
     <Dashboard
       transactions={transactions}
-      homeCurrency="USD"
+      homeCurrency={homeCurrency}
       fxRate={40}
       householdMode={household}
       onHouseholdModeChange={setHousehold}
@@ -115,6 +117,35 @@ describe('Dashboard: Todo / Hogar mode', () => {
     ).not.toBeChecked()
   })
 
+  it('labels the Todo / Hogar toggle "Ver:" on Resumen', () => {
+    render(<Harness transactions={marchRows()} />)
+    const group = screen.getByRole('radiogroup', { name: 'Ver gastos' })
+    const label = screen.getByText('Ver:')
+
+    expect(
+      label.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(label.parentElement?.querySelector('svg')).toBeNull()
+  })
+
+  it('the hero\'s eyebrow names the month and the currency, without "todo"', () => {
+    const { unmount } = render(<Harness transactions={marchRows()} />)
+    expect(screen.getByRole('heading', { name: /Gastaste/ })).toHaveTextContent(
+      /Marzo de 2026 · en dólares/
+    )
+    chooseHogar()
+    expect(
+      screen.getByRole('heading', { name: /Gastos del hogar/ })
+    ).toHaveTextContent(/Marzo de 2026 · en dólares/)
+    expect(screen.queryByText(/todo en/)).toBeNull()
+    unmount()
+
+    render(<Harness transactions={marchRows()} homeCurrency="UYU" />)
+    expect(screen.getByRole('heading', { name: /Gastaste/ })).toHaveTextContent(
+      /Marzo de 2026 · en pesos/
+    )
+  })
+
   it('opens in Hogar mode when told to', () => {
     render(<Harness transactions={marchRows()} initialHousehold />)
     expect(screen.getByText(/Gastos del hogar/)).toBeInTheDocument()
@@ -125,7 +156,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
     chooseHogar()
     const hero = screen.getByRole('heading', { name: /Gastos del hogar/ })
     expect(hero).toHaveTextContent('Gastos del hogar US$ 190,00')
-    expect(hero).toHaveTextContent(/Marzo de 2026 · todo en dólares/)
+    expect(hero).toHaveTextContent(/Marzo de 2026 · en dólares/)
     expect(screen.queryByText(/Gastaste/)).not.toBeInTheDocument()
   })
 
