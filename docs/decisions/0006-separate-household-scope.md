@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed
+Proposed. Partially superseded by
+[0007](0007-simplify-household-flag.md): the household scope radio becomes one
+"Recordar para todas las de [comercio]" checkbox, with no future-only option.
 
 ## Date
 
