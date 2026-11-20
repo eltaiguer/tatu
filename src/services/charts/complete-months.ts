@@ -2,17 +2,18 @@ import type { FileType, Transaction } from '../../models'
 import { ACCOUNT_LABELS, accountOf } from '../../utils/account-display'
 import { countsAsRow } from '../spending/spending-rules'
 
-// THE rule for "is this month fully imported?". A month is complete when
-// every imported account covers it: already started by then (not imported
-// later) and, if the month is the account's last one, running to its end (a
-// statement closing on the 20th leaves that month partial). Months between
-// an account's first and last are taken as covered even without rows —
-// sparse accounts (a USD account with a movement every month or two) are
-// common, so a quiet month is read as quiet. Trade-off: a statement skipped
-// between two imported ones also reads as quiet. An account silent for
-// DORMANT_AFTER_DAYS before the month is dormant, not "waiting to be
-// imported", and doesn't constrain it. The current month (and anything
-// later) is never complete.
+// THE rule for "is this month fully imported?" (#293, the owner's "hybrid"
+// decision; it supersedes c78b8bf's leniency toward sparse accounts). An
+// account covers a month it has rows in: already started by then (not
+// imported later) and, if the month is the account's last one, running to its
+// end (a statement closing on the 20th leaves that month partial). A month
+// with no rows from an account is missing — a statement skipped between two
+// imported ones is not a quiet month — unless the account is dormant: its
+// latest row before the month is more than DORMANT_AFTER_DAYS before the
+// month's 1st, so it is not "waiting to be imported" and doesn't constrain
+// it. That holds mid-history too, so a long quiet spell doesn't stall the
+// comparisons. A month no account covers is never complete, and neither is
+// the current month or anything later.
 //
 // `currentMonth` is passed in ('YYYY-MM') so callers choose the clock:
 // Resumen and Insights both pass today's month.
@@ -44,13 +45,14 @@ const pad = (n: number) => String(n).padStart(2, '0')
 // One month's coverage: which accounts span it and which don't.
 export interface MonthCoverage {
   month: string // 'YYYY-MM'
-  complete: boolean // missing is empty AND month < currentMonth
+  complete: boolean // missing is empty AND some account covers it AND month < currentMonth
   covered: FileType[] // accounts whose data spans the month (account order)
   missing: FileType[] // active accounts that don't (dormant ones are in neither)
-  // The missing accounts with no row at all that month: the month is before
-  // the account's first month or after its last. A missing account that HAS
-  // rows that month (first row after the 3rd, last row before the last 3
-  // days) is in `missing` only: its statement for that month is imported.
+  // The missing accounts with no row at all that month: before the
+  // account's first row, after its last, or a statement skipped in between. A
+  // missing account that HAS rows that month (first row after the 3rd, last
+  // row before the last 3 days) is in `missing` only: its statement for that
+  // month is imported.
   absent: FileType[]
 }
 
@@ -60,16 +62,27 @@ export function monthCoverage(
   transactions: Transaction[],
   currentMonth: string
 ): MonthCoverage[] {
-  // Coverage: the first and last day each account has data for.
-  const coverage = new Map<FileType, { first: string; last: string }>()
+  // Coverage: the first and last day each account has data for, and the
+  // latest day it has data in each month.
+  const coverage = new Map<
+    FileType,
+    { first: string; last: string; months: Map<string, string> }
+  >()
   for (const tx of transactions) {
     // Ignored rows (transfers) still prove the account has data that day.
     if (!countsAsRow(tx)) continue
     const day = tx.date.toISOString().slice(0, 10)
     const key = accountOf(tx.source, tx.currency)
-    const entry = coverage.get(key) ?? { first: day, last: day }
+    const entry = coverage.get(key) ?? {
+      first: day,
+      last: day,
+      months: new Map<string, string>(),
+    }
     if (day < entry.first) entry.first = day
     if (day > entry.last) entry.last = day
+    const monthKey = day.slice(0, 7)
+    if (day > (entry.months.get(monthKey) ?? ''))
+      entry.months.set(monthKey, day)
     coverage.set(key, entry)
   }
 
@@ -86,7 +99,17 @@ export function monthCoverage(
     const missing: FileType[] = []
     const absent: FileType[] = []
     for (const [account, c] of accounts) {
-      if (c.last < dormantBefore) continue
+      if (!c.months.has(month)) {
+        // No rows this month: dormant when its latest earlier row is old.
+        let before = ''
+        for (const [key, day] of c.months) {
+          if (key < month && day > before) before = day
+        }
+        if (before !== '' && before < dormantBefore) continue
+        missing.push(account)
+        absent.push(account)
+        continue
+      }
       if (
         c.first <= startBy &&
         (c.last.slice(0, 7) > month || c.last >= endFrom)
@@ -95,13 +118,11 @@ export function monthCoverage(
         continue
       }
       missing.push(account)
-      if (month < c.first.slice(0, 7) || month > c.last.slice(0, 7)) {
-        absent.push(account)
-      }
     }
     return {
       month,
-      complete: month < currentMonth && missing.length === 0,
+      complete:
+        month < currentMonth && missing.length === 0 && covered.length > 0,
       covered,
       missing,
       absent,

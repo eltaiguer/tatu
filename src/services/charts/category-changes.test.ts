@@ -169,7 +169,7 @@ describe('categoryChanges', () => {
     expect(result.kind).toBe('insufficient')
   })
 
-  it('compares a sparse but active account instead of getting stuck', () => {
+  it('reads a quiet month right after a row as missing; longer silences as dormant (#293)', () => {
     // A USD account with movements only in early May and mid-September,
     // next to a card with every month imported.
     const usd = { source: 'bank_account' as const, currency: 'USD' as const }
@@ -183,31 +183,68 @@ describe('categoryChanges', () => {
     ]
     const result = categoryChanges(txs, 'USD', 40, NOW)
 
-    // September is the USD account's last, partial month; August compares.
+    // c78b8bf favoured sparse accounts (any month between first and last was
+    // covered); the owner chose the hybrid rule on #293. June is within 45
+    // days of May 2, so USD is missing it. July and August are dormant.
+    // September is USD's last, partial month.
+    expect(result).toEqual({
+      kind: 'insufficient',
+      reference: '2026-08',
+      completeInARow: 2,
+      gap: { month: '2026-06', accounts: ['bank_account_usd'] },
+    })
+  })
+
+  it("still compares when a sparse account's silence passes 45 days (#293)", () => {
+    // Same card; USD rows on Mar 10 and Sep 10 only: dormant from May on.
+    const usd = { source: 'bank_account' as const, currency: 'USD' as const }
+    const txs = [
+      ...fullMonths(
+        ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09'],
+        (m) => [tx(`${m}-10`, 'restaurants', m === '2026-08' ? 600 : 300)]
+      ),
+      tx('2026-03-10', 'housing', 50, usd),
+      tx('2026-09-10', 'housing', 50, usd),
+    ]
+    const result = categoryChanges(txs, 'USD', 40, NOW)
+
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
     expect(result.reference).toBe('2026-08')
     expect(result.baseline).toEqual(['2026-05', '2026-06', '2026-07'])
-    expect(result.increases[0]).toMatchObject({
-      category: 'restaurants',
-      delta: 300,
-    })
   })
 
-  it('reads a statement skipped in the middle as a quiet month (accepted trade-off)', () => {
-    // Card statements for Jun, Jul and Sep imported; August skipped. With
-    // sparse accounts favoured, August counts as complete with no spend.
+  it('leaves a month whose statement was skipped incomplete (#293)', () => {
+    // Card statements for Jun, Jul and Sep imported; August skipped. August
+    // has no rows and Jul 28 is within 45 days, so it is missing. The user
+    // has a single account, so nobody covers August and no gap is named.
     const txs = fullMonths(['2026-06', '2026-07', '2026-09'], (m) => [
       tx(`${m}-10`, 'restaurants', 300),
     ])
-    const result = categoryChanges(txs, 'USD', 40, NOW)
 
-    expect(result.kind === 'ok' && result.reference).toBe('2026-09')
-    expect(result.kind === 'ok' && result.baseline).toEqual([
-      '2026-06',
-      '2026-07',
-      '2026-08',
-    ])
+    expect(categoryChanges(txs, 'USD', 40, NOW)).toEqual({
+      kind: 'insufficient',
+      reference: '2026-09',
+      completeInARow: 1,
+    })
+  })
+
+  it('names the account whose statement was skipped (#293)', () => {
+    const usd = { source: 'bank_account' as const, currency: 'USD' as const }
+    const txs = [
+      ...fullMonths(['2026-06', '2026-07', '2026-08', '2026-09'], () => []),
+      ...['2026-07', '2026-09'].flatMap((m) => [
+        tx(`${m}-01`, 'fees', 0.01, usd),
+        tx(`${m}-28`, 'fees', 0.01, usd),
+      ]),
+    ]
+
+    expect(categoryChanges(txs, 'USD', 40, NOW)).toEqual({
+      kind: 'insufficient',
+      reference: '2026-09',
+      completeInARow: 1,
+      gap: { month: '2026-08', accounts: ['bank_account_usd'] },
+    })
   })
 
   it('needs at least two complete months before the reference', () => {

@@ -67,8 +67,9 @@ function median(values: number[]): number {
 }
 
 // A month is a gap when some account covers it and another has no rows in
-// it. A month nobody covers is time (the statements just end there); a
-// missing account that has rows that month has its statement imported.
+// it (`absent` also holds a month skipped between two imported ones). A month
+// nobody covers is time (the statements just end there); a missing account
+// that has rows that month has its statement imported.
 function gapAt(
   months: MonthCoverage[],
   month: string,
