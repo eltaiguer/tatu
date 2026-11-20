@@ -22,15 +22,32 @@ const MONTHS_ES_SHORT = [
   'Dic',
 ]
 
+// The accessible name of a month chip: one source for the strings.
+export function monthChipLabel(
+  name: string,
+  count: number,
+  incomplete: boolean
+): string {
+  const rows =
+    count === 0
+      ? 'sin movimientos'
+      : `${count} ${count === 1 ? 'movimiento' : 'movimientos'}`
+  return `${name}, ${rows}${incomplete ? ', mes incompleto' : ''}`
+}
+
 /* ---- MonthNav ---- */
 export function MonthNav({
   period,
   setPeriod,
   newest,
+  monthCounts,
+  completeMonthKeys,
 }: {
   period: UrlPeriod
   setPeriod: (p: UrlPeriod) => void
   newest: Date
+  monthCounts: ReadonlyMap<string, number>
+  completeMonthKeys: ReadonlySet<string>
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -201,19 +218,45 @@ export function MonthNav({
                 period.mode === 'month' &&
                 period.y === gridYear &&
                 period.m === i
+              const key = `${gridYear}-${String(i + 1).padStart(2, '0')}`
+              const count = monthCounts.get(key) ?? 0
+              const incomplete = count > 0 && !completeMonthKeys.has(key)
+              const name = getPeriodLabel({
+                mode: 'month',
+                y: gridYear,
+                m: i,
+              }).toLowerCase()
               return (
                 <Button
                   key={i}
                   variant={isSel ? 'default' : 'outline'}
                   size="sm"
                   disabled={isFuture}
-                  className="px-0 py-[7px] disabled:opacity-[0.35]"
+                  aria-label={monthChipLabel(name, count, incomplete)}
+                  title={
+                    incomplete ? 'Le faltan datos de alguna cuenta' : undefined
+                  }
+                  className={cn(
+                    'h-auto min-h-[44px] flex-col gap-[2px] px-0 py-[5px] disabled:opacity-[0.35]',
+                    count === 0 && 'font-normal text-[var(--text-faint)]'
+                  )}
                   onClick={() => {
                     setPeriod({ mode: 'month', y: gridYear, m: i })
                     setOpen(false)
                   }}
                 >
                   {mo}
+                  {count > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="flex items-center gap-[3px] text-[10px] leading-none font-normal tabular-nums"
+                    >
+                      {count}
+                      {incomplete && (
+                        <span className="inline-block size-[6px] rounded-full border border-current" />
+                      )}
+                    </span>
+                  )}
                 </Button>
               )
             })}

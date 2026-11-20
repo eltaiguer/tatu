@@ -13,7 +13,8 @@ import {
 import { useHouseholdRules } from './useHouseholdRules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { sortCategoryIdsByLabel } from '../services/categories/category-registry'
-import { newestDate, todayAsUtcDate } from '../utils/date-utils'
+import { newestDate, toMonthKey, todayAsUtcDate } from '../utils/date-utils'
+import { completeMonths } from '../services/charts/complete-months'
 import type { Transaction } from '../models'
 import {
   DEFAULT_URL_FILTERS,
@@ -22,6 +23,7 @@ import {
 import {
   filterTransactions,
   groupSplitRows,
+  monthRowCounts,
   periodDateRange,
   periodWithDateBound,
   sortTransactions,
@@ -218,6 +220,27 @@ export function useTransactionFiltering({
     ]
   )
 
+  // What the month picker needs besides the period: the newest row of ALL
+  // rows (null only without rows), the rows each month would list under the
+  // other filters (so a caption equals the header after picking), and which
+  // months are complete (the statements, not the filters: as in Resumen).
+  const monthCounts = useMemo(
+    () => monthRowCounts(transactions, filters, { householdRules }),
+    [transactions, filters, householdRules]
+  )
+  const completeMonthKeys = useMemo(
+    () => completeMonths(transactions, toMonthKey(todayAsUtcDate())),
+    [transactions]
+  )
+  const monthNav = useMemo(
+    () => ({
+      newest: newestRowDate ?? todayAsUtcDate(),
+      monthCounts,
+      completeMonthKeys,
+    }),
+    [newestRowDate, monthCounts, completeMonthKeys]
+  )
+
   const showIgnored = filters.showIgnored
   const filteredTransactions = useMemo(() => {
     if (showIgnored) return allFilteredTransactions
@@ -321,6 +344,7 @@ export function useTransactionFiltering({
     ignoredCount,
     availableCategories,
     newestRowDate,
+    monthNav,
     currentPage,
     setCurrentPage,
     totalPages,

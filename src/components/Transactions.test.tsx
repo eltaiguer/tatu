@@ -1605,4 +1605,90 @@ describe('Transactions month range', () => {
     expect(screen.getAllByText('01/03/2026').length).toBeGreaterThan(0)
     expect(screen.queryAllByText('28/02/2026')).toHaveLength(0)
   })
+
+  describe('month picker', () => {
+    const row = (id: string, date: string, extra: Partial<Transaction> = {}) =>
+      ({
+        ...makeTransaction(0, id),
+        id,
+        date: new Date(`${date}T00:00:00.000Z`),
+        ...extra,
+      }) as Transaction
+    const rows = [
+      row('m1', '2025-03-10'),
+      row('m2', '2025-03-20'),
+      row('n1', '2025-11-01'),
+      row('n2', '2025-11-12', { category: 'restaurants' }),
+      row('n3', '2025-11-25'),
+      row('t1', '2025-11-15', { category: 'internal_transfer' }),
+      row('d1', '2025-12-01'),
+      row('d2', '2025-12-30'),
+    ]
+
+    function withClock(run: () => void) {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-11-20T15:00:00.000Z'))
+      try {
+        run()
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+
+    it('is wired to the view rows', () => {
+      withClock(() => {
+        render(<Transactions transactions={rows} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Diciembre 2025' }))
+        for (const name of [
+          'marzo 2025, 2 movimientos, mes incompleto',
+          'noviembre 2025, 3 movimientos',
+          'diciembre 2025, 2 movimientos',
+          'enero 2025, sin movimientos',
+        ]) {
+          expect(screen.getByRole('button', { name })).toBeTruthy()
+        }
+      })
+    })
+
+    it('counts what picking the month lists, following the ignored toggle', () => {
+      withClock(() => {
+        render(<Transactions transactions={rows} />)
+        fireEvent.click(screen.getByRole('button', { name: 'Diciembre 2025' }))
+        fireEvent.click(
+          screen.getByRole('button', { name: 'noviembre 2025, 3 movimientos' })
+        )
+        expect(screen.getByText(/^3 movimientos · Noviembre 2025/)).toBeTruthy()
+
+        fireEvent.click(
+          screen.getByRole('button', { name: /transferencias ignoradas/ })
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Noviembre 2025' }))
+        expect(
+          screen.getByRole('button', { name: 'noviembre 2025, 4 movimientos' })
+        ).toBeTruthy()
+      })
+    })
+
+    it('follows the other filters', () => {
+      withClock(() => {
+        render(
+          <Transactions
+            transactions={rows}
+            initialFilters={{
+              ...DEFAULT_URL_FILTERS,
+              categories: ['restaurants'],
+            }}
+          />
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Todo el período' }))
+        for (const name of [
+          'noviembre 2025, 1 movimiento',
+          'diciembre 2025, sin movimientos',
+          'marzo 2025, sin movimientos',
+        ]) {
+          expect(screen.getByRole('button', { name })).toBeTruthy()
+        }
+      })
+    })
+  })
 })
