@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   act,
   fireEvent,
@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react'
 import { useStore } from 'zustand'
 import userEvent from '@testing-library/user-event'
-import { Toaster } from 'sonner'
+import { Toaster, toast } from 'sonner'
 import { Transactions } from '../Transactions'
 import { Category, type Transaction } from '../../models'
 import {
@@ -50,6 +50,14 @@ function tx(id: string, overrides: Partial<Transaction> = {}): Transaction {
 }
 
 let repo: InMemoryRepository
+
+// Sonner's toasts are global: one test's must not outlive it into the next
+// test's Toaster.
+afterEach(() => {
+  act(() => {
+    toast.dismiss()
+  })
+})
 
 beforeEach(() => {
   replaceDescriptionOverrides({})
@@ -117,6 +125,14 @@ async function pick(description: string, label: string, which = 0) {
   )
 }
 
+// Sonner mounts a toast invisible and flips it a tick later (and shows at
+// most three at once): wait for it to be visible, don't assert on arrival.
+async function visible(element: HTMLElement | Promise<HTMLElement>) {
+  const el = await element
+  await waitFor(() => expect(el).toBeVisible())
+  return el
+}
+
 const DEVOTO = (day: number) => `DEVOTO ${day}/03/2026`
 const devotos = () => [
   tx('d1', { description: DEVOTO(11) }),
@@ -166,12 +182,18 @@ describe('categorize in place (#279)', () => {
 
     await pick(DEVOTO(11), 'Restaurantes')
 
-    expect(await screen.findByText('Cambios guardados')).toBeVisible()
-    expect(screen.getByText('Restaurantes en esta transacción')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Deshacer' })).toBeVisible()
-    expect(
-      screen.getByRole('button', { name: 'Aplicar a las 2 similares' })
-    ).toBeVisible()
+    await visible(screen.findByText('Cambios guardados'))
+    await visible(
+      Promise.resolve(screen.getByText('Restaurantes en esta transacción'))
+    )
+    await visible(
+      Promise.resolve(screen.getByRole('button', { name: 'Deshacer' }))
+    )
+    await visible(
+      Promise.resolve(
+        screen.getByRole('button', { name: 'Aplicar a las 2 similares' })
+      )
+    )
   })
 
   it('Deshacer puts back the category and its confidence', async () => {
@@ -194,7 +216,7 @@ describe('categorize in place (#279)', () => {
         categoryConfidence: 0.4,
       })
     }
-    expect(await screen.findByText('Se deshizo el cambio')).toBeVisible()
+    await visible(screen.findByText('Se deshizo el cambio'))
     expect(screen.getAllByText('Revisar').length).toBeGreaterThan(0)
 
     await pick('Sin cat', 'Transporte')
@@ -212,7 +234,7 @@ describe('categorize in place (#279)', () => {
       await screen.findByRole('button', { name: 'Aplicar a las 2 similares' })
     )
 
-    expect(await screen.findByText('Se aplicó a 2 transacciones')).toBeVisible()
+    await visible(screen.findByText('Se aplicó a 2 transacciones'))
     for (const id of ['d1', 'd2', 'd3']) {
       expect(repo.row(id)).toMatchObject({
         category: 'restaurants',
@@ -230,9 +252,9 @@ describe('categorize in place (#279)', () => {
         tx('b', { description: 'Tienda' }),
       ])
       await pick('Tienda', 'Restaurantes')
-      expect(
-        await screen.findByRole('button', { name: 'Aplicar a la otra similar' })
-      ).toBeVisible()
+      await visible(
+        screen.findByRole('button', { name: 'Aplicar a la otra similar' })
+      )
     })
 
     it('offers nothing when there is no other', async () => {
@@ -268,9 +290,9 @@ describe('categorize in place (#279)', () => {
         { filters: { period: { mode: 'month', y: 2026, m: 2 } } }
       )
       await pick('Tienda', 'Restaurantes')
-      expect(
-        await screen.findByRole('button', { name: 'Aplicar a la otra similar' })
-      ).toBeVisible()
+      await visible(
+        screen.findByRole('button', { name: 'Aplicar a la otra similar' })
+      )
     })
   })
 
@@ -339,11 +361,11 @@ describe('categorize in place (#279)', () => {
       })
       fireEvent.click(undo)
 
-      expect(
-        await screen.findByText(
+      await visible(
+        screen.findByText(
           'Mientras tanto cambió la categoría de esta transacción; no se deshizo.'
         )
-      ).toBeVisible()
+      )
       expect(stored('a')?.category).toBe('transport')
       expect(repo.row('a')?.category).toBe('transport')
     })
@@ -362,9 +384,11 @@ describe('categorize in place (#279)', () => {
 
       await userEvent.keyboard('c')
       expect(within(dialog).getByLabelText('Buscar categoría')).toHaveValue('c')
-      expect(
-        screen.getByRole('dialog', { name: 'Elegir categoría' })
-      ).toBeVisible()
+      await visible(
+        Promise.resolve(
+          screen.getByRole('dialog', { name: 'Elegir categoría' })
+        )
+      )
 
       await userEvent.clear(within(dialog).getByLabelText('Buscar categoría'))
       await userEvent.keyboard('rest{Enter}')
@@ -450,10 +474,10 @@ describe('categorize in place (#279)', () => {
 
     await pick('Tienda', 'Restaurantes')
 
-    expect(
-      await screen.findByText('No se pudo cambiar la categoría')
-    ).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Reintentar' })).toBeVisible()
+    await visible(screen.findByText('No se pudo cambiar la categoría'))
+    await visible(
+      Promise.resolve(screen.getByRole('button', { name: 'Reintentar' }))
+    )
     expect(stored('a')?.category).toBe('groceries')
     expect(logged).toHaveBeenCalled()
   })
@@ -527,9 +551,7 @@ describe('categorize in place (#279)', () => {
       await noPicker(DEVOTO(11))
 
       await act(async () => gate.release())
-      expect(
-        await screen.findByText('Se aplicó a 2 transacciones')
-      ).toBeVisible()
+      await visible(screen.findByText('Se aplicó a 2 transacciones'))
       await waitFor(() =>
         expect(badge(DEVOTO(11))).not.toHaveAttribute('aria-disabled')
       )
@@ -608,11 +630,11 @@ describe('categorize in place (#279)', () => {
 
       fireEvent.click(apply)
 
-      expect(
-        await screen.findByText(
+      await visible(
+        screen.findByText(
           'Mientras tanto cambió la categoría de esta transacción; no se aplicó a las similares.'
         )
-      ).toBeVisible()
+      )
       expect(stored('d2')?.category).toBe('groceries')
       expect(repo.categoryOverrides.size).toBe(0)
     })
@@ -635,11 +657,11 @@ describe('categorize in place (#279)', () => {
 
       fireEvent.click(retry)
 
-      expect(
-        await screen.findByText(
+      await visible(
+        screen.findByText(
           'Mientras tanto cambió la categoría de esta transacción; no se aplicó a las similares.'
         )
-      ).toBeVisible()
+      )
       expect(stored('d1')?.category).toBe('transport')
     })
   })
