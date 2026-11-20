@@ -9,14 +9,20 @@ const CURRENCY_OPTIONS: { label: string; value: Currency }[] = [
 interface CurrencyToggleProps {
   value: Currency
   onChange: (c: Currency) => void
+  size?: 'sm' | 'md'
 }
 
-export function CurrencyToggle({ value, onChange }: CurrencyToggleProps) {
+export function CurrencyToggle({
+  value,
+  onChange,
+  size = 'md',
+}: CurrencyToggleProps) {
   return (
     <SegmentedToggle
       options={CURRENCY_OPTIONS}
       value={value}
       onChange={onChange}
+      size={size}
       aria-label="Moneda principal"
     />
   )
