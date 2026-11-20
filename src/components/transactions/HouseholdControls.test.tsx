@@ -977,32 +977,45 @@ describe('the house shows Hogar or No (#265)', () => {
     expect(urls[urls.length - 1]).not.toContain('hogar=si')
   })
 
-  it('picking Hogar while Ingresos is chosen goes back to Ambos', () => {
-    seed(rows())
+  // The type radios live in the Filtros panel, a modal sheet in jsdom.
+  const openFilters = async () => {
+    fireEvent.click(screen.getByRole('button', { name: /^Filtros/ }))
+    return within(await screen.findByRole('dialog', { name: 'Filtros' }))
+  }
+  const closeFilters = async () => {
     fireEvent.click(
-      within(
-        screen.getByRole('radiogroup', { name: 'Tipo de transacción' })
-      ).getByRole('radio', { name: 'Ingresos' })
+      within(screen.getByRole('dialog', { name: 'Filtros' })).getByRole(
+        'button',
+        { name: 'Cerrar' }
+      )
     )
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  }
+  const typeRadio = (panel: ReturnType<typeof within>, name: string) =>
+    within(
+      panel.getByRole('radiogroup', { name: 'Tipo de transacción' })
+    ).getByRole('radio', { name })
+
+  it('picking Hogar while Ingresos is chosen goes back to Ambos', async () => {
+    seed(rows())
+    let panel = await openFilters()
+    fireEvent.click(typeRadio(panel, 'Ingresos'))
+    await closeFilters()
     expect(listed('Sueldo')).toBe(true)
     pick()
 
-    expect(
-      within(
-        screen.getByRole('radiogroup', { name: 'Tipo de transacción' })
-      ).getByRole('radio', { name: 'Ambos' })
-    ).toBeChecked()
+    panel = await openFilters()
+    expect(typeRadio(panel, 'Ambos')).toBeChecked()
+    await closeFilters()
     expect(listed('Devoto')).toBe(true)
   })
 
-  it('picking Ingresos while Hogar is on goes back to Todo in Hogar', () => {
+  it('picking Ingresos while Hogar is on goes back to Todo in Hogar', async () => {
     seed(rows())
     pick()
-    fireEvent.click(
-      within(
-        screen.getByRole('radiogroup', { name: 'Tipo de transacción' })
-      ).getByRole('radio', { name: 'Ingresos' })
-    )
+    const panel = await openFilters()
+    fireEvent.click(typeRadio(panel, 'Ingresos'))
+    await closeFilters()
 
     expect(chip()).toHaveAttribute('aria-pressed', 'false')
     expect(listed('Sueldo')).toBe(true)

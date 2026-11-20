@@ -46,7 +46,6 @@ function renderTable(overrides: Partial<TableProps> = {}) {
     onHeaderCheckboxChange: vi.fn(),
     onSort: vi.fn(),
     onClearFilters: vi.fn(),
-    onShowIgnoredChange: vi.fn(),
     onEdit: vi.fn(),
     onDelete: vi.fn(),
     onSplit: vi.fn(),
@@ -362,33 +361,29 @@ describe('TransactionTable', () => {
       expect(screen.getAllByText('Ignorada')).toHaveLength(2)
     })
 
-    it('toggles showing ignored transfers and shows how many there are', () => {
-      const { props } = renderTable({ ignoredCount: 3 })
+    it('says how many ignored transfers are hidden, as text', () => {
+      renderTable({ ignoredCount: 3 })
 
-      const toggle = screen.getByRole('button', {
-        name: /Mostrar transferencias ignoradas/,
-      })
-      expect(toggle).toHaveTextContent('· 3')
-
-      fireEvent.click(toggle)
-      expect(props.onShowIgnoredChange).toHaveBeenCalledWith(true)
-    })
-
-    it('offers to hide ignored transfers when they are shown', () => {
-      const { props } = renderTable({ ignoredCount: 3, showIgnored: true })
-
-      fireEvent.click(
-        screen.getByRole('button', { name: /Ocultar transferencias ignoradas/ })
-      )
-      expect(props.onShowIgnoredChange).toHaveBeenCalledWith(false)
-    })
-
-    it('disables the toggle when nothing is ignored', () => {
-      renderTable({ ignoredCount: 0 })
-
+      expect(screen.getByText('3 transferencias ocultas')).toBeInTheDocument()
       expect(
-        screen.getByRole('button', { name: /transferencias ignoradas/ })
-      ).toBeDisabled()
+        screen.queryByRole('button', { name: /transferencias/ })
+      ).toBeNull()
+    })
+
+    it('says it in the singular for one', () => {
+      renderTable({ ignoredCount: 1 })
+
+      expect(screen.getByText('1 transferencia oculta')).toBeInTheDocument()
+    })
+
+    it('says nothing when they are shown', () => {
+      renderTable({ ignoredCount: 3, showIgnored: true })
+      expect(screen.queryByText(/transferencias? ocultas?/)).toBeNull()
+    })
+
+    it('says nothing when nothing is ignored', () => {
+      renderTable({ ignoredCount: 0 })
+      expect(screen.queryByText(/transferencias? ocultas?/)).toBeNull()
     })
   })
 

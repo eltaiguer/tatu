@@ -1,5 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { TransactionFilters } from './TransactionFilters'
 import { resolveCategory } from '../services/categories/category-registry'
@@ -8,6 +14,7 @@ import {
   hasActiveFilters,
 } from '../services/filters/url-filters'
 import type { FilterState } from '../services/filters/transaction-filter'
+import { SECONDARY_FILTERS_CLEARED } from './transactions/secondary-filters'
 import { replaceCustomCategories } from '../services/categories/category-store'
 
 type FilterProps = ComponentProps<typeof TransactionFilters>
@@ -26,6 +33,7 @@ function renderFilters(
     hasActiveFilters: hasActiveFilters(state),
     dateRange: { from: '', to: '' },
     availableCategories: ['groceries', 'restaurants'],
+    ignoredCount: 0,
     onChange: vi.fn(),
     onDateBoundChange: vi.fn(),
     onClearAll: vi.fn(),
@@ -42,6 +50,22 @@ function segment(group: string, option: string): HTMLElement {
       name: option,
     }
   )
+}
+
+// The panel is a modal sheet in jsdom (matchMedia says "not wide").
+async function openFilters() {
+  fireEvent.click(screen.getByRole('button', { name: /^Filtros/ }))
+  return within(await screen.findByRole('dialog', { name: 'Filtros' }))
+}
+
+async function closeFilters() {
+  fireEvent.click(
+    within(screen.getByRole('dialog', { name: 'Filtros' })).getByRole(
+      'button',
+      { name: 'Cerrar' }
+    )
+  )
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 }
 
 describe('TransactionFilters', () => {
@@ -109,14 +133,140 @@ describe('TransactionFilters', () => {
     })
   })
 
-  describe('account filter', () => {
-    it('adds the account picked from the list', () => {
-      const props = renderFilters()
+  describe('the primary row and the Filtros panel (#284)', () => {
+    it('shows only search, Categoría, Hogar and Filtros', () => {
+      renderFilters()
 
-      fireEvent.click(screen.getByLabelText('Filtro cuenta'))
-      fireEvent.click(screen.getByRole('button', { name: 'Tarjeta' }))
+      expect(
+        screen.getByPlaceholderText('Buscar por comercio o descripción...')
+      ).toBeInTheDocument()
+      expect(screen.getByLabelText('Filtro categoría')).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Filtro Hogar' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Filtros' })
+      ).toBeInTheDocument()
+      expect(screen.queryByLabelText('Tarjeta')).toBeNull()
+      expect(
+        screen.queryByRole('radiogroup', { name: 'Tipo de transacción' })
+      ).toBeNull()
+      expect(screen.queryByRole('radiogroup', { name: 'Moneda' })).toBeNull()
+      expect(screen.queryByLabelText('Monto mínimo')).toBeNull()
+      expect(
+        screen.queryByRole('button', { name: /transferencias/ })
+      ).toBeNull()
+    })
+
+    it('counts the active panel filters on the button', () => {
+      renderFilters({ accounts: ['credit_card'], currency: 'UYU' })
+      expect(
+        screen.getByRole('button', { name: 'Filtros (2)' })
+      ).toBeInTheDocument()
+    })
+
+    it('opens a panel with every secondary control', async () => {
+      renderFilters()
+      const panel = await openFilters()
+
+      expect(panel.getByLabelText('Tarjeta')).toBeInTheDocument()
+      expect(panel.getByLabelText('Cuenta bancaria')).toBeInTheDocument()
+      expect(
+        panel.getByRole('radiogroup', { name: 'Tipo de transacción' })
+      ).toBeInTheDocument()
+      expect(
+        panel.getByRole('radiogroup', { name: 'Moneda' })
+      ).toBeInTheDocument()
+      expect(panel.getByLabelText('Monto mínimo')).toBeInTheDocument()
+      expect(panel.getByLabelText('Monto máximo')).toBeInTheDocument()
+      expect(
+        panel.getByRole('button', { name: /transferencias/ })
+      ).toBeInTheDocument()
+    })
+
+    describe('on a wide screen', () => {
+      const original = window.matchMedia
+      afterEach(() => {
+        window.matchMedia = original
+      })
+
+      it('opens a popover with the same controls', async () => {
+        window.matchMedia = ((query: string) => ({
+          matches: query === '(min-width: 768px)',
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })) as typeof window.matchMedia
+        renderFilters()
+        const panel = await openFilters()
+
+        expect(panel.getByLabelText('Tarjeta')).toBeInTheDocument()
+        expect(
+          panel.getByRole('radiogroup', { name: 'Moneda' })
+        ).toBeInTheDocument()
+        expect(panel.getByLabelText('Monto máximo')).toBeInTheDocument()
+        // A popover is not modal: the page behind stays reachable.
+        expect(screen.getByLabelText('Filtro categoría')).toBeInTheDocument()
+      })
+    })
+
+    it('gives focus back to the Filtros button when it closes', async () => {
+      renderFilters()
+      await openFilters()
+      await closeFilters()
+
+      expect(screen.getByRole('button', { name: 'Filtros' })).toHaveFocus()
+    })
+
+    describe('Limpiar', () => {
+      it('is absent while no panel filter is active', async () => {
+        renderFilters({ search: 'disco', categories: ['groceries'] })
+        const panel = await openFilters()
+        expect(panel.queryByRole('button', { name: 'Limpiar' })).toBeNull()
+      })
+
+      it('clears only the panel filters', async () => {
+        const props = renderFilters({
+          search: 'disco',
+          categories: ['groceries'],
+          household: 'household',
+          currency: 'UYU',
+          showIgnored: true,
+        })
+        const panel = await openFilters()
+
+        fireEvent.click(panel.getByRole('button', { name: 'Limpiar' }))
+
+        expect(props.onChange).toHaveBeenCalledTimes(1)
+        expect(props.onChange).toHaveBeenCalledWith(SECONDARY_FILTERS_CLEARED)
+        expect(props.onClearAll).not.toHaveBeenCalled()
+      })
+    })
+  })
+
+  describe('account filter', () => {
+    it('adds the account ticked in the panel', async () => {
+      const props = renderFilters()
+      const panel = await openFilters()
+
+      fireEvent.click(panel.getByRole('checkbox', { name: 'Tarjeta' }))
 
       expect(props.onChange).toHaveBeenCalledWith({ accounts: ['credit_card'] })
+    })
+
+    it('drops the account that is unticked', async () => {
+      const props = renderFilters({ accounts: ['credit_card', 'bank_account'] })
+      const panel = await openFilters()
+
+      fireEvent.click(panel.getByRole('checkbox', { name: 'Tarjeta' }))
+
+      expect(props.onChange).toHaveBeenCalledWith({
+        accounts: ['bank_account'],
+      })
     })
 
     it('removes the account via its chip', () => {
@@ -124,15 +274,18 @@ describe('TransactionFilters', () => {
         accounts: ['credit_card', 'bank_account'],
       })
 
-      fireEvent.click(screen.getByLabelText('Quitar filtro Cuenta bancaria'))
+      fireEvent.click(
+        screen.getByLabelText('Quitar filtro Cuenta: Cuenta bancaria')
+      )
 
       expect(props.onChange).toHaveBeenCalledWith({ accounts: ['credit_card'] })
     })
   })
 
   describe('type filter', () => {
-    it('filters to expenses or income', () => {
+    it('filters to expenses or income', async () => {
       const props = renderFilters()
+      await openFilters()
 
       fireEvent.click(segment('Tipo de transacción', 'Gastos'))
       expect(props.onChange).toHaveBeenLastCalledWith({ type: 'debit' })
@@ -141,19 +294,21 @@ describe('TransactionFilters', () => {
       expect(props.onChange).toHaveBeenLastCalledWith({ type: 'credit' })
     })
 
-    it('shows the active type and clears it via its chip', () => {
+    it('shows the active type and clears it via its chip', async () => {
       const props = renderFilters({ type: 'debit' })
 
-      expect(segment('Tipo de transacción', 'Gastos')).toBeChecked()
-      fireEvent.click(screen.getByLabelText('Quitar filtro Gastos'))
-
+      fireEvent.click(screen.getByLabelText('Quitar filtro Tipo: Gastos'))
       expect(props.onChange).toHaveBeenCalledWith({ type: 'all' })
+
+      await openFilters()
+      expect(segment('Tipo de transacción', 'Gastos')).toBeChecked()
     })
   })
 
   describe('currency filter', () => {
-    it('filters to one currency', () => {
+    it('filters to one currency', async () => {
       const props = renderFilters()
+      await openFilters()
 
       fireEvent.click(segment('Moneda', 'US$'))
       expect(props.onChange).toHaveBeenLastCalledWith({ currency: 'USD' })
@@ -165,23 +320,22 @@ describe('TransactionFilters', () => {
     it('clears the currency via its chip', () => {
       const props = renderFilters({ currency: 'UYU' })
 
-      fireEvent.click(screen.getByLabelText('Quitar filtro Pesos'))
+      fireEvent.click(screen.getByLabelText('Quitar filtro Moneda: $U'))
 
       expect(props.onChange).toHaveBeenCalledWith({ currency: 'all' })
     })
   })
 
   describe('amount filter', () => {
-    it('sets the minimum and maximum amount from the amount panel', () => {
+    it('sets the minimum and maximum amount from the panel', async () => {
       const props = renderFilters()
+      expect(screen.queryByRole('button', { name: 'Monto' })).toBeNull()
+      const panel = await openFilters()
 
-      expect(screen.queryByPlaceholderText('∞')).toBeNull()
-      fireEvent.click(screen.getByRole('button', { name: 'Monto' }))
-
-      fireEvent.change(screen.getByLabelText('Monto mínimo'), {
+      fireEvent.change(panel.getByLabelText('Monto mínimo'), {
         target: { value: '50' },
       })
-      fireEvent.change(screen.getByLabelText('Monto máximo'), {
+      fireEvent.change(panel.getByLabelText('Monto máximo'), {
         target: { value: '500' },
       })
 
@@ -192,73 +346,65 @@ describe('TransactionFilters', () => {
     it('clears both bounds via the amount chip', () => {
       const props = renderFilters({ min: '50' })
 
-      fireEvent.click(screen.getByLabelText('Quitar filtro Monto 50–∞'))
+      fireEvent.click(screen.getByLabelText('Quitar filtro Monto: 50–∞'))
 
       expect(props.onChange).toHaveBeenCalledWith({ min: '', max: '' })
     })
   })
 
-  describe('date range', () => {
-    it('edits the from and to dates', () => {
-      const props = renderFilters()
+  describe('ignored transfers', () => {
+    it('toggles showing them and says how many there are', async () => {
+      const props = renderFilters({}, { ignoredCount: 3 })
+      const panel = await openFilters()
 
-      fireEvent.change(screen.getByLabelText('Filtro fecha desde'), {
-        target: { value: '2025-01-01' },
+      const toggle = panel.getByRole('button', {
+        name: /Mostrar transferencias ignoradas/,
       })
-      fireEvent.change(screen.getByLabelText('Filtro fecha hasta'), {
-        target: { value: '2025-01-31' },
-      })
+      expect(toggle).toHaveTextContent('· 3')
+      expect(toggle).toHaveAttribute('aria-pressed', 'false')
 
-      expect(props.onDateBoundChange).toHaveBeenCalledWith('from', '2025-01-01')
-      expect(props.onDateBoundChange).toHaveBeenCalledWith('to', '2025-01-31')
-      expect(props.onChange).not.toHaveBeenCalled()
+      fireEvent.click(toggle)
+      expect(props.onChange).toHaveBeenCalledWith({ showIgnored: true })
     })
 
-    it("shows the period's days", () => {
-      renderFilters(
-        { period: { mode: 'month', y: 2026, m: 2 } },
-        { dateRange: { from: '2026-03-01', to: '2026-03-31' } }
+    it('offers to hide them when they are shown', async () => {
+      const props = renderFilters({ showIgnored: true }, { ignoredCount: 3 })
+      const panel = await openFilters()
+
+      fireEvent.click(
+        panel.getByRole('button', { name: /Ocultar transferencias ignoradas/ })
       )
+      expect(props.onChange).toHaveBeenCalledWith({ showIgnored: false })
+    })
 
-      expect(screen.getByLabelText('Filtro fecha desde')).toHaveValue(
-        '2026-03-01'
+    it('is disabled when nothing is ignored', async () => {
+      renderFilters({}, { ignoredCount: 0 })
+      const panel = await openFilters()
+
+      expect(
+        panel.getByRole('button', { name: /transferencias ignoradas/ })
+      ).toBeDisabled()
+    })
+
+    it('shows a chip while they are visible, and counts it', () => {
+      const props = renderFilters({ showIgnored: true }, { ignoredCount: 3 })
+
+      expect(
+        screen.getByRole('button', { name: 'Filtros (1)' })
+      ).toBeInTheDocument()
+      fireEvent.click(
+        screen.getByLabelText(
+          'Quitar filtro Transferencias ignoradas: visibles'
+        )
       )
-      expect(screen.getByLabelText('Filtro fecha hasta')).toHaveValue(
-        '2026-03-31'
-      )
-    })
-  })
-
-  describe('clear all', () => {
-    it('resets every filter at once', () => {
-      const props = renderFilters({
-        categories: ['groceries'],
-        type: 'debit',
-        currency: 'USD',
-      })
-
-      fireEvent.click(screen.getByRole('button', { name: 'Limpiar todo' }))
-
-      expect(props.onClearAll).toHaveBeenCalledTimes(1)
-    })
-
-    it('is not offered when no filter is active', () => {
-      renderFilters()
-
-      expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
-    })
-
-    // The view decides what counts as "filtrado" once, for the header too.
-    it('follows whether the view says a filter is active', () => {
-      renderFilters({ categories: ['groceries'] }, { hasActiveFilters: false })
-
-      expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
+      expect(props.onChange).toHaveBeenCalledWith({ showIgnored: false })
     })
   })
 
   describe('the first option of each group (#265)', () => {
-    it('reads Ambos for the type and Ambas for the currency', () => {
+    it('reads Ambos for the type and Ambas for the currency', async () => {
       renderFilters()
+      await openFilters()
       const first = (group: string) =>
         within(screen.getByRole('radiogroup', { name: group }))
           .getAllByRole('radio')
@@ -301,8 +447,9 @@ describe('TransactionFilters', () => {
       })
     })
 
-    it('picking Ingresos while Hogar is on goes back to Todo in Hogar', () => {
+    it('picking Ingresos while Hogar is on goes back to Todo in Hogar', async () => {
       const props = renderFilters({ household: 'household' })
+      await openFilters()
       fireEvent.click(segment('Tipo de transacción', 'Ingresos'))
       expect(props.onChange).toHaveBeenCalledWith({
         type: 'credit',
@@ -310,8 +457,9 @@ describe('TransactionFilters', () => {
       })
     })
 
-    it('picking Gastos keeps the household filter', () => {
+    it('picking Gastos keeps the household filter', async () => {
       const props = renderFilters({ household: 'household' })
+      await openFilters()
       fireEvent.click(segment('Tipo de transacción', 'Gastos'))
       expect(props.onChange).toHaveBeenCalledWith({ type: 'debit' })
     })

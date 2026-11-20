@@ -55,7 +55,7 @@ export const DEFAULT_URL_FILTERS: UrlFilterState = {
 // Whether the view is "filtrado" — and whether a link filters at all: every
 // filter the bar sets. The period is
 // not one (the month navigator shows it), nor is showing ignored rows (a
-// table toggle); clearing the filters resets those too.
+// toggle in the Filtros panel); clearing the filters resets those too.
 export function hasActiveFilters(filters: UrlFilterState): boolean {
   return (
     filters.search.trim() !== '' ||

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ArrowUpDown, Eye, EyeOff, Search } from 'lucide-react'
+import { ArrowUpDown, Search } from 'lucide-react'
 import { Button } from './ui/button'
 import { EmptyState } from './EmptyState'
 import { Card } from './ui/card'
@@ -35,7 +35,6 @@ interface TransactionTableProps {
   onHeaderCheckboxChange: (checked: boolean) => void
   onSort: (field: SortField) => void
   onClearFilters: () => void
-  onShowIgnoredChange: (value: boolean) => void
   onEdit: (transaction: Transaction) => void
   onDelete: (transaction: Transaction) => void
   onSplit?: (transaction: Transaction) => void
@@ -67,7 +66,6 @@ export function TransactionTable({
   onHeaderCheckboxChange,
   onSort,
   onClearFilters,
-  onShowIgnoredChange,
   onEdit,
   onDelete,
   onSplit,
@@ -85,8 +83,8 @@ export function TransactionTable({
       className="gap-0"
     >
       {filters}
-      {/* Toolbar row: selection count + transfers toggle */}
-      <div className="flex items-center justify-between gap-[12px] border-b border-[var(--border)] px-[16px] py-[10px]">
+      {/* Toolbar row: selection count + hidden-transfers hint */}
+      <div className="flex flex-wrap items-center justify-between gap-x-[12px] gap-y-1 border-b border-[var(--border)] px-[16px] py-[10px]">
         <span
           className="text-[13px] text-[color:var(--text-muted)]"
           role="status"
@@ -96,45 +94,15 @@ export function TransactionTable({
             ? `${selectionCount} de ${totalCount} seleccionada${selectionCount !== 1 ? 's' : ''}`
             : `${totalCount} movimiento${totalCount !== 1 ? 's' : ''} en la vista`}
         </span>
-        <button
-          onClick={() => onShowIgnoredChange(!showIgnored)}
-          aria-pressed={showIgnored}
-          disabled={ignoredCount === 0}
-          title="Las transferencias se ignoran de los totales"
-          className={`inline-flex h-[32px] shrink-0 items-center gap-[6px] rounded-[8px] border bg-transparent px-[10px] py-0 text-[13px] font-medium ${
-            showIgnored
-              ? 'border-[var(--brand)] text-[color:var(--brand-text,var(--brand))]'
-              : 'border-[var(--border)] text-[color:var(--text-muted)]'
-          } ${
-            ignoredCount === 0
-              ? 'cursor-not-allowed opacity-50'
-              : 'cursor-pointer opacity-100'
-          }`}
-        >
-          {showIgnored ? <Eye size={14} /> : <EyeOff size={14} />}
-          {/* Short on phones. The hidden span drops out of the accessible
-              name, so the name always matches what is shown. */}
-          {ignoredCount === 0 ? (
-            <>
-              <span className="hidden sm:inline">
-                Sin transferencias ignoradas
-              </span>
-              <span className="sm:hidden">Sin transferencias</span>
-            </>
-          ) : (
-            <>
-              <span className="hidden sm:inline">
-                {showIgnored ? 'Ocultar' : 'Mostrar'} transferencias ignoradas
-              </span>
-              <span className="sm:hidden">Transferencias</span>
-            </>
-          )}
-          {ignoredCount > 0 && (
-            <span className="font-[family-name:var(--font-mono)] text-[11px] text-[color:var(--text-muted)]">
-              · {ignoredCount}
-            </span>
-          )}
-        </button>
+        {!showIgnored && ignoredCount > 0 && (
+          // Plain text, outside the live region: rows are hidden, and the
+          // Filtros panel's toggle is where they come back.
+          <span className="text-[13px] text-[color:var(--text-muted)]">
+            {ignoredCount === 1
+              ? '1 transferencia oculta'
+              : `${ignoredCount} transferencias ocultas`}
+          </span>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-b-xl">

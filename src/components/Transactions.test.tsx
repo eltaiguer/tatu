@@ -24,6 +24,22 @@ import {
 import { createInMemoryRepository } from '../services/repository/in-memory-repository'
 import { workspaceStore } from '../stores/workspace-state'
 
+// The Filtros panel is a modal sheet in jsdom (matchMedia says "not wide").
+async function openFilters() {
+  fireEvent.click(screen.getByRole('button', { name: /^Filtros/ }))
+  return within(await screen.findByRole('dialog', { name: 'Filtros' }))
+}
+
+async function closeFilters() {
+  fireEvent.click(
+    within(screen.getByRole('dialog', { name: 'Filtros' })).getByRole(
+      'button',
+      { name: 'Cerrar' }
+    )
+  )
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+}
+
 // A category created inline is saved before it can be picked; tests that do
 // that get a signed-in user whose (in-memory) server accepts writes.
 function signedInRepository() {
@@ -87,7 +103,7 @@ describe('Transactions', () => {
     expect(within(movements).getByRole('table')).toBeInTheDocument()
   })
 
-  it('counts ignored transfers on their toggle, not as a fourth total', () => {
+  it('counts ignored transfers on their toggle, not as a fourth total', async () => {
     render(
       <Transactions
         transactions={[
@@ -106,7 +122,10 @@ describe('Transactions', () => {
         .getAllByText(/^(Ingresos|Gastos|Balance|Transferencias)$/)
         .map((el) => el.textContent)
     ).toEqual(['Ingresos', 'Gastos', 'Balance'])
-    const toggle = screen.getByRole('button', {
+    // The toolbar says rows are hidden without opening anything.
+    expect(screen.getByText('1 transferencia oculta')).toBeInTheDocument()
+    const panel = await openFilters()
+    const toggle = panel.getByRole('button', {
       name: /transferencias ignoradas/,
     })
     expect(toggle).toHaveTextContent('· 1')
@@ -179,11 +198,12 @@ describe('Transactions', () => {
     })
   })
 
-  it('says there are no ignored transfers instead of a blank disabled toggle', () => {
+  it('says there are no ignored transfers instead of a blank disabled toggle', async () => {
     render(<Transactions transactions={[makeTransaction(0)]} />)
 
+    const panel = await openFilters()
     expect(
-      screen.getByRole('button', { name: /Sin transferencias ignoradas/ })
+      panel.getByRole('button', { name: /Sin transferencias ignoradas/ })
     ).toBeDisabled()
   })
 
@@ -339,9 +359,6 @@ describe('Transactions', () => {
     fireEvent.change(screen.getByLabelText('Filtro categoría'), {
       target: { value: 'groceries' },
     })
-    fireEvent.change(screen.getByLabelText('Filtro cuenta'), {
-      target: { value: 'credit_card' },
-    })
 
     expect(screen.getAllByText('Alpha Card').length).toBeGreaterThan(0)
     expect(screen.queryByText('Alpha Market')).not.toBeInTheDocument()
@@ -387,9 +404,9 @@ describe('Transactions', () => {
       />
     )
 
-    fireEvent.click(screen.getByLabelText('Filtro cuenta'))
-    await waitFor(() => screen.getByText('Tarjeta'))
-    fireEvent.click(screen.getByText('Tarjeta'))
+    const panel = await openFilters()
+    fireEvent.click(panel.getByRole('checkbox', { name: 'Tarjeta' }))
+    await closeFilters()
 
     await waitFor(() =>
       expect(screen.getAllByText('Sin resultados').length).toBeGreaterThan(0)
@@ -1772,9 +1789,13 @@ describe('Transactions month range', () => {
         )
         expect(screen.getByText(/^3 movimientos · Noviembre 2025/)).toBeTruthy()
 
+        fireEvent.click(screen.getByRole('button', { name: /^Filtros/ }))
+        const panel = within(screen.getByRole('dialog', { name: 'Filtros' }))
         fireEvent.click(
-          screen.getByRole('button', { name: /transferencias ignoradas/ })
+          panel.getByRole('button', { name: /transferencias ignoradas/ })
         )
+        fireEvent.click(panel.getByRole('button', { name: 'Cerrar' }))
+        expect(screen.queryByRole('dialog')).toBeNull()
         fireEvent.click(screen.getByRole('button', { name: 'Noviembre 2025' }))
         expect(
           screen.getByRole('button', { name: 'noviembre 2025, 4 movimientos' })

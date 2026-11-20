@@ -59,7 +59,8 @@ function TotalTile({
 }
 
 // The period's money in three figures, on the page rather than in tiles. The
-// ignored-transfer count lives on the table's toggle, next to what it hides.
+// ignored-row count lives in the Filtros panel's toggle and the table
+// toolbar's hint.
 export function TotalsStrip({
   rows,
   homeCurrency,
