@@ -554,6 +554,29 @@ describe('statementLabel', () => {
   })
 })
 
+describe('statementLabel casing (#274 review)', () => {
+  it('uppercases a known short merchant only as the whole payee or its first word', () => {
+    expect(statementLabel(DEBIT('PELUQUERIA HAIR CUT'))).toBe(
+      'Peluqueria Hair Cut'
+    )
+    expect(statementLabel(DEBIT('UTE'))).toBe('UTE')
+    expect(statementLabel(DEBIT('KFC PUNTA CARRETAS'))).toBe(
+      'KFC Punta Carretas'
+    )
+  })
+
+  it('capitalizes after an apostrophe and a hyphen, and spells out initials', () => {
+    expect(statementLabel(DEBIT("O'NEILL"))).toBe("O'Neill")
+    expect(statementLabel(DEBIT('CAFE-BAR LA ESQUINA'))).toBe(
+      'Cafe-Bar La Esquina'
+    )
+    expect(statementLabel(DEBIT('MC DONALD S.A.'))).toBe('Mc Donald S.A')
+    expect(statementLabel(DEBIT('PUESTO EZEQUI.HANDY'))).toBe(
+      'Puesto Ezequi.handy'
+    )
+  })
+})
+
 describe('statementMerchantLabel', () => {
   it('suffixes a debit-card payee, so it never reads like the same payee on a credit card', () => {
     expect(statementMerchantLabel(DEBIT('PANADERIA MARACANA'))).toBe(
@@ -598,9 +621,28 @@ describe('transactionLabel', () => {
     })
     expect(transactionLabel(tx({ description: bank }))).toBe('La tintorería')
   })
+
+  it('treats a "rename" equal to the raw description as no rename', () => {
+    expect(
+      transactionLabel(
+        tx({ description: bank, displayDescription: ` ${bank} ` })
+      )
+    ).toBe('Tintoreria Martinizi')
+    setDescriptionOverride({ description: bank, friendlyDescription: bank })
+    expect(transactionLabel(tx({ description: bank }))).toBe(
+      'Tintoreria Martinizi'
+    )
+  })
 })
 
 describe('merchantLabelFor on bank rows', () => {
+  it('ignores a "rename" equal to the raw description', () => {
+    const raw = DEBIT('PANADERIA MARACANA')
+    expect(
+      merchantLabelFor([tx({ description: raw, displayDescription: raw })])
+    ).toBe('Panaderia Maracana · Tarjeta de débito')
+  })
+
   it('carries the debit-card suffix, and no suffix on fixed concepts', () => {
     expect(
       merchantLabelFor([tx({ description: DEBIT('PANADERIA MARACANA') })])

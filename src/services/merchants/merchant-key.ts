@@ -228,8 +228,7 @@ const TRANSFER_KEY_CONCEPTS: ReadonlyArray<readonly [string, string]> = [
 // opens with no known concept; the raw description when it does but its rest
 // is not a name (empty, one letter, a reference code kept because nothing else
 // was left). Display only — the key is rawMerchantKey.
-function counterpartyLabel(description: string): string | null {
-  const key = rawMerchantKey(description)
+function counterpartyLabel(description: string, key: string): string | null {
   const concept = TRANSFER_KEY_CONCEPTS.find(
     ([opening]) =>
       key.startsWith(opening) &&
@@ -258,15 +257,37 @@ const DEBIT_PURCHASE_OPENING = 'compra con tarjeta debito '
 const DEBIT_GROUP_SUFFIX = ' · Tarjeta de débito'
 const UPPERCASE_WORDS = new Set(['sa', 'srl', 'sas'])
 
-// The folded payee in title case; known short merchants and company suffixes
-// in capitals. Accents are gone with the fold, as Santander writes none.
+// A word's own capitals: one after an apostrophe or hyphen ("O'Neill",
+// "Cafe-Bar"), and every letter of an initialism ("s.a" → "S.A"). A dotted
+// name ("ezequi.handy") only capitalizes its first letter.
+function capitalize(word: string): string {
+  const parts = word.split('.')
+  if (parts.length > 1 && parts.every((part) => part.length === 1)) {
+    return word.toUpperCase()
+  }
+  return (
+    word.charAt(0).toUpperCase() +
+    word
+      .slice(1)
+      .replace(
+        /(['-])([a-z])/g,
+        (_, mark: string, letter: string) => `${mark}${letter.toUpperCase()}`
+      )
+  )
+}
+
+// The folded payee in title case; company suffixes in capitals, and a known
+// short merchant in capitals when it is the whole payee or its first word
+// ("UTE", "KFC Punta Carretas", but "Peluqueria Hair Cut"). Accents are gone
+// with the fold, as Santander writes none.
 function titleCase(folded: string): string {
   return folded
     .split(' ')
-    .map((word) =>
-      KNOWN_SHORT_MERCHANTS.has(word) || UPPERCASE_WORDS.has(word)
+    .map((word, index) =>
+      UPPERCASE_WORDS.has(word) ||
+      (index === 0 && KNOWN_SHORT_MERCHANTS.has(word))
         ? word.toUpperCase()
-        : word.charAt(0).toUpperCase() + word.slice(1)
+        : capitalize(word)
     )
     .join(' ')
 }
@@ -279,6 +300,10 @@ function debitPayee(key: string): string | null {
   return /[a-z].*[a-z]/.test(rest) ? titleCase(rest) : null
 }
 
+// Pure in the description (live renames are applied by transactionLabel, never
+// here), so each description is labelled once.
+const STATEMENT_LABELS = new Map<string, string>()
+
 // THE label of an un-renamed bank description (#274), read off its merchant
 // key: a transfer's "NAME · Concept", a debit-card purchase's payee in title
 // case, a fixed concept's name; anything else (every card row, user-typed
@@ -286,10 +311,16 @@ function debitPayee(key: string): string | null {
 // never stored: the description, the key and the dedup fingerprint stay as
 // the statement wrote them.
 export function statementLabel(description: string): string {
-  const transfer = counterpartyLabel(description)
-  if (transfer !== null) return transfer
+  const cached = STATEMENT_LABELS.get(description)
+  if (cached !== undefined) return cached
   const key = rawMerchantKey(description)
-  return debitPayee(key) ?? FIXED_KEY_LABELS.get(key) ?? description
+  const label =
+    counterpartyLabel(description, key) ??
+    debitPayee(key) ??
+    FIXED_KEY_LABELS.get(key) ??
+    description
+  STATEMENT_LABELS.set(description, label)
+  return label
 }
 
 // A group's label (Mayores comercios, Insights, the merchant chip): the row
@@ -302,11 +333,21 @@ export function statementMerchantLabel(description: string): string {
     : `${label}${DEBIT_GROUP_SUFFIX}`
 }
 
+// The user's name for a row, or null: a "rename" equal to the raw description
+// is none (the AI stores `name || description`; editTransaction's `renamed`
+// is the same rule), so it must not hide the clean label.
+function renameOf(transaction: Transaction): string | null {
+  const rename = getUserRename(transaction)
+  return rename !== null && rename !== transaction.description.trim()
+    ? rename
+    : null
+}
+
 // THE name a row shows: the user's rename (own, AI or a live override), else
 // the statement's clean label. Never use `description` or
 // getDisplayDescription as a row's name.
 export function transactionLabel(transaction: Transaction): string {
-  return getUserRename(transaction) ?? statementLabel(transaction.description)
+  return renameOf(transaction) ?? statementLabel(transaction.description)
 }
 
 // The description's last words if they fold to `folded` (accents and case
@@ -325,13 +366,14 @@ function newestFirst(a: Transaction, b: Transaction): number {
 }
 
 // The friendliest name for a group of rows sharing a key: the most recent
-// rename, else the most common raw description, cleaned (statementMerchantLabel). Ties go to the most recent
-// row, so the label does not depend on input order (it feeds InsightInput,
-// whose hash decides whether cached insights are stale).
+// rename, else the most common raw description, cleaned
+// (statementMerchantLabel). Ties go to the most recent row, so the label does
+// not depend on input order (it feeds InsightInput, whose hash decides
+// whether cached insights are stale).
 export function merchantLabelFor(rows: Transaction[]): string {
   const byRecency = [...rows].sort(newestFirst)
   for (const tx of byRecency) {
-    const rename = getUserRename(tx)
+    const rename = renameOf(tx)
     if (rename) return rename
   }
 

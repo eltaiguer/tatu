@@ -179,6 +179,18 @@ describe('filterTransactions — search over bank-row labels (#274)', () => {
     expect(found('comisión')).toEqual(['fee'])
   })
 
+  it('finds an accented label without the accent, and the reverse', () => {
+    const withAccent = [
+      tx('card', { description: 'PAGO ELECTRONICO TARJETA CREDITO' }),
+      tx('other', { description: 'SUPERMERCADO' }),
+    ]
+    const search = (q: string) =>
+      ids(filterTransactions(withAccent, filters({ search: q })))
+    expect(search('tarjeta de credito')).toEqual(['card'])
+    expect(search('Pago de tarjeta de CRÉDITO')).toEqual(['card'])
+    expect(search('super')).toEqual(['other'])
+  })
+
   it('still matches the raw statement text', () => {
     expect(found('martinizi')).toEqual(['debit'])
     expect(found('tarj:')).toEqual(['debit'])

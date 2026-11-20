@@ -119,6 +119,29 @@ describe('HouseholdRulesSection', () => {
     ).toBeInTheDocument()
   })
 
+  it('tells two rules apart when their clean labels collide (#274)', () => {
+    const card = (city: string) =>
+      `COMPRA CON TARJETA DEBITO PANADERIA MARACANA, ${city} TARJ: ############9172`
+    seed([
+      rule('maracana-montevideo', '2026-03-02T10:00:00.000Z', {
+        merchantOriginal: card('MONTEVIDEO'),
+      }),
+      rule('maracana-carrasco', '2026-03-01T10:00:00.000Z', {
+        merchantOriginal: card('CARRASCO'),
+      }),
+    ])
+    renderSection()
+    const buttons = screen.getAllByRole('button', {
+      name: /Eliminar regla del hogar/,
+    })
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0].getAttribute('aria-label')).not.toBe(
+      buttons[1].getAttribute('aria-label')
+    )
+    expect(screen.getByText(card('MONTEVIDEO'))).toBeTruthy()
+    expect(screen.getByText(card('CARRASCO'))).toBeTruthy()
+  })
+
   it('says "Hogar: No" for a rule that says no, and "1 transacción" in the singular', () => {
     seed([rule(DEVOTO_KEY, '2026-03-01T10:00:00.000Z', { isHousehold: false })])
     renderSection([makeTx({ id: 'a' })])

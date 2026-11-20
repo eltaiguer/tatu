@@ -687,15 +687,18 @@ rows. Never group by `description` or `getDisplayDescription` directly.
   echoes ignoring case, accents and the separator.
 - **Row label (#274).** `statementLabel(description)` is the name of an
   un-renamed bank row, read off `rawMerchantKey` (never by re-parsing the raw
-  text): a transfer's `NAME · Concept` (the table above, plus `CR. PAGO
-SUELDOS` → "SETA WORKSHOP SRL · Sueldo"); a debit-card purchase's payee in
-  title case ("COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO
-  TARJ: …" → "Tintoreria Martinizi"; known short merchants and SA/SRL/SAS in
-  capitals; a payee left with fewer than two letters keeps the raw text); three
-  fixed concepts matched on their exact key ("Comisión costo producto",
+  text): a transfer's `NAME · Concept` (the table above, plus
+  `CR. PAGO SUELDOS` → "SETA WORKSHOP SRL · Sueldo"); a debit-card
+  purchase's payee in title case ("COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO
+  TARJ: …" → "Tintoreria Martinizi"; SA/SRL/SAS in capitals, and a known short
+  merchant when it is the whole payee or its first word ("UTE", not "Hair
+  CUT"); capitals after `'` and `-`, and in initials ("S.A"); a payee left with fewer than two letters keeps the raw
+  text); three fixed concepts matched on their exact key ("Comisión costo producto",
   "Retiro en corresponsal", "Pago de tarjeta de crédito"); anything else, every
   card row included, is the raw description. `transactionLabel(tx)` is THE name
-  a row shows: the user's rename (`getUserRename`) wins, else `statementLabel`.
+  a row shows: the user's rename (`getUserRename`, unless it equals the raw
+  description, as the AI stores) wins, else `statementLabel` (memoized by
+  description: it is pure in it).
   It is derived at render and never stored, so the description, the merchant
   key, dedup fingerprints and household-rule keys are unchanged, and the
   categorizer and the AI prompt still read the raw text. A group's label adds
