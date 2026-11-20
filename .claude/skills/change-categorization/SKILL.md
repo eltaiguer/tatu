@@ -74,7 +74,7 @@ one.
   new result is at least as confident as the row's current category and
   changes it — a changed rule reaches rows at the same confidence; user
   edits at 1 give way only to a user rule at 1), a rule applied to past rows
-  (`applyPatternToPast`: 0.95, split parts skipped), or a user edit
+  (`applyPatternToPast`: 0.95 on the rows `rowsRuleWouldChange` returns — not split rows, not rows at confidence 1, not rows an earlier rule or an override wins, not rows already applied), or a user edit
   (confidence 1). Both live in
   `src/services/mutations/transaction-mutations.ts`.
 - Re-importing a CSV doesn't recategorize either: import dedup

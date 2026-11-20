@@ -53,7 +53,12 @@ import {
 } from '../categorizer/category-overrides'
 import { normalizeMerchantName } from '../categorizer/merchant-patterns'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
-import { currentUserRules, hasUserRule } from '../categorizer/user-rules'
+import {
+  currentUserRules,
+  hasUserRule,
+  isRenamedByUser,
+  rowsRuleWouldChange,
+} from '../categorizer/user-rules'
 import { categorizeImportedTransactions } from '../categorizer/import-categorization'
 import { listCustomCategories } from '../categories/category-store'
 import {
@@ -70,7 +75,7 @@ import {
   restoreHouseholdRuleWithSync,
 } from '../household/household-rules-store'
 import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
-import { testPattern, type CustomPattern } from '../categorizer/custom-patterns'
+import type { CustomPattern } from '../categorizer/custom-patterns'
 import { applyAiEnrichment, enrichTransactionsWithAi, getAiConfig } from '../ai'
 import { buildCorrectionContext } from '../ai/correction-context'
 import {
@@ -1279,28 +1284,36 @@ export async function autoCategorize(
 }
 
 /**
- * Applies a just-created rule to existing rows (split parts keep their own
- * categories). Rows that saved stay applied, locally too; the rest are
- * counted as failed — Categorías reports "N de M".
+ * Applies a rule to the existing rows it would change (`rowsRuleWouldChange`:
+ * not split rows, not rows the user categorized by hand, not rows an earlier
+ * rule or an override wins, not rows already applied) at confidence 0.95.
+ * Rows that saved stay applied, locally too; the rest are counted as failed —
+ * Categorías reports "N de M".
  */
 export async function applyPatternToPast(
   repo: Repository,
   pattern: CustomPattern
 ): Promise<{ updated: number; failed: number }> {
   assertOwner(repo)
-  const targets = store().transactions.filter(
-    (tx) => !tx.splitParentId && testPattern(tx.description, pattern)
-  )
+  const rules = currentUserRules()
+  const targets = rowsRuleWouldChange(store().transactions, pattern, rules)
   if (targets.length === 0) return { updated: 0, failed: 0 }
-  const patch: TransactionPatch = {
-    category: pattern.category,
-    categoryConfidence: 0.95,
-    ...(pattern.description && { displayDescription: pattern.description }),
-  }
-  const outcome = await writePatches(
-    repo,
-    new Map(targets.map((tx) => [tx.id, patch]))
+  const category = normalizeCategoryId(pattern.category)
+  // A row the user renamed keeps its name: the rule only recategorizes it.
+  const patches = new Map<string, TransactionPatch>(
+    targets.map((tx) => [
+      tx.id,
+      {
+        category,
+        categoryConfidence: 0.95,
+        ...(pattern.description &&
+          !isRenamedByUser(rules, tx.description) && {
+            displayDescription: pattern.description,
+          }),
+      },
+    ])
   )
+  const outcome = await writePatches(repo, patches)
   return {
     updated: outcome.saved.length,
     failed: outcome.failed.length + outcome.missing.length,

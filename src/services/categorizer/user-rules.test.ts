@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { currentUserRules, emptyUserRules, hasUserRule } from './user-rules'
+import {
+  currentUserRules,
+  emptyUserRules,
+  hasUserRule,
+  rowsRuleWouldChange,
+  countRowsEachRuleWouldChange,
+} from './user-rules'
+import type { Transaction } from '../../models'
 import { addCustomPattern, clearAllCustomPatterns } from './custom-patterns'
 import {
   clearAllCategoryOverrides,
@@ -110,5 +117,180 @@ describe('currentUserRules', () => {
     expect(hasUserRule(snapshot, 'KIOSCO 25')).toBe(false)
     expect(hasUserRule(snapshot, 'DEVOTO EXPRESS')).toBe(false)
     expect(hasUserRule(snapshot, 'NETFLIX.COM')).toBe(false)
+  })
+})
+
+describe('rowsRuleWouldChange — the rows a rule would change now', () => {
+  const uber = {
+    pattern: 'uber',
+    matchType: 'contains' as const,
+    category: 'transport',
+  }
+  const row = (id: string, overrides: Partial<Transaction> = {}) =>
+    ({
+      id,
+      date: new Date('2026-03-15T00:00:00Z'),
+      description: 'UBER TRIP',
+      amount: 300,
+      currency: 'UYU',
+      type: 'debit',
+      source: 'bank_account',
+      category: 'groceries',
+      categoryConfidence: 0.8,
+      tags: [],
+      rawData: {},
+      ...overrides,
+    }) as Transaction
+  const ids = (rows: Transaction[]) => rows.map((r) => r.id)
+
+  it('returns matching rows whose category differs', () => {
+    const rules = userRules({ customPatterns: [uber] })
+    const rows = [row('a'), row('b', { description: 'DEVOTO' })]
+
+    expect(
+      ids(rowsRuleWouldChange(rows, rules.customPatterns[0], rules))
+    ).toEqual(['a'])
+  })
+
+  it('skips rows that need no change or that a rule must not touch', () => {
+    const rules = userRules({ customPatterns: [uber] })
+    const rows = [
+      row('already', { category: 'transport' }),
+      row('by-hand', { categoryConfidence: 1 }),
+      row('part', { splitParentId: 'x' }),
+      row('parent', { isSplitParent: true }),
+      row('other', { description: 'DEVOTO' }),
+    ]
+
+    expect(rowsRuleWouldChange(rows, rules.customPatterns[0], rules)).toEqual(
+      []
+    )
+  })
+
+  it('includes a row in the right category when the rule names it differently', () => {
+    const rules = userRules({
+      customPatterns: [{ ...uber, description: 'Uber' }],
+    })
+    const rows = [
+      row('named', { category: 'transport', displayDescription: 'Uber' }),
+      row('unnamed', { category: 'transport' }),
+      row('renamed', { category: 'transport', displayDescription: 'Taxi' }),
+    ]
+
+    expect(
+      ids(rowsRuleWouldChange(rows, rules.customPatterns[0], rules))
+    ).toEqual(['unnamed', 'renamed'])
+  })
+
+  it('skips a row an earlier rule matches first, and includes it for that rule', () => {
+    const rules = userRules({
+      customPatterns: [
+        {
+          pattern: 'uber eats',
+          matchType: 'contains',
+          category: 'restaurants',
+        },
+        uber,
+      ],
+    })
+    const rows = [row('eats', { description: 'UBER EATS' })]
+
+    expect(rowsRuleWouldChange(rows, rules.customPatterns[1], rules)).toEqual(
+      []
+    )
+    expect(
+      ids(rowsRuleWouldChange(rows, rules.customPatterns[0], rules))
+    ).toEqual(['eats'])
+  })
+
+  it('decides by the pattern alone when the rule is not in the list', () => {
+    const rules = userRules({ customPatterns: [] })
+    const literal = { ...uber, id: 'unlisted', createdAt: '' }
+
+    expect(ids(rowsRuleWouldChange([row('a')], literal, rules))).toEqual(['a'])
+  })
+
+  it('skips a row a merchant override or a categorized description override covers', () => {
+    const merchant = userRules({
+      customPatterns: [uber],
+      merchantOverrides: [{ merchantName: 'UBER TRIP', category: 'personal' }],
+    })
+    const described = userRules({
+      customPatterns: [uber],
+      descriptionOverrides: [
+        {
+          description: 'UBER TRIP',
+          friendlyDescription: 'Taxi',
+          category: 'personal',
+        },
+      ],
+    })
+
+    expect(
+      rowsRuleWouldChange([row('a')], merchant.customPatterns[0], merchant)
+    ).toEqual([])
+    expect(
+      rowsRuleWouldChange([row('a')], described.customPatterns[0], described)
+    ).toEqual([])
+  })
+
+  it("includes a legacy-id rule's rows only when the category really differs", () => {
+    const rules = userRules({
+      customPatterns: [{ ...uber, category: 'food' }],
+    })
+    const rows = [
+      row('same', { category: 'groceries' }),
+      row('differs', { category: 'transport' }),
+    ]
+
+    expect(
+      ids(rowsRuleWouldChange(rows, rules.customPatterns[0], rules))
+    ).toEqual(['differs'])
+  })
+
+  it('never counts a row the user renamed through a description override', () => {
+    const rules = userRules({
+      customPatterns: [{ ...uber, description: 'Uber' }],
+      descriptionOverrides: [
+        { description: 'UBER TRIP', friendlyDescription: 'Taxi' },
+      ],
+    })
+    const rows = [row('a', { category: 'transport' })]
+
+    expect(rowsRuleWouldChange(rows, rules.customPatterns[0], rules)).toEqual(
+      []
+    )
+  })
+
+  it('counts every rule in one pass exactly as rowsRuleWouldChange does', () => {
+    const rules = userRules({
+      customPatterns: [
+        {
+          pattern: 'uber eats',
+          matchType: 'contains',
+          category: 'restaurants',
+        },
+        { ...uber, description: 'Uber' },
+      ],
+      descriptionOverrides: [
+        { description: 'UBER X', friendlyDescription: 'Taxi' },
+      ],
+    })
+    const rows = [
+      row('eats', { description: 'UBER EATS' }),
+      row('trip'),
+      row('x', { description: 'UBER X', category: 'transport' }),
+      row('hand', { categoryConfidence: 1 }),
+      row('other', { description: 'DEVOTO' }),
+    ]
+
+    const counts = countRowsEachRuleWouldChange(rows, rules)
+
+    for (const rule of rules.customPatterns) {
+      expect(counts.get(rule.id)).toBe(
+        rowsRuleWouldChange(rows, rule, rules).length
+      )
+    }
+    expect([...counts.values()]).toEqual([1, 1])
   })
 })

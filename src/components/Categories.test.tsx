@@ -21,6 +21,8 @@ import {
   clearAllCustomPatterns,
   listCustomPatterns,
 } from '../services/categorizer/custom-patterns'
+import { replaceDescriptionOverrides } from '../services/descriptions/description-overrides'
+import { replaceMerchantCategoryOverrides } from '../services/categorizer/category-overrides'
 import { createInMemoryRepository } from '../services/repository/in-memory-repository'
 import { workspaceStore } from '../stores/workspace-state'
 
@@ -43,9 +45,15 @@ function makeTx(overrides: Partial<Transaction> = {}): Transaction {
   }
 }
 
+function openRuleForm() {
+  fireEvent.click(screen.getByRole('button', { name: /Nueva regla/ }))
+}
+
 describe('Categories', () => {
   beforeEach(() => {
     clearAllCustomPatterns()
+    replaceDescriptionOverrides({})
+    replaceMerchantCategoryOverrides({})
     replaceCustomCategories([])
     vi.restoreAllMocks()
     repo = createInMemoryRepository()
@@ -306,6 +314,7 @@ describe('Categories', () => {
 
   it('adds and removes a pattern rule', async () => {
     render(<Categories repository={repo} transactions={[]} />)
+    openRuleForm()
 
     fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
       target: { value: 'farmashop' },
@@ -344,8 +353,11 @@ describe('Categories', () => {
 
     expect(screen.getByText(/2 transacciones coinciden/)).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /Agregar regla/ })
-    ).toHaveTextContent('Agregar regla')
+      screen.getByRole('button', { name: /Nueva regla/ })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Agregar regla' })
+    ).not.toBeInTheDocument()
   })
 
   it('reports how many past transactions a new rule was applied to', async () => {
@@ -363,6 +375,7 @@ describe('Categories', () => {
       </>
     )
 
+    openRuleForm()
     fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
       target: { value: 'farmashop' },
     })
@@ -389,6 +402,7 @@ describe('Categories', () => {
       </>
     )
 
+    openRuleForm()
     fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
       target: { value: 'farmashop' },
     })
@@ -439,6 +453,7 @@ describe('Categories', () => {
 
   it('saves the type and category chosen in the rule form', async () => {
     render(<Categories repository={repo} transactions={[]} />)
+    openRuleForm()
 
     fireEvent.change(screen.getByPlaceholderText(/Ej\. "farmacia"/), {
       target: { value: 'uber' },
@@ -463,6 +478,7 @@ describe('Categories', () => {
 
   it('exposes which scope is selected to assistive tech', () => {
     render(<Categories repository={repo} transactions={[]} />)
+    openRuleForm()
 
     const group = screen.getByRole('group', { name: 'Aplicar a' })
     expect(
@@ -474,6 +490,510 @@ describe('Categories', () => {
     expect(
       within(group).getByRole('radio', { name: 'Pasadas y futuras' })
     ).toBeChecked()
+  })
+
+  describe('rules: collapsed form, Editar and "Aplicar a las N" (#287)', () => {
+    const rulesRegion = () =>
+      screen.getByRole('region', { name: 'Reglas de auto-categorización' })
+    const patternInput = () =>
+      within(rulesRegion()).getByPlaceholderText(/Ej\. "farmacia"/)
+    const uber = () =>
+      addCustomPattern({
+        pattern: 'uber',
+        matchType: 'starts_with',
+        category: 'transport',
+        description: 'Uber',
+      })
+    const uberRows = [
+      makeTx({ id: '1', description: 'UBER TRIP', categoryConfidence: 0.8 }),
+      makeTx({ id: '2', description: 'UBER EATS', categoryConfidence: 0.8 }),
+      makeTx({
+        id: '3',
+        description: 'UBER X',
+        category: 'transport',
+        displayDescription: 'Uber',
+        categoryConfidence: 0.8,
+      }),
+      makeTx({ id: '4', description: 'UBER Y', categoryConfidence: 1 }),
+      makeTx({ id: '5', description: 'DEVOTO' }),
+    ]
+    const renderWithToasts = (
+      props: Partial<React.ComponentProps<typeof Categories>> = {}
+    ) =>
+      render(
+        <>
+          <Categories repository={repo} transactions={uberRows} {...props} />
+          <Toaster />
+        </>
+      )
+
+    it('hides the form until "Nueva regla" is clicked, then focuses the pattern', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+
+      expect(
+        within(rulesRegion()).getByText(/No hay reglas personalizadas/)
+      ).toBeInTheDocument()
+      expect(
+        within(rulesRegion()).getByRole('button', { name: /Nueva regla/ })
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByPlaceholderText(/Ej\. "farmacia"/)
+      ).not.toBeInTheDocument()
+
+      openRuleForm()
+
+      expect(patternInput()).toHaveFocus()
+      expect(
+        within(rulesRegion()).getByRole('heading', {
+          level: 3,
+          name: 'Nueva regla',
+        })
+      ).toBeInTheDocument()
+      expect(
+        within(rulesRegion()).queryByRole('button', { name: /Nueva regla/ })
+      ).not.toBeInTheDocument()
+    })
+
+    it('closes the form with the X and puts focus back on "Nueva regla"', () => {
+      render(<Categories repository={repo} transactions={[]} />)
+      openRuleForm()
+
+      fireEvent.click(
+        within(rulesRegion()).getByRole('button', { name: 'Cancelar' })
+      )
+
+      expect(
+        screen.queryByPlaceholderText(/Ej\. "farmacia"/)
+      ).not.toBeInTheDocument()
+      expect(
+        within(rulesRegion()).getByRole('button', { name: /Nueva regla/ })
+      ).toHaveFocus()
+    })
+
+    it('closes the form once a rule is created', async () => {
+      renderWithToasts({ transactions: [] })
+      openRuleForm()
+      fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
+
+      expect(await screen.findByText('Regla creada')).toBeInTheDocument()
+      expect(
+        screen.queryByPlaceholderText(/Ej\. "farmacia"/)
+      ).not.toBeInTheDocument()
+    })
+
+    it('keeps the form open, with its values, when the create fails', async () => {
+      repo.failOn('upsertCustomPattern', { error: new Error('timeout') })
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+      renderWithToasts({ transactions: [] })
+      openRuleForm()
+      fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
+
+      expect(
+        await screen.findByText(/No se pudo crear la regla/)
+      ).toBeInTheDocument()
+      expect(patternInput()).toHaveValue('farmashop')
+      expect(logged).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'timeout' })
+      )
+    })
+
+    it('reopens the form with the rule\'s values from "Editar"', () => {
+      uber()
+      render(<Categories repository={repo} transactions={[]} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Editar regla uber' }))
+
+      const region = within(rulesRegion())
+      expect(
+        region.getByRole('heading', { level: 3, name: 'Editar regla' })
+      ).toBeInTheDocument()
+      expect(patternInput()).toHaveValue('uber')
+      expect(region.getByLabelText('Tipo')).toHaveValue('starts_with')
+      expect(region.getByLabelText('Categoría')).toHaveValue('transport')
+      expect(region.getByLabelText('Descripción (opcional)')).toHaveValue(
+        'Uber'
+      )
+      expect(
+        region.getByRole('button', { name: 'Guardar cambios' })
+      ).toBeInTheDocument()
+      expect(region.getByRole('radio', { name: 'Solo futuras' })).toBeChecked()
+    })
+
+    it('saves an edit in place and closes the form', async () => {
+      const rule = uber()
+      renderWithToasts({ transactions: [] })
+      fireEvent.click(screen.getByRole('button', { name: 'Editar regla uber' }))
+      fireEvent.change(within(rulesRegion()).getByLabelText('Categoría'), {
+        target: { value: 'restaurants' },
+      })
+      fireEvent.click(
+        within(rulesRegion()).getByRole('button', { name: 'Guardar cambios' })
+      )
+
+      expect(await screen.findByText('Regla guardada')).toBeInTheDocument()
+      expect(listCustomPatterns()).toEqual([
+        expect.objectContaining({ id: rule.id, category: 'restaurants' }),
+      ])
+      expect(
+        screen.queryByPlaceholderText(/Ej\. "farmacia"/)
+      ).not.toBeInTheDocument()
+    })
+
+    it('applies an edited rule to past rows when "Pasadas y futuras" is chosen', async () => {
+      const rule = uber()
+      const onApplyPatternToPast = vi
+        .fn()
+        .mockResolvedValue({ updated: 2, failed: 0 })
+      renderWithToasts({ transactions: [], onApplyPatternToPast })
+      fireEvent.click(screen.getByRole('button', { name: 'Editar regla uber' }))
+      fireEvent.click(screen.getByRole('radio', { name: 'Pasadas y futuras' }))
+      fireEvent.click(
+        within(rulesRegion()).getByRole('button', { name: 'Guardar cambios' })
+      )
+
+      expect(
+        await screen.findByText('Regla guardada · aplicada a 2 transacciones')
+      ).toBeInTheDocument()
+      expect(onApplyPatternToPast).toHaveBeenCalledWith(
+        expect.objectContaining({ id: rule.id })
+      )
+    })
+
+    it('counts the rows a rule would change and applies them', async () => {
+      const rule = uber()
+      const onApplyPatternToPast = vi
+        .fn()
+        .mockResolvedValue({ updated: 2, failed: 0 })
+      renderWithToasts({ onApplyPatternToPast })
+
+      // The pattern matches 4 rows; it would change 2 (one is applied, one
+      // was categorized by hand).
+      expect(screen.getByText(/4 transacciones coinciden/)).toBeInTheDocument()
+      const apply = screen.getByRole('button', {
+        name: 'Aplicar regla uber a 2 transacciones',
+      })
+      expect(apply).toHaveTextContent('Aplicar a las 2')
+
+      fireEvent.click(apply)
+
+      expect(
+        await screen.findByText('Regla aplicada a 2 transacciones')
+      ).toBeInTheDocument()
+      expect(onApplyPatternToPast).toHaveBeenCalledWith(
+        expect.objectContaining({ id: rule.id })
+      )
+    })
+
+    it('shows no apply button when nothing would change, and "Aplicar a 1" for one row', () => {
+      uber()
+      const onApplyPatternToPast = vi.fn()
+      const { unmount } = render(
+        <Categories
+          repository={repo}
+          transactions={[uberRows[2], uberRows[3], uberRows[4]]}
+          onApplyPatternToPast={onApplyPatternToPast}
+        />
+      )
+      expect(
+        screen.queryByRole('button', { name: /Aplicar regla/ })
+      ).not.toBeInTheDocument()
+      unmount()
+
+      render(
+        <Categories
+          repository={repo}
+          transactions={[uberRows[0], uberRows[2]]}
+          onApplyPatternToPast={onApplyPatternToPast}
+        />
+      )
+      expect(
+        screen.getByRole('button', {
+          name: 'Aplicar regla uber a 1 transacción',
+        })
+      ).toHaveTextContent('Aplicar a 1')
+    })
+
+    it('says how many rows failed on a partial apply, and reports a rejected apply', async () => {
+      uber()
+      const onApplyPatternToPast = vi
+        .fn()
+        .mockResolvedValueOnce({ updated: 1, failed: 1 })
+        .mockRejectedValueOnce(new Error('boom'))
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+      renderWithToasts({ onApplyPatternToPast })
+      const apply = () =>
+        screen.getByRole('button', {
+          name: 'Aplicar regla uber a 2 transacciones',
+        })
+
+      fireEvent.click(apply())
+      expect(
+        await screen.findByText(
+          'Se aplicó a 1 de 2 transacciones; el resto no se pudo guardar.'
+        )
+      ).toBeInTheDocument()
+
+      await waitFor(() => expect(apply()).toBeEnabled())
+      fireEvent.click(apply())
+      expect(
+        await screen.findByText(/No se pudo aplicar la regla/)
+      ).toBeInTheDocument()
+      expect(logged).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'boom' })
+      )
+    })
+
+    it('says nothing changed when the apply found no rows to change', async () => {
+      uber()
+      const onApplyPatternToPast = vi
+        .fn()
+        .mockResolvedValue({ updated: 0, failed: 0 })
+      renderWithToasts({ onApplyPatternToPast })
+
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: 'Aplicar regla uber a 2 transacciones',
+        })
+      )
+
+      expect(
+        await screen.findByText('Regla aplicada · ninguna transacción cambió')
+      ).toBeInTheDocument()
+    })
+
+    it('closes the form when the rule being edited is deleted', async () => {
+      uber()
+      render(<Categories repository={repo} transactions={[]} />)
+      fireEvent.click(screen.getByRole('button', { name: 'Editar regla uber' }))
+      expect(patternInput()).toBeInTheDocument()
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Eliminar regla uber' })
+      )
+
+      await waitFor(() =>
+        expect(
+          screen.queryByPlaceholderText(/Ej\. "farmacia"/)
+        ).not.toBeInTheDocument()
+      )
+    })
+
+    describe('review round 1 (#287)', () => {
+      const never = () =>
+        new Promise<{ updated: number; failed: number }>(() => {})
+      const save = () =>
+        fireEvent.click(
+          within(rulesRegion()).getByRole('button', { name: 'Guardar cambios' })
+        )
+
+      it('keeps the rule locked through the apply that follows its save', async () => {
+        uber()
+        renderWithToasts({ onApplyPatternToPast: vi.fn(never) })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.click(
+          screen.getByRole('radio', { name: 'Pasadas y futuras' })
+        )
+        save()
+
+        await waitFor(() =>
+          expect(
+            screen.queryByPlaceholderText(/Ej\. "farmacia"/)
+          ).not.toBeInTheDocument()
+        )
+        expect(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        ).toBeDisabled()
+        expect(
+          screen.getByRole('button', { name: 'Eliminar regla uber' })
+        ).toBeDisabled()
+        expect(
+          screen.getByRole('button', { name: /Aplicar regla uber/ })
+        ).toBeDisabled()
+      })
+
+      it("can't save an edited rule while its apply is running", async () => {
+        uber()
+        renderWithToasts({ onApplyPatternToPast: vi.fn(never) })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.click(
+          screen.getByRole('button', { name: /Aplicar regla uber/ })
+        )
+
+        await waitFor(() =>
+          expect(
+            within(rulesRegion()).getByRole('button', {
+              name: 'Guardar cambios',
+            })
+          ).toBeDisabled()
+        )
+      })
+
+      it("doesn't close a form opened after a delete that finishes late", async () => {
+        uber()
+        const gate = repo.hold('deleteCustomPattern')
+        renderWithToasts({ transactions: [] })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Eliminar regla uber' })
+        )
+        fireEvent.click(
+          within(rulesRegion()).getByRole('button', { name: 'Cancelar' })
+        )
+        openRuleForm()
+        fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+
+        gate.release()
+        expect(await screen.findByText('Regla eliminada')).toBeInTheDocument()
+
+        expect(patternInput()).toHaveValue('farmashop')
+      })
+
+      it("doesn't close a form opened after a save that finishes late", async () => {
+        uber()
+        const gate = repo.hold('upsertCustomPattern')
+        renderWithToasts({ transactions: [] })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        save()
+        fireEvent.click(
+          within(rulesRegion()).getByRole('button', { name: 'Cancelar' })
+        )
+        openRuleForm()
+        fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+
+        gate.release()
+        expect(await screen.findByText('Regla guardada')).toBeInTheDocument()
+
+        expect(patternInput()).toHaveValue('farmashop')
+      })
+
+      it('says no row changed when the form apply finds nothing to change', async () => {
+        renderWithToasts({
+          transactions: [],
+          onApplyPatternToPast: vi
+            .fn()
+            .mockResolvedValue({ updated: 0, failed: 0 }),
+        })
+        openRuleForm()
+        fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+        fireEvent.click(
+          screen.getByRole('radio', { name: 'Pasadas y futuras' })
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
+
+        expect(
+          await screen.findByText('Regla creada · ninguna transacción cambió')
+        ).toBeInTheDocument()
+      })
+
+      it('says no row changed after an edit that finds nothing to change', async () => {
+        uber()
+        renderWithToasts({
+          transactions: [],
+          onApplyPatternToPast: vi
+            .fn()
+            .mockResolvedValue({ updated: 0, failed: 0 }),
+        })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.click(
+          screen.getByRole('radio', { name: 'Pasadas y futuras' })
+        )
+        save()
+
+        expect(
+          await screen.findByText('Regla guardada · ninguna transacción cambió')
+        ).toBeInTheDocument()
+      })
+
+      it('uses the singular when a single row failed to apply', async () => {
+        renderWithToasts({
+          transactions: [],
+          onApplyPatternToPast: vi
+            .fn()
+            .mockResolvedValue({ updated: 0, failed: 1 }),
+        })
+        openRuleForm()
+        fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+        fireEvent.click(
+          screen.getByRole('radio', { name: 'Pasadas y futuras' })
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
+
+        expect(
+          await screen.findByText(/Se aplicó a 0 de 1 transacción;/)
+        ).toBeInTheDocument()
+      })
+
+      it('keeps an archived category selectable when editing', () => {
+        addCustomPattern({
+          pattern: 'viaje',
+          matchType: 'contains',
+          category: 'viajes-viejos',
+        })
+        render(<Categories repository={repo} transactions={[]} />)
+
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla viaje' })
+        )
+
+        const select = within(rulesRegion()).getByLabelText('Categoría')
+        expect(select).toHaveValue('viajes-viejos')
+        expect(
+          within(select).getByRole('option', { name: /viajes viejos/i })
+        ).toBeInTheDocument()
+      })
+
+      it('keeps the form open and the list unchanged when an edit fails', async () => {
+        const rule = uber()
+        repo.failOn('upsertCustomPattern', { error: new Error('timeout') })
+        const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+        renderWithToasts({ transactions: [] })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.change(within(rulesRegion()).getByLabelText('Categoría'), {
+          target: { value: 'restaurants' },
+        })
+        save()
+
+        expect(
+          await screen.findByText(/No se pudo guardar la regla/)
+        ).toBeInTheDocument()
+        expect(patternInput()).toBeInTheDocument()
+        expect(listCustomPatterns()).toEqual([rule])
+        expect(logged).toHaveBeenCalledWith(
+          expect.objectContaining({ message: 'timeout' })
+        )
+      })
+    })
+
+    it('keeps a legacy category id selected when editing', () => {
+      addCustomPattern({
+        pattern: 'disco',
+        matchType: 'contains',
+        category: 'food',
+      })
+      render(<Categories repository={repo} transactions={[]} />)
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Editar regla disco' })
+      )
+
+      expect(within(rulesRegion()).getByLabelText('Categoría')).toHaveValue(
+        'groceries'
+      )
+    })
   })
 
   describe('household checkbox in the category form (#251)', () => {

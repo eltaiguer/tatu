@@ -17,10 +17,15 @@ import {
   type DescriptionOverrides,
 } from '../descriptions/description-overrides'
 import {
+  firstMatchingPattern,
   listCustomPatterns,
   matchCustomPattern,
+  testPattern,
   type CustomPattern,
 } from './custom-patterns'
+import { isSplitParentTx, type Transaction } from '../../models'
+import { normalizeCategoryId } from '../categories/category-aliases'
+import { effectiveConfidence } from './confidence'
 
 /** Read-only: a value is never changed after it is read (see currentUserRules). */
 export interface UserRules {
@@ -67,4 +72,96 @@ export function hasUserRule(rules: UserRules, description: string): boolean {
     !!findMerchantCategoryOverride(rules.merchantOverrides, description) ||
     !!matchCustomPattern(description, rules.customPatterns)
   )
+}
+
+/**
+ * True when the user renamed this description (a description override with a
+ * friendly name, with or without a category). A rule never writes a name over
+ * it: for the name part there is nothing to change.
+ */
+export function isRenamedByUser(
+  rules: UserRules,
+  description: string
+): boolean {
+  return !!findDescriptionOverride(rules.descriptionOverrides, description)
+    ?.friendlyDescription
+}
+
+// A row any rule may still change: not a split row, not categorized by hand,
+// and no categorized description override or merchant override wins over a
+// custom pattern (categorizer steps 1-3).
+function isOpenToRules(tx: Transaction, rules: UserRules): boolean {
+  if (isSplitParentTx(tx) || tx.splitParentId) return false
+  if (effectiveConfidence(tx) >= 1) return false
+  if (
+    findDescriptionOverride(rules.descriptionOverrides, tx.description)
+      ?.category
+  )
+    return false
+  return !findMerchantCategoryOverride(rules.merchantOverrides, tx.description)
+}
+
+// The rule would change the row: it differs in category, or in the name the
+// rule sets (unless the user renamed the row).
+function differsFromRule(
+  tx: Transaction,
+  rule: CustomPattern,
+  rules: UserRules
+): boolean {
+  const sameCategory =
+    normalizeCategoryId(tx.category) === normalizeCategoryId(rule.category)
+  const sameName =
+    !rule.description ||
+    tx.displayDescription === rule.description ||
+    isRenamedByUser(rules, tx.description)
+  return !(sameCategory && sameName)
+}
+
+/**
+ * THE rows a custom rule would change now — what "Aplicar a las N" counts and
+ * `applyPatternToPast` writes, so the button never promises more or less than
+ * the write does. A row counts when the pattern matches it and the rule is the
+ * one the categorizer would pick for it (no categorized description override,
+ * no merchant override, no earlier rule; an unlisted rule is decided by its
+ * pattern alone), it is not a split row, was not categorized by hand
+ * (confidence 1) and does not already carry the rule's category (and name,
+ * when the rule sets one and the user did not rename the row). Categories
+ * compare normalized: a stored rule can hold a legacy id.
+ */
+export function rowsRuleWouldChange(
+  rows: readonly Transaction[],
+  rule: CustomPattern,
+  rules: UserRules
+): Transaction[] {
+  const listed = rules.customPatterns.some((p) => p.id === rule.id)
+  return rows.filter((tx) => {
+    if (!isOpenToRules(tx, rules)) return false
+    if (!testPattern(tx.description, rule)) return false
+    if (
+      listed &&
+      firstMatchingPattern(tx.description, rules.customPatterns)?.id !== rule.id
+    )
+      return false
+    return differsFromRule(tx, rule, rules)
+  })
+}
+
+/**
+ * `rowsRuleWouldChange(...).length` for every listed rule, in one pass over
+ * the rows (the winning rule is found once per row): what Categorías shows on
+ * each rule's "Aplicar a las N".
+ */
+export function countRowsEachRuleWouldChange(
+  rows: readonly Transaction[],
+  rules: UserRules
+): Map<string, number> {
+  const counts = new Map(rules.customPatterns.map((p) => [p.id, 0]))
+  for (const tx of rows) {
+    if (!isOpenToRules(tx, rules)) continue
+    const winner = firstMatchingPattern(tx.description, rules.customPatterns)
+    if (winner && differsFromRule(tx, winner, rules)) {
+      counts.set(winner.id, (counts.get(winner.id) ?? 0) + 1)
+    }
+  }
+  return counts
 }
