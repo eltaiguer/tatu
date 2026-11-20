@@ -5,7 +5,7 @@ import type { Currency, Transaction, TransactionsFilter } from '../../models'
 import { resolveCategory } from '../../services/categories/category-registry'
 import { convert } from '../../services/currency/convert'
 import { formatCurrency, formatDateCompact } from '../../utils/formatting'
-import { getDisplayDescription } from '../../utils/transaction-display'
+import { transactionLabel } from '../../services/merchants/merchant-key'
 import { Card } from '../ui/card'
 import { IconTile } from '../ui/icon-tile'
 
@@ -58,8 +58,15 @@ export function RecentTransactionsCard({
                 {catDef.icon}
               </IconTile>
               <div className="min-w-0 flex-1">
-                <div className="overflow-hidden text-[14px] font-medium text-ellipsis whitespace-nowrap">
-                  {getDisplayDescription(tx)}
+                <div
+                  className="overflow-hidden text-[14px] font-medium text-ellipsis whitespace-nowrap"
+                  title={
+                    transactionLabel(tx) !== tx.description
+                      ? tx.description
+                      : undefined
+                  }
+                >
+                  {transactionLabel(tx)}
                 </div>
                 <div className="text-[12px] text-muted-foreground">
                   {formatDateCompact(tx.date)}

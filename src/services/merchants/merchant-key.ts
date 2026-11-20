@@ -13,7 +13,7 @@ import { getUserRename } from '../../utils/transaction-display'
 // Not pure in `tx` alone: live description overrides are read from the
 // description-overrides module (same as getDisplayDescription).
 
-const DIACRITICS = /[̀-ͯ]/g
+export const DIACRITICS = /[̀-ͯ]/g
 
 // Lowercase, accent-free, `*` as a separator ("MERPAGO*FOO" = "Merpago Foo"),
 // single spaces. Also how Insights compares a merchant name the model echoes.
@@ -193,7 +193,7 @@ export function rawMerchantKey(description: string): string {
 }
 
 export function merchantKeyOf(tx: Transaction): string {
-  const rename = getUserRename(tx)
+  const rename = renameOf(tx)
   if (rename) return fold(rename)
   // A split part is prefilled with the parent's bank description, so it goes
   // through the same stripping as its unsplit siblings; a user-typed part
@@ -218,29 +218,139 @@ const TRANSFER_KEY_CONCEPTS: ReadonlyArray<readonly [string, string]> = [
   ['transf instantanea recibida', 'Transf. instantánea recibida'],
   ['transferencia enviada trf. plaza-', 'Transferencia enviada'],
   ['transferencia recibida recibida /', 'Transferencia recibida'],
+  ['cr. pago sueldos', 'Sueldo'],
 ]
 
 // A transfer's label: its counterparty plus the bank concept, both read off
 // the merchant key ("TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO
 // GAZZANO" → "FEDERICO GAZZANO · Transferencia enviada"). The name keeps the
-// description's own spelling when its last words fold to it. A key that opens
-// otherwise, or whose rest is not a name (empty, one letter, a reference code
-// kept because nothing else was left), keeps the raw description. Display
-// only — the key is rawMerchantKey.
-function counterpartyLabel(description: string): string {
-  const key = rawMerchantKey(description)
+// description's own spelling when its last words fold to it. Null when the key
+// opens with no known concept; the raw description when it does but its rest
+// is not a name (empty, one letter, a reference code kept because nothing else
+// was left). Display only — the key is rawMerchantKey.
+function counterpartyLabel(description: string, key: string): string | null {
   const concept = TRANSFER_KEY_CONCEPTS.find(
     ([opening]) =>
       key.startsWith(opening) &&
       (opening.endsWith('/') || key[opening.length] === ' ')
   )
-  if (!concept) return description
+  if (!concept) return null
   const [opening, conceptLabel] = concept
   const name = key.slice(opening.length).trim()
   const isName =
     /[a-z].*[a-z]/.test(name) && (!/\d/.test(name) || name.startsWith('nro '))
   if (!isName) return description
   return `${spelledAsInDescription(name, description)} · ${conceptLabel}`
+}
+
+// Bank concepts with no payee: the exact key and its label.
+const FIXED_KEY_LABELS: ReadonlyMap<string, string> = new Map([
+  [
+    'comision por costo producto comision costo producto',
+    'Comisión costo producto',
+  ],
+  ['retiro corresponsales', 'Retiro en corresponsal'],
+  ['pago electronico tarjeta credito', 'Pago de tarjeta de crédito'],
+])
+
+const DEBIT_PURCHASE_OPENING = 'compra con tarjeta debito '
+const DEBIT_GROUP_SUFFIX = ' · Tarjeta de débito'
+const UPPERCASE_WORDS = new Set(['sa', 'srl', 'sas'])
+
+// A word's own capitals: one after an apostrophe or hyphen ("O'Neill",
+// "Cafe-Bar"), and every letter of an initialism ("s.a" → "S.A"). A dotted
+// name ("ezequi.handy") only capitalizes its first letter.
+function capitalize(word: string): string {
+  const parts = word.split('.').filter((part) => part !== '')
+  if (parts.length > 1 && parts.every((part) => part.length === 1)) {
+    return word.toUpperCase()
+  }
+  return (
+    word.charAt(0).toUpperCase() +
+    word
+      .slice(1)
+      .replace(
+        /(['-])([a-z])/g,
+        (_, mark: string, letter: string) => `${mark}${letter.toUpperCase()}`
+      )
+  )
+}
+
+// The folded payee in title case; company suffixes in capitals, and a known
+// short merchant in capitals when it is the whole payee or its first word
+// ("UTE", "KFC Punta Carretas", but "Peluqueria Hair Cut"). Accents are gone
+// with the fold, as Santander writes none.
+function titleCase(folded: string): string {
+  return folded
+    .split(' ')
+    .map((word, index) =>
+      UPPERCASE_WORDS.has(word) ||
+      (index === 0 && KNOWN_SHORT_MERCHANTS.has(word))
+        ? word.toUpperCase()
+        : capitalize(word)
+    )
+    .join(' ')
+}
+
+// The name of a debit-card purchase's payee, or null when the key is not one
+// or has no name left (digits only).
+function debitPayee(key: string): string | null {
+  if (!key.startsWith(DEBIT_PURCHASE_OPENING)) return null
+  const rest = key.slice(DEBIT_PURCHASE_OPENING.length).trim()
+  return /[a-z].*[a-z]/.test(rest) ? titleCase(rest) : null
+}
+
+// Pure in the description (live renames are applied by transactionLabel, never
+// here), so each description is labelled once.
+// Bounded: cleared when full.
+const STATEMENT_LABELS_LIMIT = 20000
+const STATEMENT_LABELS = new Map<string, string>()
+
+// THE label of an un-renamed bank description (#274), read off its merchant
+// key: a transfer's "NAME · Concept", a debit-card purchase's payee in title
+// case, a fixed concept's name; anything else (every card row, user-typed
+// split parts, unknown shapes) is the raw description. Derived at render,
+// never stored: the description, the key and the dedup fingerprint stay as
+// the statement wrote them.
+export function statementLabel(description: string): string {
+  const cached = STATEMENT_LABELS.get(description)
+  if (cached !== undefined) return cached
+  if (STATEMENT_LABELS.size >= STATEMENT_LABELS_LIMIT) STATEMENT_LABELS.clear()
+  const key = rawMerchantKey(description)
+  const label =
+    counterpartyLabel(description, key) ??
+    debitPayee(key) ??
+    FIXED_KEY_LABELS.get(key) ??
+    description
+  STATEMENT_LABELS.set(description, label)
+  return label
+}
+
+// A group's label (Mayores comercios, Insights, the merchant chip): the row
+// label, plus " · Tarjeta de débito" on a debit-card payee so a debit "Devoto
+// Supermercado" and a credit-card one, two keys, never read the same.
+export function statementMerchantLabel(description: string): string {
+  const label = statementLabel(description)
+  return debitPayee(rawMerchantKey(description)) === null
+    ? label
+    : `${label}${DEBIT_GROUP_SUFFIX}`
+}
+
+// The user's name for a row, or null: a "rename" equal to the raw description
+// is none (the AI stores `name || description`; editTransaction's `renamed`
+// is the same rule), so it must not hide the clean label.
+function renameOf(transaction: Transaction): string | null {
+  const rename = getUserRename(transaction)
+  return rename !== null && rename !== transaction.description.trim()
+    ? rename
+    : null
+}
+
+// THE name a row shows: the user's rename (own, AI or a live override), else
+// the statement's clean label. Never use `description` or
+// getDisplayDescription as a row's name.
+export function transactionLabel(transaction: Transaction): string {
+  return renameOf(transaction) ?? statementLabel(transaction.description)
 }
 
 // The description's last words if they fold to `folded` (accents and case
@@ -259,14 +369,14 @@ function newestFirst(a: Transaction, b: Transaction): number {
 }
 
 // The friendliest name for a group of rows sharing a key: the most recent
-// rename, else the most common raw description (a transfer's reduced to its
-// counterparty). Ties go to the most recent
-// row, so the label does not depend on input order (it feeds InsightInput,
-// whose hash decides whether cached insights are stale).
+// rename, else the most common raw description, cleaned
+// (statementMerchantLabel). Ties go to the most recent row, so the label does
+// not depend on input order (it feeds InsightInput, whose hash decides
+// whether cached insights are stale).
 export function merchantLabelFor(rows: Transaction[]): string {
   const byRecency = [...rows].sort(newestFirst)
   for (const tx of byRecency) {
-    const rename = getUserRename(tx)
+    const rename = renameOf(tx)
     if (rename) return rename
   }
 
@@ -284,7 +394,7 @@ export function merchantLabelFor(rows: Transaction[]): string {
       best = count
     }
   }
-  return counterpartyLabel(label)
+  return statementMerchantLabel(label)
 }
 
 export interface MerchantGroup {

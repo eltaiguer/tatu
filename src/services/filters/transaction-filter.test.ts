@@ -158,6 +158,46 @@ describe('filterTransactions — search and merchant', () => {
   })
 })
 
+describe('filterTransactions — search over bank-row labels (#274)', () => {
+  const rows = [
+    tx('debit', {
+      description:
+        'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172',
+    }),
+    tx('transfer', {
+      description:
+        'DEBITO OPERACION EN SUPERNET O SMS 754930TT55557465 TRF. PLAZA- FEDERICO GAZZANO',
+    }),
+    tx('fee', {
+      description: 'COMISION POR COSTO PRODUCTO COMISION COSTO PRODUCTO',
+    }),
+  ]
+  const found = (search: string) =>
+    ids(filterTransactions(rows, filters({ search })))
+
+  it('matches the clean label, which the raw text does not contain', () => {
+    expect(found('transferencia supernet')).toEqual(['transfer'])
+    expect(found('comisión')).toEqual(['fee'])
+  })
+
+  it('finds an accented label without the accent, and the reverse', () => {
+    const withAccent = [
+      tx('card', { description: 'PAGO ELECTRONICO TARJETA CREDITO' }),
+      tx('other', { description: 'SUPERMERCADO' }),
+    ]
+    const search = (q: string) =>
+      ids(filterTransactions(withAccent, filters({ search: q })))
+    expect(search('tarjeta de credito')).toEqual(['card'])
+    expect(search('Pago de tarjeta de CRÉDITO')).toEqual(['card'])
+    expect(search('super')).toEqual(['other'])
+  })
+
+  it('still matches the raw statement text', () => {
+    expect(found('martinizi')).toEqual(['debit'])
+    expect(found('tarj:')).toEqual(['debit'])
+  })
+})
+
 describe('filterTransactions — account, currency, type', () => {
   const rows = [
     tx('card-usd-debit', { source: 'credit_card' }),
@@ -440,6 +480,20 @@ describe('sortTransactions', () => {
       'a',
       'b',
       'c',
+    ])
+  })
+
+  it('sorts bank rows by their clean label, as the table shows them', () => {
+    const mixed = [
+      tx('debit', {
+        description:
+          'COMPRA CON TARJETA DEBITO PANADERIA MARACANA, MONTEVIDEO TARJ: ############9172',
+      }),
+      tx('card', { description: 'Devoto Supermercado' }),
+    ]
+    expect(ids(sortTransactions(mixed, 'description', 'asc'))).toEqual([
+      'card',
+      'debit',
     ])
   })
 

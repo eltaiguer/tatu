@@ -17,6 +17,7 @@ import {
   needsCategoryReview,
 } from '../../utils/transaction-display'
 import { formatCurrency, formatDate } from '../../utils/formatting'
+import { transactionLabel } from '../../services/merchants/merchant-key'
 import { convert } from '../../services/currency/convert'
 import { countsTowardTotals } from '../../services/spending/spending-rules'
 import {
@@ -43,8 +44,9 @@ export function TransactionCard({
   onCategorize,
 }: TransactionRowProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const displayDescription = getDisplayDescription(transaction)
-  const hasFriendlyOverride = displayDescription !== transaction.description
+  const displayDescription = transactionLabel(transaction)
+  const hasFriendlyOverride =
+    getDisplayDescription(transaction) !== transaction.description
   const category = resolveCategory(transaction.category)
   const isIgnored = category.isIgnored
   const showIgnoredFlag = needsIgnoredFlag(category)
@@ -86,7 +88,16 @@ export function TransactionCard({
         />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <div className="font-medium truncate">{displayDescription}</div>
+            <div
+              className="font-medium truncate"
+              title={
+                displayDescription !== transaction.description
+                  ? transaction.description
+                  : undefined
+              }
+            >
+              {displayDescription}
+            </div>
             {showIgnoredFlag && (
               <span className="inline-flex shrink-0 items-center gap-[3px] rounded-[4px] bg-[var(--muted)] px-[6px] py-[1px] text-[11px] font-medium text-[color:var(--text-muted)]">
                 <Slash size={9} />

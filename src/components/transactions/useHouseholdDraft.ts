@@ -5,7 +5,7 @@ import {
   householdLine,
 } from '../../services/household/household-copy'
 import { useHouseholdRules } from '../../hooks/useHouseholdRules'
-import { getDisplayDescription } from '../../utils/transaction-display'
+import { transactionLabel } from '../../services/merchants/merchant-key'
 import {
   isCategoryHousehold,
   currentHouseholdRules,
@@ -195,7 +195,7 @@ export function useHouseholdDraft({
     pick: pickHousehold,
     toggleRemember,
     toWrite,
-    rememberLabel: `Recordar para todas las de ${getDisplayDescription(transaction)}`,
+    rememberLabel: `Recordar para todas las de ${transactionLabel(transaction)}`,
     hint:
       startedRemembered && !remember
         ? 'Al guardar, se deja de recordar'

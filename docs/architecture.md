@@ -29,7 +29,9 @@ crash (a bug in the app, not a bad file) — is "No se pudo importar", area
 `import`. `onParsed` only reports progress ("Importando…").
 The result is `ImportResult` plus the file type and the month to show.
 The parsers are pure: they map columns, dates, amounts, currency and IDs and
-never call the categorizer.
+never call the categorizer. They keep the statement's text as `description`;
+the clean name a bank row shows is derived at render by `statementLabel`
+(see [Merchant key](#merchant-key)), not stored.
 
 When the import finishes, the dialog stays open on a summary of the
 `ImportResult` counts (nuevas · duplicadas omitidas · eliminadas antes, plus
@@ -678,15 +680,41 @@ rows. Never group by `description` or `getDisplayDescription` directly.
   kept instead.
 - `merchantLabelFor(rows)`: what the user sees and the Insights model echoes —
   the most recent rename, else the most common raw description (ties: most
-  recent row). A transfer's label is read off its key: the counterparty plus
+  recent row), cleaned by `statementMerchantLabel`. A transfer's label is read off its key: the counterparty plus
   the bank concept ("TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO
   GAZZANO" → "FEDERICO GAZZANO · Transferencia enviada"). The concept stays
   because the key keeps it: a Supernet debit and the TRANSFERENCIA ENVIADA leg
   beside it name the same person but are different merchants. Deriving the
   label from the key means two keys never share a label. A key that opens
-  with no known concept, or leaves no name, keeps the raw text. Insights
-  matches the merchant the model echoes ignoring case, accents and the
-  separator.
+  with no known concept and is no debit-card purchase or fixed concept, or
+  leaves no name, keeps the raw text. Insights matches the merchant the model
+  echoes ignoring case, accents and the separator.
+- **Row label (#274).** `statementLabel(description)` is the name of an
+  un-renamed bank row, read off `rawMerchantKey` (never by re-parsing the raw
+  text): a transfer's `NAME · Concept` (the table above, plus
+  `CR. PAGO SUELDOS` → "SETA WORKSHOP SRL · Sueldo"); a debit-card
+  purchase's payee in title case ("COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO
+  TARJ: …" → "Tintoreria Martinizi"; SA/SRL/SAS in capitals, and a known short
+  merchant when it is the whole payee or its first word ("UTE", not "Hair
+  CUT"); capitals after `'` and `-`, and in initials ("S.A"); a payee left with fewer than two letters keeps the raw
+  text); three fixed concepts matched on their exact key ("Comisión costo producto",
+  "Retiro en corresponsal", "Pago de tarjeta de crédito"); anything else, every
+  card row included, is the raw description. `transactionLabel(tx)` is THE name
+  a row shows: the user's rename (`getUserRename`, unless it equals the raw
+  description, as the AI stores) wins, else `statementLabel` (memoized by
+  description: it is pure in it).
+  It is derived at render and never stored, so the description, the merchant
+  key, dedup fingerprints and household-rule keys are unchanged, and the
+  categorizer and the AI prompt still read the raw text. A group's label adds
+  " · Tarjeta de débito" to a debit-card payee (`statementMerchantLabel`; also
+  Reglas del hogar), because a debit "Devoto Supermercado" and the credit-card
+  one are two keys and two labels must never read the same (Mayores comercios
+  would show twins, Insights would drop an ambiguous merchant). Search matches
+  the label and the raw text; sorting by description orders by the label. The
+  edit dialog's "Descripción visible" keeps the raw text (or the rename) and
+  its "Original:" line: `getDisplayDescription` still feeds writes, because a
+  name different from the raw description is saved as a rename. CSV/PDF export,
+  `DuplicatesReview` and `SplitTransactionDialog` keep the raw text.
 - `npx vite-node scripts/merchant-groups.ts [paths…]` prints, for Santander
   CSVs or Tatu's own CSV export, every key that merges several variants.
 

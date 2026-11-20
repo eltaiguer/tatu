@@ -2,8 +2,11 @@ import type { HouseholdRules, Transaction } from '../../models'
 import { rowHouseholdView } from '../household/household'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { countsAsRow, countsTowardTotals } from '../spending/spending-rules'
-import { getDisplayDescription } from '../../utils/transaction-display'
-import { merchantKeyOf } from '../merchants/merchant-key'
+import {
+  DIACRITICS,
+  merchantKeyOf,
+  transactionLabel,
+} from '../merchants/merchant-key'
 import {
   newestDate,
   toDateKey,
@@ -37,6 +40,11 @@ export interface TransactionFilterOptions {
   // cannot forget them: pass currentHouseholdRules() (like userRules,
   // never read in here).
   householdRules: HouseholdRules
+}
+
+// Lowercase and accent-free, so "credito" finds a row labelled "crédito".
+function foldAccents(text: string): string {
+  return text.normalize('NFD').replace(DIACRITICS, '').toLowerCase()
 }
 
 function utcDay(y: number, m: number, d: number): Date {
@@ -95,7 +103,7 @@ export function filterTransactions(
   const dateTo =
     !invalidDateRange && range.to ? new Date(`${range.to}T23:59:59.999Z`) : null
 
-  const query = filters.search.toLowerCase()
+  const query = foldAccents(filters.search)
   // Same normalization Resumen and Categorías count with: missing, '',
   // 'other' and casing all mean "Sin categoría".
   const categorySet = new Set(filters.categories.map(normalizeCategoryId))
@@ -137,8 +145,9 @@ export function filterTransactions(
 
     if (!query) return true
 
-    const searchable =
-      `${getDisplayDescription(transaction)} ${transaction.description} ${(transaction.tags ?? []).join(' ')}`.toLowerCase()
+    const searchable = foldAccents(
+      `${transactionLabel(transaction)} ${transaction.description} ${(transaction.tags ?? []).join(' ')}`
+    )
     return searchable.includes(query)
   })
 }
@@ -171,16 +180,18 @@ export function sortTransactions(
   direction: SortDirection
 ): Transaction[] {
   const sign = direction === 'asc' ? 1 : -1
+  if (field === 'description') {
+    // Label each row once: the label is not free to compute, and a sort asks
+    // for it on every comparison.
+    return rows
+      .map((row) => ({ row, label: transactionLabel(row) }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'es') * sign)
+      .map(({ row }) => row)
+  }
   return [...rows].sort((a, b) => {
     if (field === 'date') return (a.date.getTime() - b.date.getTime()) * sign
     if (field === 'amount')
       return (Math.abs(a.amount) - Math.abs(b.amount)) * sign
-    if (field === 'description') {
-      return (
-        getDisplayDescription(a).localeCompare(getDisplayDescription(b), 'es') *
-        sign
-      )
-    }
     return (a.category ?? '').localeCompare(b.category ?? '', 'es') * sign
   })
 }

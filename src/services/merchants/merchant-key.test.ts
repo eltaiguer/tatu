@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Transaction } from '../../models'
 import {
@@ -9,7 +11,12 @@ import {
   merchantKeyOf,
   merchantLabelFor,
   rawMerchantKey,
+  statementLabel,
+  statementMerchantLabel,
+  transactionLabel,
 } from './merchant-key'
+import { parseCSV } from '../parsers/csv-parser'
+import { decodeCsvBytes } from '../parsers/decode-csv'
 
 const tx = (overrides: Partial<Transaction>): Transaction => ({
   id: 'a',
@@ -390,8 +397,9 @@ describe('merchantLabelFor on transfers', () => {
 
   it('leaves non-transfer descriptions and renames untouched', () => {
     expect(labelOf('CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL')).toBe(
-      'CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL'
+      'SETA WORKSHOP SRL · Sueldo'
     )
+    expect(labelOf('PAGO DE ALQUILER ENERO')).toBe('PAGO DE ALQUILER ENERO')
     expect(
       merchantLabelFor([
         tx({
@@ -405,7 +413,7 @@ describe('merchantLabelFor on transfers', () => {
   // The label is display only; the key decides the groups. Two groups must
   // never read the same, or Mayores comercios shows twin rows and Insights
   // twin merchants. Every transfer shape in samples/, plus near-misses.
-  it('gives different merchant keys different labels', () => {
+  it('gives different merchant keys different labels, for every shape in samples/', () => {
     const descriptions = [
       'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE',
       'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY  MARIA CONSTANZA',
@@ -436,6 +444,20 @@ describe('merchantLabelFor on transfers', () => {
       'DEBITO OPERACION EN BANCA DIGITAL 526741TT TRF. PLAZA-',
       'CREDITO POR OPERACION EN SUPERNET 12345/HARGUINDEGUY MARIA',
       'CREDITO POR OPERACION EN SUPERNET 67890/PEREZ MARIA',
+      'CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL',
+      'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172',
+      'COMPRA CON TARJETA DEBITO PUESTO EZEQUI.HANDY., XQ9MONTEVIDEO TARJ: ############9172',
+      'COMPRA CON TARJETA DEBITO PUESTO JOSE BENITEZ, MONTEVIDEO TARJ: ############9172',
+      'COMPRA CON TARJETA DEBITO PEDIDOSYA.BAR MICHIG, MONTEVIDEO TARJ: ############9172',
+      'COMPRA CON TARJETA DEBITO PEDIDOSYA, MONTEVIDEO TARJ: ############9172',
+      'Pedidosya',
+      'COMPRA CON TARJETA DEBITO PANADERIA MARACANA, MONTEVIDEO TARJ: ############9172',
+      'COMPRA CON TARJETA DEBITO DEVOTO SUPERMERCADO, MONTEVIDEO TARJ: ############9172',
+      'Devoto Supermercado',
+      'COMPRA CON TARJETA DEBITO 7SEVEN, MONTEVIDEO TARJ: ####1',
+      'RETIRO CORRESPONSALES , MONTEVIDEO TARJ: ############9172',
+      'COMISION POR COSTO PRODUCTO COMISION COSTO PRODUCTO',
+      'PAGO ELECTRONICO TARJETA CREDITO',
     ]
     const keyByLabel = new Map<string, string>()
     for (const description of descriptions) {
@@ -461,5 +483,194 @@ describe('groupByMerchant', () => {
       ['spotify', 1],
     ])
     expect(groups[1].label).toBe('SPOTIFY P3D110F721')
+  })
+
+  it("keeps a row saved with its raw text as its name in its siblings' group (#274)", () => {
+    const raw = (city: string) =>
+      `COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, ${city} TARJ: ############9172`
+    const groups = groupByMerchant([
+      tx({ id: '1', description: raw('MONTEVIDEO') }),
+      tx({
+        id: '2',
+        description: raw('MONTEVIDEO'),
+        displayDescription: raw('MONTEVIDEO'),
+      }),
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0].label).toBe('Tintoreria Martinizi · Tarjeta de débito')
+  })
+})
+
+const DEBIT = (rest: string) =>
+  `COMPRA CON TARJETA DEBITO ${rest}, MONTEVIDEO TARJ: ############9172`
+
+describe('statementLabel', () => {
+  it.each([
+    [DEBIT('TINTORERIA MARTINIZI'), 'Tintoreria Martinizi'],
+    [
+      'COMPRA CON TARJETA DEBITO PUESTO EZEQUI.HANDY., XQ9MONTEVIDEO TARJ: ############9172',
+      'Puesto Ezequi.handy',
+    ],
+    [DEBIT('PUESTO JOSE BENITEZ'), 'Puesto Jose Benitez'],
+    [DEBIT('PEDIDOSYA.BAR MICHIG'), 'Pedidosya.bar Michig'],
+    [DEBIT('PEDIDOSYA'), 'Pedidosya'],
+    [DEBIT('PANADERIA MARACANA'), 'Panaderia Maracana'],
+    ['COMPRA CON TARJETA DEBITO 7SEVEN, MONTEVIDEO TARJ: ####1', '7seven'],
+    ['COMPRA CON TARJETA DEBITO UTE 123, MONTEVIDEO TARJ: ####1', 'UTE'],
+    [DEBIT('DEVOTO SRL'), 'Devoto SRL'],
+    ['COMPRA CON TARJETA DEBITO 123456, MONTEVIDEO TARJ: ####1', null],
+    [
+      'RETIRO CORRESPONSALES , MONTEVIDEO TARJ: ############9172',
+      'Retiro en corresponsal',
+    ],
+    [
+      'COMISION POR COSTO PRODUCTO COMISION COSTO PRODUCTO',
+      'Comisión costo producto',
+    ],
+    ['PAGO ELECTRONICO TARJETA CREDITO', 'Pago de tarjeta de crédito'],
+    [
+      'CR. PAGO SUELDOS 20251106_0610426 SETA WORKSHOP SRL',
+      'SETA WORKSHOP SRL · Sueldo',
+    ],
+    [
+      'DEBITO OPERACION EN SUPERNET O SMS 754930TT55557465 TRF. PLAZA- FEDERICO GAZZANO',
+      'FEDERICO GAZZANO · Transferencia Supernet',
+    ],
+    ['DEBITO OPERACION EN SUPERNET O SMS P--', null],
+    ['Devoto Supermercado', null],
+    ['Spotify P3d110f721', null],
+  ])('reads %s as its row label', (description, label) => {
+    expect(statementLabel(description)).toBe(label ?? description)
+  })
+
+  it('names every bank row of samples/ and leaves every card row alone', () => {
+    const rows = (name: string) =>
+      parseCSV(
+        decodeCsvBytes(readFileSync(join(__dirname, '../../../samples', name))),
+        name
+      ).transactions
+    const bank = [...rows('USDmovements.csv'), ...rows('UYUmovements.csv')]
+    expect(bank.length).toBeGreaterThan(20)
+    const unchanged: string[] = []
+    for (const { description } of bank) {
+      const label = statementLabel(description)
+      expect(label).not.toMatch(/COMPRA CON TARJETA DEBITO|TARJ:|NRR:/)
+      expect(label).not.toMatch(/\d{6,}TT\d+/)
+      if (label === description) unchanged.push(description)
+    }
+    expect([...new Set(unchanged)]).toEqual([
+      'DEBITO OPERACION EN SUPERNET O SMS P--',
+    ])
+    const card = rows('CreditCardsMovementsDetail.csv')
+    expect(card.length).toBeGreaterThan(5)
+    for (const { description } of card) {
+      expect(statementLabel(description)).toBe(description)
+    }
+  })
+})
+
+describe('statementLabel casing (#274 review)', () => {
+  it('uppercases a known short merchant only as the whole payee or its first word', () => {
+    expect(statementLabel(DEBIT('PELUQUERIA HAIR CUT'))).toBe(
+      'Peluqueria Hair Cut'
+    )
+    expect(statementLabel(DEBIT('UTE'))).toBe('UTE')
+    expect(statementLabel(DEBIT('KFC PUNTA CARRETAS'))).toBe(
+      'KFC Punta Carretas'
+    )
+  })
+
+  it('capitalizes after an apostrophe and a hyphen, and spells out initials', () => {
+    expect(statementLabel(DEBIT("O'NEILL"))).toBe("O'Neill")
+    expect(statementLabel(DEBIT('CAFE-BAR LA ESQUINA'))).toBe(
+      'Cafe-Bar La Esquina'
+    )
+    expect(statementLabel(DEBIT('MC DONALD S.A.'))).toBe('Mc Donald S.A')
+    expect(
+      statementLabel(
+        'COMPRA CON TARJETA DEBITO S.A. TIENDA, MONTEVIDEO TARJ: ####1'
+      )
+    ).toBe('S.A. Tienda')
+    expect(statementLabel(DEBIT('PUESTO EZEQUI.HANDY'))).toBe(
+      'Puesto Ezequi.handy'
+    )
+  })
+})
+
+describe('statementMerchantLabel', () => {
+  it('suffixes a debit-card payee, so it never reads like the same payee on a credit card', () => {
+    expect(statementMerchantLabel(DEBIT('PANADERIA MARACANA'))).toBe(
+      'Panaderia Maracana · Tarjeta de débito'
+    )
+    expect(statementMerchantLabel('Devoto Supermercado')).toBe(
+      'Devoto Supermercado'
+    )
+  })
+
+  it('adds nothing to fixed concepts and transfers', () => {
+    expect(statementMerchantLabel('PAGO ELECTRONICO TARJETA CREDITO')).toBe(
+      'Pago de tarjeta de crédito'
+    )
+    expect(
+      statementMerchantLabel('RETIRO CORRESPONSALES , MONTEVIDEO TARJ: ####1')
+    ).toBe('Retiro en corresponsal')
+  })
+})
+
+describe('transactionLabel', () => {
+  const bank = DEBIT('TINTORERIA MARTINIZI')
+
+  it('gives an un-renamed bank row its clean label', () => {
+    expect(
+      transactionLabel(tx({ description: bank, source: 'bank_account' }))
+    ).toBe('Tintoreria Martinizi')
+  })
+
+  it('lets a rename win over the clean label', () => {
+    expect(
+      transactionLabel(
+        tx({ description: bank, displayDescription: 'Tintorería' })
+      )
+    ).toBe('Tintorería')
+  })
+
+  it('lets a live description override win over the clean label', () => {
+    setDescriptionOverride({
+      description: bank,
+      friendlyDescription: 'La tintorería',
+    })
+    expect(transactionLabel(tx({ description: bank }))).toBe('La tintorería')
+  })
+
+  it('treats a "rename" equal to the raw description as no rename', () => {
+    expect(
+      transactionLabel(
+        tx({ description: bank, displayDescription: ` ${bank} ` })
+      )
+    ).toBe('Tintoreria Martinizi')
+    setDescriptionOverride({ description: bank, friendlyDescription: bank })
+    expect(transactionLabel(tx({ description: bank }))).toBe(
+      'Tintoreria Martinizi'
+    )
+  })
+})
+
+describe('merchantLabelFor on bank rows', () => {
+  it('ignores a "rename" equal to the raw description', () => {
+    const raw = DEBIT('PANADERIA MARACANA')
+    expect(
+      merchantLabelFor([tx({ description: raw, displayDescription: raw })])
+    ).toBe('Panaderia Maracana · Tarjeta de débito')
+  })
+
+  it('carries the debit-card suffix, and no suffix on fixed concepts', () => {
+    expect(
+      merchantLabelFor([tx({ description: DEBIT('PANADERIA MARACANA') })])
+    ).toBe('Panaderia Maracana · Tarjeta de débito')
+    expect(
+      merchantLabelFor([
+        tx({ description: 'PAGO ELECTRONICO TARJETA CREDITO' }),
+      ])
+    ).toBe('Pago de tarjeta de crédito')
   })
 })

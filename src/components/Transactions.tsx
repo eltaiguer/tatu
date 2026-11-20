@@ -50,6 +50,7 @@ import {
 } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
 import { getDisplayDescription } from '../utils/transaction-display'
+import { transactionLabel } from '../services/merchants/merchant-key'
 
 const sameTags = (a: string[], b: string[]) =>
   a.length === b.length && a.every((tag, i) => tag === b[i])
@@ -307,7 +308,7 @@ export function Transactions({
         editingId,
         draft.household,
         // The merchant the box named, not the name being typed.
-        getDisplayDescription(editing),
+        transactionLabel(editing),
         message
       )
       if (!outcome.saved && !message && !outcome.rowSaved) {

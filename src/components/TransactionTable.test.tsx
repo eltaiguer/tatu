@@ -147,6 +147,51 @@ describe('TransactionTable', () => {
     })
   })
 
+  describe('bank-row labels (#274)', () => {
+    const RAW =
+      'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+
+    it('shows a bank row by its clean label, the statement text in its title and no second line', () => {
+      const { table } = renderTable({
+        paginatedTransactions: [makeTransaction({ id: 'b', description: RAW })],
+      })
+
+      const name = table.getByText('Tintoreria Martinizi')
+      expect(name).toHaveAttribute('title', RAW)
+      expect(table.queryByText(RAW)).not.toBeInTheDocument()
+      expect(
+        table.getByLabelText('Editar Tintoreria Martinizi')
+      ).toBeInTheDocument()
+    })
+
+    it('names the mobile card by the clean label too, without an "Original:" line', () => {
+      renderTable({
+        paginatedTransactions: [makeTransaction({ id: 'b', description: RAW })],
+      })
+
+      expect(
+        screen.getAllByLabelText('Seleccionar Tintoreria Martinizi')
+      ).toHaveLength(2)
+      expect(screen.queryByText(/^Original:/)).not.toBeInTheDocument()
+    })
+
+    it('keeps the raw second line on a renamed row', () => {
+      const { table } = renderTable({
+        paginatedTransactions: [
+          makeTransaction({
+            id: 'b',
+            description: RAW,
+            displayDescription: 'Tintorería',
+          }),
+        ],
+      })
+
+      expect(table.getByText('Tintorería')).toBeInTheDocument()
+      expect(table.getByText(RAW)).toBeInTheDocument()
+      expect(screen.getByText(`Original: ${RAW}`)).toBeInTheDocument()
+    })
+  })
+
   describe('row actions', () => {
     it('edits the transaction of the row whose button was clicked', () => {
       const { props, table } = renderTable()

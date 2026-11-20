@@ -5,6 +5,7 @@ import { Section } from '../ui/section'
 import type { Transaction } from '../../models'
 import { useHouseholdRuleRecords } from '../../hooks/useHouseholdRules'
 import { householdValueLabel } from '../../services/household/household-copy'
+import { statementMerchantLabel } from '../../services/merchants/merchant-key'
 import { ruleReachCounts } from '../../services/household/household'
 import {
   deleteHouseholdRuleWithSync,
@@ -14,7 +15,14 @@ import {
   requireRepository,
   type Repository,
 } from '../../services/repository/repository'
+import type { HouseholdRuleRecord } from '../../services/supabase/household-rules'
 import { userErrorMessage } from '../../utils/user-error'
+
+function ruleLabel(rule: HouseholdRuleRecord): string {
+  return rule.merchantOriginal
+    ? statementMerchantLabel(rule.merchantOriginal)
+    : rule.merchantNormalized
+}
 
 interface HouseholdRulesSectionProps {
   transactions: Transaction[]
@@ -36,6 +44,13 @@ export function HouseholdRulesSection({
 
   // Rows each rule decides (see ruleReachCounts): one pass for all rules.
   const reached = useMemo(() => ruleReachCounts(transactions), [transactions])
+  // The clean group label drops the place a rule's key keeps, so two rules can
+  // read alike; those show the statement text instead.
+  const labelCounts = new Map<string, number>()
+  for (const rule of records) {
+    const label = ruleLabel(rule)
+    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1)
+  }
 
   // Focus after a delete: its row unmounts, so the next row's delete button,
   // else the previous one, else the heading. Set before the write (the store
@@ -108,7 +123,11 @@ export function HouseholdRulesSection({
         {records.length > 0 ? (
           <ul className="m-0 flex list-none flex-col gap-[6px] p-0">
             {records.map((rule) => {
-              const name = rule.merchantOriginal ?? rule.merchantNormalized
+              const label = ruleLabel(rule)
+              const name =
+                (labelCounts.get(label) ?? 0) > 1 && rule.merchantOriginal
+                  ? rule.merchantOriginal
+                  : label
               const count = reached.get(rule.merchantNormalized) ?? 0
               return (
                 <li
@@ -117,7 +136,7 @@ export function HouseholdRulesSection({
                 >
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px]">
                     <span
-                      title={name}
+                      title={rule.merchantOriginal || name}
                       className="min-w-0 max-w-full truncate font-mono text-[12px]"
                     >
                       {name}
