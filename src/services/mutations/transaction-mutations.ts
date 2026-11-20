@@ -56,6 +56,7 @@ import { categorizeTransaction } from '../categorizer/transaction-categorizer'
 import {
   currentUserRules,
   hasUserRule,
+  isRenamedByUser,
   rowsRuleWouldChange,
 } from '../categorizer/user-rules'
 import { categorizeImportedTransactions } from '../categorizer/import-categorization'
@@ -1294,21 +1295,25 @@ export async function applyPatternToPast(
   pattern: CustomPattern
 ): Promise<{ updated: number; failed: number }> {
   assertOwner(repo)
-  const targets = rowsRuleWouldChange(
-    store().transactions,
-    pattern,
-    currentUserRules()
-  )
+  const rules = currentUserRules()
+  const targets = rowsRuleWouldChange(store().transactions, pattern, rules)
   if (targets.length === 0) return { updated: 0, failed: 0 }
-  const patch: TransactionPatch = {
-    category: pattern.category,
-    categoryConfidence: 0.95,
-    ...(pattern.description && { displayDescription: pattern.description }),
-  }
-  const outcome = await writePatches(
-    repo,
-    new Map(targets.map((tx) => [tx.id, patch]))
+  const category = normalizeCategoryId(pattern.category)
+  // A row the user renamed keeps its name: the rule only recategorizes it.
+  const patches = new Map<string, TransactionPatch>(
+    targets.map((tx) => [
+      tx.id,
+      {
+        category,
+        categoryConfidence: 0.95,
+        ...(pattern.description &&
+          !isRenamedByUser(rules, tx.description) && {
+            displayDescription: pattern.description,
+          }),
+      },
+    ])
   )
+  const outcome = await writePatches(repo, patches)
   return {
     updated: outcome.saved.length,
     failed: outcome.failed.length + outcome.missing.length,

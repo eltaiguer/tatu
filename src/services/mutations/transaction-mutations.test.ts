@@ -2621,6 +2621,39 @@ describe('transaction-mutations — applying a new rule to past rows', () => {
     expect(stored('auto')?.category).toBe('transport')
   })
 
+  it("writes a legacy rule's category under its current id", async () => {
+    const repo = signedIn([
+      makeTransaction('a', {
+        description: 'UBER TRIP',
+        category: 'transport',
+      }),
+    ])
+
+    await applyPatternToPast(repo, { ...rule, category: 'food' })
+
+    expect(repo.row('a')?.category).toBe('groceries')
+    expect(stored('a')?.category).toBe('groceries')
+  })
+
+  it("recategorizes a row the user renamed but keeps the user's name", async () => {
+    replaceDescriptionOverrides({
+      'uber trip': { friendlyDescription: 'Taxi', updatedAt: '' },
+    })
+    const repo = signedIn([
+      makeTransaction('a', {
+        description: 'UBER TRIP',
+        displayDescription: 'Taxi',
+      }),
+    ])
+
+    await applyPatternToPast(repo, { ...rule, description: 'Uber' })
+
+    expect(stored('a')).toMatchObject({
+      category: 'transport',
+      displayDescription: 'Taxi',
+    })
+  })
+
   it('leaves split parents alone', async () => {
     const repo = signedIn([
       makeTransaction('parent', {

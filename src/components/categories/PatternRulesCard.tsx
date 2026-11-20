@@ -16,8 +16,8 @@ import {
 } from '../../services/categories/category-registry'
 import { normalizeCategoryId } from '../../services/categories/category-aliases'
 import {
+  countRowsEachRuleWouldChange,
   currentUserRules,
-  rowsRuleWouldChange,
 } from '../../services/categorizer/user-rules'
 import {
   addCustomPatternWithSync,
@@ -74,12 +74,12 @@ function toastAppliedToPast(
   const noun = verb === 'creada' ? 'Regla creada' : 'Regla guardada'
   if (failed > 0) {
     toast.error(
-      `${noun}. Se aplicó a ${updated} de ${updated + failed} transacciones; el resto no se pudo guardar.`
+      `${noun}. Se aplicó a ${updated} de ${updated + failed} ${plural(updated + failed)}; el resto no se pudo guardar.`
     )
   } else {
     toast.success(
       updated === 0
-        ? `${noun} · ninguna transacción anterior coincide`
+        ? `${noun} · ninguna transacción cambió`
         : `${noun} · aplicada a ${updated} ${plural(updated)}`
     )
   }
@@ -106,6 +106,9 @@ export function PatternRulesCard({
   )
   const [patternForm, setPatternForm] = useState<RuleForm>(EMPTY_FORM)
   const focusNewRuleButton = useRef(false)
+  // Which form is on screen: bumped whenever one opens or closes, so a save
+  // or delete that finishes late can tell the form it was started from is gone.
+  const formGeneration = useRef(0)
 
   // Focus follows the form: into the pattern when it opens, back to
   // "Nueva regla" when it closes.
@@ -128,12 +131,14 @@ export function PatternRulesCard({
   }
 
   function openNewForm() {
+    formGeneration.current += 1
     setEditingId(null)
     setPatternForm(EMPTY_FORM)
     setFormOpen(true)
   }
 
   function openEditForm(rule: CustomPattern) {
+    formGeneration.current += 1
     setEditingId(rule.id)
     setPatternForm({
       pattern: rule.pattern,
@@ -147,6 +152,7 @@ export function PatternRulesCard({
   }
 
   function closeForm() {
+    formGeneration.current += 1
     focusNewRuleButton.current = true
     setFormOpen(false)
     setEditingId(null)
@@ -154,8 +160,10 @@ export function PatternRulesCard({
   }
 
   async function handleSubmit() {
-    if (!patternForm.pattern.trim() || saving) return
     const editing = editingId
+    if (!patternForm.pattern.trim() || saving) return
+    if (editing && busyRuleIds.has(editing)) return
+    const generation = formGeneration.current
     const input = {
       pattern: patternForm.pattern,
       matchType: patternForm.matchType,
@@ -171,6 +179,7 @@ export function PatternRulesCard({
         ? await updateCustomPatternWithSync(repo, editing, input)
         : await addCustomPatternWithSync(repo, input)
     } catch (error) {
+      if (editing) setBusy(editing, false)
       toast.error(
         userErrorMessage(
           error,
@@ -181,33 +190,43 @@ export function PatternRulesCard({
       return
     } finally {
       setSaving(false)
-      if (editing) setBusy(editing, false)
     }
 
-    const applyToPast = patternForm.applyScope === 'past_and_future'
-    closeForm()
-    setCustomPatterns(listCustomPatterns())
-
-    const verb = editing ? 'guardada' : 'creada'
-    if (!applyToPast || !onApplyPatternToPast) {
-      toast.success(editing ? 'Regla guardada' : 'Regla creada')
-      return
-    }
+    // The rule stays locked until its apply (if any) is over.
+    setBusy(saved.id, true)
     try {
-      toastAppliedToPast(verb, await onApplyPatternToPast(saved))
-    } catch (error) {
-      toast.error(
-        `La regla se guardó, pero no se pudo aplicar a las transacciones anteriores: ${userErrorMessage(error, 'error al guardar')}`
-      )
+      const applyToPast = patternForm.applyScope === 'past_and_future'
+      if (formGeneration.current === generation) closeForm()
+      setCustomPatterns(listCustomPatterns())
+
+      if (!applyToPast || !onApplyPatternToPast) {
+        toast.success(editing ? 'Regla guardada' : 'Regla creada')
+        return
+      }
+      try {
+        toastAppliedToPast(
+          editing ? 'guardada' : 'creada',
+          await onApplyPatternToPast(saved)
+        )
+      } catch (error) {
+        toast.error(
+          `La regla se guardó, pero no se pudo aplicar a las transacciones anteriores: ${userErrorMessage(error, 'error al guardar')}`
+        )
+      }
+    } finally {
+      setBusy(saved.id, false)
     }
   }
 
   async function handleRemovePattern(id: string) {
+    // Close the form only if it is still the one this delete was started from.
+    const generation = formGeneration.current
+    const wasEditing = editingId === id
     setBusy(id, true)
     try {
       await removeCustomPatternWithSync(requireRepository(repository), id)
       toast.success('Regla eliminada')
-      if (editingId === id) closeForm()
+      if (wasEditing && formGeneration.current === generation) closeForm()
     } catch (error) {
       toast.error(userErrorMessage(error, 'No se pudo eliminar la regla'))
     } finally {
@@ -261,15 +280,16 @@ export function PatternRulesCard({
   // Rows each rule would change now: what "Aplicar a las N" writes. It is
   // not the number above — a match can already be applied, categorized by
   // hand, or won by another rule. Uses the rules this card lists.
-  const changeCounts = useMemo(() => {
-    const rules = { ...currentUserRules(), customPatterns }
-    return new Map(
-      customPatterns.map((rule) => [
-        rule.id,
-        rowsRuleWouldChange(transactions, rule, rules).length,
-      ])
-    )
-  }, [transactions, customPatterns])
+  const { descriptionOverrides, merchantOverrides } = currentUserRules()
+  const changeCounts = useMemo(
+    () =>
+      countRowsEachRuleWouldChange(transactions, {
+        descriptionOverrides,
+        merchantOverrides,
+        customPatterns,
+      }),
+    [transactions, customPatterns, descriptionOverrides, merchantOverrides]
+  )
 
   const categoryOptions = getCategoryDefinitions().filter(
     (c) => c.id !== Category.Uncategorized
@@ -410,7 +430,11 @@ export function PatternRulesCard({
                 onClick={() => {
                   void handleSubmit()
                 }}
-                disabled={!patternForm.pattern.trim() || saving}
+                disabled={
+                  !patternForm.pattern.trim() ||
+                  saving ||
+                  (editingId !== null && busyRuleIds.has(editingId))
+                }
                 className="h-[40px]"
               >
                 {!editingId && <Plus size={15} />}

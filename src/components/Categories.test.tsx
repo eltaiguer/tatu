@@ -719,7 +719,7 @@ describe('Categories', () => {
         .fn()
         .mockResolvedValueOnce({ updated: 1, failed: 1 })
         .mockRejectedValueOnce(new Error('boom'))
-      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
       renderWithToasts({ onApplyPatternToPast })
       const apply = () =>
         screen.getByRole('button', {
@@ -738,6 +738,7 @@ describe('Categories', () => {
       expect(
         await screen.findByText(/No se pudo aplicar la regla/)
       ).toBeInTheDocument()
+      expect(logged).toHaveBeenCalled()
     })
 
     it('says nothing changed when the apply found no rows to change', async () => {
@@ -773,6 +774,182 @@ describe('Categories', () => {
           screen.queryByPlaceholderText(/Ej\. "farmacia"/)
         ).not.toBeInTheDocument()
       )
+    })
+
+    describe('review round 1 (#287)', () => {
+      const never = () =>
+        new Promise<{ updated: number; failed: number }>(() => {})
+      const save = () =>
+        fireEvent.click(
+          within(rulesRegion()).getByRole('button', { name: 'Guardar cambios' })
+        )
+
+      it('keeps the rule locked through the apply that follows its save', async () => {
+        uber()
+        renderWithToasts({ onApplyPatternToPast: vi.fn(never) })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.click(
+          screen.getByRole('radio', { name: 'Pasadas y futuras' })
+        )
+        save()
+
+        await waitFor(() =>
+          expect(
+            screen.queryByPlaceholderText(/Ej\. "farmacia"/)
+          ).not.toBeInTheDocument()
+        )
+        expect(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        ).toBeDisabled()
+        expect(
+          screen.getByRole('button', { name: 'Eliminar regla uber' })
+        ).toBeDisabled()
+        expect(
+          screen.getByRole('button', { name: /Aplicar regla uber/ })
+        ).toBeDisabled()
+      })
+
+      it("can't save an edited rule while its apply is running", async () => {
+        uber()
+        renderWithToasts({ onApplyPatternToPast: vi.fn(never) })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.click(
+          screen.getByRole('button', { name: /Aplicar regla uber/ })
+        )
+
+        await waitFor(() =>
+          expect(
+            within(rulesRegion()).getByRole('button', {
+              name: 'Guardar cambios',
+            })
+          ).toBeDisabled()
+        )
+      })
+
+      it("doesn't close a form opened after a delete that finishes late", async () => {
+        uber()
+        const gate = repo.hold('deleteCustomPattern')
+        renderWithToasts({ transactions: [] })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Eliminar regla uber' })
+        )
+        fireEvent.click(
+          within(rulesRegion()).getByRole('button', { name: 'Cancelar' })
+        )
+        openRuleForm()
+        fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+
+        gate.release()
+        expect(await screen.findByText('Regla eliminada')).toBeInTheDocument()
+
+        expect(patternInput()).toHaveValue('farmashop')
+      })
+
+      it('says no row changed when the form apply finds nothing to change', async () => {
+        renderWithToasts({
+          transactions: [],
+          onApplyPatternToPast: vi
+            .fn()
+            .mockResolvedValue({ updated: 0, failed: 0 }),
+        })
+        openRuleForm()
+        fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+        fireEvent.click(
+          screen.getByRole('radio', { name: 'Pasadas y futuras' })
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
+
+        expect(
+          await screen.findByText('Regla creada · ninguna transacción cambió')
+        ).toBeInTheDocument()
+      })
+
+      it('says no row changed after an edit that finds nothing to change', async () => {
+        uber()
+        renderWithToasts({
+          transactions: [],
+          onApplyPatternToPast: vi
+            .fn()
+            .mockResolvedValue({ updated: 0, failed: 0 }),
+        })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.click(
+          screen.getByRole('radio', { name: 'Pasadas y futuras' })
+        )
+        save()
+
+        expect(
+          await screen.findByText('Regla guardada · ninguna transacción cambió')
+        ).toBeInTheDocument()
+      })
+
+      it('uses the singular when a single row failed to apply', async () => {
+        renderWithToasts({
+          transactions: [],
+          onApplyPatternToPast: vi
+            .fn()
+            .mockResolvedValue({ updated: 0, failed: 1 }),
+        })
+        openRuleForm()
+        fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+        fireEvent.click(
+          screen.getByRole('radio', { name: 'Pasadas y futuras' })
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Agregar regla' }))
+
+        expect(
+          await screen.findByText(/Se aplicó a 0 de 1 transacción;/)
+        ).toBeInTheDocument()
+      })
+
+      it('keeps an archived category selectable when editing', () => {
+        addCustomPattern({
+          pattern: 'viaje',
+          matchType: 'contains',
+          category: 'viajes-viejos',
+        })
+        render(<Categories repository={repo} transactions={[]} />)
+
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla viaje' })
+        )
+
+        const select = within(rulesRegion()).getByLabelText('Categoría')
+        expect(select).toHaveValue('viajes-viejos')
+        expect(
+          within(select).getByRole('option', { name: /viajes viejos/i })
+        ).toBeInTheDocument()
+      })
+
+      it('keeps the form open and the list unchanged when an edit fails', async () => {
+        const rule = uber()
+        repo.failOn('upsertCustomPattern', { error: new Error('timeout') })
+        const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+        renderWithToasts({ transactions: [] })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        fireEvent.change(within(rulesRegion()).getByLabelText('Categoría'), {
+          target: { value: 'restaurants' },
+        })
+        save()
+
+        expect(
+          await screen.findByText(/No se pudo guardar la regla/)
+        ).toBeInTheDocument()
+        expect(patternInput()).toBeInTheDocument()
+        expect(listCustomPatterns()).toEqual([rule])
+        expect(logged).toHaveBeenCalled()
+      })
     })
 
     it('keeps a legacy category id selected when editing', () => {

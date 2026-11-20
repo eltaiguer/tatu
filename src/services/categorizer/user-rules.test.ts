@@ -4,6 +4,7 @@ import {
   emptyUserRules,
   hasUserRule,
   rowsRuleWouldChange,
+  countRowsEachRuleWouldChange,
 } from './user-rules'
 import type { Transaction } from '../../models'
 import { addCustomPattern, clearAllCustomPatterns } from './custom-patterns'
@@ -245,5 +246,51 @@ describe('rowsRuleWouldChange — the rows a rule would change now', () => {
     expect(
       ids(rowsRuleWouldChange(rows, rules.customPatterns[0], rules))
     ).toEqual(['differs'])
+  })
+
+  it('never counts a row the user renamed through a description override', () => {
+    const rules = userRules({
+      customPatterns: [{ ...uber, description: 'Uber' }],
+      descriptionOverrides: [
+        { description: 'UBER TRIP', friendlyDescription: 'Taxi' },
+      ],
+    })
+    const rows = [row('a', { category: 'transport' })]
+
+    expect(rowsRuleWouldChange(rows, rules.customPatterns[0], rules)).toEqual(
+      []
+    )
+  })
+
+  it('counts every rule in one pass exactly as rowsRuleWouldChange does', () => {
+    const rules = userRules({
+      customPatterns: [
+        {
+          pattern: 'uber eats',
+          matchType: 'contains',
+          category: 'restaurants',
+        },
+        { ...uber, description: 'Uber' },
+      ],
+      descriptionOverrides: [
+        { description: 'UBER X', friendlyDescription: 'Taxi' },
+      ],
+    })
+    const rows = [
+      row('eats', { description: 'UBER EATS' }),
+      row('trip'),
+      row('x', { description: 'UBER X', category: 'transport' }),
+      row('hand', { categoryConfidence: 1 }),
+      row('other', { description: 'DEVOTO' }),
+    ]
+
+    const counts = countRowsEachRuleWouldChange(rows, rules)
+
+    for (const rule of rules.customPatterns) {
+      expect(counts.get(rule.id)).toBe(
+        rowsRuleWouldChange(rows, rule, rules).length
+      )
+    }
+    expect([...counts.values()]).toEqual([1, 1])
   })
 })
