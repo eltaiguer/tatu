@@ -6,22 +6,18 @@ import { defaultsToAllSimilar } from '../services/descriptions/default-scope'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import { Download, X } from 'lucide-react'
 import { Button } from './ui/button'
-import { Category, DEFAULT_CATEGORY_COLOR } from '../models'
+import { DEFAULT_CATEGORY_COLOR } from '../models'
 import type { Transaction } from '../models'
 import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
 import { EditTransactionDialog } from './EditTransactionDialog'
 import type { EditTransactionDraft } from './EditTransactionDialog'
-import { BulkEditDialog } from './BulkEditDialog'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
 import { newestDataMonth } from '../utils/date-utils'
 import { exportTransactions } from '../services/export/export'
 import { addCustomCategoryWithSync } from '../services/categories/category-store'
-import {
-  buildCategorySuggestions,
-  buildTagSuggestions,
-} from '../services/suggestions/suggestions'
+import { buildTagSuggestions } from '../services/suggestions/suggestions'
 import { isCountedExpense } from '../services/spending/spending-rules'
 import {
   merchantKeyOf,
@@ -38,6 +34,7 @@ import { getPeriodLabel } from '../services/filters/period-label'
 import { MonthNav } from './transactions/MonthNav'
 import { TotalsStrip } from './transactions/TotalsStrip'
 import { BulkBar } from './transactions/BulkBar'
+import { BulkTagsDialog } from './transactions/BulkTagsDialog'
 import { TransactionsPagination } from './transactions/TransactionsPagination'
 import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
@@ -174,19 +171,28 @@ export function Transactions({
     filteredTransactionIds,
   })
 
+  const categoryWrites = useCategoryWrites({
+    transactions,
+    onUpdateTransaction,
+    onRestoreCategories,
+    setPending,
+    reportError,
+  })
+
   const {
     isAutoCategorizing,
     isBulkOperating,
     isBusy,
-    handleAutoCategorizeSelected,
+    categorizeOpen,
+    setCategorizeOpen,
+    handleSuggestSelected,
     handleBulkCategorizeSelected,
     handleBulkIgnore,
     handleBulkHousehold,
     handleBulkDelete,
-    openBulkEdit,
-    closeBulkEdit,
-    handleBulkEditSave,
-    bulkEdit,
+    tagsOpen,
+    setTagsOpen,
+    handleBulkTagsSave,
   } = useBulkActions({
     transactions,
     selectedTransactionIds,
@@ -197,10 +203,19 @@ export function Transactions({
     onBulkDelete,
     onSetHousehold,
     onReload,
+    onRestoreCategories,
+    rowWrites: categoryWrites.rowWrites,
+    setPending,
+    pendingTransactionIds,
     reportError,
     reportDeleted,
     deleteWithConfirmation,
   })
+
+  // A write of a selected row is in flight (an in-place pick): the bar waits.
+  const selectionPending = selectedTransactionIds.some((id) =>
+    pendingTransactionIds.has(id)
+  )
 
   const { handleToggleHousehold, canSaveHousehold, saveHouseholdDraft } =
     useHouseholdWrites({
@@ -212,25 +227,12 @@ export function Transactions({
       reportError,
     })
 
-  const categoryWrites = useCategoryWrites({
-    transactions,
-    onUpdateTransaction,
-    onRestoreCategories,
-    setPending,
-    reportError,
-  })
-
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
 
   const [splittingTransaction, setSplittingTransaction] =
     useState<Transaction | null>(null)
   const [splitPending, setSplitPending] = useState(false)
-
-  // Not memoized: custom categories live outside React state, and the list
-  // is short, so rebuilding it each render keeps a category created in the
-  // edit dialog visible to the bulk pickers.
-  const categorySuggestions = buildCategorySuggestions()
 
   const tagSuggestions = useMemo(
     () => buildTagSuggestions(transactions.flatMap((tx) => tx.tags ?? [])),
@@ -462,10 +464,14 @@ export function Transactions({
                 }
               : undefined
           }
-          onEdit={openBulkEdit}
-          onAuto={() => {
-            void handleAutoCategorizeSelected()
-          }}
+          onTags={onBulkTag ? () => setTagsOpen(true) : undefined}
+          onSuggest={
+            onAutoCategorizeTransactions
+              ? () => {
+                  void handleSuggestSelected()
+                }
+              : undefined
+          }
           onIgnore={() => {
             void handleBulkIgnore()
           }}
@@ -473,10 +479,11 @@ export function Transactions({
             void handleBulkDelete()
           }}
           isAutoCategorizing={isAutoCategorizing}
-          isBusy={isBusy}
-          categorySuggestions={categorySuggestions.filter(
-            (c) => c !== Category.Uncategorized
-          )}
+          isBusy={isBusy || selectionPending}
+          categorizeOpen={
+            categorizeOpen && hasSelection && !isBusy && !selectionPending
+          }
+          onCategorizeOpenChange={setCategorizeOpen}
         />
       )}
 
@@ -561,30 +568,15 @@ export function Transactions({
         onClose={() => setEditingTransaction(null)}
       />
 
-      <BulkEditDialog
-        open={bulkEdit.open}
+      <BulkTagsDialog
+        open={tagsOpen}
         selectionCount={selectionCount}
-        bulkEditCategory={bulkEdit.category}
-        bulkEditTagList={bulkEdit.tagList}
-        bulkCategoryPickerOpen={bulkEdit.categoryPickerOpen}
-        bulkTagPickerOpen={bulkEdit.tagPickerOpen}
-        bulkCategorySearch={bulkEdit.categorySearch}
-        bulkTagSearch={bulkEdit.tagSearch}
-        categorySuggestions={categorySuggestions}
         tagSuggestions={tagSuggestions}
         isBulkOperating={isBulkOperating}
-        showCategorySection={Boolean(onBulkCategorize)}
-        showTagSection={Boolean(onBulkTag)}
-        onBulkEditCategoryChange={bulkEdit.setCategory}
-        onBulkEditTagListChange={bulkEdit.setTagList}
-        onBulkCategoryPickerOpenChange={bulkEdit.setCategoryPickerOpen}
-        onBulkTagPickerOpenChange={bulkEdit.setTagPickerOpen}
-        onBulkCategorySearchChange={bulkEdit.setCategorySearch}
-        onBulkTagSearchChange={bulkEdit.setTagSearch}
-        onSave={() => {
-          void handleBulkEditSave()
+        onSave={(tags) => {
+          void handleBulkTagsSave(tags)
         }}
-        onCancel={closeBulkEdit}
+        onCancel={() => setTagsOpen(false)}
       />
 
       {/* Pagination */}

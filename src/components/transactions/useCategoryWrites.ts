@@ -61,12 +61,17 @@ export function useCategoryWrites({
   const transactionsRef = useRef(transactions)
   transactionsRef.current = transactions
 
+  // The bulk bar's toasts (one for many rows): withdrawn on leaving too.
+  const bulkOffers = useRef(new Set<string | number>())
+
   // Toasts outlive the view (8 s): leaving it withdraws them, since their
   // actions belong to this instance's counters.
   useEffect(
     () => () => {
       for (const offer of offers.current.values()) toast.dismiss(offer)
       offers.current.clear()
+      for (const offer of bulkOffers.current) toast.dismiss(offer)
+      bulkOffers.current.clear()
     },
     []
   )
@@ -367,5 +372,15 @@ export function useCategoryWrites({
     start(id)
   }
 
-  return { onCategorize, categorySplits, toastEdit, supersede }
+  // For the bulk bar (#282): a bulk write starts as the newest write of every
+  // selected row, and its Deshacer asks whether a row was written since.
+  const rowWrites = {
+    start,
+    isLatest: (id: string, seq: number) => writes.current.get(id) === seq,
+    track: (toastId: string | number) => {
+      bulkOffers.current.add(toastId)
+    },
+  }
+
+  return { onCategorize, categorySplits, toastEdit, supersede, rowWrites }
 }

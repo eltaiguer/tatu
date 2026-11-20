@@ -1,15 +1,16 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import {
+  EyeOff,
   House,
   Loader2,
-  Pencil,
-  Slash,
+  Shapes,
   Sparkles,
   Tag,
   Trash2,
 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
-import { resolveCategory } from '../../services/categories/category-registry'
+import { CategoryPicker } from '../CategoryPicker'
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { householdValueLabel } from '../../services/household/household-copy'
 
 /* ---- BulkBar ---- */
@@ -20,13 +21,14 @@ export function BulkBar({
   onClear,
   onCategorize,
   onHousehold,
-  onEdit,
-  onAuto,
+  onTags,
+  onSuggest,
   onIgnore,
   onDelete,
   isAutoCategorizing,
   isBusy,
-  categorySuggestions,
+  categorizeOpen,
+  onCategorizeOpenChange,
 }: {
   count: number
   total: number
@@ -35,17 +37,22 @@ export function BulkBar({
   onCategorize: (category: string) => void
   // Absent when the view cannot save the household choice.
   onHousehold?: (household: boolean | null) => void
-  onEdit: () => void
-  onAuto: () => void
+  // Absent when the view cannot tag.
+  onTags?: () => void
+  onSuggest?: () => void
   onIgnore: () => void
   onDelete: () => void
   isAutoCategorizing: boolean
   isBusy: boolean
-  categorySuggestions: string[]
+  categorizeOpen: boolean
+  onCategorizeOpenChange: (open: boolean) => void
 }) {
-  const [catOpen, setCatOpen] = useState(false)
-  const catRef = useRef<HTMLDivElement>(null)
-  useClickOutside(catRef, () => setCatOpen(false))
+  const suggestHintId = useId()
+  // A phone: the keyboard would cover the list, so the first option takes
+  // focus instead of the search (as the row's sheet does).
+  const coarse =
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(pointer: coarse)').matches
   const [houseOpen, setHouseOpen] = useState(false)
   const houseRef = useRef<HTMLDivElement>(null)
   const houseTriggerRef = useRef<HTMLButtonElement>(null)
@@ -61,23 +68,26 @@ export function BulkBar({
       className="fixed inset-x-4 bottom-4 z-40 [animation:fadeUp_0.2s_both] md:inset-x-auto md:bottom-[26px] md:left-[calc(50%+var(--sidebar-w,252px)/2)] md:[transform:translateX(-50%)]"
     >
       <div className="flex items-center gap-[10px] rounded-[999px] border border-[var(--border)] bg-[var(--surface)] py-[10px] pr-[12px] pl-[16px] shadow-[var(--shadow-lg)] max-md:flex-wrap max-md:rounded-[16px]">
-        <span
-          role="status"
-          aria-live="polite"
-          className="text-[14px] font-semibold whitespace-nowrap"
-        >
-          {count} seleccionada{count !== 1 ? 's' : ''}
-        </span>
-
-        {count < total && (
-          <button
-            onClick={onSelectAll}
-            disabled={isBusy}
-            className="cursor-pointer border-none bg-transparent bg-none p-0 text-[13px] whitespace-nowrap text-[var(--brand)]"
+        {/* Below md the count and "select all" share the first row with × */}
+        <div className="flex min-w-0 items-center gap-[10px] max-md:flex-1 max-md:flex-wrap max-md:gap-y-[2px]">
+          <span
+            role="status"
+            aria-live="polite"
+            className="text-[14px] font-semibold whitespace-nowrap"
           >
-            Seleccionar las {total} transacciones
-          </button>
-        )}
+            {count} seleccionada{count !== 1 ? 's' : ''}
+          </span>
+
+          {count < total && (
+            <button
+              onClick={onSelectAll}
+              disabled={isBusy}
+              className="cursor-pointer border-none bg-transparent bg-none p-0 text-[13px] whitespace-nowrap text-[var(--brand)]"
+            >
+              Seleccionar las {total} transacciones
+            </button>
+          )}
+        </div>
 
         <span className="h-[22px] w-[1px] bg-[var(--border)] max-md:hidden" />
 
@@ -86,52 +96,73 @@ export function BulkBar({
           aria-label="Acciones"
           className="relative flex gap-[4px] max-md:order-last max-md:w-full max-md:flex-wrap"
         >
-          {/* Quick categorize */}
-          <div ref={catRef} className="relative">
-            <button
-              onClick={() => {
-                setHouseOpen(false)
-                setCatOpen((o) => !o)
+          {/* Categorizar: the shared picker, in a popover */}
+          <Popover
+            open={categorizeOpen}
+            onOpenChange={(next) => {
+              if (next) setHouseOpen(false)
+              onCategorizeOpenChange(next)
+            }}
+          >
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                disabled={isBusy}
+                className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
+              >
+                {isAutoCategorizing ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Shapes size={13} aria-hidden="true" />
+                )}
+                {isAutoCategorizing ? 'Sugiriendo…' : 'Categorizar'}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              align="start"
+              collisionPadding={16}
+              className="w-[min(280px,calc(100vw-2rem))] p-0"
+              aria-label="Elegir categoría"
+              onOpenAutoFocus={(event) => {
+                if (!coarse) return
+                event.preventDefault()
+                ;(event.currentTarget as HTMLElement)
+                  .querySelector<HTMLElement>('[data-category-option]')
+                  ?.focus()
               }}
-              disabled={isBusy}
-              className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
             >
-              <Tag size={13} />
-              Categorizar
-            </button>
-
-            {catOpen && (
-              <div className="absolute bottom-[calc(100%+10px)] left-0 z-[80] max-h-[280px] w-[220px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[6px] shadow-[var(--shadow-lg)]">
-                {categorySuggestions.map((cat) => {
-                  const { label, color } = resolveCategory(cat)
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => {
-                        onCategorize(cat)
-                        setCatOpen(false)
-                      }}
-                      className="flex w-full cursor-pointer items-center gap-[9px] rounded-[7px] border-none bg-transparent px-[9px] py-[7px] [font:inherit] text-[13px]! text-[var(--text)]"
-                      onMouseEnter={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background =
-                          'var(--muted)')
-                      }
-                      onMouseLeave={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background =
-                          'transparent')
-                      }
-                    >
-                      <span
-                        className="h-[8px] w-[8px] shrink-0 rounded-[3px]"
-                        style={{ background: color }}
-                      />
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+              <CategoryPicker
+                touch={coarse}
+                onPick={(id) => {
+                  onCategorizeOpenChange(false)
+                  onCategorize(id)
+                }}
+              />
+              {onSuggest && (
+                <div className="border-t border-[var(--border)] p-2">
+                  <button
+                    type="button"
+                    aria-describedby={suggestHintId}
+                    onClick={() => {
+                      onCategorizeOpenChange(false)
+                      onSuggest()
+                    }}
+                    className="inline-flex h-[32px] w-full cursor-pointer items-center gap-[5px] rounded-[8px] border-none bg-transparent px-[8px] py-0 [font:inherit] text-[13px]! text-[var(--text)] hover:bg-[var(--muted)]"
+                  >
+                    <Sparkles size={13} aria-hidden="true" />
+                    Volver a sugerir
+                  </button>
+                  <p
+                    id={suggestHintId}
+                    className="px-[8px] pt-[2px] text-[12px] text-[var(--text-muted)]"
+                  >
+                    Según tus reglas y los comercios que ya categorizaste
+                  </p>
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
 
           {/* Hogar: a yes / no / back-to-category for the selection */}
           {onHousehold && (
@@ -151,7 +182,7 @@ export function BulkBar({
                 type="button"
                 aria-expanded={houseOpen}
                 onClick={() => {
-                  setCatOpen(false)
+                  onCategorizeOpenChange(false)
                   setHouseOpen((o) => !o)
                 }}
                 disabled={isBusy}
@@ -187,38 +218,26 @@ export function BulkBar({
             </div>
           )}
 
-          {/* Full edit dialog */}
-          <button
-            onClick={onEdit}
-            disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
-            aria-label="Editar seleccionadas"
-          >
-            <Pencil size={13} />
-            Editar
-          </button>
-
-          <button
-            onClick={onAuto}
-            disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
-          >
-            {isAutoCategorizing ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Sparkles size={13} />
-            )}
-            {isAutoCategorizing ? 'Auto-categorizando...' : 'Auto-categorizar'}
-          </button>
-
           <button
             onClick={onIgnore}
             disabled={isBusy}
+            title="Dejar fuera de los totales"
             className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
           >
-            <Slash size={13} />
-            Ignorar
+            <EyeOff size={13} aria-hidden="true" />
+            No contar
           </button>
+
+          {onTags && (
+            <button
+              onClick={onTags}
+              disabled={isBusy}
+              className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
+            >
+              <Tag size={13} />
+              Etiquetas
+            </button>
+          )}
 
           <button
             onClick={onDelete}

@@ -70,7 +70,7 @@ one.
   or custom pattern), so a change to the built-in keywords or merchant list may not
   show in a test import with AI on; a custom pattern always does.
 - A rule change never rewrites stored rows. They change only through
-  Auto-categorizar (`autoCategorize`: the selected rows, and only where the
+  Volver a sugerir (`autoCategorize`: the selected rows, and only where the
   new result is at least as confident as the row's current category and
   changes it — a changed rule reaches rows at the same confidence; user
   edits at 1 give way only to a user rule at 1), a rule applied to past rows

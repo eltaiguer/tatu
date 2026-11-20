@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  act,
   render,
   screen,
   fireEvent,
@@ -442,11 +441,8 @@ describe('Transactions', () => {
         name: 'Seleccionar Devoto Supermercado',
       })[0]
     )
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /Auto-categorizar/,
-      })
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
+    fireEvent.click(screen.getByRole('button', { name: /Volver a sugerir/ }))
 
     await waitFor(() =>
       expect(onAutoCategorizeTransactions).toHaveBeenCalledWith(['tx-1'])
@@ -477,15 +473,10 @@ describe('Transactions', () => {
 
     expect(screen.getAllByText('1 seleccionada').length).toBeGreaterThan(0)
 
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /Auto-categorizar/,
-      })
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
+    fireEvent.click(screen.getByRole('button', { name: /Volver a sugerir/ }))
 
-    expect(
-      screen.getByRole('button', { name: /Auto-categorizando/ })
-    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Sugiriendo/ })).toBeDisabled()
 
     resolveAutoCategorize?.()
 
@@ -1002,20 +993,8 @@ describe('Transactions', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Netflix' })[0]
     )
 
-    await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
-
-    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
-      target: { value: 'entretenimiento' },
-    })
-
-    const popoverButtons = screen.getAllByText('Entretenimiento')
-    fireEvent.click(popoverButtons[popoverButtons.length - 1])
-
-    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Entretenimiento' }))
 
     await waitFor(() =>
       expect(onBulkCategorize).toHaveBeenCalledWith(
@@ -1084,7 +1063,7 @@ describe('Transactions', () => {
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
     )
-    fireEvent.click(screen.getByRole('button', { name: /^Ignorar$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^No contar$/ }))
 
     expect(
       await screen.findByText('Se actualizaron 247 de 300 — reintentar')
@@ -1161,16 +1140,17 @@ describe('Transactions', () => {
     expect(onBulkDelete).toHaveBeenCalledTimes(1)
   })
 
-  it('says what applied when a bulk edit fails part-way', async () => {
+  it('says what applied when a bulk tag step fails part-way', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const onBulkCategorize = vi.fn().mockResolvedValue({ updated: 1 })
-    const onBulkTag = vi.fn().mockRejectedValue(new Error('boom'))
+    const onBulkTag = vi
+      .fn()
+      .mockResolvedValueOnce({ updated: 1 })
+      .mockRejectedValue(new Error('boom'))
 
     render(
       <>
         <Transactions
           transactions={[makeTransaction(1, 'Devoto')]}
-          onBulkCategorize={onBulkCategorize}
           onBulkTag={onBulkTag}
         />
         <Toaster />
@@ -1180,37 +1160,36 @@ describe('Transactions', () => {
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
     )
-    await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
-    })
-    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
-    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
-      target: { value: 'entretenimiento' },
-    })
-    const options = screen.getAllByText('Entretenimiento')
-    fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
-    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
-      target: { value: 'viaje' },
-    })
     fireEvent.click(
-      screen.getByRole('button', { name: /Crear etiqueta "viaje"/ })
+      within(screen.getByRole('group', { name: 'Acciones' })).getByRole(
+        'button',
+        { name: 'Etiquetas' }
+      )
     )
-    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
+    for (const tag of ['viaje', 'trabajo']) {
+      fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
+        target: { value: tag },
+      })
+      fireEvent.click(
+        screen.getByRole('button', { name: `Crear etiqueta "${tag}"` })
+      )
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar etiquetas' }))
 
     expect(
       await screen.findByText(
-        /Se aplicó la categoría, pero falló el resto: No se pudieron actualizar/
+        /Se aplicó la etiqueta "viaje", pero falló el resto: No se pudieron actualizar/
       )
     ).toBeTruthy()
     expect(screen.queryByText(/actualizada/)).not.toBeInTheDocument()
   })
 
-  it('offers to retry the rest when a bulk edit step saved only some rows', async () => {
+  it('offers to retry the rest when a bulk tag step saved only some rows', async () => {
     const retry = vi.fn().mockResolvedValue({ updated: 1 })
-    const onBulkCategorize = vi.fn().mockResolvedValue({ updated: 2 })
     const onBulkTag = vi
       .fn()
+      .mockResolvedValueOnce({ updated: 2 })
       .mockRejectedValue(
         new PartialWriteError('Se actualizaron 1 de 2', 1, 2, retry)
       )
@@ -1219,7 +1198,6 @@ describe('Transactions', () => {
       <>
         <Transactions
           transactions={[makeTransaction(1, 'Devoto')]}
-          onBulkCategorize={onBulkCategorize}
           onBulkTag={onBulkTag}
         />
         <Toaster />
@@ -1229,47 +1207,45 @@ describe('Transactions', () => {
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
     )
-    await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
-    })
-    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
-    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
-      target: { value: 'entretenimiento' },
-    })
-    const options = screen.getAllByText('Entretenimiento')
-    fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
-    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
-      target: { value: 'viaje' },
-    })
     fireEvent.click(
-      screen.getByRole('button', { name: /Crear etiqueta "viaje"/ })
+      within(screen.getByRole('group', { name: 'Acciones' })).getByRole(
+        'button',
+        { name: 'Etiquetas' }
+      )
     )
-    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
+    for (const tag of ['viaje', 'trabajo']) {
+      fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
+        target: { value: tag },
+      })
+      fireEvent.click(
+        screen.getByRole('button', { name: `Crear etiqueta "${tag}"` })
+      )
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar etiquetas' }))
 
     expect(
       await screen.findByText(
-        'Se aplicó la categoría, pero falló el resto: Se actualizaron 1 de 2 — reintentar'
+        'Se aplicó la etiqueta "viaje", pero falló el resto: Se actualizaron 1 de 2 — reintentar'
       )
     ).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
     expect(retry).toHaveBeenCalledTimes(1)
   })
 
-  it('retrying a partial category step also applies the tags that never ran', async () => {
+  it('retrying a partial tag step also applies the tags that never ran', async () => {
     const retry = vi.fn().mockResolvedValue({ updated: 1 })
-    const onBulkCategorize = vi
+    const onBulkTag = vi
       .fn()
-      .mockRejectedValue(
+      .mockRejectedValueOnce(
         new PartialWriteError('Se actualizaron 1 de 2', 1, 2, retry)
       )
-    const onBulkTag = vi.fn().mockResolvedValue({ updated: 2 })
+      .mockResolvedValue({ updated: 2 })
 
     render(
       <>
         <Transactions
           transactions={[makeTransaction(1, 'Devoto')]}
-          onBulkCategorize={onBulkCategorize}
           onBulkTag={onBulkTag}
         />
         <Toaster />
@@ -1279,34 +1255,33 @@ describe('Transactions', () => {
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
     )
-    await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
-    })
-    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
-    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
-      target: { value: 'entretenimiento' },
-    })
-    const options = screen.getAllByText('Entretenimiento')
-    fireEvent.click(options[options.length - 1])
-    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
-    fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
-      target: { value: 'viaje' },
-    })
     fireEvent.click(
-      screen.getByRole('button', { name: /Crear etiqueta "viaje"/ })
+      within(screen.getByRole('group', { name: 'Acciones' })).getByRole(
+        'button',
+        { name: 'Etiquetas' }
+      )
     )
-    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
+    for (const tag of ['viaje', 'trabajo']) {
+      fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
+        target: { value: tag },
+      })
+      fireEvent.click(
+        screen.getByRole('button', { name: `Crear etiqueta "${tag}"` })
+      )
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar etiquetas' }))
 
     expect(
       await screen.findByText('Se actualizaron 1 de 2 — reintentar')
     ).toBeTruthy()
-    expect(onBulkTag).not.toHaveBeenCalled()
+    expect(onBulkTag).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
 
     expect(await screen.findByText('Cambios guardados')).toBeTruthy()
     expect(retry).toHaveBeenCalledTimes(1)
-    expect(onBulkTag).toHaveBeenCalledWith(['tx-1'], 'viaje')
+    expect(onBulkTag).toHaveBeenCalledWith(['tx-1'], 'trabajo')
   })
 
   it('offers undo for the rows a retried delete removed', async () => {
@@ -1362,16 +1337,19 @@ describe('Transactions', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Netflix' })[0]
     )
 
-    await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
-    })
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Acciones' })).getByRole(
+        'button',
+        { name: 'Etiquetas' }
+      )
+    )
 
     fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
 
     const tagButtons = screen.getAllByText('#monthly')
     fireEvent.click(tagButtons[tagButtons.length - 1])
 
-    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar etiquetas' }))
 
     await waitFor(() =>
       expect(onBulkTag).toHaveBeenCalledWith(['tx-1', 'tx-2'], 'monthly')
@@ -1392,7 +1370,12 @@ describe('Transactions', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
     )
 
-    fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Acciones' })).getByRole(
+        'button',
+        { name: 'Etiquetas' }
+      )
+    )
 
     fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
 
@@ -1404,7 +1387,7 @@ describe('Transactions', () => {
       screen.getByRole('button', { name: /Crear etiqueta "new-tag"/ })
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Agregar etiquetas' }))
 
     await waitFor(() =>
       expect(onBulkTag).toHaveBeenCalledWith(['tx-1'], 'new-tag')
@@ -1484,7 +1467,12 @@ describe('Transactions', () => {
   // this pins the responsive classes; the PR carries the Playwright check.
   describe('selection bar layout (#194)', () => {
     function selectOne() {
-      render(<Transactions transactions={[makeTransaction(1, 'Devoto')]} />)
+      render(
+        <Transactions
+          transactions={[makeTransaction(1, 'Devoto')]}
+          onBulkTag={vi.fn()}
+        />
+      )
       fireEvent.click(
         screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
       )
@@ -1505,13 +1493,18 @@ describe('Transactions', () => {
       )
     })
 
+    it('has no Editar button: the rows have their own', () => {
+      const bar = selectOne()
+      const group = within(bar).getByRole('group', { name: 'Acciones' })
+      expect(within(group).queryByRole('button', { name: /Editar/ })).toBeNull()
+    })
+
     it('never wraps an action label mid-word', () => {
       const bar = selectOne()
       for (const name of [
         'Categorizar',
-        'Editar seleccionadas',
-        'Auto-categorizar',
-        'Ignorar',
+        'No contar',
+        'Etiquetas',
         'Eliminar',
       ]) {
         expect(within(bar).getByRole('button', { name })).toHaveClass(

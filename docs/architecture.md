@@ -371,6 +371,13 @@ confidence put back exactly from a snapshot, writing no overrides. One counter
 per row (`useCategoryWrites`) withdraws an old toast when the row is written
 again. There is no Deshacer after "Aplicar".
 
+**Bulk category writes (#282).** The selection bar's Categorizar (the shared
+`CategoryPicker` in a popover), No contar (writes `ignored`) and Volver a sugerir
+(`autoCategorize`) offer "Deshacer" through `restoreCategories`, from a
+before-snapshot read from the store: only rows the write changed are offered, and
+at the click only rows still holding what it wrote are restored. No Deshacer is
+offered after a failed or partial write (its toast's action is "Reintentar").
+
 **Default scope (#281).** The edit dialog's "Aplicar nombre y categoría a"
 starts as "Solo esta transacción" and becomes "Todas las similares" only when
 `defaultsToAllSimilar` (`services/descriptions/default-scope.ts`) says so;
@@ -417,7 +424,7 @@ The user's rules come in as a value, `UserRules`
 (`src/services/categorizer/user-rules.ts`: description overrides, merchant
 overrides, custom patterns); steps 1–3 and 8 read only that value, never the
 stores. Call sites read it with `currentUserRules()` after their last
-await (import, Auto-categorizar, the dev panels), so each rule type keeps its
+await (import, Volver a sugerir, the dev panels), so each rule type keeps its
 one owner store. The value is an immutable snapshot (read-only types; the
 three stores replace their objects on every write, never mutate them), so
 learned patterns are built once per merchant-overrides object: one
@@ -444,8 +451,8 @@ sources.
 | 12  | Fallback             | 0                                                                                                                                                                                                                                                        | (inline)                                       | `uncategorized`.                                                                                                                                                                                                                                                                                                                                                                      |
 
 Steps 9–11 only run when a `CategorizationContext` is passed. In the app that
-happens only in `autoCategorize` (the "Auto-categorizar"
-bulk action in Transacciones) and in the developer `CoverageAnalysis` tool.
+happens only in `autoCategorize` (the "Volver a sugerir"
+bulk action in the Categorizar popover of Transacciones) and in the developer `CoverageAnalysis` tool.
 
 Tests in `transaction-categorizer.test.ts` that pin the order:
 
@@ -467,13 +474,13 @@ holding a category, 6 before 7, and 7 before 8 come from the code order only.
 
 ### What can change a category after the categorizer
 
-| Step                        | Where                               | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AI enrichment (import only) | `applyAiEnrichment`                 | Replaces category, confidence (model value, clamped 0–1, default 0.7) and display name on new rows without a user rule (`hasUserRule`).                                                                                                                                                                                                                                                                                                                                                           |
-| Internal-transfer inference | `inferInternalTransfers` (store)    | Bank rows only. Debits with transfer wording become `internal_transfer` (or `external_transfer` with a named beneficiary) at 0.9. A debit paired with a matching credit within 2 days gets 0.92, 0.95 or 0.98, depending on the match score. Skips rows at confidence 1, split rows, and rows already in a transfer category.                                                                                                                                                                     |
-| User edit / bulk categorize | `editTransaction`, `bulkCategorize` | Sets the category at confidence 1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Rule applied to past rows   | `applyPatternToPast`                | Sets the rule's category (and display name) at 0.95 on the rows `rowsRuleWouldChange` returns: matching rows the rule wins, not split rows, not at confidence 1, not already applied; a row the user renamed keeps its name, and the category is written under its current id. Runs on create/edit with "Pasadas y futuras" and from a rule's "Aplicar a las N".                                                                                                                                  |
-| Auto-categorizar            | `autoCategorize`                    | Re-runs the categorizer with context on the selected rows; writes a result only when it is not `uncategorized`, at least as confident as the row's current category (a row without a recorded confidence counts as 0.55; a confidence-1 row is beaten only by a user rule at 1) and changes something. The similar-merchant pool is the merchant overrides, then rows categorized at 0.55 or more that are not in an ignored category, one entry per merchant; a row never sees its own merchant. |
+| Step                              | Where                               | Effect                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AI enrichment (import only)       | `applyAiEnrichment`                 | Replaces category, confidence (model value, clamped 0–1, default 0.7) and display name on new rows without a user rule (`hasUserRule`).                                                                                                                                                                                                                                                                                                                                                           |
+| Internal-transfer inference       | `inferInternalTransfers` (store)    | Bank rows only. Debits with transfer wording become `internal_transfer` (or `external_transfer` with a named beneficiary) at 0.9. A debit paired with a matching credit within 2 days gets 0.92, 0.95 or 0.98, depending on the match score. Skips rows at confidence 1, split rows, and rows already in a transfer category.                                                                                                                                                                     |
+| User edit / bulk categorize       | `editTransaction`, `bulkCategorize` | Sets the category at confidence 1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Rule applied to past rows         | `applyPatternToPast`                | Sets the rule's category (and display name) at 0.95 on the rows `rowsRuleWouldChange` returns: matching rows the rule wins, not split rows, not at confidence 1, not already applied; a row the user renamed keeps its name, and the category is written under its current id. Runs on create/edit with "Pasadas y futuras" and from a rule's "Aplicar a las N".                                                                                                                                  |
+| Volver a sugerir (autoCategorize) | `autoCategorize`                    | Re-runs the categorizer with context on the selected rows; writes a result only when it is not `uncategorized`, at least as confident as the row's current category (a row without a recorded confidence counts as 0.55; a confidence-1 row is beaten only by a user rule at 1) and changes something. The similar-merchant pool is the merchant overrides, then rows categorized at 0.55 or more that are not in an ignored category, one entry per merchant; a row never sees its own merchant. |
 
 ## Dates
 
@@ -662,7 +669,7 @@ id; it no longer resolves aliases or breaks ties itself.
 | missing, `''`                               | Sin categoría (and follows its ignore flag, like a row stored as `uncategorized`)                                                                                                        |
 | built-in, any casing, or a pre-rename alias | the current built-in, with the user's label / colour / icon / ignore override if any (a stored colour equal to a shipped default — `PAST_CATEGORY_COLORS` — follows the current palette) |
 | a loaded custom category                    | its stored name, colour (one equal to a past or current `DEFAULT_CATEGORY_COLOR` follows the current default), icon and ignore flag                                                      |
-| `ignored` (written by "Ignorar")            | "Ignorada", left out of totals; a legacy custom row keyed `ignored` supplies its label and can only un-ignore it explicitly                                                              |
+| `ignored` (written by "No contar")          | "Ignorada", left out of totals; a legacy custom row keyed `ignored` supplies its label and can only un-ignore it explicitly                                                              |
 | anything else (usually a deleted category)  | itself: label derived from the id, neutral colour, 🏷️, counted in totals, `known: false` — never Sin categoría                                                                           |
 
 Deleting a custom category archives its row and stops loading it, so the
