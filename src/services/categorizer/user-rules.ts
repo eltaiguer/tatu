@@ -87,34 +87,37 @@ export function isRenamedByUser(
     ?.friendlyDescription
 }
 
+// A categorized description override or a merchant override wins over every
+// custom pattern (categorizer steps 1-2).
+function overrideWins(description: string, rules: UserRules): boolean {
+  return (
+    !!findDescriptionOverride(rules.descriptionOverrides, description)
+      ?.category ||
+    !!findMerchantCategoryOverride(rules.merchantOverrides, description)
+  )
+}
+
 // The custom pattern the categorizer would pick for this description, or null
-// when a categorized description override or a merchant override wins first
-// (categorizer steps 1-3).
+// when an override wins first or no pattern matches (steps 1-3).
 function winningRule(
   description: string,
   rules: UserRules
 ): CustomPattern | null {
-  if (
-    findDescriptionOverride(rules.descriptionOverrides, description)?.category
-  )
-    return null
-  if (findMerchantCategoryOverride(rules.merchantOverrides, description))
-    return null
+  if (overrideWins(description, rules)) return null
   return firstMatchingPattern(description, rules.customPatterns) ?? null
 }
 
 // A row any rule may still change: not a split row, not categorized by hand,
-// and no categorized description override or merchant override wins over a
-// custom pattern (categorizer steps 1-3).
+// and no override wins over a custom pattern.
 function isOpenToRules(tx: Transaction, rules: UserRules): boolean {
   if (isSplitParentTx(tx) || tx.splitParentId) return false
   if (effectiveConfidence(tx) >= 1) return false
-  if (
-    findDescriptionOverride(rules.descriptionOverrides, tx.description)
-      ?.category
-  )
-    return false
-  return !findMerchantCategoryOverride(rules.merchantOverrides, tx.description)
+  return !overrideWins(tx.description, rules)
+}
+
+// Categories compare normalized: a stored rule can hold a legacy id.
+function sameCategory(a: string | undefined, b: string | undefined): boolean {
+  return normalizeCategoryId(a) === normalizeCategoryId(b)
 }
 
 // The rule would change the row: it differs in category, or in the name the
@@ -124,13 +127,11 @@ function differsFromRule(
   rule: CustomPattern,
   rules: UserRules
 ): boolean {
-  const sameCategory =
-    normalizeCategoryId(tx.category) === normalizeCategoryId(rule.category)
   const sameName =
     !rule.description ||
     tx.displayDescription === rule.description ||
     isRenamedByUser(rules, tx.description)
-  return !(sameCategory && sameName)
+  return !(sameCategory(tx.category, rule.category) && sameName)
 }
 
 /**
@@ -194,10 +195,7 @@ export function isCategorizedByRule(
   tx: Transaction,
   rules: UserRules
 ): boolean {
-  if (!tx.category || rules.customPatterns.length === 0) return false
+  if (!tx.category) return false
   const winner = winningRule(tx.description, rules)
-  return (
-    !!winner &&
-    normalizeCategoryId(tx.category) === normalizeCategoryId(winner.category)
-  )
+  return !!winner && sameCategory(tx.category, winner.category)
 }

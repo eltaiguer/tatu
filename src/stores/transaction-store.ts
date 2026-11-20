@@ -28,6 +28,9 @@ interface TransactionStoreActions {
   removeTransactions: (ids: string[]) => void
   clearTransactions: () => void
   setTransactions: (transactions: Transaction[]) => void
+  // Recomputes the inferred transfers from the rules as they are now: call it
+  // after a custom-pattern write (the pattern store cannot import this one).
+  reinfer: () => void
 }
 
 export type TransactionStore = TransactionStoreState & TransactionStoreActions
@@ -106,6 +109,8 @@ function createTransactionStoreState(
       set(() => ({
         transactions: [],
       })),
+    reinfer: () =>
+      set((state) => ({ transactions: infer(state.transactions) })),
     setTransactions: (transactions) =>
       set(() => ({
         transactions: normalizeTransactions(transactions),

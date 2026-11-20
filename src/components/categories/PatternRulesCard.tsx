@@ -28,6 +28,7 @@ import {
   type CustomPattern,
   type MatchType,
 } from '../../services/categorizer/custom-patterns'
+import { transactionStore } from '../../stores/transaction-store'
 import { userErrorMessage } from '../../utils/user-error'
 import {
   requireRepository,
@@ -192,6 +193,10 @@ export function PatternRulesCard({
       setSaving(false)
     }
 
+    // The rule changed: a row it categorized may now be (or stop being) a
+    // transfer (#289).
+    transactionStore.getState().reinfer()
+
     // The rule stays locked until its apply (if any) is over.
     setBusy(saved.id, true)
     try {
@@ -225,6 +230,7 @@ export function PatternRulesCard({
     setBusy(id, true)
     try {
       await removeCustomPatternWithSync(requireRepository(repository), id)
+      transactionStore.getState().reinfer()
       toast.success('Regla eliminada')
       if (wasEditing && formGeneration.current === generation) closeForm()
     } catch (error) {

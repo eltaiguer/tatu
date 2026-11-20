@@ -131,8 +131,10 @@ export function inferInternalTransfers(
   const byId = new Map(next.map((transaction) => [transaction.id, transaction]))
   const pairedIds = new Set<string>()
 
-  // Rule ownership is judged on the row as it came in, once per row per call,
-  // and only for rows that pass the cheap gates.
+  // Rule ownership, once per row per call (the cache is keyed by id: a row's
+  // category is the input's until pass 1 marks it, and a marked row never
+  // reaches this check), and only for rows that pass the cheap gates. With no
+  // custom patterns nothing is rule-owned: the fast path.
   const ruleOwned = new Map<string, boolean>()
   const isRuleOwned = (transaction: Transaction): boolean => {
     if (rules.customPatterns.length === 0) return false

@@ -66,9 +66,10 @@ one.
   `userRules(...)` from `src/test/user-rules.ts`; `emptyUserRules()` means
   the built-in sources only.
 - Transfer inference skips a row whose category equals its winning custom
-  rule's (`isCategorizedByRule`). Deleting or editing a rule takes that
-  protection away at the next store write or reload: there is no re-inference
-  on the rule write itself.
+  rule's (`isCategorizedByRule`, distinct from `hasUserRule`). Categorías
+  re-runs inference (`transactionStore.reinfer()`) after a rule is added,
+  edited or deleted; a rule written any other way takes effect at the next
+  store write or reload, because `custom-patterns.ts` cannot import the store.
 - With AI enabled, `applyAiEnrichment` replaces the rule result for new rows
   without a user rule (`hasUserRule`: description override, merchant override
   or custom pattern), so a change to the built-in keywords or merchant list may not
