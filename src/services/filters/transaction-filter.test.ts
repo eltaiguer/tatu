@@ -5,6 +5,7 @@ import { categoryRules } from '../../test/household-rules'
 import {
   filterTransactions as filterRows,
   groupSplitRows,
+  monthRowCounts,
   periodDateRange,
   periodWithDateBound,
   sortTransactions,
@@ -611,5 +612,63 @@ describe('filterTransactions — Hogar', () => {
     )
     expect(ids(matched)).toEqual(['p1'])
     expect(ids(groupSplitRows(matched, split))).toEqual(['parent', 'p1'])
+  })
+})
+
+describe('monthRowCounts', () => {
+  const options = { householdRules: NO_DEFAULTS }
+
+  it('counts rows per UTC month, ignoring the period', () => {
+    const rows = [
+      tx('a', { date: day('2025-03-10') }),
+      tx('b', { date: day('2025-11-01') }),
+      tx('c', { date: day('2025-11-30') }),
+      tx('d', { date: day('2025-12-31') }),
+    ]
+    expect(
+      monthRowCounts(
+        rows,
+        filters({ period: { mode: 'month', y: 2025, m: 2 } }),
+        options
+      )
+    ).toEqual(
+      new Map([
+        ['2025-03', 1],
+        ['2025-11', 2],
+        ['2025-12', 1],
+      ])
+    )
+  })
+
+  it('counts ignored rows only with showIgnored', () => {
+    const rows = [
+      tx('a', { date: day('2025-11-05') }),
+      tx('t', { date: day('2025-11-06'), category: 'internal_transfer' }),
+    ]
+    expect(monthRowCounts(rows, filters(), options).get('2025-11')).toBe(1)
+    expect(
+      monthRowCounts(rows, filters({ showIgnored: true }), options).get(
+        '2025-11'
+      )
+    ).toBe(2)
+  })
+
+  it('never counts split parents', () => {
+    const rows = [
+      tx('parent', { date: day('2025-11-05'), isSplitParent: true }),
+      tx('p1', { date: day('2025-11-05'), splitParentId: 'parent' }),
+      tx('p2', { date: day('2025-11-05'), splitParentId: 'parent' }),
+    ]
+    expect(monthRowCounts(rows, filters(), options).get('2025-11')).toBe(2)
+  })
+
+  it('applies every other filter', () => {
+    const rows = [
+      tx('a', { date: day('2025-11-05'), category: 'restaurants' }),
+      tx('b', { date: day('2025-11-06'), category: 'groceries' }),
+    ]
+    expect(
+      monthRowCounts(rows, filters({ categories: ['restaurants'] }), options)
+    ).toEqual(new Map([['2025-11', 1]]))
   })
 })

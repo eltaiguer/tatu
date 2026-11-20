@@ -14,7 +14,7 @@ import { BulkEditDialog } from './BulkEditDialog'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
-import { newestDataMonth, todayAsUtcDate } from '../utils/date-utils'
+import { newestDataMonth } from '../utils/date-utils'
 import { exportTransactions } from '../services/export/export'
 import { addCustomCategoryWithSync } from '../services/categories/category-store'
 import {
@@ -102,7 +102,7 @@ export function Transactions({
     filteredTransactions,
     ignoredCount,
     availableCategories,
-    newestRowDate,
+    monthNav,
     currentPage,
     setCurrentPage,
     safeTotalPages,
@@ -144,9 +144,6 @@ export function Transactions({
     if (!onFiltersChange) return
     onFiltersChange(serializeFilterParams(filters))
   }, [onFiltersChange, filters])
-
-  // `newestRowDate` is null only without rows.
-  const newestForNav = newestRowDate ?? todayAsUtcDate()
 
   /* ---- Edit state ---- */
   const { pendingTransactionIds, setPending } = usePendingRows()
@@ -398,11 +395,7 @@ export function Transactions({
         }
         actions={
           <>
-            <MonthNav
-              period={period}
-              setPeriod={setPeriod}
-              newest={newestForNav}
-            />
+            <MonthNav period={period} setPeriod={setPeriod} {...monthNav} />
             <Button
               variant="outline"
               size="sm"

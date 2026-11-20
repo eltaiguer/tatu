@@ -4,7 +4,12 @@ import { normalizeCategoryId } from '../categories/category-aliases'
 import { countsAsRow, countsTowardTotals } from '../spending/spending-rules'
 import { getDisplayDescription } from '../../utils/transaction-display'
 import { merchantKeyOf } from '../merchants/merchant-key'
-import { newestDate, toDateKey, todayAsUtcDate } from '../../utils/date-utils'
+import {
+  newestDate,
+  toDateKey,
+  toMonthKey,
+  todayAsUtcDate,
+} from '../../utils/date-utils'
 import type { UrlFilterState, UrlPeriod } from './url-filters'
 
 // THE definition of "matches the Transacciones filter" (#121): one pure
@@ -136,6 +141,26 @@ export function filterTransactions(
       `${getDisplayDescription(transaction)} ${transaction.description} ${(transaction.tags ?? []).join(' ')}`.toLowerCase()
     return searchable.includes(query)
   })
+}
+
+// Rows per 'YYYY-MM' (UTC month, toMonthKey) that filterTransactions lists
+// with the period left out: what picking that month would show, with every
+// other filter as it is. Months without rows are absent from the map.
+export function monthRowCounts(
+  transactions: Transaction[],
+  filters: UrlFilterState,
+  options: TransactionFilterOptions
+): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const tx of filterTransactions(
+    transactions,
+    { ...filters, period: { mode: 'all' } },
+    options
+  )) {
+    const key = toMonthKey(tx.date)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
 }
 
 // A sorted copy. Amounts sort by size (absolute value), descriptions by the
