@@ -16,6 +16,7 @@ function renderNav(props: Partial<React.ComponentProps<typeof MonthNav>> = {}) {
       newest={NEWEST}
       monthCounts={new Map()}
       completeMonthKeys={new Set()}
+      rowYears={new Set([2025])}
       {...props}
     />
   )
@@ -154,6 +155,7 @@ describe('MonthNav year arrows', () => {
     newest: new Date('2026-02-20T00:00:00.000Z'),
     monthCounts: YEARS,
     completeMonthKeys: new Set<string>(),
+    rowYears: new Set([2023, 2026]),
   }
   const prev = () =>
     screen.getByRole('button', { name: 'Año anterior' }) as HTMLButtonElement
@@ -186,9 +188,98 @@ describe('MonthNav year arrows', () => {
   })
 
   it('disables both arrows without rows', () => {
-    renderNav({ ...props, period: FEB_2026, monthCounts: new Map() })
+    renderNav({
+      ...props,
+      period: FEB_2026,
+      monthCounts: new Map(),
+      rowYears: new Set(),
+    })
     open('Febrero 2026')
     expect(prev().disabled).toBe(true)
     expect(next().disabled).toBe(true)
+  })
+})
+
+describe('MonthNav review round 1', () => {
+  it('keeps the selected empty month readable (no muted colour)', () => {
+    renderNav({
+      period: { mode: 'month', y: 2025, m: 0 },
+      monthCounts: DATA,
+      completeMonthKeys: APR_TO_DEC,
+    })
+    open('Enero 2025')
+    const selected = screen.getByRole('button', {
+      name: 'enero 2025, sin movimientos',
+    })
+    expect(selected.className).not.toContain('text-faint')
+    const other = screen.getByRole('button', {
+      name: 'febrero 2025, sin movimientos',
+    })
+    expect(other.className).toContain('text-faint')
+  })
+
+  it('reaches other years through the arrows even when the filters match nothing', () => {
+    renderNav({
+      period: { mode: 'month', y: 2026, m: 1 },
+      newest: new Date('2026-02-20T00:00:00.000Z'),
+      monthCounts: new Map(),
+      rowYears: new Set([2023, 2026]),
+    })
+    open('Febrero 2026')
+    const prev = screen.getByRole('button', {
+      name: 'Año anterior',
+    }) as HTMLButtonElement
+    expect(prev.disabled).toBe(false)
+    fireEvent.click(prev)
+    expect(screen.getByText('2023')).toBeTruthy()
+  })
+
+  it('calls the current month in progress, not incomplete', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2025-12-15T15:00:00.000Z'))
+    try {
+      // The rule never counts the current month as complete.
+      const complete = new Set(APR_TO_DEC)
+      complete.delete('2025-12')
+      renderNav({ monthCounts: DATA, completeMonthKeys: complete })
+      open()
+      const chip = screen.getByRole('button', {
+        name: 'diciembre 2025, 2 movimientos, mes en curso',
+      })
+      expect(chip.getAttribute('title')).toBe('Mes en curso')
+      // A past incomplete month keeps its own wording.
+      expect(
+        screen.getByRole('button', {
+          name: 'marzo 2025, 2 movimientos, mes incompleto',
+        })
+      ).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps the dot off the number and the count in mono digits', () => {
+    renderNav({ monthCounts: DATA, completeMonthKeys: APR_TO_DEC })
+    open()
+    const marzo = screen.getByRole('button', {
+      name: 'marzo 2025, 2 movimientos, mes incompleto',
+    })
+    const count = within(marzo).getByText('2')
+    expect(count.textContent).toBe('2')
+    expect(count.className).toContain('font-mono')
+    expect(count.className).toContain('tabular-nums')
+    const dot = marzo.querySelector('[data-testid="month-dot"]')
+    expect(dot).not.toBeNull()
+    expect(count.contains(dot)).toBe(false)
+    expect(dot?.parentElement).toBe(marzo)
+  })
+
+  it('shows no caption on an empty month', () => {
+    renderNav({ monthCounts: DATA, completeMonthKeys: APR_TO_DEC })
+    open()
+    const enero = screen.getByRole('button', {
+      name: 'enero 2025, sin movimientos',
+    })
+    expect(enero.textContent).toBe('Ene')
   })
 })

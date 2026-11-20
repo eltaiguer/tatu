@@ -1669,6 +1669,49 @@ describe('Transactions month range', () => {
       })
     })
 
+    it('still reaches other years when the search matches nothing', () => {
+      withClock(() => {
+        render(
+          <Transactions
+            transactions={[...rows, row('old', '2024-06-10')]}
+            initialFilters={{ ...DEFAULT_URL_FILTERS, search: 'zzz-no-hits' }}
+          />
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Todo el período' }))
+        const prev = screen.getByRole('button', {
+          name: 'Año anterior',
+        }) as HTMLButtonElement
+        expect(prev.disabled).toBe(false)
+      })
+    })
+
+    it('counts follow the household rules under the Hogar filter', () => {
+      withClock(() => {
+        render(
+          <Transactions
+            transactions={[
+              row('h1', '2025-11-05', { household: true }),
+              row('h2', '2025-11-06', { household: true }),
+              row('o1', '2025-11-07', { household: false }),
+              row('o2', '2025-12-02', { household: false }),
+            ]}
+            initialFilters={{ ...DEFAULT_URL_FILTERS, household: 'household' }}
+          />
+        )
+        fireEvent.click(screen.getByRole('button', { name: 'Todo el período' }))
+        expect(
+          screen.getByRole('button', {
+            name: /^noviembre 2025, 2 movimientos/,
+          })
+        ).toBeTruthy()
+        expect(
+          screen.getByRole('button', {
+            name: 'diciembre 2025, sin movimientos',
+          })
+        ).toBeTruthy()
+      })
+    })
+
     it('follows the other filters', () => {
       withClock(() => {
         render(

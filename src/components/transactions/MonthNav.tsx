@@ -3,7 +3,7 @@ import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '../ui/button'
 import { cn } from '../ui/utils'
 import { useClickOutside } from '../../hooks/useClickOutside'
-import { toDateKey, todayAsUtcDate } from '../../utils/date-utils'
+import { toDateKey, toMonthKey, todayAsUtcDate } from '../../utils/date-utils'
 import type { UrlPeriod } from '../../services/filters/url-filters'
 import { getPeriodLabel } from '../../services/filters/period-label'
 
@@ -26,13 +26,14 @@ const MONTHS_ES_SHORT = [
 export function monthChipLabel(
   name: string,
   count: number,
-  incomplete: boolean
+  incomplete: boolean,
+  inProgress = false
 ): string {
   const rows =
     count === 0
       ? 'sin movimientos'
       : `${count} ${count === 1 ? 'movimiento' : 'movimientos'}`
-  return `${name}, ${rows}${incomplete ? ', mes incompleto' : ''}`
+  return `${name}, ${rows}${inProgress ? ', mes en curso' : incomplete ? ', mes incompleto' : ''}`
 }
 
 /* ---- MonthNav ---- */
@@ -42,12 +43,14 @@ export function MonthNav({
   newest,
   monthCounts,
   completeMonthKeys,
+  rowYears,
 }: {
   period: UrlPeriod
   setPeriod: (p: UrlPeriod) => void
   newest: Date
   monthCounts: ReadonlyMap<string, number>
   completeMonthKeys: ReadonlySet<string>
+  rowYears: ReadonlySet<number>
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -56,6 +59,7 @@ export function MonthNav({
   const newestY = newest.getUTCFullYear()
   const newestM = newest.getUTCMonth()
   const today = todayAsUtcDate()
+  const currentMonthKey = toMonthKey(today)
   const anchorY = period.mode === 'month' ? period.y : newestY
   const anchorM = period.mode === 'month' ? period.m : newestM
   const [gridYear, setGridYear] = useState(anchorY)
@@ -76,9 +80,9 @@ export function MonthNav({
   }
 
   // Years that have rows: the year arrows jump between them.
-  const dataYears = Array.from(monthCounts)
-    .filter(([, count]) => count > 0)
-    .map(([key]) => Number(key.slice(0, 4)))
+  // from every row, not the filtered ones: a search with no hits must not
+  // strand the grid on one year.
+  const dataYears = Array.from(rowYears)
   const prevYear = Math.max(...dataYears.filter((y) => y < gridYear), -Infinity)
   const nextYear = Math.min(...dataYears.filter((y) => y > gridYear), Infinity)
 
@@ -231,6 +235,8 @@ export function MonthNav({
               const key = `${gridYear}-${String(i + 1).padStart(2, '0')}`
               const count = monthCounts.get(key) ?? 0
               const incomplete = count > 0 && !completeMonthKeys.has(key)
+              // Still running by the clock: not "missing data".
+              const inProgress = incomplete && key === currentMonthKey
               const name = getPeriodLabel({
                 mode: 'month',
                 y: gridYear,
@@ -242,13 +248,24 @@ export function MonthNav({
                   variant={isSel ? 'default' : 'outline'}
                   size="sm"
                   disabled={isFuture}
-                  aria-label={monthChipLabel(name, count, incomplete)}
+                  aria-label={monthChipLabel(
+                    name,
+                    count,
+                    incomplete,
+                    inProgress
+                  )}
                   title={
-                    incomplete ? 'Le faltan datos de alguna cuenta' : undefined
+                    inProgress
+                      ? 'Mes en curso'
+                      : incomplete
+                        ? 'Le faltan datos de alguna cuenta'
+                        : undefined
                   }
                   className={cn(
-                    'h-auto min-h-[44px] flex-col gap-[2px] px-0 py-[5px] disabled:opacity-[0.35]',
-                    count === 0 && 'font-normal text-[var(--text-faint)]'
+                    'relative h-auto min-h-[44px] flex-col gap-[2px] px-0 py-[5px] disabled:opacity-[0.35]',
+                    count === 0 &&
+                      !isSel &&
+                      'font-normal text-[var(--text-faint)]'
                   )}
                   onClick={() => {
                     setPeriod({ mode: 'month', y: gridYear, m: i })
@@ -259,13 +276,17 @@ export function MonthNav({
                   {count > 0 && (
                     <span
                       aria-hidden="true"
-                      className="flex items-center gap-[3px] text-[10px] leading-none font-normal tabular-nums"
+                      className="font-mono text-[10px] leading-none font-normal tabular-nums"
                     >
                       {count}
-                      {incomplete && (
-                        <span className="inline-block size-[6px] rounded-full border border-current" />
-                      )}
                     </span>
+                  )}
+                  {incomplete && (
+                    <span
+                      aria-hidden="true"
+                      data-testid="month-dot"
+                      className="absolute top-[5px] right-[6px] size-[6px] rounded-full border border-current"
+                    />
                   )}
                 </Button>
               )
