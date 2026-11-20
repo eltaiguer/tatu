@@ -10,6 +10,7 @@ import {
   removeCustomPatternWithSync,
   replaceCustomPatterns,
   testPattern,
+  updateCustomPatternWithSync,
 } from './custom-patterns'
 
 import {
@@ -17,6 +18,7 @@ import {
   type InMemoryRepository,
 } from '../repository/in-memory-repository'
 import { workspaceStore } from '../../stores/workspace-state'
+import { UserFacingError } from '../../utils/user-error'
 
 describe('Custom Patterns', () => {
   beforeEach(() => {
@@ -159,6 +161,83 @@ describe('Custom Patterns', () => {
         'timeout'
       )
       expect(listCustomPatterns().map((p) => p.id)).toEqual([a.id, b.id])
+    })
+
+    describe('editing a rule in place', () => {
+      const edit = {
+        pattern: '  FARMA  ',
+        matchType: 'starts_with' as const,
+        category: Category.Restaurants,
+        description: 'Farma',
+      }
+      const seed = () => {
+        const [a, b, c] = ['a', 'b', 'c'].map((pattern) =>
+          addCustomPattern({
+            pattern,
+            matchType: 'contains',
+            category: Category.Healthcare,
+          })
+        )
+        return { a, b, c }
+      }
+
+      it('saves an edited rule under the same id and keeps its place', async () => {
+        const { a, b, c } = seed()
+        await repo.upsertCustomPattern(b)
+
+        await updateCustomPatternWithSync(repo, b.id, edit)
+
+        const listed = listCustomPatterns()
+        expect(listed.map((p) => p.id)).toEqual([a.id, b.id, c.id])
+        expect(listed[1]).toMatchObject({
+          pattern: 'farma',
+          matchType: 'starts_with',
+          category: Category.Restaurants,
+          description: 'Farma',
+          createdAt: b.createdAt,
+        })
+        expect(repo.customPatterns.get(b.id)).toMatchObject({
+          pattern: 'farma',
+          matchType: 'starts_with',
+          category: Category.Restaurants,
+          description: 'Farma',
+          createdAt: b.createdAt,
+        })
+      })
+
+      it('puts the previous rule back when the save fails', async () => {
+        const { b } = seed()
+        const before = listCustomPatterns()
+        repo.failOn('upsertCustomPattern', { error: new Error('timeout') })
+
+        await expect(
+          updateCustomPatternWithSync(repo, b.id, edit)
+        ).rejects.toThrow('timeout')
+
+        expect(listCustomPatterns()).toEqual(before)
+      })
+
+      it("refuses to edit for a user whose workspace isn't loaded", async () => {
+        const { b } = seed()
+        const before = listCustomPatterns()
+        workspaceStore.setState({ userId: null, status: 'idle' })
+
+        await expect(
+          updateCustomPatternWithSync(repo, b.id, edit)
+        ).rejects.toThrow(/sesión/)
+
+        expect(listCustomPatterns()).toEqual(before)
+        expect(repo.customPatterns.size).toBe(0)
+      })
+
+      it('rejects an id that is not in the list', async () => {
+        seed()
+
+        await expect(
+          updateCustomPatternWithSync(repo, 'gone', edit)
+        ).rejects.toThrow(new UserFacingError('La regla ya no existe.'))
+        expect(repo.customPatterns.size).toBe(0)
+      })
     })
   })
 

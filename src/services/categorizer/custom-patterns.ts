@@ -79,6 +79,36 @@ export async function addCustomPatternWithSync(
   return pattern
 }
 
+/**
+ * Saves an edited rule under the same id and `createdAt`, so it keeps its
+ * place in the list (list order is precedence, and the server lists by
+ * `created_at`). On failure the previous rule goes back in place.
+ */
+export async function updateCustomPatternWithSync(
+  repo: PatternRepository,
+  id: string,
+  input: Omit<CustomPattern, 'id' | 'createdAt'>
+): Promise<CustomPattern> {
+  requireOwner(repo)
+  const previous = patterns.find((p) => p.id === id)
+  if (!previous) throw new UserFacingError('La regla ya no existe.')
+  const next: CustomPattern = {
+    ...previous,
+    ...input,
+    pattern: normalizeMerchantName(input.pattern),
+  }
+  patterns = patterns.map((p) => (p.id === id ? next : p))
+  try {
+    await repo.upsertCustomPattern(next)
+  } catch (error) {
+    if (isWorkspaceOwner(repo.userId) && patterns.includes(next)) {
+      patterns = patterns.map((p) => (p === next ? previous : p))
+    }
+    throw error
+  }
+  return next
+}
+
 export function removeCustomPattern(id: string): void {
   patterns = patterns.filter((p) => p.id !== id)
 }
