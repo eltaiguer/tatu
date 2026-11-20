@@ -606,8 +606,10 @@ describe('App', () => {
       })
     )
 
+    // Found outside act(): a findBy inside act() logs act warnings (#300).
+    const undo = await screen.findByRole('button', { name: 'Deshacer' })
     await act(async () => {
-      fireEvent.click(await screen.findByRole('button', { name: 'Deshacer' }))
+      fireEvent.click(undo)
     })
 
     await waitFor(() =>
