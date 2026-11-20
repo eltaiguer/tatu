@@ -197,8 +197,7 @@ function PanelBody({
 }
 
 // The filters beyond the bar's primary row: a popover from md (where the
-// table replaces the cards), a bottom sheet below it. Read per render, as
-// BulkBar reads its own media query.
+// table replaces the cards), a bottom sheet below it..
 export function FiltersPanel({
   filters,
   ignoredCount,

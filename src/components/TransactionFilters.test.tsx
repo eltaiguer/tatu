@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { useState, type ComponentProps } from 'react'
 import { TransactionFilters } from './TransactionFilters'
 import { resolveCategory } from '../services/categories/category-registry'
@@ -282,17 +283,22 @@ describe('TransactionFilters', () => {
         }
         render(<Bar />)
         const panel = await openFilters()
-        fireEvent.click(panel.getByRole('button', { name: 'Limpiar' }))
+        // userEvent focuses the button it clicks, as a real click does.
+        await userEvent
+          .setup()
+          .click(panel.getByRole('button', { name: 'Limpiar' }))
 
         // Nothing left to clear: the button stays, disabled.
         await waitFor(() =>
           expect(panel.getByRole('button', { name: 'Limpiar' })).toBeDisabled()
         )
-        expect(
-          screen
-            .getByRole('dialog', { name: 'Filtros' })
-            .contains(document.activeElement)
-        ).toBe(true)
+        // Focus moved to the panel body: not the disabled button, not <body>.
+        const dialog = screen.getByRole('dialog', { name: 'Filtros' })
+        expect(document.activeElement).not.toBe(document.body)
+        expect(document.activeElement).not.toBe(
+          panel.getByRole('button', { name: 'Limpiar' })
+        )
+        expect(dialog.contains(document.activeElement)).toBe(true)
       })
 
       it('clears only the panel filters', async () => {

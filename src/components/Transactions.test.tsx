@@ -326,7 +326,8 @@ describe('Transactions', () => {
     const transactions: Transaction[] = [
       {
         ...makeTransaction(1, 'Alpha Market'),
-        date: new Date(Date.UTC(2026, 0, 10)),
+        // Inside the date window: only the account step removes it.
+        date: new Date(Date.UTC(2026, 0, 13)),
         category: 'groceries',
         source: 'bank_account',
       },
