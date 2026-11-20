@@ -187,6 +187,8 @@ export function filterToSearch(filter: TransactionsFilter): string {
     currency: filter.currency ?? 'all',
     type: filter.type ?? 'all',
     household: filter.household ?? 'all',
+    min: filter.min === undefined ? '' : String(filter.min),
+    max: filter.max === undefined ? '' : String(filter.max),
   }
   const period =
     filter.period ??
