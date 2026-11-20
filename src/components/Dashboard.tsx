@@ -21,6 +21,7 @@ import {
   toCategorySpendRows,
 } from '../services/charts/dashboard-rows'
 import { categoryChanges } from '../services/charts/category-changes'
+import { typicalMonth } from '../services/charts/typical-month'
 import { countsTowardTotals } from '../services/spending/spending-rules'
 import { householdExpenses } from '../services/household/household'
 import { useHouseholdRules } from '../hooks/useHouseholdRules'
@@ -40,6 +41,7 @@ import { MonthHero } from './dashboard/MonthHero'
 import { MonthlySpendChart } from './dashboard/MonthlySpendChart'
 import { RecentTransactionsCard } from './dashboard/RecentTransactionsCard'
 import { SavingsCard } from './dashboard/SavingsCard'
+import { HouseholdTypicalMonthCard } from './dashboard/HouseholdTypicalMonthCard'
 import { ResumenSection } from './dashboard/ResumenSection'
 import { TopMerchantsCard } from './dashboard/TopMerchantsCard'
 import { SpendNudge } from './dashboard/SpendNudge'
@@ -245,6 +247,15 @@ export function Dashboard({
     [rows, transactions, homeCurrency, fxRate, currentMonth]
   )
 
+  // Hogar's typical month: the same complete months as the bars.
+  const typical = useMemo(
+    () =>
+      householdMode
+        ? typicalMonth(monthlyTrend, householdRows, homeCurrency, fxRate)
+        : null,
+    [householdMode, monthlyTrend, householdRows, homeCurrency, fxRate]
+  )
+
   // Opens exactly one month's rows (optionally only income or expenses), as
   // summed by the savings and monthly spend charts.
   const openMonth = openTransactions
@@ -441,7 +452,13 @@ export function Dashboard({
                   : `Últimos ${monthlyTrend.length} meses con datos`
               } · combinado en ${curWord}`}
             >
-              {!householdMode && (
+              {householdMode ? (
+                <HouseholdTypicalMonthCard
+                  typical={typical}
+                  monthlyTrend={monthlyTrend}
+                  homeCurrency={homeCurrency}
+                />
+              ) : (
                 <SavingsCard
                   monthlyTrend={monthlyTrend}
                   homeCurrency={homeCurrency}
