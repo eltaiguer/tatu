@@ -55,7 +55,7 @@ Transacciones filter (`countReviewRows` in `services/import/import-review.ts`),
 never from `result.added`: rules, AI enrichment and transfer inference change
 category and confidence after the rows were classified, and a transfer pairing
 a later file completes should stop counting. When at least one new row needs
-review, "Revisar N movimientos" opens Transacciones with `?revisar=si` over the
+review, "Revisar N movimientos" opens the review mode (`?revisar=si&modo=revisar`, #305) over the
 files' dates (`reviewLink`: the account too when every file shares one; N is
 what that link lists, so it can exceed the per-file lines by older rows in the
 same dates). Nothing navigates on its own: "Ver transacciones" closes the dialog and opens
@@ -63,7 +63,7 @@ Transacciones on the month of the newest new row (the file's newest when
 nothing was new; `newestDataMonth` in `src/utils/date-utils.ts`; the newest
 among several files), through the same `navigateToTransactions` link Resumen
 uses; "Importar otro archivo" resets the dialog to the file picker. A toast
-(AI unavailable or incomplete, repairs failed) is said once for the whole batch, naming the files it is about when several were picked; closing the dialog mid-batch still says the toasts of the files already imported, and a user change under the dialog (it is keyed by user id) shows nothing of the old batch. "Revisar N" opens the table with N rows, except that a split part listed under its parent (`groupSplitRows`) can add the parent's row to the list; a fresh import has no splits. Two bank files (USD and UYU) link to the bank account without a currency.
+(AI unavailable or incomplete, repairs failed) is said once for the whole batch, naming the files it is about when several were picked; closing the dialog mid-batch still says the toasts of the files already imported, and a user change under the dialog (it is keyed by user id) shows nothing of the old batch. "Revisar N movimientos" opens the review mode: the queue is built from the filtered rows, not the grouped table, so "1 de N" is exactly N. Two bank files (USD and UYU) link to the bank account without a currency.
 
 ```mermaid
 flowchart TD
@@ -527,7 +527,7 @@ a changed default re-filters). `sortTransactions` orders the result.
 The A revisar filter (`review`, `?revisar=si`) keeps the rows
 `needsCategoryReview` flags (uncategorized, or automatic with a confidence
 under 0.55), the same ones the "Revisar" marker shows; it ANDs with every other
-filter and counts as "filtrado". The import summary's "Revisar N" link uses it.
+filter and counts as "filtrado". The import summary's "Revisar N" link opens its review mode.
 
 The review mode (`reviewMode`, `?modo=revisar`) is a mode on top of that
 filter, not a filter: it parses only beside `revisar=si` (alone it reads as
@@ -547,8 +547,10 @@ advance it without a second source of truth. Picks go through
 toast): an inline strip offers "Aplicar a las N similares" and "Deshacer"
 (the same guarded actions as the toast), and the card is busy while a write of
 the row is in flight. Escape / "Salir" return to the A revisar table.
-Entries: Resumen's "Sin categoría" nudge, Categorías' "Revisar N" and the
-table's "Revisar uno por uno" button. A reload restarts at "1 de M" over what
+Entries: Resumen's "Sin categoría" nudge, Categorías' "Revisar N", the import
+summary's "Revisar N movimientos", Insights' Sin categoría "Revisar N →" (in
+Hogar mode the household cut carries into the queue) and the table's "Revisar
+uno por uno" button. A reload restarts at "1 de M" over what
 is left.
 
 `useTransactionFiltering` holds that state in React as one value (seeded once
