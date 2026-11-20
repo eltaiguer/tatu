@@ -628,6 +628,30 @@ describe('Dashboard: Todo / Hogar mode', () => {
       expect(screen.getByText(/Últimos 3 meses con datos/)).toBeInTheDocument()
     })
 
+    it('lists a month with no household spend with its share, for keyboard and screen reader users', () => {
+      render(
+        <Harness
+          transactions={[
+            tx({ amount: 100, date: new Date('2026-01-10T00:00:00.000Z') }),
+            tx({
+              amount: 60,
+              category: Category.Restaurants,
+              date: new Date('2026-02-10T00:00:00.000Z'),
+            }),
+            tx({ amount: 100, date: new Date('2026-03-10T00:00:00.000Z') }),
+          ]}
+          initialHousehold
+          onNavigateToTransactions={() => {}}
+        />
+      )
+
+      // No drill (an empty list), but its total and its 0% are not mouse-only.
+      const items = screen.getAllByRole('listitem').map((li) => li.textContent)
+      expect(items).toContainEqual(
+        expect.stringMatching(/^feb\S* 2026 · Hogar 0% de US\$ 60,00$/)
+      )
+    })
+
     it('the empty Hogar state shows the Sin categoría nudge', () => {
       render(
         <Harness
@@ -769,9 +793,9 @@ describe('Dashboard: Un mes típico del hogar', () => {
     const card = typicalCard()
     expect(card.getByText('Mediana de 4 meses completos')).toBeInTheDocument()
     expect(card.getByText('US$ 275,00')).toBeInTheDocument()
-    expect(
-      card.getByText('Entre US$ 100,00 y US$ 400,00 por mes')
-    ).toBeInTheDocument()
+    expect(card.getByText(/^Entre /)).toHaveTextContent(
+      'Entre US$ 100,00 y US$ 400,00 por mes'
+    )
     expect(
       card.getByText('Por categoría, en un mes típico')
     ).toBeInTheDocument()

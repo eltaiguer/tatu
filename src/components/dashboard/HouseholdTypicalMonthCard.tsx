@@ -22,6 +22,10 @@ export function HouseholdTypicalMonthCard({
   monthlyTrend,
   homeCurrency,
 }: HouseholdTypicalMonthCardProps) {
+  // Equal to the cent is equal: converted months can differ by float noise.
+  const showBand =
+    typical !== null &&
+    Math.round(typical.min * 100) !== Math.round(typical.max * 100)
   return (
     <Card className="p-6">
       <div className="grid grid-cols-1 lg:grid-cols-[258px_1fr] gap-8 items-center">
@@ -45,10 +49,17 @@ export function HouseholdTypicalMonthCard({
               <div className="font-mono tabular-nums mt-[4px] text-[30px] font-semibold">
                 {formatCurrency(typical.median, homeCurrency)}
               </div>
-              {typical.min !== typical.max && (
+              {showBand && (
                 <p className="mt-[8px] mb-0 text-[14px] leading-[1.5]">
-                  Entre {formatCurrency(typical.min, homeCurrency)} y{' '}
-                  {formatCurrency(typical.max, homeCurrency)} por mes
+                  Entre{' '}
+                  <span className="font-mono tabular-nums">
+                    {formatCurrency(typical.min, homeCurrency)}
+                  </span>{' '}
+                  y{' '}
+                  <span className="font-mono tabular-nums">
+                    {formatCurrency(typical.max, homeCurrency)}
+                  </span>{' '}
+                  por mes
                 </p>
               )}
               <PartialMonthsNote monthlyTrend={monthlyTrend} />

@@ -3,7 +3,7 @@ import type { Transaction } from '../../models'
 import { convert } from '../currency/convert'
 import { isCountedExpense } from '../spending/spending-rules'
 import { toMonthKey } from '../../utils/date-utils'
-import type { MonthlyTrendRow } from './dashboard-rows'
+import { buildMonthlyTrendRows, type MonthlyTrendRow } from './dashboard-rows'
 import { typicalMonth } from './typical-month'
 
 function month(key: string, gastos: number, complete = true): MonthlyTrendRow {
@@ -146,20 +146,12 @@ describe('typicalMonth: the top categories', () => {
       tx({ date: on('2026-10-02'), category: 'healthcare', amount: 900 }),
     ]
   }
-  const usdTrend = [
-    month('2026-07', 480),
-    month('2026-08', 600),
-    month('2026-09', 500),
-    month('2026-10', 900, false),
-  ]
-  const uyuTrend = usdTrend.map((m) => ({
-    ...m,
-    gastos: m.gastos * 40,
-    todoGastos: m.todoGastos * 40,
-  }))
+  // The trend the card sits beside, built from the same rows.
+  const usdTrend = () => buildMonthlyTrendRows(fixture(), 'USD', 40, '2026-11')
+  const uyuTrend = () => buildMonthlyTrendRows(fixture(), 'UYU', 40, '2026-11')
 
   it('ranks each category by its own median over the complete months', () => {
-    const result = typicalMonth(usdTrend, fixture(), 'USD', 40)
+    const result = typicalMonth(usdTrend(), fixture(), 'USD', 40)
 
     // groceries [260, 100, 150] → 150, utilities [120, 0, 250] → 120,
     // housing [0, 400, 0] → 0 (dropped), automotive / education tie at 50 and
@@ -185,11 +177,18 @@ describe('typicalMonth: the top categories', () => {
       )
     }
 
-    for (const m of usdTrend) expect(sums.get(m.key)).toBe(m.gastos)
+    const trend = usdTrend()
+    expect(trend.filter((m) => m.complete).map((m) => m.key)).toEqual([
+      '2026-07',
+      '2026-08',
+      '2026-09',
+    ])
+    for (const m of trend.filter((m) => m.complete))
+      expect(sums.get(m.key)).toBe(m.gastos)
   })
 
   it('converts into the home currency', () => {
-    const result = typicalMonth(uyuTrend, fixture(), 'UYU', 40)
+    const result = typicalMonth(uyuTrend(), fixture(), 'UYU', 40)
 
     expect(result?.median).toBe(20000)
     expect(result?.topCategories.slice(0, 2)).toEqual([

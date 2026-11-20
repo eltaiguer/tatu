@@ -46,15 +46,25 @@ export function householdMarkedToast(merchant: string, count: number): string {
     : `${householdValueLabel(true)} en ${count} transacciones de ${merchant}`
 }
 
+/** The caption of "Gasto por mes" in Hogar mode: what its lighter bar is. */
+export const HOUSEHOLD_GHOST_CAPTION =
+  'La barra más clara detrás de cada mes es tu gasto total'
+
+/** The tooltip note of a partial month in Hogar mode. */
+export const HOUSEHOLD_PARTIAL_MONTH_NOTE =
+  'Le faltan datos de alguna cuenta: no entra en el mes típico'
+
 /**
- * The household's share of a total: "Hogar 62% de US$ 2.300,00". Never claims
- * 0% / 100% of a total it is not exactly none / all of; null with no total.
+ * The household's share of a total in two parts, so a component can set the
+ * amount in the mono face: { lead: "Hogar 62% de", total: "US$ 2.300,00" }.
+ * Never claims 0% / 100% of a total it is not exactly none / all of; null
+ * with no total.
  */
-export function householdShareLine(
+export function householdShareParts(
   part: number,
   total: number,
   currency: Currency
-): string | null {
+): { lead: string; total: string } | null {
   if (!(total > 0)) return null
   let share: string
   if (part <= 0) share = '0%'
@@ -63,5 +73,18 @@ export function householdShareLine(
     const pct = Math.round((part / total) * 100)
     share = pct < 1 ? '<1%' : `${Math.min(pct, 99)}%`
   }
-  return `Hogar ${share} de ${formatCurrency(total, currency)}`
+  return {
+    lead: `Hogar ${share} de`,
+    total: formatCurrency(total, currency),
+  }
+}
+
+/** The same as one string: "Hogar 62% de US$ 2.300,00". */
+export function householdShareLine(
+  part: number,
+  total: number,
+  currency: Currency
+): string | null {
+  const parts = householdShareParts(part, total, currency)
+  return parts && `${parts.lead} ${parts.total}`
 }

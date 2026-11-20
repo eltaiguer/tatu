@@ -151,9 +151,7 @@ export function SavingsCard({
               </div>
             </>
           )}
-          {completeMonths.length > 0 && (
-            <PartialMonthsNote monthlyTrend={monthlyTrend} />
-          )}
+          <PartialMonthsNote monthlyTrend={monthlyTrend} />
         </div>
 
         {/* Diverging net bars */}
