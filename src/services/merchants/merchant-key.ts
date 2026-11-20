@@ -336,8 +336,8 @@ export function statementMerchantLabel(description: string): string {
     : `${label}${DEBIT_GROUP_SUFFIX}`
 }
 
-// THE "is this typed name the original" rule of the edit write and the edit
-// dialog's N (#296): the statement text or its clean label puts a name back to
+// THE "is this typed name the original" rule of the edit write (#296), also
+// read by reachesNamedParts for the dialog's N: the statement text or its clean label puts a name back to
 // the original instead of storing a rename. Exact match, both sides trimmed
 // (the caller trims `name`; a card row's label is its untrimmed raw text); a
 // case or accent variant is a real rename.

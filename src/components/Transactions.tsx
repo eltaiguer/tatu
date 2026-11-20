@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast, type ExternalToast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
 import { defaultsToAllSimilar } from '../services/descriptions/default-scope'
-import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
+import {
+  countSimilarEditReach,
+  reachesNamedParts,
+} from '../services/descriptions/similar-transactions'
 import { DEFAULT_CATEGORY_COLOR } from '../models'
 import type { Transaction } from '../models'
 import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
@@ -235,8 +238,12 @@ export function Transactions({
   // Same matching the apply-to-similar write uses, so the number the
   // dialog shows is the number of rows the save will touch.
   const countSimilar = useCallback(
-    (transaction: Transaction, renamed: boolean) =>
-      countSimilarEditReach(transactions, transaction, renamed),
+    (transaction: Transaction, name: string | null) =>
+      countSimilarEditReach(
+        transactions,
+        transaction,
+        reachesNamedParts(transaction, name)
+      ),
     [transactions]
   )
 

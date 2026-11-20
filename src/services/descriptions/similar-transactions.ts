@@ -1,4 +1,6 @@
 import type { Transaction } from '../../models'
+import { isOriginalName } from '../merchants/merchant-key'
+import { getDescriptionOverride } from './description-overrides'
 import { buildDescriptionOverrideKey } from './normalization'
 
 // The rows an apply-to-similar edit writes: same normalized description key.
@@ -48,4 +50,21 @@ export function countSimilarEditReach(
       buildDescriptionOverrideKey(tx.description) === key
   )
   return written.length + namedParts.length
+}
+
+// Whether a save that gives `name` (null: untouched, none given) reaches the
+// split parts that show the merchant-wide name (#296): a real rename does, and
+// so does the original name when a description override exists (deleting it
+// changes what those parts show). THE rule shared by the dialog's N and the
+// count editTransaction returns; read it before the write deletes the override.
+export function reachesNamedParts(
+  target: Transaction,
+  name: string | null
+): boolean {
+  const given = name?.trim()
+  if (!given) return false
+  return (
+    !isOriginalName(given, target.description) ||
+    getDescriptionOverride(target.description) !== null
+  )
 }

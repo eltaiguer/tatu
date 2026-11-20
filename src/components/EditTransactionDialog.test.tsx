@@ -35,7 +35,7 @@ function baseProps(overrides: Partial<DialogProps> = {}): DialogProps {
   return {
     transaction,
     // Fake reach: 4 similar rows, 2 once the name changes.
-    countSimilar: (_transaction, renamed) => (renamed ? 2 : 4),
+    countSimilar: (_transaction, name) => (name !== null ? 2 : 4),
     defaultToAll: () => true,
     countHouseholdSimilar: () => 3,
     knownTags: ['super', 'viaje', 'trabajo'],
@@ -273,18 +273,18 @@ describe('EditTransactionDialog', () => {
   })
 
   it('counts the similar reach as a name write only when the name differs from the one opened', () => {
-    const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
-      renamed ? 2 : 1
+    const countSimilar = vi.fn((_tx: Transaction, name: string | null) =>
+      name !== null ? 2 : 1
     )
     render(<EditTransactionDialog {...baseProps({ countSimilar })} />)
 
     // "Disco" is the row's own name, as opened: untouched.
-    expect(countSimilar).toHaveBeenLastCalledWith(transaction, false)
+    expect(countSimilar).toHaveBeenLastCalledWith(transaction, null)
 
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'Disco Pocitos' },
     })
-    expect(countSimilar).toHaveBeenLastCalledWith(transaction, true)
+    expect(countSimilar).toHaveBeenLastCalledWith(transaction, 'Disco Pocitos')
 
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'POS COMPRA DISCO 123' },
@@ -292,12 +292,15 @@ describe('EditTransactionDialog', () => {
 
     // The statement text is a touched name: under Todas it clears every
     // similar row's name, as a rename does.
-    expect(countSimilar).toHaveBeenLastCalledWith(transaction, true)
+    expect(countSimilar).toHaveBeenLastCalledWith(
+      transaction,
+      'POS COMPRA DISCO 123'
+    )
 
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
       target: { value: 'Disco' },
     })
-    expect(countSimilar).toHaveBeenLastCalledWith(transaction, false)
+    expect(countSimilar).toHaveBeenLastCalledWith(transaction, null)
   })
 
   it('starts a fresh draft for the next transaction', () => {
@@ -602,8 +605,8 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
     })
 
     it('counts a touched name against the opened label: only the opened label typed back is untouched (#296)', () => {
-      const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
-        renamed ? 2 : 4
+      const countSimilar = vi.fn((_tx: Transaction, name: string | null) =>
+        name !== null ? 2 : 4
       )
       const tx = {
         ...transaction,
@@ -620,22 +623,22 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
           target: { value },
         })
 
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, null)
       type('Lavadero Martinizi')
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, 'Lavadero Martinizi')
       type('Tintoreria Martinizi')
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, null)
       // The statement text is a touched name: the write reaches the same rows
       // (it clears names and the override), so the count says so.
       type(RAW)
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, RAW)
       type('Tintoreria Martinizi')
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, null)
     })
 
     it('counts the clean label typed over another own name: the write reaches every similar row (#296)', () => {
-      const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
-        renamed ? 2 : 4
+      const countSimilar = vi.fn((_tx: Transaction, name: string | null) =>
+        name !== null ? 2 : 4
       )
       const tx = { ...transaction, description: RAW, displayDescription: 'Foo' }
       render(
@@ -644,11 +647,11 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
         />
       )
 
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, null)
       fireEvent.change(screen.getByLabelText('Descripción edición'), {
         target: { value: 'Tintoreria Martinizi' },
       })
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, 'Tintoreria Martinizi')
     })
 
     it('says whether the name was touched in the draft, decided once (#296)', () => {

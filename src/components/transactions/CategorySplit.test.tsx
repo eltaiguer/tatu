@@ -17,6 +17,7 @@ import {
   editTransaction,
   restoreCategories,
 } from '../../services/mutations/transaction-mutations'
+import { buildDescriptionOverrideKey } from '../../services/descriptions/normalization'
 import { replaceDescriptionOverrides } from '../../services/descriptions/description-overrides'
 import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
 import {
@@ -563,5 +564,37 @@ describe('the name field opens with the row label (#296)', () => {
     await waitFor(() => expect(repo.row('d1')?.category).toBe('restaurants'))
     expect(repo.row('d1')?.displayDescription).toBeUndefined()
     expect(repo.row('d2')?.displayDescription).toBe('Bar')
+  })
+
+  it('the original name over a live override: the dialog’s N, the toast and the write count the named parts', async () => {
+    replaceDescriptionOverrides({
+      [buildDescriptionOverrideKey(RAW)!]: {
+        descriptionOriginal: RAW,
+        friendlyDescription: 'Lavadero',
+        updatedAt: '',
+      },
+    })
+    seed([
+      tx('d1', { description: RAW, categoryConfidence: 0.9 }),
+      tx('d2', { description: RAW, categoryConfidence: 0.9 }),
+      tx('part', {
+        description: RAW,
+        splitParentId: 'd1',
+        categoryConfidence: 0.9,
+      }),
+    ])
+
+    await openLabelled('Lavadero')
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: LABEL },
+    })
+    await pickInDialog(restaurants)
+    scope(/^Todas las similares/)
+    expect(
+      screen.getByLabelText(/se aplica a 3 transacciones/)
+    ).toBeInTheDocument()
+    await saveDialog()
+
+    await visible(screen.findByText(/3 transacciones/))
   })
 })

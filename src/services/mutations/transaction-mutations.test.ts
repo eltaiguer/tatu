@@ -1043,6 +1043,41 @@ describe('transaction-mutations — apply scope', () => {
         expect(getDescriptionOverride(RAW)).toBeNull()
       })
 
+      describe('the returned count includes the unnamed split parts the override named', () => {
+        const rowsWithPart = () => [
+          makeTransaction('same-1', { description: RAW }),
+          makeTransaction('same-2', { description: RAW }),
+          makeTransaction('part', {
+            description: RAW,
+            splitParentId: 'same-1',
+          }),
+        ]
+
+        it('original name + override: rows written + parts', async () => {
+          const repo = withOverride(rowsWithPart())
+
+          const { affected } = await editTransaction(repo, 'same-1', {
+            displayDescription: 'Tintoreria Martinizi',
+            category: 'restaurants',
+            applyScope: 'matching_past_and_future',
+          })
+
+          expect(affected).toBe(3)
+        })
+
+        it('original name without an override: the parts are not counted', async () => {
+          const repo = signedIn(rowsWithPart())
+
+          const { affected } = await editTransaction(repo, 'same-1', {
+            displayDescription: 'Tintoreria Martinizi',
+            category: 'restaurants',
+            applyScope: 'matching_past_and_future',
+          })
+
+          expect(affected).toBe(2)
+        })
+      })
+
       it('future_matching_only clears the edited row’s name and the override', async () => {
         const repo = withOverride(bankRows())
 

@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import type { Transaction } from '../../models'
 import {
   countSimilarEditReach,
   findSimilarTransactions,
+  reachesNamedParts,
 } from './similar-transactions'
+import {
+  replaceDescriptionOverrides,
+  setDescriptionOverride,
+} from './description-overrides'
 
 const tx = (id: string, description: string): Transaction => ({
   id,
@@ -59,5 +64,34 @@ describe('findSimilarTransactions', () => {
     // A rename also shows on the part without a name of its own.
     expect(countSimilarEditReach(all, all[0], false)).toBe(2)
     expect(countSimilarEditReach(all, all[0], true)).toBe(3)
+  })
+})
+
+describe('reachesNamedParts (#296)', () => {
+  const RAW =
+    'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+  const row = tx('a', RAW)
+  beforeEach(() => replaceDescriptionOverrides({}))
+
+  it('is false without a name (untouched)', () => {
+    expect(reachesNamedParts(row, null)).toBe(false)
+  })
+
+  it('is true for a real rename', () => {
+    expect(reachesNamedParts(row, 'Lavadero Martinizi')).toBe(true)
+  })
+
+  it('is false for the original name when no description override exists', () => {
+    expect(reachesNamedParts(row, 'Tintoreria Martinizi')).toBe(false)
+    expect(reachesNamedParts(row, RAW)).toBe(false)
+  })
+
+  it('is true for the original name when a description override exists', () => {
+    setDescriptionOverride({
+      description: RAW,
+      friendlyDescription: 'Lavadero',
+    })
+    expect(reachesNamedParts(row, 'Tintoreria Martinizi')).toBe(true)
+    expect(reachesNamedParts(row, RAW)).toBe(true)
   })
 })

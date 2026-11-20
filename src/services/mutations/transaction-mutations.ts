@@ -33,6 +33,7 @@ import { captureError } from '../monitoring/error-reporting'
 import {
   countSimilarEditReach,
   findSimilarTransactions,
+  reachesNamedParts,
 } from '../descriptions/similar-transactions'
 import { buildDescriptionOverrideKey } from '../descriptions/normalization'
 import { normalizeCategoryId } from '../categories/category-aliases'
@@ -710,6 +711,9 @@ export async function editTransaction(
       edit.applyScope === 'single' &&
       getDescriptionOverride(current.description) !== null)
 
+  // Read before writeOverrides deletes the override it depends on.
+  const reachesParts = reachesNamedParts(current, name ?? null)
+
   if (edit.applyScope === 'matching_past_and_future') {
     // When the user renamed, the merchant-keyed description override becomes
     // the single source of the friendly name, so per-row names are cleared.
@@ -743,7 +747,7 @@ export async function editTransaction(
         alwaysPartial: true,
       })
     }
-    return { affected: countSimilarEditReach(all, current, renamed) }
+    return { affected: countSimilarEditReach(all, current, reachesParts) }
   }
 
   if (edit.applyScope === 'future_matching_only') {
