@@ -206,10 +206,16 @@ export function Transactions({
     onRestoreCategories,
     rowWrites: categoryWrites.rowWrites,
     setPending,
+    pendingTransactionIds,
     reportError,
     reportDeleted,
     deleteWithConfirmation,
   })
+
+  // A write of a selected row is in flight (an in-place pick): the bar waits.
+  const selectionPending = selectedTransactionIds.some((id) =>
+    pendingTransactionIds.has(id)
+  )
 
   const { handleToggleHousehold, canSaveHousehold, saveHouseholdDraft } =
     useHouseholdWrites({
@@ -473,8 +479,10 @@ export function Transactions({
             void handleBulkDelete()
           }}
           isAutoCategorizing={isAutoCategorizing}
-          isBusy={isBusy}
-          categorizeOpen={categorizeOpen && hasSelection && !isBusy}
+          isBusy={isBusy || selectionPending}
+          categorizeOpen={
+            categorizeOpen && hasSelection && !isBusy && !selectionPending
+          }
           onCategorizeOpenChange={setCategorizeOpen}
         />
       )}

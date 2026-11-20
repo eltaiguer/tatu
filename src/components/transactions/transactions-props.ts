@@ -37,7 +37,7 @@ interface BaseTransactionsProps {
   ) => Promise<{ restored: number }>
   onAutoCategorizeTransactions?: (
     transactionIds: string[]
-  ) => Promise<{ categorized: number }>
+  ) => Promise<{ categorized: number; savedIds?: string[] }>
   onBulkCategorize?: (
     transactionIds: string[],
     category: string

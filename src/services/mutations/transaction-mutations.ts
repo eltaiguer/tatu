@@ -1250,7 +1250,7 @@ export async function forgetHouseholdRule(
 export async function autoCategorize(
   repo: Repository,
   transactionIds: string[]
-): Promise<{ categorized: number }> {
+): Promise<{ categorized: number; savedIds: string[] }> {
   assertOwner(repo)
   const all = store().transactions
   const targetIds = new Set(transactionIds)
@@ -1316,14 +1316,14 @@ export async function autoCategorize(
       })
     }
   }
-  if (changes.size === 0) return { categorized: 0 }
+  if (changes.size === 0) return { categorized: 0, savedIds: [] }
 
   const outcome = await writePatches(repo, changes)
   settle(outcome, {
     message: updatedMessage,
     retry: (failed) => retryPatches(repo, changes, failed),
   })
-  return { categorized: outcome.saved.length }
+  return { categorized: outcome.saved.length, savedIds: outcome.saved }
 }
 
 /**

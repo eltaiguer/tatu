@@ -86,7 +86,8 @@ function seed(rows: Transaction[], filters: Partial<UrlFilterState> = {}) {
   repo = createInMemoryRepository({ transactions: rows })
   transactionStore.getState().setTransactions(rows)
   workspaceStore.setState({ userId: repo.userId, status: 'ready' })
-  render(<Toaster />)
+  // Slow, multi-step specs under load must not outlive sonner's 4 s default.
+  render(<Toaster duration={30000} />)
   return render(
     <Harness
       initialFilters={{
@@ -750,6 +751,144 @@ describe('selection bar (#282)', () => {
       expect(
         within(dialog).queryByRole('button', { name: /Volver a sugerir/ })
       ).toBeNull()
+    })
+  })
+
+  describe('review round 2', () => {
+    const rowBadge = (description: string) =>
+      screen.getAllByRole('button', {
+        name: (name) => name.startsWith(`Categoría de ${description}:`),
+      })[0]
+
+    async function pickInRow(description: string, label: string) {
+      await userEvent.click(rowBadge(description))
+      await userEvent.click(
+        within(
+          await screen.findByRole('dialog', { name: 'Elegir categoría' })
+        ).getByRole('button', { name: label })
+      )
+    }
+
+    async function categorizeAll(ids: string[]) {
+      await select(...ids)
+      const dialog = await openPicker()
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Entretenimiento' })
+      )
+      await visible(
+        screen.findByText(`${ids.length} transacciones categorizadas`)
+      )
+    }
+
+    it('locks the rows’ pickers while Deshacer restores them', async () => {
+      seed([tx('a'), tx('b')])
+      await categorizeAll(['a', 'b'])
+      const gate = repo.hold('update')
+
+      await deshacer()
+
+      await waitFor(() =>
+        expect(rowBadge('a')).toHaveAttribute('aria-disabled', 'true')
+      )
+      await act(async () => gate.release())
+      await visible(screen.findByText('Se deshizo el cambio'))
+      await waitFor(() =>
+        expect(rowBadge('a')).not.toHaveAttribute('aria-disabled')
+      )
+    })
+
+    it('Reintentar of a partial restore leaves a row picked away and back alone', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      seed([
+        tx('a', { category: 'groceries', categoryConfidence: 0.8 }),
+        tx('b', { category: 'restaurants', categoryConfidence: 0.6 }),
+      ])
+      await categorizeAll(['a', 'b'])
+      repo.failOn('update', {
+        when: (ids) => ids.includes('b'),
+        times: 1,
+        error: new Error('timeout'),
+      })
+      await deshacer()
+      await visible(screen.findByText('Se actualizaron 1 de 2 — reintentar'))
+      await pickInRow('b', 'Compras')
+      await waitFor(() => expect(stored('b')?.category).toBe('shopping'))
+      await pickInRow('b', 'Entretenimiento')
+      await waitFor(() => expect(stored('b')?.category).toBe('entertainment'))
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+      await visible(
+        screen.findByText(
+          'Mientras tanto cambiaron estas transacciones; no se deshizo.'
+        )
+      )
+      expect(stored('b')?.category).toBe('entertainment')
+    })
+
+    it('Volver a sugerir offers Deshacer only for rows it saved', async () => {
+      seed([
+        tx('Devoto Supermercado', {
+          category: undefined,
+          categoryConfidence: undefined,
+        }),
+        tx('Otro', { category: 'groceries', categoryConfidence: 1 }),
+      ])
+      await select('Devoto Supermercado', 'Otro')
+      const dialog = await openPicker()
+      const gate = repo.hold('update')
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: /Volver a sugerir/ })
+      )
+      await act(async () => {
+        await editTransaction(repo, 'Otro', {
+          category: 'restaurants',
+          applyScope: 'single',
+        })
+      })
+      await act(async () => gate.release())
+      await visible(screen.findByText('1 transacción categorizada'))
+
+      await deshacer()
+
+      await visible(screen.findByText('Se deshizo el cambio'))
+      expect(stored('Devoto Supermercado')?.category ?? null).toBeNull()
+      expect(stored('Otro')?.category).toBe('restaurants')
+      expect(screen.queryByText(/mientras tanto/)).toBeNull()
+    })
+
+    it('does not start a bulk write on rows with a write in flight', async () => {
+      seed([tx('a'), tx('b')])
+      await select('a')
+      const gate = repo.hold('update')
+      await pickInRow('a', 'Restaurantes')
+
+      await waitFor(() => expect(barButton('No contar')).toBeDisabled())
+      expect(barButton('Categorizar')).toBeDisabled()
+      expect(barButton('Eliminar')).toBeDisabled()
+      await act(async () => gate.release())
+
+      await waitFor(() => expect(barButton('No contar')).toBeEnabled())
+      expect(repo.requests.update).toBe(1)
+    })
+
+    it('a row deleted during the write is not offered for Deshacer', async () => {
+      seed([tx('a'), tx('b')])
+      await select('b')
+      const dialog = await openPicker()
+      const gate = repo.hold('update')
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Entretenimiento' })
+      )
+      await act(async () => {
+        await deleteTransactions(repo, ['b'])
+      })
+      await act(async () => gate.release())
+      await waitFor(() =>
+        expect(document.querySelector('[data-sonner-toast]')).not.toBeNull()
+      )
+
+      expect(screen.queryByRole('button', { name: 'Deshacer' })).toBeNull()
     })
   })
 })

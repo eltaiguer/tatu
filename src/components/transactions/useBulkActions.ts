@@ -73,6 +73,7 @@ export function useBulkActions({
   onRestoreCategories,
   rowWrites,
   setPending,
+  pendingTransactionIds,
   reportError,
   reportDeleted,
   deleteWithConfirmation,
@@ -82,7 +83,7 @@ export function useBulkActions({
   setSelectedTransactionIds: Dispatch<SetStateAction<string[]>>
   onAutoCategorizeTransactions?: (
     transactionIds: string[]
-  ) => Promise<{ categorized: number }>
+  ) => Promise<{ categorized: number; savedIds?: string[] }>
   onBulkCategorize?: (
     transactionIds: string[],
     category: string
@@ -113,6 +114,8 @@ export function useBulkActions({
   }
   // Locks a row's pickers while a write of it is in flight (usePendingRows).
   setPending?: (transactionId: string, pending: boolean) => void
+  // Rows with a write in flight: a bulk write never starts over one.
+  pendingTransactionIds?: ReadonlySet<string>
 } & Pick<
   MutationFeedback,
   'reportError' | 'reportDeleted' | 'deleteWithConfirmation'
@@ -127,6 +130,10 @@ export function useBulkActions({
   // Set synchronously: a second click (or the "Categorizar a mano" toast)
   // never starts a write while another category write runs.
   const working = useRef(false)
+  // A write already runs (here, or on a selected row): none starts over it.
+  const blocked = () =>
+    working.current ||
+    selectedTransactionIds.some((id) => pendingTransactionIds?.has(id))
   const busyRef = useRef(false)
   busyRef.current = isBusy
   const selectionRef = useRef(selectedTransactionIds)
@@ -224,16 +231,22 @@ export function useBulkActions({
       toast(STALE_RESTORE)
       return
     }
-    // The restore is a write of these rows.
-    for (const row of restorable) rowWrites?.start(row.id)
+    // The restore is a write of these rows: it is their newest, and their
+    // pickers are locked until it lands.
+    const seqs = new Map(
+      restorable.map((row) => [row.id, rowWrites?.start(row.id) ?? 0])
+    )
+    for (const row of restorable) setPending?.(row.id, true)
     try {
       await restore(restorable)
     } catch (error) {
       reportError(
-        guardedRestore(error, restorable, afterById),
+        guardedRestore(error, restorable, afterById, seqs),
         'No se pudo deshacer'
       )
       return
+    } finally {
+      for (const row of restorable) setPending?.(row.id, false)
     }
     const skipped = present.length - restorable.length
     toast.success('Se deshizo el cambio', {
@@ -252,7 +265,8 @@ export function useBulkActions({
   function guardedRestore(
     error: unknown,
     restorable: CategorySnapshot[],
-    afterById: Map<string, CategorySnapshot>
+    afterById: Map<string, CategorySnapshot>,
+    seqs: Map<string, number>
   ) {
     if (!(error instanceof PartialWriteError) || !error.retry) return error
     const retry = error.retry
@@ -266,16 +280,24 @@ export function useBulkActions({
         )
         const holds = restorable.every((row) => {
           const now = nowById.get(row.id)
-          // A row deleted since has nothing to overwrite.
+          // A row deleted since has nothing to overwrite; one written since
+          // (even back to the same value) is the user's newest word.
           return (
             !now ||
-            same(row, now) ||
-            same(afterById.get(row.id) as CategorySnapshot, now)
+            ((rowWrites?.isLatest(row.id, seqs.get(row.id) ?? 0) ?? true) &&
+              (same(row, now) ||
+                same(afterById.get(row.id) as CategorySnapshot, now)))
           )
         })
-        return holds
-          ? retry()
-          : Promise.reject(new UserFacingError(STALE_RESTORE))
+        if (!holds) return Promise.reject(new UserFacingError(STALE_RESTORE))
+        // The retry is a write of the rows, locked like the first one.
+        for (const row of restorable) {
+          seqs.set(row.id, rowWrites?.start(row.id) ?? 0)
+          setPending?.(row.id, true)
+        }
+        return retry().finally(() => {
+          for (const row of restorable) setPending?.(row.id, false)
+        })
       },
       error.result,
       error.cause
@@ -287,17 +309,23 @@ export function useBulkActions({
     if (
       !onAutoCategorizeTransactions ||
       selectedTransactionIds.length === 0 ||
-      working.current
+      blocked()
     ) {
       return
     }
     const ids = selectedTransactionIds
+    // Only the rows the categorizer saved are its to undo.
+    let saved: Set<string> | undefined
     working.current = true
     setIsAutoCategorizing(true)
     try {
       await runCategoryWrite(
         ids,
-        async () => (await onAutoCategorizeTransactions(ids)).categorized,
+        async () => {
+          const result = await onAutoCategorizeTransactions(ids)
+          if (result.savedIds) saved = new Set(result.savedIds)
+          return result.categorized
+        },
         'No se pudieron categorizar las transacciones',
         (categorized, action) => {
           if (categorized === 0) {
@@ -329,7 +357,8 @@ export function useBulkActions({
             duration: 8000,
             action,
           })
-        }
+        },
+        (after) => !saved || saved.has(after.id)
       )
     } finally {
       working.current = false
@@ -338,11 +367,7 @@ export function useBulkActions({
   }
 
   async function handleBulkCategorizeSelected(category: string) {
-    if (
-      !onBulkCategorize ||
-      selectedTransactionIds.length === 0 ||
-      working.current
-    ) {
+    if (!onBulkCategorize || selectedTransactionIds.length === 0 || blocked()) {
       return
     }
     working.current = true
@@ -373,11 +398,7 @@ export function useBulkActions({
   // the others are skipped and said so. Rows already at the value count as
   // done: the toast reports the eligible rows, not how many were written.
   async function handleBulkHousehold(household: boolean | null) {
-    if (
-      !onSetHousehold ||
-      selectedTransactionIds.length === 0 ||
-      isBulkOperating
-    ) {
+    if (!onSetHousehold || selectedTransactionIds.length === 0 || blocked()) {
       return
     }
     const selected = new Set(selectedTransactionIds)
@@ -391,6 +412,7 @@ export function useBulkActions({
       return
     }
     const owner = workspaceStore.getState().userId
+    working.current = true
     setIsBulkOperating(true)
     try {
       await onSetHousehold(
@@ -417,17 +439,14 @@ export function useBulkActions({
     } catch (error) {
       reportError(error, HOUSEHOLD_SAVE_FAILED)
     } finally {
+      working.current = false
       setIsBulkOperating(false)
     }
   }
 
   // "No contar": the `ignored` category, which totals leave out.
   async function handleBulkIgnore() {
-    if (
-      !onBulkCategorize ||
-      selectedTransactionIds.length === 0 ||
-      working.current
-    )
+    if (!onBulkCategorize || selectedTransactionIds.length === 0 || blocked())
       return
     working.current = true
     setIsBulkOperating(true)
@@ -455,9 +474,10 @@ export function useBulkActions({
   }
 
   async function handleBulkDelete() {
-    if (!onBulkDelete || selectedTransactionIds.length === 0 || isBulkOperating)
+    if (!onBulkDelete || selectedTransactionIds.length === 0 || blocked())
       return
     const ids = selectedTransactionIds
+    working.current = true
     setIsBulkOperating(true)
     try {
       const result = await deleteWithConfirmation(
@@ -475,12 +495,14 @@ export function useBulkActions({
     } catch (error) {
       reportError(error, 'No se pudieron eliminar las transacciones')
     } finally {
+      working.current = false
       setIsBulkOperating(false)
     }
   }
 
   async function handleBulkTagsSave(tags: string[]) {
-    if (selectedTransactionIds.length === 0 || isBulkOperating) return
+    if (selectedTransactionIds.length === 0 || blocked()) return
+    working.current = true
     setIsBulkOperating(true)
     // Steps run in sequence; on failure the message says which already
     // applied, so a retry isn't a blind guess.
@@ -526,6 +548,7 @@ export function useBulkActions({
         onReload ? { action: { label: 'Recargar', onClick: onReload } } : {}
       )
     } finally {
+      working.current = false
       setIsBulkOperating(false)
     }
   }

@@ -2355,6 +2355,7 @@ describe('transaction-mutations — Volver a sugerir (autoCategorize), review of
     const result = await autoCategorize(repo, ['ruled'])
 
     expect(result.categorized).toBe(1)
+    expect(result.savedIds).toEqual(['ruled'])
     expect(stored('ruled')?.category).toBe('restaurants')
   })
 
