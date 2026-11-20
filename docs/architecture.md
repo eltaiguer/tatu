@@ -351,6 +351,35 @@ confidence put back exactly from a snapshot, writing no overrides. One counter
 per row (`useCategoryWrites`) withdraws an old toast when the row is written
 again. There is no Deshacer after "Aplicar".
 
+**Default scope (#281).** The edit dialog's "Aplicar nombre y categoría a"
+starts as "Solo esta transacción" and becomes "Todas las similares" while the
+picked category differs from the row's, the row is not a split part or parent
+and the label's N (`countSimilar`) is more than 1; clicking any radio makes
+the choice sticky. It is derived, not initial state, because the dialog always
+sends the row's current category and `matching_past_and_future` stamps it, at
+confidence 1, on every similar row: a default of "Todas" on a rename-, tags- or
+Hogar-only save would silently unify the merchant, and "Sin categoría" with it
+would delete the merchant override.
+
+**Split merchant (#281).** `findCategorySplits`
+(`src/services/descriptions/category-splits.ts`) says which rows have similar
+rows in another category, by row id, with the same key as
+`findSimilarTransactions` (`buildDescriptionOverrideKey`), so "Aplicar a las N
+similares" makes the split go away. Left out, neither counted nor flagged:
+split parents and parts, Sin categoría rows (Revisar and the nudge cover
+them), and transfer rows (their category is set per row by the pairing in
+`inferInternalTransfers`, so one description can be paired one month and not
+the next). Every row of a split group gets the "≠" (`CategorySplitMarker`)
+with `categorySplitLine`: where the others are. `Transactions.tsx` computes it
+once over all the user's rows (`useCategoryWrites().categorySplits`). After a
+dialog save with `single` that changed the category, `offerAfterEdit` shows
+the save's toast with "Aplicar a las N similares" when any other similar row
+(Sin categoría included, transfers and split parents not) is in another
+category; no "Deshacer" (it would not restore the name or tags the same save
+changed), none when the household "forget" owns the toast's action, none after
+`future_matching_only`. `supersede` withdraws the row's older in-place toast
+on every dialog save that writes.
+
 ## Categorizer precedence
 
 `categorizeTransaction(description, type, { rules, ...context })` in
