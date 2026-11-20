@@ -1576,10 +1576,10 @@ describe('App', () => {
       renderApp('/')
 
       const nudge = await screen.findByRole('button', {
-        name: 'Ver los movimientos sin categoría',
+        name: /Ver los movimientos sin categoría/,
       })
       // The nudge's count is the queue's size: 2 expenses + 1 credit.
-      expect(nudge).toHaveTextContent('2 gastos y 1 ingreso')
+      expect(nudge).toHaveTextContent('2 gastos (US$ 9,88) y 1 ingreso')
       fireEvent.click(nudge)
 
       await waitFor(() => expect(currentUrl()).toBe(REVIEW_URL))
@@ -1599,7 +1599,7 @@ describe('App', () => {
       renderApp('/')
 
       const nudge = await screen.findByRole('button', {
-        name: 'Ver los movimientos sin categoría',
+        name: /Ver los movimientos sin categoría/,
       })
       // 400 UYU of uncategorized expenses (100 + 300) in the home currency.
       const amount = within(nudge).getByText(/\$U|US\$/).textContent

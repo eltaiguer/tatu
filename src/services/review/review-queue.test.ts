@@ -36,12 +36,12 @@ describe('buildReviewQueue', () => {
     tx('credit10', { amount: 400, currency: 'UYU', type: 'credit' }),
   ]
 
-  it('puts the biggest converted amount first (home USD)', () => {
+  it('puts the biggest converted expense first, credits after (home USD)', () => {
     expect(buildReviewQueue(rows, 'USD', 40)).toEqual([
       'uyu4000',
       'usd50',
-      'credit10',
       'usd10',
+      'credit10',
     ])
   })
 
@@ -49,9 +49,31 @@ describe('buildReviewQueue', () => {
     expect(buildReviewQueue(rows, 'UYU', 40)).toEqual([
       'uyu4000',
       'usd50',
-      'credit10',
       'usd10',
+      'credit10',
     ])
+  })
+
+  it('never leads with a credit, however big (a salary is not the spend to review)', () => {
+    const salary = tx('salary', { amount: 5000, type: 'credit' })
+    const small = tx('small', { amount: 1 })
+    expect(buildReviewQueue([salary, small], 'USD', 40)).toEqual([
+      'small',
+      'salary',
+    ])
+  })
+
+  it('orders the credits among themselves by amount', () => {
+    const queue = buildReviewQueue(
+      [
+        tx('c-small', { amount: 5, type: 'credit' }),
+        tx('c-big', { amount: 500, type: 'credit' }),
+        tx('d', { amount: 1 }),
+      ],
+      'USD',
+      40
+    )
+    expect(queue).toEqual(['d', 'c-big', 'c-small'])
   })
 
   it('breaks ties by date descending, then id', () => {

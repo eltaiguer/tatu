@@ -60,7 +60,8 @@ export function MonthHero({
   const heroRef = useRef<HTMLHeadingElement>(null)
   // Under the Ingresos figure, only when some of it is still Sin categoría.
   const uncategorizedIncome =
-    monthSummary.uncategorizedIncome > 0
+    // Rounded to cents: a sliver must not print "US$ 0,00".
+    Math.round(monthSummary.uncategorizedIncome * 100) > 0
       ? formatCurrency(monthSummary.uncategorizedIncome, homeCurrency)
       : null
 

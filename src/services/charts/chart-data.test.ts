@@ -14,6 +14,7 @@ import type { Transaction } from '../../models'
 import { Category } from '../../models'
 import { parseSantanderDate } from '../parsers/utils'
 import { toMonthKey } from '../../utils/date-utils'
+import { replaceCustomCategories } from '../categories/category-store'
 
 function makeTransaction(
   id: string,
@@ -212,6 +213,25 @@ describe('chart-data multicurrency converting selectors', () => {
         total: 1012.5,
         count: 3,
       })
+    })
+
+    it('skips credits when Sin categoría is flagged ignored in totals', () => {
+      replaceCustomCategories([
+        {
+          id: Category.Uncategorized,
+          label: 'Sin categoría',
+          color: '#999999',
+          isIgnored: true,
+        },
+      ])
+      try {
+        expect(uncategorizedIncome(rows, 'USD', 40.5)).toEqual({
+          total: 0,
+          count: 0,
+        })
+      } finally {
+        replaceCustomCategories([])
+      }
     })
 
     it('is empty when there are no uncategorized credits', () => {

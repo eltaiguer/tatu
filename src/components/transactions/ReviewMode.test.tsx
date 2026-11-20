@@ -440,6 +440,27 @@ describe('ReviewMode', () => {
       expect(onGoToOverview).toHaveBeenCalledTimes(1)
     })
 
+    it('counts expenses and credits apart when credits were categorized', async () => {
+      // Queue: the 100 expense, the 10 expense, then the 20 credit.
+      seed([
+        usd10(),
+        uyuBig(),
+        tx('salary', {
+          description: 'REINTEGRO KIOSCO',
+          amount: 20,
+          currency: 'USD',
+          type: 'credit',
+        }),
+      ])
+      await pickAll()
+
+      expect(
+        await screen.findByText(
+          'US$ 110,00 en gastos y US$ 20,00 en ingresos ahora tienen categoría'
+        )
+      ).toBeInTheDocument()
+    })
+
     it('adds up in the home currency', async () => {
       seed(basicRows(), { homeCurrency: 'UYU' })
       await pickAll()
