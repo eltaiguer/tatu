@@ -13,7 +13,8 @@ import {
 } from './ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { CategoryBadge } from './CategoryBadge'
-import { Category } from '../models'
+import { Category, isSplitChildTx, isSplitParentTx } from '../models'
+import { normalizeCategoryId } from '../services/categories/category-aliases'
 import type { Currency, Transaction } from '../models'
 import { formatCurrency, formatDate } from '../utils/formatting'
 import { getDisplayDescription } from '../utils/transaction-display'
@@ -146,7 +147,8 @@ function EditTransactionForm({
   )
   const [category, setCategory] = useState(transaction.category ?? '')
   const [tags, setTags] = useState<string[]>(transaction.tags ?? [])
-  const [applyScope, setApplyScope] = useState<ApplyScope>('single')
+  // null until the user touches the radio: then the default follows the form.
+  const [chosenScope, setChosenScope] = useState<ApplyScope | null>(null)
   const household = useHouseholdDraft({
     transaction,
     category,
@@ -168,6 +170,23 @@ function EditTransactionForm({
     () => countSimilar(transaction, renamed),
     [countSimilar, transaction, renamed]
   )
+
+  // A changed category favours the whole merchant (#281). Derived, not
+  // initial state: the save always sends the row's category, and a matching
+  // scope would stamp it on every similar row, so a rename-, tags- or
+  // Hogar-only save must stay on this row. Sin categoría would delete the
+  // merchant override; split rows have their category per part.
+  const categoryChanged =
+    category !== '' &&
+    normalizeCategoryId(category) !== normalizeCategoryId(transaction.category)
+  const applyScope: ApplyScope =
+    chosenScope ??
+    (categoryChanged &&
+    !isSplitChildTx(transaction) &&
+    !isSplitParentTx(transaction) &&
+    similarCount > 1
+      ? 'matching_past_and_future'
+      : 'single')
 
   const categorySuggestions = useMemo(
     () =>
@@ -336,7 +355,7 @@ function EditTransactionForm({
           legend="Aplicar nombre y categoría a"
           name="apply-scope"
           value={applyScope}
-          onChange={setApplyScope}
+          onChange={setChosenScope}
           options={[
             { value: 'single', label: 'Solo esta transacción' },
             {

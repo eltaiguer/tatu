@@ -954,6 +954,9 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
         categoryScope().getByLabelText('Solo esta transacción')
       ).toBeChecked()
       pickCategory('restaurants')
+      // The category changed, so the default is now Todas: this test is about
+      // "Solo esta", chosen by hand.
+      fireEvent.click(categoryScope().getByLabelText('Solo esta transacción'))
       fireEvent.click(box()!)
       save()
 
@@ -1079,5 +1082,132 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
     expect(
       screen.queryByRole('checkbox', { name: /^Recordar para todas las de/ })
     ).toBeNull()
+  })
+})
+
+describe('EditTransactionDialog — default scope (#281)', () => {
+  const restaurants = resolveCategory('restaurants').label
+  const groceries = resolveCategory('groceries').label
+  const transport = resolveCategory('transport').label
+  // The fixture's visible name differs from the raw one: the reach is 2.
+  const all = /^Todas las similares · se aplica a 2 transacciones/
+  const pick = (label: string) => {
+    fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: label }))
+  }
+
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  it('pre-selects Todas las similares once the category changes', () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
+
+    pick(restaurants)
+
+    expect(categoryScope().getByLabelText(all)).toBeChecked()
+    save()
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'restaurants',
+        applyScope: 'matching_past_and_future',
+      })
+    )
+  })
+
+  it('keeps Solo esta when the merchant has no other rows', () => {
+    const props = baseProps({ countSimilar: () => 1 })
+    render(<EditTransactionDialog {...props} />)
+
+    pick(restaurants)
+
+    expect(
+      categoryScope().getByLabelText('Solo esta transacción')
+    ).toBeChecked()
+    save()
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ applyScope: 'single' })
+    )
+  })
+
+  it('keeps Solo esta for a split part', () => {
+    const props = baseProps({
+      transaction: { ...transaction, splitParentId: 'p' },
+    })
+    render(<EditTransactionDialog {...props} />)
+
+    pick(restaurants)
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ applyScope: 'single' })
+    )
+  })
+
+  it('keeps Solo esta for a split parent', () => {
+    const props = baseProps({
+      transaction: { ...transaction, isSplitParent: true },
+    })
+    render(<EditTransactionDialog {...props} />)
+
+    pick(restaurants)
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ applyScope: 'single' })
+    )
+  })
+
+  it('goes back to Solo esta when the original category is put back', () => {
+    render(<EditTransactionDialog {...baseProps()} />)
+
+    pick(restaurants)
+    pick(groceries)
+
+    expect(
+      categoryScope().getByLabelText('Solo esta transacción')
+    ).toBeChecked()
+  })
+
+  it('keeps the user’s own choice when the category changes again', () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
+
+    pick(restaurants)
+    fireEvent.click(categoryScope().getByLabelText('Solo esta transacción'))
+    pick(transport)
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ category: 'transport', applyScope: 'single' })
+    )
+  })
+
+  it('keeps Solo esta for a rename alone', () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Disco Pocitos' },
+    })
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ applyScope: 'single' })
+    )
+  })
+
+  it('keeps Solo esta for a tags-only save', () => {
+    const props = baseProps()
+    render(<EditTransactionDialog {...props} />)
+
+    fireEvent.click(screen.getByLabelText('Etiquetas dropdown'))
+    fireEvent.click(screen.getByRole('button', { name: 'viaje' }))
+    save()
+
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ applyScope: 'single' })
+    )
   })
 })

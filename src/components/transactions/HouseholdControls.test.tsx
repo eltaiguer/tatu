@@ -1154,6 +1154,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     await openEdit(D1)
     remember()
     await pickCategory(/Alimentación/)
+    categoryScope('Solo esta transacción')
     await save()
 
     await waitFor(() => expect(repo.householdRules.size).toBe(0))
@@ -1466,6 +1467,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     await openEdit(D1)
 
     await pickCategory(/Alimentación/)
+    categoryScope('Solo esta transacción')
     remember()
     fireEvent.click(screen.getByLabelText('Sí'))
     await save()
