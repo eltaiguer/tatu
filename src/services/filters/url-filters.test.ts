@@ -24,6 +24,7 @@ describe('url filters', () => {
       showIgnored: true,
       household: 'household',
       review: true,
+      reviewMode: true,
       period: { mode: 'month', y: 2026, m: 2 },
     }
 
@@ -132,6 +133,45 @@ describe('url filters — A revisar', () => {
       })
     ).toBe('revisar=si&desde=2025-03-01&hasta=2025-12-31')
     expect(filterToSearch({ review: true })).toBe('revisar=si&periodo=todo')
+  })
+})
+
+describe('url filters — review mode', () => {
+  it('reads ?modo=revisar only beside revisar=si', () => {
+    const on = parseFilterParams('revisar=si&modo=revisar')
+    expect(on.review).toBe(true)
+    expect(on.reviewMode).toBe(true)
+    const alone = parseFilterParams('modo=revisar')
+    expect(alone.review).toBe(false)
+    expect(alone.reviewMode).toBe(false)
+    expect(parseFilterParams('revisar=si&modo=otro').reviewMode).toBe(false)
+  })
+
+  it('writes modo right after revisar, only when both are on', () => {
+    expect(
+      serializeFilterParams(filters({ review: true, reviewMode: true }))
+    ).toBe('revisar=si&modo=revisar')
+    expect(serializeFilterParams(filters({ review: true }))).toBe('revisar=si')
+    expect(serializeFilterParams(filters({ reviewMode: true }))).toBe('')
+  })
+
+  it('is not a filter', () => {
+    expect(hasActiveFilters(filters({ reviewMode: true }))).toBe(false)
+    expect(hasActiveFilters(filters({ review: true, reviewMode: true }))).toBe(
+      true
+    )
+  })
+
+  it('builds the link the Revisar entries open', () => {
+    expect(
+      filterToSearch({
+        categories: ['uncategorized'],
+        type: 'debit',
+        reviewMode: true,
+      })
+    ).toBe(
+      'categoria=uncategorized&tipo=debit&revisar=si&modo=revisar&periodo=todo'
+    )
   })
 })
 

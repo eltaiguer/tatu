@@ -49,6 +49,8 @@ export interface TransactionsFilter {
   household?: Exclude<HouseholdFilter, 'all'>
   // Only the rows that need a category review (`needsCategoryReview`).
   review?: true
+  // Open the review mode (one row at a time) over those rows; implies review.
+  reviewMode?: true
   period?: UrlPeriod
 }
 export type { CustomCategoryRecord } from './custom-category'
