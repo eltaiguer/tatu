@@ -906,6 +906,103 @@ describe('Dashboard', () => {
     })
   })
 
+  describe('when there is too little to compare', () => {
+    function edgeRows(
+      prefix: string,
+      months: string[],
+      overrides: Partial<Transaction>
+    ): Transaction[] {
+      return months.flatMap((m, i) =>
+        ['01', '28'].map((day) =>
+          makeTransaction({
+            id: `${prefix}-${i}-${day}`,
+            date: new Date(`${m}-${day}T12:00:00.000Z`),
+            amount: 1,
+            currency: 'USD',
+            category: Category.Fees,
+            ...overrides,
+          })
+        )
+      )
+    }
+    const card = { source: 'credit_card' } as const
+    const bank = { source: 'bank_account' } as const
+
+    function setup(transactions: Transaction[], onImport?: () => void) {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-03T12:00:00.000Z'))
+      render(
+        <Dashboard
+          transactions={transactions}
+          homeCurrency="USD"
+          fxRate={40}
+          onNavigateToImport={onImport}
+        />
+      )
+      vi.useRealTimers()
+    }
+
+    // Card covers Jun–Sep; the USD account only Sep.
+    const missingAugust = [
+      ...edgeRows('c', ['2026-06', '2026-07', '2026-08', '2026-09'], card),
+      ...edgeRows('b', ['2026-09'], bank),
+    ]
+
+    it('renders no banner, only the count line under the hero', () => {
+      setup([
+        ...edgeRows('c', ['2026-08', '2026-09'], card),
+        makeTransaction({
+          id: 'spend',
+          date: new Date('2026-09-10T12:00:00.000Z'),
+          amount: 100,
+          currency: 'USD',
+          source: 'credit_card',
+          category: Category.Restaurants,
+        }),
+      ])
+
+      const line = screen.getByText(
+        'Comparaciones mes a mes: a partir de 3 meses completos (tenés 2)'
+      )
+      expect(screen.queryByText(/Qué cambió/)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(/Todavía no hay suficientes/)
+      ).not.toBeInTheDocument()
+      expect(screen.queryByText(/le faltan datos/)).not.toBeInTheDocument()
+      const hero = screen.getByRole('heading', { level: 2, name: /Gastaste/ })
+      expect(
+        hero.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
+    })
+
+    it('names the missing account and opens the import', () => {
+      const onImport = vi.fn()
+      setup(missingAugust, onImport)
+
+      expect(
+        screen.getByText(
+          'Comparaciones mes a mes: a partir de 3 meses completos (tenés 1)'
+        )
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText('A ago. 2026 le faltan datos de Cuenta USD')
+      ).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Importar extracto' }))
+      expect(onImport).toHaveBeenCalledTimes(1)
+    })
+
+    it('has no import button without a handler', () => {
+      setup(missingAugust)
+
+      expect(
+        screen.getByText('A ago. 2026 le faltan datos de Cuenta USD')
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Importar extracto' })
+      ).not.toBeInTheDocument()
+    })
+  })
+
   describe('what changed', () => {
     // Card data on the first and last days of Jun–Sep makes each month
     // complete; restaurants jump in September.
@@ -964,6 +1061,9 @@ describe('Dashboard', () => {
     it("leads with the month's biggest change and links to both sides of it", () => {
       const go = setup()
 
+      expect(
+        screen.queryByText(/Comparaciones mes a mes/)
+      ).not.toBeInTheDocument()
       expect(
         screen.getByText(/Qué cambió en setiembre|Qué cambió en septiembre/)
       ).toBeInTheDocument()

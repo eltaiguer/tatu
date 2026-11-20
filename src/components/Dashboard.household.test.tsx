@@ -108,6 +108,41 @@ describe('Dashboard: Todo / Hogar mode', () => {
     vi.useRealTimers()
   })
 
+  it('shows the same comparisons hint in both modes, from every row', () => {
+    // Household rows alone (card groceries Aug–Oct) would compare; the USD
+    // account has no August row, so every row says Aug is missing it.
+    const bank = {
+      source: 'bank_account' as const,
+      currency: 'USD' as const,
+      category: Category.Restaurants,
+    }
+    render(
+      <Harness
+        transactions={[
+          tx({ date: new Date('2026-08-01T00:00:00.000Z') }),
+          tx({ date: new Date('2026-09-15T00:00:00.000Z') }),
+          tx({ date: new Date('2026-10-28T00:00:00.000Z') }),
+          tx({ ...bank, date: new Date('2026-09-01T00:00:00.000Z') }),
+          tx({ ...bank, date: new Date('2026-10-29T00:00:00.000Z') }),
+        ]}
+      />
+    )
+    const expectHint = () => {
+      expect(
+        screen.getByText(
+          'Comparaciones mes a mes: a partir de 3 meses completos (tenés 2)'
+        )
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText('A ago. 2026 le faltan datos de Cuenta USD')
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/Qué cambió/)).not.toBeInTheDocument()
+    }
+    expectHint()
+    chooseHogar()
+    expectHint()
+  })
+
   it('offers Todo / Hogar, with Todo selected by default', () => {
     render(<Harness transactions={marchRows()} />)
     const group = screen.getByRole('radiogroup', { name: 'Ver gastos' })
