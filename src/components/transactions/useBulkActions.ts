@@ -2,8 +2,16 @@ import { useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type { Transaction } from '../../models'
+import { normalizeCategoryId } from '../../services/categories/category-aliases'
+import { resolveCategory } from '../../services/categories/category-registry'
+import type { CategorySnapshot } from '../../services/mutations/transaction-mutations'
+import { transactionStore } from '../../stores/transaction-store'
 import { householdValueLabel } from '../../services/household/household-copy'
-import { PartialWriteError, userErrorMessage } from '../../utils/user-error'
+import {
+  PartialWriteError,
+  UserFacingError,
+  userErrorMessage,
+} from '../../utils/user-error'
 import {
   currentHouseholdRules,
   rowHouseholdView,
@@ -18,6 +26,29 @@ import type { DeleteResult } from './useMutationFeedback'
 import { HOUSEHOLD_SAVE_FAILED } from './useHouseholdWrites'
 
 type MutationFeedback = ReturnType<typeof useMutationFeedback>
+
+const STALE_RESTORE =
+  'Mientras tanto cambiaron estas transacciones; no se deshizo.'
+
+// The rows' category + confidence, read from the store (props lag an await),
+// in the shape `restoreCategories` takes: absent = null. Rows no longer in
+// the store are skipped.
+function snapshot(ids: string[]): CategorySnapshot[] {
+  const wanted = new Set(ids)
+  return transactionStore
+    .getState()
+    .transactions.filter((tx) => wanted.has(tx.id))
+    .map((tx) => ({
+      id: tx.id,
+      category: tx.category ?? null,
+      categoryConfidence: tx.categoryConfidence ?? null,
+    }))
+}
+
+const same = (a: CategorySnapshot, b?: CategorySnapshot) =>
+  !!b &&
+  normalizeCategoryId(a.category) === normalizeCategoryId(b.category) &&
+  a.categoryConfidence === b.categoryConfidence
 
 /**
  * What the Transacciones view does with a selection: the bulk bar's
@@ -34,6 +65,8 @@ export function useBulkActions({
   onBulkDelete,
   onSetHousehold,
   onReload,
+  onRestoreCategories,
+  supersede,
   reportError,
   reportDeleted,
   deleteWithConfirmation,
@@ -61,6 +94,11 @@ export function useBulkActions({
     household: boolean | null
   ) => Promise<{ updated: number }>
   onReload?: () => void
+  onRestoreCategories?: (
+    rows: CategorySnapshot[]
+  ) => Promise<{ restored: number }>
+  // Withdraws a row's older in-place toast (useCategoryWrites).
+  supersede?: (transactionId: string) => void
 } & Pick<
   MutationFeedback,
   'reportError' | 'reportDeleted' | 'deleteWithConfirmation'
@@ -68,8 +106,132 @@ export function useBulkActions({
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
   const [isBulkOperating, setIsBulkOperating] = useState(false)
   const [tagsOpen, setTagsOpen] = useState(false)
+  // Controlled here: the "Sin coincidencias" toast opens it.
+  const [categorizeOpen, setCategorizeOpen] = useState(false)
 
   const isBusy = isAutoCategorizing || isBulkOperating
+
+  // Every path that ends with the selection cleared also shuts the picker, so
+  // a stale `true` never opens it on a later selection.
+  function clearSelection() {
+    setSelectedTransactionIds([])
+    setCategorizeOpen(false)
+  }
+
+  // A bulk write of categories with its Deshacer. Rows are compared in the
+  // store before and after, so Deshacer touches only rows the write changed,
+  // and at the click only rows still holding what it wrote. No Deshacer after
+  // a failed or partial write: the one action of that toast is Reintentar.
+  async function runCategoryWrite(
+    ids: string[],
+    write: () => Promise<number>,
+    fallback: string,
+    show: (
+      count: number,
+      action: { label: string; onClick: () => void } | undefined
+    ) => void
+  ) {
+    for (const id of ids) supersede?.(id)
+    const before = snapshot(ids)
+    const owner = workspaceStore.getState().userId
+    let count: number
+    try {
+      count = await write()
+    } catch (error) {
+      reportError(error, fallback)
+      return
+    }
+    // Another user signed in meanwhile: this selection is not theirs.
+    if (owner && !isWorkspaceOwner(owner)) return
+    const afterById = new Map(snapshot(ids).map((row) => [row.id, row]))
+    const written = before.filter((row) => !same(row, afterById.get(row.id)))
+    show(
+      count,
+      written.length > 0 && onRestoreCategories
+        ? {
+            label: 'Deshacer',
+            onClick: () =>
+              void undoCategoryWrite(
+                onRestoreCategories,
+                owner,
+                written,
+                afterById
+              ),
+          }
+        : undefined
+    )
+  }
+
+  async function undoCategoryWrite(
+    restore: (rows: CategorySnapshot[]) => Promise<{ restored: number }>,
+    owner: string | null | undefined,
+    written: CategorySnapshot[],
+    afterById: Map<string, CategorySnapshot>
+  ) {
+    if (owner && !isWorkspaceOwner(owner)) return
+    const nowById = new Map(
+      snapshot(written.map((r) => r.id)).map((r) => [r.id, r])
+    )
+    const restorable = written.filter((row) =>
+      same(afterById.get(row.id) as CategorySnapshot, nowById.get(row.id))
+    )
+    if (restorable.length === 0) {
+      toast(STALE_RESTORE)
+      return
+    }
+    try {
+      await restore(restorable)
+    } catch (error) {
+      reportError(
+        guardedRestore(error, restorable, afterById),
+        'No se pudo deshacer'
+      )
+      return
+    }
+    const skipped = written.length - restorable.length
+    toast.success('Se deshizo el cambio', {
+      description:
+        skipped === 0
+          ? undefined
+          : skipped === 1
+            ? '1 cambió mientras tanto y quedó como está'
+            : `${skipped} cambiaron mientras tanto y quedaron como están`,
+    })
+  }
+
+  // A partial restore's own "reintentar" must not overwrite a row the user
+  // re-categorized meanwhile: every row still holds what it held before the
+  // restore (restored) or what the write left (failed, untouched).
+  function guardedRestore(
+    error: unknown,
+    restorable: CategorySnapshot[],
+    afterById: Map<string, CategorySnapshot>
+  ) {
+    if (!(error instanceof PartialWriteError) || !error.retry) return error
+    const retry = error.retry
+    return new PartialWriteError(
+      error.message,
+      error.done,
+      error.total,
+      () => {
+        const nowById = new Map(
+          snapshot(restorable.map((r) => r.id)).map((r) => [r.id, r])
+        )
+        const holds = restorable.every((row) => {
+          const now = nowById.get(row.id)
+          return (
+            same(row, now) ||
+            same(afterById.get(row.id) as CategorySnapshot, now)
+          )
+        })
+        return holds
+          ? retry()
+          : Promise.reject(new UserFacingError(STALE_RESTORE))
+      },
+      error.result,
+      error.cause
+    )
+  }
 
   async function handleAutoCategorizeSelected() {
     if (
@@ -90,7 +252,7 @@ export function useBulkActions({
         )
         return
       }
-      setSelectedTransactionIds([])
+      clearSelection()
       toast.success(txDone(categorized, 'categorizad'))
     } catch (error) {
       reportError(error, 'No se pudieron categorizar las transacciones')
@@ -100,17 +262,29 @@ export function useBulkActions({
   }
 
   async function handleBulkCategorizeSelected(category: string) {
-    if (!onBulkCategorize || selectedTransactionIds.length === 0) return
+    if (
+      !onBulkCategorize ||
+      selectedTransactionIds.length === 0 ||
+      isBulkOperating
+    ) {
+      return
+    }
     setIsBulkOperating(true)
     try {
-      const { updated } = await onBulkCategorize(
+      await runCategoryWrite(
         selectedTransactionIds,
-        category
+        async () =>
+          (await onBulkCategorize(selectedTransactionIds, category)).updated,
+        'No se pudieron categorizar las transacciones',
+        (updated, action) => {
+          clearSelection()
+          toast.success(txDone(updated, 'categorizad'), {
+            description: resolveCategory(category).label,
+            duration: 8000,
+            action,
+          })
+        }
       )
-      setSelectedTransactionIds([])
-      toast.success(txDone(updated, 'categorizad'))
-    } catch (error) {
-      reportError(error, 'No se pudieron categorizar las transacciones')
     } finally {
       setIsBulkOperating(false)
     }
@@ -146,7 +320,7 @@ export function useBulkActions({
       )
       // Another user signed in meanwhile: this selection is not theirs.
       if (owner && !isWorkspaceOwner(owner)) return
-      setSelectedTransactionIds([])
+      clearSelection()
       const n = eligible.length
       const done =
         household === null
@@ -168,6 +342,7 @@ export function useBulkActions({
     }
   }
 
+  // "No contar": the `ignored` category, which totals leave out.
   async function handleBulkIgnore() {
     if (
       !onBulkCategorize ||
@@ -177,14 +352,21 @@ export function useBulkActions({
       return
     setIsBulkOperating(true)
     try {
-      const { updated } = await onBulkCategorize(
+      await runCategoryWrite(
         selectedTransactionIds,
-        'ignored'
+        async () =>
+          (await onBulkCategorize(selectedTransactionIds, 'ignored')).updated,
+        'No se pudieron dejar las transacciones fuera de los totales',
+        (updated, action) => {
+          clearSelection()
+          toast.success(
+            updated === 1
+              ? '1 transacción no cuenta en los totales'
+              : `${updated} transacciones no cuentan en los totales`,
+            { duration: 8000, action }
+          )
+        }
       )
-      setSelectedTransactionIds([])
-      toast.success(txDone(updated, 'ignorad'))
-    } catch (error) {
-      reportError(error, 'No se pudieron ignorar las transacciones')
     } finally {
       setIsBulkOperating(false)
     }
@@ -205,7 +387,7 @@ export function useBulkActions({
         }
       )
       if (result) {
-        setSelectedTransactionIds([])
+        clearSelection()
         reportDeleted(result)
       }
     } catch (error) {
@@ -233,7 +415,7 @@ export function useBulkActions({
     }
     try {
       const updated = await runBulkSteps(steps, (label) => applied.push(label))
-      setSelectedTransactionIds([])
+      clearSelection()
       setTagsOpen(false)
       if (updated === 0) {
         toast.info('Las transacciones ya tenían esos cambios')
@@ -270,6 +452,8 @@ export function useBulkActions({
     isAutoCategorizing,
     isBulkOperating,
     isBusy,
+    categorizeOpen,
+    setCategorizeOpen,
     handleAutoCategorizeSelected,
     handleBulkCategorizeSelected,
     handleBulkIgnore,

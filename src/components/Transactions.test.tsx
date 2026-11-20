@@ -1042,7 +1042,7 @@ describe('Transactions', () => {
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar Merchant A' })[0]
     )
-    fireEvent.click(screen.getByRole('button', { name: /^Ignorar$/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^No contar$/ }))
 
     expect(
       await screen.findByText('Se actualizaron 247 de 300 — reintentar')
@@ -1477,7 +1477,7 @@ describe('Transactions', () => {
       const bar = selectOne()
       for (const name of [
         'Categorizar',
-        'Ignorar',
+        'No contar',
         'Etiquetas',
         'Auto-categorizar',
         'Eliminar',

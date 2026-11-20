@@ -1,7 +1,16 @@
 import { useRef, useState } from 'react'
-import { House, Loader2, Slash, Sparkles, Tag, Trash2 } from 'lucide-react'
+import {
+  EyeOff,
+  House,
+  Loader2,
+  Shapes,
+  Sparkles,
+  Tag,
+  Trash2,
+} from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
-import { resolveCategory } from '../../services/categories/category-registry'
+import { CategoryPicker } from '../CategoryPicker'
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { householdValueLabel } from '../../services/household/household-copy'
 
 /* ---- BulkBar ---- */
@@ -18,7 +27,8 @@ export function BulkBar({
   onDelete,
   isAutoCategorizing,
   isBusy,
-  categorySuggestions,
+  categorizeOpen,
+  onCategorizeOpenChange,
 }: {
   count: number
   total: number
@@ -33,11 +43,14 @@ export function BulkBar({
   onDelete: () => void
   isAutoCategorizing: boolean
   isBusy: boolean
-  categorySuggestions: string[]
+  categorizeOpen: boolean
+  onCategorizeOpenChange: (open: boolean) => void
 }) {
-  const [catOpen, setCatOpen] = useState(false)
-  const catRef = useRef<HTMLDivElement>(null)
-  useClickOutside(catRef, () => setCatOpen(false))
+  // A phone: the keyboard would cover the list, so the first option takes
+  // focus instead of the search (as the row's sheet does).
+  const coarse =
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(pointer: coarse)').matches
   const [houseOpen, setHouseOpen] = useState(false)
   const houseRef = useRef<HTMLDivElement>(null)
   const houseTriggerRef = useRef<HTMLButtonElement>(null)
@@ -78,52 +91,47 @@ export function BulkBar({
           aria-label="Acciones"
           className="relative flex gap-[4px] max-md:order-last max-md:w-full max-md:flex-wrap"
         >
-          {/* Quick categorize */}
-          <div ref={catRef} className="relative">
-            <button
-              onClick={() => {
-                setHouseOpen(false)
-                setCatOpen((o) => !o)
+          {/* Categorizar: the shared picker, in a popover */}
+          <Popover
+            open={categorizeOpen}
+            onOpenChange={(next) => {
+              if (next) setHouseOpen(false)
+              onCategorizeOpenChange(next)
+            }}
+          >
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                disabled={isBusy}
+                className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
+              >
+                <Shapes size={13} aria-hidden="true" />
+                Categorizar
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              align="start"
+              collisionPadding={16}
+              className="w-[min(280px,calc(100vw-2rem))] p-0"
+              aria-label="Elegir categoría"
+              onOpenAutoFocus={(event) => {
+                if (!coarse) return
+                event.preventDefault()
+                ;(event.currentTarget as HTMLElement)
+                  .querySelector<HTMLElement>('[data-category-option]')
+                  ?.focus()
               }}
-              disabled={isBusy}
-              className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
             >
-              <Tag size={13} />
-              Categorizar
-            </button>
-
-            {catOpen && (
-              <div className="absolute bottom-[calc(100%+10px)] left-0 z-[80] max-h-[280px] w-[220px] overflow-y-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-[6px] shadow-[var(--shadow-lg)]">
-                {categorySuggestions.map((cat) => {
-                  const { label, color } = resolveCategory(cat)
-                  return (
-                    <button
-                      key={cat}
-                      onClick={() => {
-                        onCategorize(cat)
-                        setCatOpen(false)
-                      }}
-                      className="flex w-full cursor-pointer items-center gap-[9px] rounded-[7px] border-none bg-transparent px-[9px] py-[7px] [font:inherit] text-[13px]! text-[var(--text)]"
-                      onMouseEnter={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background =
-                          'var(--muted)')
-                      }
-                      onMouseLeave={(e) =>
-                        ((e.currentTarget as HTMLElement).style.background =
-                          'transparent')
-                      }
-                    >
-                      <span
-                        className="h-[8px] w-[8px] shrink-0 rounded-[3px]"
-                        style={{ background: color }}
-                      />
-                      {label}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+              <CategoryPicker
+                touch={coarse}
+                onPick={(id) => {
+                  onCategorizeOpenChange(false)
+                  onCategorize(id)
+                }}
+              />
+            </PopoverContent>
+          </Popover>
 
           {/* Hogar: a yes / no / back-to-category for the selection */}
           {onHousehold && (
@@ -143,7 +151,7 @@ export function BulkBar({
                 type="button"
                 aria-expanded={houseOpen}
                 onClick={() => {
-                  setCatOpen(false)
+                  onCategorizeOpenChange(false)
                   setHouseOpen((o) => !o)
                 }}
                 disabled={isBusy}
@@ -180,6 +188,25 @@ export function BulkBar({
           )}
 
           <button
+            onClick={onIgnore}
+            disabled={isBusy}
+            title="Dejar fuera de los totales"
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
+          >
+            <EyeOff size={13} aria-hidden="true" />
+            No contar
+          </button>
+
+          <button
+            onClick={onTags}
+            disabled={isBusy}
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
+          >
+            <Tag size={13} />
+            Etiquetas
+          </button>
+
+          <button
             onClick={onAuto}
             disabled={isBusy}
             className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
@@ -190,24 +217,6 @@ export function BulkBar({
               <Sparkles size={13} />
             )}
             {isAutoCategorizing ? 'Auto-categorizando...' : 'Auto-categorizar'}
-          </button>
-
-          <button
-            onClick={onIgnore}
-            disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
-          >
-            <Slash size={13} />
-            Ignorar
-          </button>
-
-          <button
-            onClick={onTags}
-            disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
-          >
-            <Tag size={13} />
-            Etiquetas
           </button>
 
           <button

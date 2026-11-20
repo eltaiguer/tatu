@@ -6,7 +6,7 @@ import { defaultsToAllSimilar } from '../services/descriptions/default-scope'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import { Download, X } from 'lucide-react'
 import { Button } from './ui/button'
-import { Category, DEFAULT_CATEGORY_COLOR } from '../models'
+import { DEFAULT_CATEGORY_COLOR } from '../models'
 import type { Transaction } from '../models'
 import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
 import { EditTransactionDialog } from './EditTransactionDialog'
@@ -17,10 +17,7 @@ import { TransactionTable } from './TransactionTable'
 import { newestDataMonth } from '../utils/date-utils'
 import { exportTransactions } from '../services/export/export'
 import { addCustomCategoryWithSync } from '../services/categories/category-store'
-import {
-  buildCategorySuggestions,
-  buildTagSuggestions,
-} from '../services/suggestions/suggestions'
+import { buildTagSuggestions } from '../services/suggestions/suggestions'
 import { isCountedExpense } from '../services/spending/spending-rules'
 import {
   merchantKeyOf,
@@ -174,10 +171,20 @@ export function Transactions({
     filteredTransactionIds,
   })
 
+  const categoryWrites = useCategoryWrites({
+    transactions,
+    onUpdateTransaction,
+    onRestoreCategories,
+    setPending,
+    reportError,
+  })
+
   const {
     isAutoCategorizing,
     isBulkOperating,
     isBusy,
+    categorizeOpen,
+    setCategorizeOpen,
     handleAutoCategorizeSelected,
     handleBulkCategorizeSelected,
     handleBulkIgnore,
@@ -196,6 +203,8 @@ export function Transactions({
     onBulkDelete,
     onSetHousehold,
     onReload,
+    onRestoreCategories,
+    supersede: categoryWrites.supersede,
     reportError,
     reportDeleted,
     deleteWithConfirmation,
@@ -211,25 +220,12 @@ export function Transactions({
       reportError,
     })
 
-  const categoryWrites = useCategoryWrites({
-    transactions,
-    onUpdateTransaction,
-    onRestoreCategories,
-    setPending,
-    reportError,
-  })
-
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
 
   const [splittingTransaction, setSplittingTransaction] =
     useState<Transaction | null>(null)
   const [splitPending, setSplitPending] = useState(false)
-
-  // Not memoized: custom categories live outside React state, and the list
-  // is short, so rebuilding it each render keeps a category created in the
-  // edit dialog visible to the bulk pickers.
-  const categorySuggestions = buildCategorySuggestions()
 
   const tagSuggestions = useMemo(
     () => buildTagSuggestions(transactions.flatMap((tx) => tx.tags ?? [])),
@@ -473,9 +469,8 @@ export function Transactions({
           }}
           isAutoCategorizing={isAutoCategorizing}
           isBusy={isBusy}
-          categorySuggestions={categorySuggestions.filter(
-            (c) => c !== Category.Uncategorized
-          )}
+          categorizeOpen={categorizeOpen && hasSelection}
+          onCategorizeOpenChange={setCategorizeOpen}
         />
       )}
 
