@@ -25,6 +25,7 @@ import { replaceDescriptionOverrides } from '../services/descriptions/descriptio
 import { replaceMerchantCategoryOverrides } from '../services/categorizer/category-overrides'
 import { createInMemoryRepository } from '../services/repository/in-memory-repository'
 import { workspaceStore } from '../stores/workspace-state'
+import { transactionStore } from '../stores/transaction-store'
 
 // Category and rule changes are saved before they count; these view tests
 // get a signed-in user whose (in-memory) server accepts writes.
@@ -332,6 +333,36 @@ describe('Categories', () => {
     await waitFor(() =>
       expect(screen.queryByText(/"farmashop"/)).not.toBeInTheDocument()
     )
+  })
+
+  it('re-runs transfer inference right after a rule is deleted (#289)', async () => {
+    const rule = addCustomPattern({
+      pattern: 'NRO FAMILIA',
+      matchType: 'contains',
+      category: 'personal',
+    })
+    repo = createInMemoryRepository({ customPatterns: [rule] })
+    workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+    transactionStore.getState().setTransactions([
+      makeTx({
+        id: 'fam',
+        description: 'DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA 5506',
+        category: 'personal',
+        categoryConfidence: 0.95,
+      }),
+    ])
+    const row = () =>
+      transactionStore.getState().transactions.find((t) => t.id === 'fam')
+    expect(row()?.category).toBe('personal')
+    render(<Categories repository={repo} transactions={[]} />)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Eliminar regla nro familia' })
+    )
+
+    // No other write: the delete itself recomputes.
+    await waitFor(() => expect(row()?.category).toBe('internal_transfer'))
+    transactionStore.getState().clearTransactions()
   })
 
   it("shows how many transactions each rule's pattern matches", () => {

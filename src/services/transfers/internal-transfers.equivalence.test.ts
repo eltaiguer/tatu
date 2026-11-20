@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Transaction } from '../../models'
+import { emptyUserRules } from '../categorizer/user-rules'
+import { userRules } from '../../test/user-rules'
 import { inferInternalTransfers } from './internal-transfers'
 
 /**
@@ -87,25 +89,41 @@ function fingerprint(transactions: Transaction[]): string {
 
 describe('inferInternalTransfers — output is preserved', () => {
   it('produces the same categorisation over a 600-transaction corpus', () => {
-    const result = inferInternalTransfers(buildCorpus(600))
+    const result = inferInternalTransfers(buildCorpus(600), emptyUserRules())
+    expect(fingerprint(result)).toBe('141ed1cc')
+  })
+
+  it('gives the same digest with rules present but none winning', () => {
+    const result = inferInternalTransfers(
+      buildCorpus(600),
+      userRules({
+        customPatterns: [
+          {
+            pattern: 'ZZZ NO MATCH',
+            matchType: 'contains',
+            category: 'personal',
+          },
+        ],
+      })
+    )
     expect(fingerprint(result)).toBe('141ed1cc')
   })
 
   it('produces the same categorisation over a differently seeded corpus', () => {
-    const result = inferInternalTransfers(buildCorpus(400, 7))
+    const result = inferInternalTransfers(buildCorpus(400, 7), emptyUserRules())
     expect(fingerprint(result)).toBe('6b4cb7f5')
   })
 
   it('is idempotent — running it twice changes nothing', () => {
-    const once = inferInternalTransfers(buildCorpus(300))
-    const twice = inferInternalTransfers(once)
+    const once = inferInternalTransfers(buildCorpus(300), emptyUserRules())
+    const twice = inferInternalTransfers(once, emptyUserRules())
     expect(fingerprint(twice)).toBe(fingerprint(once))
   })
 
   it('never assigns a category to a credit-card row', () => {
     // canAutoAssignTransfer only touches bank_account rows; the pairing pass
     // must not widen that.
-    const result = inferInternalTransfers(buildCorpus(600))
+    const result = inferInternalTransfers(buildCorpus(600), emptyUserRules())
     const cardWithTransfer = result.filter(
       (tx) =>
         tx.source === 'credit_card' &&
@@ -117,7 +135,7 @@ describe('inferInternalTransfers — output is preserved', () => {
 
   it('preserves input order and length', () => {
     const input = buildCorpus(200)
-    const result = inferInternalTransfers(input)
+    const result = inferInternalTransfers(input, emptyUserRules())
     expect(result).toHaveLength(input.length)
     expect(result.map((t) => t.id)).toEqual(input.map((t) => t.id))
   })

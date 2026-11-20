@@ -1,6 +1,13 @@
 import { createStore } from 'zustand/vanilla'
 import type { Transaction } from '../models'
+import { currentUserRules } from '../services/categorizer/user-rules'
 import { inferInternalTransfers } from '../services/transfers/internal-transfers'
+
+// Inference reads the user's rules at each write: a row a rule categorized
+// is left alone (#289).
+function infer(rows: Transaction[]): Transaction[] {
+  return inferInternalTransfers(rows, currentUserRules())
+}
 
 interface TransactionStoreState {
   transactions: Transaction[]
@@ -21,6 +28,9 @@ interface TransactionStoreActions {
   removeTransactions: (ids: string[]) => void
   clearTransactions: () => void
   setTransactions: (transactions: Transaction[]) => void
+  // Recomputes the inferred transfers from the rules as they are now: call it
+  // after a custom-pattern write (the pattern store cannot import this one).
+  reinfer: () => void
 }
 
 export type TransactionStore = TransactionStoreState & TransactionStoreActions
@@ -28,7 +38,7 @@ export type TransactionStore = TransactionStoreState & TransactionStoreActions
 export function normalizeTransactions(
   transactions: Transaction[]
 ): Transaction[] {
-  return inferInternalTransfers(
+  return infer(
     transactions.map((tx) => {
       const date =
         tx.date instanceof Date
@@ -46,10 +56,7 @@ function createTransactionStoreState(
     transactions: [],
     addTransaction: (transaction) =>
       set((state) => ({
-        transactions: inferInternalTransfers([
-          ...state.transactions,
-          transaction,
-        ]),
+        transactions: infer([...state.transactions, transaction]),
       })),
     addTransactions: (transactions) => {
       const added: Transaction[] = []
@@ -69,14 +76,14 @@ function createTransactionStoreState(
           }
         })
 
-        return { transactions: inferInternalTransfers(next) }
+        return { transactions: infer(next) }
       })
 
       return { added, duplicates }
     },
     updateTransaction: (id, updates) =>
       set((state) => ({
-        transactions: inferInternalTransfers(
+        transactions: infer(
           state.transactions.map((tx) =>
             tx.id === id ? { ...tx, ...updates } : tx
           )
@@ -84,7 +91,7 @@ function createTransactionStoreState(
       })),
     mapTransactions: (fn) =>
       set((state) => ({
-        transactions: inferInternalTransfers(state.transactions.map(fn)),
+        transactions: infer(state.transactions.map(fn)),
       })),
     removeTransaction: (id) =>
       set((state) => ({
@@ -93,7 +100,7 @@ function createTransactionStoreState(
     removeTransactions: (ids) => {
       const idSet = new Set(ids)
       set((state) => ({
-        transactions: inferInternalTransfers(
+        transactions: infer(
           state.transactions.filter((tx) => !idSet.has(tx.id))
         ),
       }))
@@ -102,6 +109,8 @@ function createTransactionStoreState(
       set(() => ({
         transactions: [],
       })),
+    reinfer: () =>
+      set((state) => ({ transactions: infer(state.transactions) })),
     setTransactions: (transactions) =>
       set(() => ({
         transactions: normalizeTransactions(transactions),
