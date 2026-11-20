@@ -622,6 +622,21 @@ describe('review round 1 of step 4 (#251)', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('a household-only save on an un-renamed bank row writes no name or category (#296)', async () => {
+    const RAW =
+      'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+    seed([tx('b1', { description: RAW, categoryConfidence: 0.6 })])
+    await openEdit('Tintoreria Martinizi')
+
+    fireEvent.click(screen.getByLabelText('No'))
+    await saveDialog()
+
+    await waitFor(() => expect(repo.row('b1')?.household).toBe(false))
+    expect(repo.row('b1')?.categoryConfidence).toBe(0.6)
+    expect(repo.row('b1')?.displayDescription).toBeUndefined()
+    expect(repo.descriptionOverrides.size).toBe(0)
+  })
+
   it('reports one outcome when the edit and the choice both save', async () => {
     seed([tx('Devoto')])
     await openEdit('Devoto')

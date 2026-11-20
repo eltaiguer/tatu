@@ -629,6 +629,71 @@ describe('Transactions', () => {
     )
   })
 
+  describe('the name field opens with the row label (#296)', () => {
+    const RAW =
+      'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+
+    function openRow() {
+      const onUpdateTransaction = vi.fn().mockResolvedValue({ affected: 1 })
+      render(
+        <Transactions
+          transactions={[makeTransaction(1, RAW)]}
+          onUpdateTransaction={onUpdateTransaction}
+        />
+      )
+      fireEvent.click(
+        screen.getAllByRole('button', {
+          name: 'Editar Tintoreria Martinizi',
+        })[0]
+      )
+      return onUpdateTransaction
+    }
+    function pickCategoryAndSave() {
+      fireEvent.click(screen.getByLabelText('Categoría dropdown'))
+      fireEvent.click(screen.getByRole('button', { name: /Restaurantes/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    }
+
+    it('an untouched name sends no name', async () => {
+      const onUpdateTransaction = openRow()
+
+      pickCategoryAndSave()
+
+      await waitFor(() => expect(onUpdateTransaction).toHaveBeenCalled())
+      expect(onUpdateTransaction.mock.calls[0][1].displayDescription).toBe(
+        undefined
+      )
+    })
+
+    it('the clean label typed back sends no name', async () => {
+      const onUpdateTransaction = openRow()
+      const input = screen.getByLabelText('Descripción edición')
+      fireEvent.change(input, { target: { value: '' } })
+      fireEvent.change(input, { target: { value: 'Tintoreria Martinizi' } })
+
+      pickCategoryAndSave()
+
+      await waitFor(() => expect(onUpdateTransaction).toHaveBeenCalled())
+      expect(onUpdateTransaction.mock.calls[0][1].displayDescription).toBe(
+        undefined
+      )
+    })
+
+    it('another name is sent', async () => {
+      const onUpdateTransaction = openRow()
+      fireEvent.change(screen.getByLabelText('Descripción edición'), {
+        target: { value: 'Lavadero Martinizi' },
+      })
+
+      pickCategoryAndSave()
+
+      await waitFor(() => expect(onUpdateTransaction).toHaveBeenCalled())
+      expect(onUpdateTransaction.mock.calls[0][1].displayDescription).toBe(
+        'Lavadero Martinizi'
+      )
+    })
+  })
+
   it('keeps the editor open and shows an error when saving fails', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const onUpdateTransaction = vi.fn().mockRejectedValue(new Error('boom'))

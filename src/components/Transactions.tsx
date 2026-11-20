@@ -40,7 +40,6 @@ import { useCategoryWrites } from './transactions/useCategoryWrites'
 import { usePendingRows } from './transactions/usePendingRows'
 import { rowsSharingMerchantRule } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
-import { getDisplayDescription } from '../utils/transaction-display'
 import { transactionLabel } from '../services/merchants/merchant-key'
 
 const sameTags = (a: string[], b: string[]) =>
@@ -278,7 +277,9 @@ export function Transactions({
     // must not re-write the category as the user's own (confidence 1): nothing
     // about name, category or tags changed (a name/category scope still runs).
     const householdChanged = canSaveHousehold(draft.household)
-    const nameKept = draft.description === getDisplayDescription(editing)
+    // The dialog opens with the row's label: untouched (or retyped the same)
+    // is no name at all.
+    const nameKept = draft.description === transactionLabel(editing).trim()
     const unchanged =
       nameKept &&
       draft.category === ((editing.category ?? '').trim() || null) &&

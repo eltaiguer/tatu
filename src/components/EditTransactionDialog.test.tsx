@@ -5,6 +5,7 @@ import { EditTransactionDialog } from './EditTransactionDialog'
 import type { Transaction } from '../models'
 import { resolveCategory } from '../services/categories/category-registry'
 import { replaceCustomCategories } from '../services/categories/category-store'
+import { statementLabel } from '../services/merchants/merchant-key'
 import { merchantOverrideKey } from '../services/categorizer/category-overrides'
 import {
   clearHouseholdRules,
@@ -12,6 +13,9 @@ import {
 } from '../services/household/household-rules-store'
 
 type DialogProps = ComponentProps<typeof EditTransactionDialog>
+
+const RAW =
+  'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
 
 const transaction: Transaction = {
   id: 'tx-1',
@@ -530,16 +534,14 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
       expect(within(group()).getByText(/^Hogar/)).not.toHaveTextContent('·')
     })
 
-    it('names an un-renamed bank row by its clean label, and keeps the statement text in the name input (#274)', () => {
-      const raw =
-        'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+    it('opens an un-renamed bank row with its clean label and keeps the statement text under Original (#274, #296)', () => {
       const onSave = vi.fn()
       render(
         <EditTransactionDialog
           {...baseProps({
             transaction: {
               ...transaction,
-              description: raw,
+              description: RAW,
               displayDescription: undefined,
             },
             onSave,
@@ -552,9 +554,99 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
           name: 'Recordar para todas las de Tintoreria Martinizi',
         })
       ).toBeInTheDocument()
-      // Display only: a save must not turn the label into a rename.
-      expect(screen.getByLabelText('Descripción edición')).toHaveValue(raw)
-      expect(screen.getByText(`Original: ${raw}`)).toBeInTheDocument()
+      expect(screen.getByLabelText('Descripción edición')).toHaveValue(
+        'Tintoreria Martinizi'
+      )
+      expect(screen.getByText(`Original: ${RAW}`)).toBeInTheDocument()
+    })
+
+    it('opens an un-renamed transfer row with its row label, never the group form (#296)', () => {
+      const desc = 'TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO GAZZANO'
+      render(
+        <EditTransactionDialog
+          {...baseProps({
+            transaction: {
+              ...transaction,
+              description: desc,
+              displayDescription: undefined,
+            },
+          })}
+        />
+      )
+
+      const input = screen.getByLabelText('Descripción edición')
+      expect(input).toHaveValue('FEDERICO GAZZANO · Transferencia enviada')
+      expect(input).toHaveValue(statementLabel(desc))
+    })
+
+    it('opens a row whose AI name equals the statement text with the clean label (#296)', () => {
+      render(
+        <EditTransactionDialog
+          {...baseProps({
+            transaction: {
+              ...transaction,
+              description: RAW,
+              displayDescription: RAW,
+            },
+          })}
+        />
+      )
+
+      expect(screen.getByLabelText('Descripción edición')).toHaveValue(
+        'Tintoreria Martinizi'
+      )
+    })
+
+    it('counts a rename against the opened label: the label or the statement text typed back is not one (#296)', () => {
+      const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
+        renamed ? 2 : 4
+      )
+      const tx = {
+        ...transaction,
+        description: RAW,
+        displayDescription: undefined,
+      }
+      render(
+        <EditTransactionDialog
+          {...baseProps({ transaction: tx, countSimilar })}
+        />
+      )
+      const type = (value: string) =>
+        fireEvent.change(screen.getByLabelText('Descripción edición'), {
+          target: { value },
+        })
+
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+      type('Lavadero Martinizi')
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
+      type('Tintoreria Martinizi')
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+      type('Lavadero Martinizi')
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
+      type(RAW)
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+    })
+
+    it('saves an untouched bank row with its clean label as the draft name (#296)', () => {
+      const onSave = vi.fn()
+      render(
+        <EditTransactionDialog
+          {...baseProps({
+            transaction: {
+              ...transaction,
+              description: RAW,
+              displayDescription: undefined,
+            },
+            onSave,
+          })}
+        />
+      )
+
+      save()
+
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'Tintoreria Martinizi' })
+      )
     })
 
     it('says "solo esta por ahora" when the merchant has no other row', () => {

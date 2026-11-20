@@ -17,7 +17,7 @@ import { Category, isSplitChildTx, isSplitParentTx } from '../models'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import type { Currency, Transaction } from '../models'
 import { formatCurrency, formatDate } from '../utils/formatting'
-import { getDisplayDescription } from '../utils/transaction-display'
+import { transactionLabel } from '../services/merchants/merchant-key'
 import {
   buildCategorySuggestions,
   buildTagSuggestions,
@@ -38,7 +38,9 @@ export type ApplyScope =
   | 'matching_past_and_future'
   | 'future_matching_only'
 
-// What the user saved. `description` is trimmed and never empty;
+// What the user saved. `description` is the name field, trimmed, never empty;
+// when untouched it is the row's label (`transactionLabel`), which the caller
+// must not store as a rename.
 // `category` is null for "sin categoría", which clears it (on the server
 // too, #119).
 export interface EditTransactionDraft {
@@ -146,9 +148,9 @@ function EditTransactionForm({
 }: Omit<EditTransactionDialogProps, 'transaction'> & {
   transaction: Transaction
 }) {
-  const [description, setDescription] = useState(() =>
-    getDisplayDescription(transaction)
-  )
+  // What the row shows (#296): the field opens with the row's label.
+  const [openedName] = useState(() => transactionLabel(transaction))
+  const [description, setDescription] = useState(openedName)
   const [category, setCategory] = useState(transaction.category ?? '')
   const [tags, setTags] = useState<string[]>(transaction.tags ?? [])
   // null until the user touches the radio: then the default follows the form.
@@ -168,11 +170,12 @@ function EditTransactionForm({
 
   // "Renamed" exactly as the save decides it, so the number shown is the
   // number of rows the save will touch.
-  const [openedName] = useState(() => getDisplayDescription(transaction))
   const name = description.trim()
   // An untouched name is not a rename, even when the row has its own.
   const renamed =
-    !!name && name !== transaction.description && name !== openedName
+    !!name &&
+    name !== transaction.description.trim() &&
+    name !== openedName.trim()
   const similarCount = useMemo(
     () => countSimilar(transaction, renamed),
     [countSimilar, transaction, renamed]
