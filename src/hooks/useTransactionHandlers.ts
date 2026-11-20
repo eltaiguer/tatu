@@ -13,10 +13,12 @@ import {
   editTransaction,
   applyHouseholdToSimilar,
   forgetHouseholdRule,
+  restoreCategories,
   restoreDeleted,
   setHousehold,
   splitTransaction,
   unsplitTransaction,
+  type CategorySnapshot,
   type DeleteResult,
   type SplitPart,
   type TransactionEdit,
@@ -99,6 +101,11 @@ export function useTransactionHandlers({
     handleBulkCategorizeTransactions: run(
       (repo, transactionIds: string[], category: string) =>
         bulkCategorize(repo, transactionIds, category)
+    ),
+    // Puts rows' category + confidence back from a snapshot (the inline
+    // pick's Deshacer).
+    handleRestoreCategories: run((repo, rows: CategorySnapshot[]) =>
+      restoreCategories(repo, rows)
     ),
     handleBulkTagTransactions: run(
       (repo, transactionIds: string[], tag: string) =>

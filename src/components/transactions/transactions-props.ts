@@ -1,5 +1,8 @@
 import type { Transaction } from '../../models'
-import type { ForgetResult } from '../../services/mutations/transaction-mutations'
+import type {
+  CategorySnapshot,
+  ForgetResult,
+} from '../../services/mutations/transaction-mutations'
 import type { Repository } from '../../services/repository/repository'
 import type { UrlFilterState } from '../../services/filters/url-filters'
 import type { DeleteResult } from './useMutationFeedback'
@@ -27,6 +30,11 @@ interface BaseTransactionsProps {
       applyScope: 'single' | 'matching_past_and_future' | 'future_matching_only'
     }
   ) => Promise<{ affected: number }>
+  // Puts rows' category + confidence back exactly (the inline pick's
+  // Deshacer). Without it the toast has no Deshacer.
+  onRestoreCategories?: (
+    rows: CategorySnapshot[]
+  ) => Promise<{ restored: number }>
   onAutoCategorizeTransactions?: (
     transactionIds: string[]
   ) => Promise<{ categorized: number }>

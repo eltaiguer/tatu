@@ -51,6 +51,7 @@ import {
   deleteTransactions,
   editTransaction,
   importTransactions,
+  restoreCategories,
   restoreDeleted,
   setHousehold,
   splitTransaction,
@@ -61,6 +62,7 @@ import {
   NeedsConfirmationError,
   PartialWriteError,
   UserFacingError,
+  WorkspaceChangedError,
 } from '../../utils/user-error'
 import { transactionStore } from '../../stores/transaction-store'
 import { replaceCustomPatterns } from '../categorizer/custom-patterns'
@@ -2822,5 +2824,135 @@ describe('transaction-mutations — switching accounts mid-write', () => {
     await expect(restoreDeleted(removed)).rejects.toThrow(UserFacingError)
     expect(repo.requests.restore).toBeUndefined()
     expect(storedIds()).toEqual([])
+  })
+})
+
+describe('transaction-mutations — restoreCategories (#279)', () => {
+  const MERCHANT = 'SUPERMERCADO DISCO'
+  const snapshot = (id: string) => {
+    const tx = stored(id)!
+    return {
+      id,
+      category: tx.category ?? null,
+      categoryConfidence: tx.categoryConfidence ?? null,
+    }
+  }
+
+  it('puts the category back with its confidence, not at 1', async () => {
+    const repo = signedIn([
+      makeTransaction('a', {
+        description: MERCHANT,
+        category: 'groceries',
+        categoryConfidence: 0.4,
+      }),
+    ])
+    const before = snapshot('a')
+    await editTransaction(repo, 'a', {
+      category: 'restaurants',
+      applyScope: 'single',
+    })
+
+    await expect(restoreCategories(repo, [before])).resolves.toEqual({
+      restored: 1,
+    })
+
+    for (const read of [stored, repo.row]) {
+      expect(read('a')).toMatchObject({
+        category: 'groceries',
+        categoryConfidence: 0.4,
+      })
+    }
+  })
+
+  it('puts an uncategorized row back to having no category', async () => {
+    const repo = signedIn([
+      makeTransaction('a', {
+        description: MERCHANT,
+        category: undefined,
+        categoryConfidence: undefined,
+      }),
+    ])
+    const before = snapshot('a')
+    await editTransaction(repo, 'a', {
+      category: 'restaurants',
+      applyScope: 'single',
+    })
+
+    await restoreCategories(repo, [before])
+
+    for (const read of [stored, repo.row]) {
+      expect(read('a')?.category).toBeUndefined()
+      expect(read('a')?.categoryConfidence).toBeUndefined()
+    }
+  })
+
+  it('writes no overrides', async () => {
+    const repo = signedIn([makeTransaction('a', { description: MERCHANT })])
+
+    await restoreCategories(repo, [snapshot('a')])
+
+    expect(repo.categoryOverrides.size).toBe(0)
+    expect(repo.descriptionOverrides.size).toBe(0)
+  })
+
+  it('rejects for a row that is gone', async () => {
+    const repo = signedIn([makeTransaction('a')])
+
+    await expect(
+      restoreCategories(repo, [
+        { id: 'zzz', category: 'groceries', categoryConfidence: 0.4 },
+      ])
+    ).rejects.toThrow(/ya no existe/)
+  })
+
+  it('changes nothing when another user signed in', async () => {
+    const repo = signedIn([
+      makeTransaction('a', { category: 'restaurants', categoryConfidence: 1 }),
+    ])
+    workspaceStore.setState({ userId: 'other', status: 'ready' })
+
+    await expect(
+      restoreCategories(repo, [
+        { id: 'a', category: 'groceries', categoryConfidence: 0.4 },
+      ])
+    ).rejects.toBeInstanceOf(WorkspaceChangedError)
+
+    expect(stored('a')?.category).toBe('restaurants')
+    expect(repo.row('a')?.category).toBe('restaurants')
+  })
+
+  it('restores the rows that saved, and retries only the rest', async () => {
+    const repo = signedIn([
+      makeTransaction('a', { category: 'restaurants', categoryConfidence: 1 }),
+      makeTransaction('b', { category: 'travel', categoryConfidence: 1 }),
+    ])
+    repo.failOn('update', {
+      when: (chunk) => chunk.includes('b'),
+      times: 1,
+    })
+
+    const error = (await restoreCategories(repo, [
+      { id: 'a', category: 'groceries', categoryConfidence: 0.4 },
+      { id: 'b', category: 'healthcare', categoryConfidence: 0.6 },
+    ]).catch((e: unknown) => e)) as PartialWriteError
+    expect(error).toBeInstanceOf(PartialWriteError)
+    expect(error.message).toMatch('Se actualizaron 1 de 2')
+
+    for (const read of [stored, repo.row]) {
+      expect(read('a')).toMatchObject({
+        category: 'groceries',
+        categoryConfidence: 0.4,
+      })
+      expect(read('b')?.category).toBe('travel')
+    }
+
+    await error.retry!()
+
+    for (const read of [stored, repo.row]) {
+      expect(read('b')).toMatchObject({
+        category: 'healthcare',
+        categoryConfidence: 0.6,
+      })
+    }
   })
 })

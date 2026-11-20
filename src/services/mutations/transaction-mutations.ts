@@ -1338,3 +1338,33 @@ export async function applyPatternToPast(
     failed: outcome.failed.length + outcome.missing.length,
   }
 }
+
+/** A row's category as it was, for undo (#279). null = absent. */
+export interface CategorySnapshot {
+  id: string
+  category: string | null
+  categoryConfidence: number | null
+}
+
+/** Puts rows' category + confidence back exactly. Writes no overrides. */
+export async function restoreCategories(
+  repo: Repository,
+  rows: CategorySnapshot[]
+): Promise<{ restored: number }> {
+  assertOwner(repo)
+  const present = new Set(store().transactions.map((tx) => tx.id))
+  const targets = rows.filter((r) => present.has(r.id))
+  if (targets.length === 0) throw MISSING_TRANSACTION
+  const changes = new Map<string, TransactionPatch>(
+    targets.map((r) => [
+      r.id,
+      { category: r.category, categoryConfidence: r.categoryConfidence },
+    ])
+  )
+  const outcome = await writePatches(repo, changes)
+  settle(outcome, {
+    message: updatedMessage,
+    retry: (failed) => retryPatches(repo, changes, failed),
+  })
+  return { restored: outcome.saved.length }
+}

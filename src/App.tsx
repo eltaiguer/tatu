@@ -307,6 +307,7 @@ function App({ auth, createRepository }: AppProps) {
     handleForgetHouseholdRule,
     handleUnsplitTransaction,
     handleBulkCategorizeTransactions,
+    handleRestoreCategories,
     handleBulkDeleteTransactions,
     handleBulkTagTransactions,
     handleAutoCategorizeTransactions,
@@ -514,6 +515,7 @@ function App({ auth, createRepository }: AppProps) {
                     fxRate={fxRate}
                     repository={repository}
                     onUpdateTransaction={handleUpdateTransaction}
+                    onRestoreCategories={handleRestoreCategories}
                     onDeleteTransaction={handleDeleteTransaction}
                     onRestoreTransactions={handleRestoreTransactions}
                     onReload={refetch}
