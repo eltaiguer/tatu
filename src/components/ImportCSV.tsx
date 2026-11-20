@@ -17,6 +17,7 @@ import type {
   StatementFile,
   StatementImportResult,
 } from '../services/import/import-statement'
+import { workspaceStore } from '../stores/workspace-state'
 import { ACCOUNT_LABELS } from '../utils/account-display'
 import {
   ImportSummaryPanel,
@@ -291,6 +292,8 @@ export function ImportCSV({
   // previous one stored (dedup, taken ids, transfer pairing).
   const handleFiles = async (files: File[]) => {
     cancelledRef.current = false
+    // Whose batch this is: a warning is only for them.
+    const batchOwner = workspaceStore.getState().userId
     const done: FileOutcome[] = []
     // What the files that imported came back with, for the warnings.
     const imported: ImportedResult[] = []
@@ -318,7 +321,9 @@ export function ImportCSV({
       // The dialog closed meanwhile: the file in flight finished, so its
       // warnings (AI, repairs) are still said; the rest is not started.
       if (cancelledRef.current) {
-        warnAboutBatch(imported, files.length)
+        if (workspaceStore.getState().userId === batchOwner) {
+          warnAboutBatch(imported, files.length)
+        }
         return
       }
     }

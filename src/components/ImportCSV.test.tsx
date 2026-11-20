@@ -1183,6 +1183,30 @@ describe('ImportCSV', () => {
       expect(screen.queryByRole('button', { name: /^Revisar/ })).toBeNull()
     })
 
+    it('marks "a revisar" as actionable only when there is something to review', async () => {
+      const user = userEvent.setup()
+      view([stored('a'), clean('b')], {
+        added: [makeTx('a'), makeTx('b')],
+        fileRange: { from: '2025-03-04', to: '2025-12-20' },
+        fileRows: 2,
+      })
+      await importFile(user)
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(document.querySelector('[data-actionable]')).not.toBeNull()
+    })
+
+    it('leaves "0 a revisar" plain', async () => {
+      const user = userEvent.setup()
+      view([clean('a')], {
+        added: [makeTx('a')],
+        fileRange: { from: '2025-03-04', to: '2025-12-20' },
+        fileRows: 1,
+      })
+      await importFile(user)
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(document.querySelector('[data-actionable]')).toBeNull()
+    })
+
     it('shows no Revisar without a way to open Transacciones', async () => {
       const user = userEvent.setup()
       render(
@@ -1676,6 +1700,38 @@ describe('ImportCSV', () => {
       expect(importer).toHaveBeenCalledTimes(2)
     })
 
+    it('says nothing to the next user when an import finishes after a user change', async () => {
+      workspaceStore.setState({ userId: 'user-a', status: 'ready' })
+      const resolvers: Array<() => void> = []
+      const importer = vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+        async (_file, { onParsed }) => {
+          onParsed?.()
+          await new Promise<void>((resolve) => resolvers.push(resolve))
+          return result({
+            ...added('a'),
+            aiError: new AiError('auth'),
+            repairsFailed: 1,
+          })
+        }
+      )
+      const { unmount } = render(
+        <ImportCSV transactions={[]} onTransactionsImported={importer} />
+      )
+
+      pickMany(['one.csv'])
+      await waitFor(() => expect(resolvers).toHaveLength(1))
+      // The dialog is re-keyed by the user change, then A's import resolves.
+      unmount()
+      workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+      await act(async () => resolvers[0]())
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      })
+
+      expect(toastMock.warning).not.toHaveBeenCalled()
+      workspaceStore.setState({ userId: null, status: 'idle' })
+    })
+
     it('names the files where AI failed when the others were fine', async () => {
       const importer = byName({
         'card.csv': added('a'),
@@ -1797,7 +1853,7 @@ describe('ImportCSV', () => {
       )
     })
 
-    it('hides the zero lines of each file but a single file keeps them', async () => {
+    it('hides the zero lines of each file, but a single file keeps them', async () => {
       const importer = byName({
         'card.csv': added('a'),
         'usd.csv': added('b'),
@@ -1816,6 +1872,17 @@ describe('ImportCSV', () => {
         '0 a revisar · sin categoría o con poca seguridad',
       ])
       unmount()
+
+      // One file keeps today's lines, zeros included.
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+      pickMany(['card.csv'])
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(summaryLines()).toEqual([
+        '1 nueva',
+        '0 a revisar · sin categoría o con poca seguridad',
+        '0 duplicadas omitidas',
+        '0 eliminadas antes',
+      ])
     })
 
     it('goes back to the picker with "Importar otro archivo"', async () => {

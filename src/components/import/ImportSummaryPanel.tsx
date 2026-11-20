@@ -145,18 +145,21 @@ function FileSummary({
           ({ count, one, many, hint, actionable }) => (
             <li key={many} className="flex justify-center">
               <span
-                className={
-                  actionable
-                    ? 'rounded-full border border-[color:var(--accent)] px-2 py-px'
-                    : undefined
-                }
+                // Only a line that asks something: "0 a revisar" stays plain.
+                {...(actionable && count > 0
+                  ? {
+                      'data-actionable': true,
+                      className:
+                        'rounded-full border border-[color:var(--accent)] px-2 py-px',
+                    }
+                  : {})}
               >
                 <span className="font-mono tabular-nums font-medium">
                   {count}
                 </span>{' '}
                 <span
                   className={
-                    actionable
+                    actionable && count > 0
                       ? 'text-[color:var(--text)]'
                       : 'text-muted-foreground'
                   }
@@ -347,7 +350,7 @@ export function ImportSummaryPanel({
           })}
         </div>
         {/* Stays at the bottom of the dialog while a long summary scrolls. */}
-        <div className="sticky bottom-[-1.5rem] z-10 -mb-8 flex w-full flex-col-reverse justify-center gap-3 bg-card pt-4 pb-6 sm:flex-row">
+        <div className="sticky bottom-[-1.5rem] z-10 -mb-8 flex w-full flex-col-reverse justify-center gap-3 bg-card pt-4 pb-8 sm:flex-row">
           <Button
             onClick={onImportAnother}
             variant={nothingNew || !onViewTransactions ? 'default' : 'outline'}
@@ -364,9 +367,12 @@ export function ImportSummaryPanel({
           )}
           {reviewAction && (
             <Button onClick={reviewAction}>
-              Revisar{' '}
-              <span className="font-mono tabular-nums">{linkCount}</span>{' '}
-              {plural(linkCount, 'movimiento', 'movimientos')}
+              {/* One element: the button lays its children out with a gap. */}
+              <span>
+                Revisar{' '}
+                <span className="font-mono tabular-nums">{linkCount}</span>{' '}
+                {plural(linkCount, 'movimiento', 'movimientos')}
+              </span>
             </Button>
           )}
         </div>

@@ -398,6 +398,11 @@ export async function importTransactions(
     }
   }
 
+  // The repairs and the run's close came after the last check: if another
+  // user signed in meanwhile, nothing about this import may be reported to
+  // them (the rows stay saved for this one).
+  if (!isWorkspaceOwner(repo.userId)) throw new WorkspaceChangedError()
+
   return {
     added,
     duplicates,

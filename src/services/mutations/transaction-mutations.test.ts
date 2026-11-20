@@ -2912,6 +2912,23 @@ describe('transaction-mutations — switching accounts mid-write', () => {
     expect(reporting.captureError).not.toHaveBeenCalled()
   })
 
+  it('refuses to report an import as finished once the account changed while closing its run', async () => {
+    const repo = signedIn()
+    repo.failOn('completeImportRun', {
+      when: () => {
+        workspaceStore.setState({ userId: 'user-b', status: 'ready' })
+        return true
+      },
+    })
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(
+      importTransactions(repo, [makeTransaction('a')], makeImportContext())
+    ).rejects.toBeInstanceOf(WorkspaceChangedError)
+    // The rows stay saved for user A.
+    expect(repo.row('a')).toBeDefined()
+  })
+
   it("refuses A's undo once B is signed in, before sending anything", async () => {
     const repo = signedIn([makeTransaction('a')])
     const { removed } = await deleteTransactions(repo, ['a'])
