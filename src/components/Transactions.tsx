@@ -11,7 +11,6 @@ import type { Transaction } from '../models'
 import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
 import { EditTransactionDialog } from './EditTransactionDialog'
 import type { EditTransactionDraft } from './EditTransactionDialog'
-import { BulkEditDialog } from './BulkEditDialog'
 import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
@@ -38,6 +37,7 @@ import { getPeriodLabel } from '../services/filters/period-label'
 import { MonthNav } from './transactions/MonthNav'
 import { TotalsStrip } from './transactions/TotalsStrip'
 import { BulkBar } from './transactions/BulkBar'
+import { BulkTagsDialog } from './transactions/BulkTagsDialog'
 import { TransactionsPagination } from './transactions/TransactionsPagination'
 import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
@@ -183,10 +183,9 @@ export function Transactions({
     handleBulkIgnore,
     handleBulkHousehold,
     handleBulkDelete,
-    openBulkEdit,
-    closeBulkEdit,
-    handleBulkEditSave,
-    bulkEdit,
+    tagsOpen,
+    setTagsOpen,
+    handleBulkTagsSave,
   } = useBulkActions({
     transactions,
     selectedTransactionIds,
@@ -462,7 +461,7 @@ export function Transactions({
                 }
               : undefined
           }
-          onEdit={openBulkEdit}
+          onTags={() => setTagsOpen(true)}
           onAuto={() => {
             void handleAutoCategorizeSelected()
           }}
@@ -561,30 +560,15 @@ export function Transactions({
         onClose={() => setEditingTransaction(null)}
       />
 
-      <BulkEditDialog
-        open={bulkEdit.open}
+      <BulkTagsDialog
+        open={tagsOpen}
         selectionCount={selectionCount}
-        bulkEditCategory={bulkEdit.category}
-        bulkEditTagList={bulkEdit.tagList}
-        bulkCategoryPickerOpen={bulkEdit.categoryPickerOpen}
-        bulkTagPickerOpen={bulkEdit.tagPickerOpen}
-        bulkCategorySearch={bulkEdit.categorySearch}
-        bulkTagSearch={bulkEdit.tagSearch}
-        categorySuggestions={categorySuggestions}
         tagSuggestions={tagSuggestions}
         isBulkOperating={isBulkOperating}
-        showCategorySection={Boolean(onBulkCategorize)}
-        showTagSection={Boolean(onBulkTag)}
-        onBulkEditCategoryChange={bulkEdit.setCategory}
-        onBulkEditTagListChange={bulkEdit.setTagList}
-        onBulkCategoryPickerOpenChange={bulkEdit.setCategoryPickerOpen}
-        onBulkTagPickerOpenChange={bulkEdit.setTagPickerOpen}
-        onBulkCategorySearchChange={bulkEdit.setCategorySearch}
-        onBulkTagSearchChange={bulkEdit.setTagSearch}
-        onSave={() => {
-          void handleBulkEditSave()
+        onSave={(tags) => {
+          void handleBulkTagsSave(tags)
         }}
-        onCancel={closeBulkEdit}
+        onCancel={() => setTagsOpen(false)}
       />
 
       {/* Pagination */}

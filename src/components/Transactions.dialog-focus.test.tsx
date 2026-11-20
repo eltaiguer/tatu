@@ -56,7 +56,7 @@ describe('Transactions dialogs return focus on close', () => {
     await waitFor(() => expect(opener).toHaveFocus())
   })
 
-  it('returns focus to Editar seleccionadas', async () => {
+  it('returns focus to Etiquetas', async () => {
     const user = userEvent.setup()
     render(<Transactions transactions={TRANSACTIONS} />)
     await user.click(
@@ -65,7 +65,7 @@ describe('Transactions dialogs return focus on close', () => {
     await user.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar comercio 1' })[0]
     )
-    const opener = screen.getByRole('button', { name: 'Editar seleccionadas' })
+    const opener = screen.getByRole('button', { name: 'Etiquetas' })
 
     await openWithKeyboardAndEscape(opener)
 

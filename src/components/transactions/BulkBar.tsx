@@ -1,13 +1,5 @@
 import { useRef, useState } from 'react'
-import {
-  House,
-  Loader2,
-  Pencil,
-  Slash,
-  Sparkles,
-  Tag,
-  Trash2,
-} from 'lucide-react'
+import { House, Loader2, Slash, Sparkles, Tag, Trash2 } from 'lucide-react'
 import { useClickOutside } from '../../hooks/useClickOutside'
 import { resolveCategory } from '../../services/categories/category-registry'
 import { householdValueLabel } from '../../services/household/household-copy'
@@ -20,7 +12,7 @@ export function BulkBar({
   onClear,
   onCategorize,
   onHousehold,
-  onEdit,
+  onTags,
   onAuto,
   onIgnore,
   onDelete,
@@ -35,7 +27,7 @@ export function BulkBar({
   onCategorize: (category: string) => void
   // Absent when the view cannot save the household choice.
   onHousehold?: (household: boolean | null) => void
-  onEdit: () => void
+  onTags: () => void
   onAuto: () => void
   onIgnore: () => void
   onDelete: () => void
@@ -187,17 +179,6 @@ export function BulkBar({
             </div>
           )}
 
-          {/* Full edit dialog */}
-          <button
-            onClick={onEdit}
-            disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
-            aria-label="Editar seleccionadas"
-          >
-            <Pencil size={13} />
-            Editar
-          </button>
-
           <button
             onClick={onAuto}
             disabled={isBusy}
@@ -218,6 +199,15 @@ export function BulkBar({
           >
             <Slash size={13} />
             Ignorar
+          </button>
+
+          <button
+            onClick={onTags}
+            disabled={isBusy}
+            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
+          >
+            <Tag size={13} />
+            Etiquetas
           </button>
 
           <button

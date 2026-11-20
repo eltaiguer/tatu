@@ -21,8 +21,8 @@ type MutationFeedback = ReturnType<typeof useMutationFeedback>
 
 /**
  * What the Transacciones view does with a selection: the bulk bar's
- * actions (categorize, auto-categorize, ignore, delete) and the bulk edit
- * dialog's draft + save. Clears the selection after a successful change.
+ * actions (categorize, auto-categorize, ignore, delete) and the open state +
+ * save of the Etiquetas dialog. Clears the selection after a successful change.
  */
 export function useBulkActions({
   transactions,
@@ -67,13 +67,7 @@ export function useBulkActions({
 >) {
   const [isAutoCategorizing, setIsAutoCategorizing] = useState(false)
   const [isBulkOperating, setIsBulkOperating] = useState(false)
-  const [bulkEditOpen, setBulkEditOpen] = useState(false)
-  const [bulkEditCategory, setBulkEditCategory] = useState('')
-  const [bulkEditTagList, setBulkEditTagList] = useState<string[]>([])
-  const [bulkCategoryPickerOpen, setBulkCategoryPickerOpen] = useState(false)
-  const [bulkCategorySearch, setBulkCategorySearch] = useState('')
-  const [bulkTagPickerOpen, setBulkTagPickerOpen] = useState(false)
-  const [bulkTagSearch, setBulkTagSearch] = useState('')
+  const [tagsOpen, setTagsOpen] = useState(false)
 
   const isBusy = isAutoCategorizing || isBulkOperating
 
@@ -221,23 +215,7 @@ export function useBulkActions({
     }
   }
 
-  function openBulkEdit() {
-    setBulkEditCategory('')
-    setBulkEditTagList([])
-    setBulkCategorySearch('')
-    setBulkTagSearch('')
-    setBulkEditOpen(true)
-  }
-
-  function closeBulkEdit() {
-    setBulkEditOpen(false)
-    setBulkCategoryPickerOpen(false)
-    setBulkTagPickerOpen(false)
-    setBulkCategorySearch('')
-    setBulkTagSearch('')
-  }
-
-  async function handleBulkEditSave() {
+  async function handleBulkTagsSave(tags: string[]) {
     if (selectedTransactionIds.length === 0 || isBulkOperating) return
     setIsBulkOperating(true)
     // Steps run in sequence; on failure the message says which already
@@ -245,15 +223,8 @@ export function useBulkActions({
     const applied: string[] = []
     const ids = selectedTransactionIds
     const steps: BulkStep[] = []
-    if (bulkEditCategory && onBulkCategorize) {
-      const category = bulkEditCategory
-      steps.push({
-        label: 'la categoría',
-        run: () => onBulkCategorize(ids, category),
-      })
-    }
     if (onBulkTag) {
-      for (const tag of bulkEditTagList) {
+      for (const tag of tags) {
         steps.push({
           label: `la etiqueta "${tag}"`,
           run: () => onBulkTag(ids, tag),
@@ -263,7 +234,7 @@ export function useBulkActions({
     try {
       const updated = await runBulkSteps(steps, (label) => applied.push(label))
       setSelectedTransactionIds([])
-      closeBulkEdit()
+      setTagsOpen(false)
       if (updated === 0) {
         toast.info('Las transacciones ya tenían esos cambios')
       } else {
@@ -304,24 +275,8 @@ export function useBulkActions({
     handleBulkIgnore,
     handleBulkHousehold,
     handleBulkDelete,
-    openBulkEdit,
-    closeBulkEdit,
-    handleBulkEditSave,
-    // The bulk edit dialog's draft, picker and search state.
-    bulkEdit: {
-      open: bulkEditOpen,
-      category: bulkEditCategory,
-      setCategory: setBulkEditCategory,
-      tagList: bulkEditTagList,
-      setTagList: setBulkEditTagList,
-      categoryPickerOpen: bulkCategoryPickerOpen,
-      setCategoryPickerOpen: setBulkCategoryPickerOpen,
-      categorySearch: bulkCategorySearch,
-      setCategorySearch: setBulkCategorySearch,
-      tagPickerOpen: bulkTagPickerOpen,
-      setTagPickerOpen: setBulkTagPickerOpen,
-      tagSearch: bulkTagSearch,
-      setTagSearch: setBulkTagSearch,
-    },
+    tagsOpen,
+    setTagsOpen,
+    handleBulkTagsSave,
   }
 }
