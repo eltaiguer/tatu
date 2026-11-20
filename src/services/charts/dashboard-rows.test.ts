@@ -65,4 +65,30 @@ describe('buildMonthlyTrendRows', () => {
       ['2026-03', 50, false],
     ])
   })
+
+  it("carries every row's spend per month as todoGastos, also where the drawn rows have none", () => {
+    const all = [
+      tx('2026-01-12', 100),
+      tx('2026-02-27', 200),
+      tx('2026-03-10', 50),
+    ]
+    const rows = buildMonthlyTrendRows([all[2]], 'USD', 40, '2026-11', all)
+
+    expect(rows.map((r) => [r.key, r.gastos, r.todoGastos])).toEqual([
+      ['2026-01', 0, 100],
+      ['2026-02', 0, 200], // a month with no household spend: gastos 0
+      ['2026-03', 50, 50],
+    ])
+  })
+
+  it('has todoGastos equal gastos when nothing is cut', () => {
+    const rows = buildMonthlyTrendRows(
+      [tx('2026-02-27', 200), tx('2026-03-10', 50)],
+      'USD',
+      40,
+      '2026-11'
+    )
+
+    expect(rows.every((r) => r.todoGastos === r.gastos)).toBe(true)
+  })
 })

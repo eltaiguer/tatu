@@ -22,6 +22,7 @@ import type { MonthlyTrendRow } from '../../services/charts/dashboard-rows'
 import { formatCurrency, formatCurrencyShort } from '../../utils/formatting'
 import { Card } from '../ui/card'
 import { MonthButtons } from './MonthButtons'
+import { PartialMonthsNote } from './PartialMonthsNote'
 
 interface SavingsCardProps {
   monthlyTrend: MonthlyTrendRow[]
@@ -40,9 +41,6 @@ export function SavingsCard({
   // complete months count: a statement imported up to the 10th would read
   // as a month with spend and no salary.
   const completeMonths = monthlyTrend.filter((m) => m.complete)
-  const partialMonths = monthlyTrend
-    .filter((m) => !m.complete)
-    .map((m) => m.month)
   const savings = summarizeSavings(
     completeMonths.map((m) => ({ month: m.month, net: m.neto }))
   )
@@ -153,13 +151,7 @@ export function SavingsCard({
               </div>
             </>
           )}
-          {completeMonths.length > 0 && partialMonths.length > 0 && (
-            <p className="mt-[4px] mb-0 text-[12px] text-muted-foreground">
-              {partialMonths.length === 1
-                ? `No cuenta ${partialMonths[0]}: le faltan datos de alguna cuenta.`
-                : `No cuentan ${partialMonths.slice(0, -1).join(', ')} y ${partialMonths[partialMonths.length - 1]}: les faltan datos de alguna cuenta.`}
-            </p>
-          )}
+          <PartialMonthsNote monthlyTrend={monthlyTrend} />
         </div>
 
         {/* Diverging net bars */}

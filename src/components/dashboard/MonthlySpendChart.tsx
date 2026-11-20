@@ -21,24 +21,31 @@ import type { Currency } from '../../models'
 import type { MonthlyTrendRow } from '../../services/charts/dashboard-rows'
 import { formatCurrency, formatCurrencyShort } from '../../utils/formatting'
 import { averageSpendOfMonthsWithSpend } from '../../services/charts/chart-data'
+import {
+  HOUSEHOLD_GHOST_CAPTION,
+  householdShareLine,
+} from '../../services/household/household-copy'
 import { Card } from '../ui/card'
 import { MonthButtons } from './MonthButtons'
+import { MonthlySpendTooltip } from './MonthlySpendTooltip'
 
 interface MonthlySpendChartProps {
   monthlyTrend: MonthlyTrendRow[]
   homeCurrency: Currency
   // Opens one month's rows; undefined when there is nowhere to navigate.
   openMonth?: (key: string, type?: 'credit' | 'debit') => void
-  // The income ghost bars; off in Hogar mode, where income is out of scope.
-  showIncome?: boolean
+  // The lighter bar behind each month: the income (Todo) or, in Hogar mode,
+  // where income is out of scope, the Todo spend the household bar is part of.
+  ghost?: 'income' | 'total'
 }
 
 export function MonthlySpendChart({
   monthlyTrend,
   homeCurrency,
   openMonth,
-  showIncome = true,
+  ghost = 'income',
 }: MonthlySpendChartProps) {
+  const showIncome = ghost === 'income'
   // Partial months are drawn but not averaged: ten days of a statement
   // would read as a cheap month.
   const avgMonthly = averageSpendOfMonthsWithSpend(
@@ -48,6 +55,23 @@ export function MonthlySpendChart({
   // A Hogar month with no household spend would open an empty list, so it has
   // no drill (bar or button). Todo keeps every month's.
   const opensExpenses = (m: { gastos: number }) => showIncome || m.gastos > 0
+  // Hogar only: how much of each month's Todo spend the household bar is,
+  // computed once per month.
+  const shares = new Map(
+    monthlyTrend.map((m) => [
+      m.key,
+      showIncome
+        ? null
+        : householdShareLine(m.gastos, m.todoGastos, homeCurrency),
+    ])
+  )
+  const shareSuffix = (m: MonthlyTrendRow) =>
+    shares.get(m.key) ? ` · ${shares.get(m.key)}` : ''
+  // A Hogar month without a drill still says its share, for keyboard and
+  // screen reader users (the tooltip is mouse-only).
+  const undrilled = showIncome
+    ? []
+    : monthlyTrend.filter((m) => !opensExpenses(m) && shares.get(m.key))
 
   const tooltip = ({
     active,
@@ -55,32 +79,13 @@ export function MonthlySpendChart({
     label,
   }: TooltipProps<ValueType, NameType>) => {
     if (!active || !payload?.length) return null
-    const d = payload[0].payload as MonthlyTrendRow
     return (
-      <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-[14px] py-[10px] shadow-[var(--shadow-md)]">
-        <p className="mx-0 mt-0 mb-[6px] text-[12px] text-[var(--text-faint)]">
-          {label}
-        </p>
-        <p className="mx-0 my-[3px] text-[12px] font-semibold">
-          Gastos:{' '}
-          <span className="font-mono tabular-nums">
-            {formatCurrency(d.gastos, homeCurrency)}
-          </span>
-        </p>
-        {showIncome && (
-          <p className="mx-0 my-[3px] text-[12px] text-[var(--pos)]">
-            Ingresos:{' '}
-            <span className="font-mono tabular-nums">
-              {formatCurrency(d.ingresos, homeCurrency)}
-            </span>
-          </p>
-        )}
-        {!d.complete && (
-          <p className="mx-0 mt-[6px] mb-0 text-[12px] text-[var(--text-faint)]">
-            Le faltan datos de alguna cuenta: no entra en el promedio
-          </p>
-        )}
-      </div>
+      <MonthlySpendTooltip
+        month={payload[0].payload as MonthlyTrendRow}
+        label={String(label)}
+        homeCurrency={homeCurrency}
+        ghost={ghost}
+      />
     )
   }
 
@@ -89,13 +94,13 @@ export function MonthlySpendChart({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="m-0 text-title font-semibold">Gasto por mes</h3>
-          {showIncome && (
-            <p className="mx-0 mt-[2px] mb-0 text-caption text-[var(--text-faint)]">
-              La barra más clara detrás de cada mes son tus ingresos
-            </p>
-          )}
+          <p className="mx-0 mt-[2px] mb-0 text-caption text-[var(--text-faint)]">
+            {showIncome
+              ? 'La barra más clara detrás de cada mes son tus ingresos'
+              : HOUSEHOLD_GHOST_CAPTION}
+          </p>
         </div>
-        {avgMonthly !== null && (
+        {showIncome && avgMonthly !== null && (
           <div className="sm:text-right">
             <div className="text-label text-muted-foreground">
               Promedio por mes completo con gastos
@@ -157,6 +162,22 @@ export function MonthlySpendChart({
               ))}
             </Bar>
           )}
+          {!showIncome && (
+            // No drill: the Hogar drill would open rows that do not sum to it.
+            <Bar
+              dataKey="todoGastos"
+              xAxisId="ghost"
+              fill="var(--neg)"
+              fillOpacity={0.2}
+              radius={[3, 3, 0, 0]}
+              maxBarSize={26}
+              isAnimationActive={false}
+            >
+              {monthlyTrend.map((m) => (
+                <Cell key={m.key} fillOpacity={m.complete ? 0.2 : 0.1} />
+              ))}
+            </Bar>
+          )}
           <Bar
             dataKey="gastos"
             fill="var(--neg)"
@@ -185,7 +206,7 @@ export function MonthlySpendChart({
               ? [
                   {
                     key: `${m.key}-debit`,
-                    text: `Ver los gastos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
+                    text: `Ver los gastos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}${shareSuffix(m)}`,
                     onClick: () => openMonth(m.key, 'debit'),
                   },
                 ]
@@ -201,6 +222,15 @@ export function MonthlySpendChart({
               : []),
           ])}
         />
+      )}
+      {undrilled.length > 0 && (
+        <ul aria-label="Meses sin gastos del hogar" className="sr-only">
+          {undrilled.map((m) => (
+            <li key={m.key}>
+              {m.month} · {shares.get(m.key)}
+            </li>
+          ))}
+        </ul>
       )}
     </Card>
   )
