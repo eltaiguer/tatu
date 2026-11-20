@@ -123,7 +123,14 @@ Implemented in step 6 of #251: the Todo / Hogar mode on Resumen.
   the mode: `buildCurrentMonthSummary` takes the reference month, so a month
   with no household spend reads $0). The income, balance and savings views
   are not shown, nor the income bars of "Mes a mes"; one link opens the
-  month's household expenses (hidden when the month has none).
+  month's household expenses (hidden when the month has none). In their place
+  (#285): "Un mes típico del hogar" — the median household spend over the
+  complete months of "Mes a mes" ($0 months included), its count, the min–max
+  band and the top three categories by their own median (no drill, they don't
+  add up to the median); "Gasto por mes" draws the Todo spend as the lighter
+  bar behind each household bar (no drill), with "Hogar N% de $Y" in the
+  tooltip and the month's keyboard button; its "Promedio por mes completo con
+  gastos" is Todo only. The hero is unchanged.
 - Every drill-through in Hogar mode adds `household: 'household'` (one wrapper
   in `Dashboard.tsx`; Todo adds no key).
 - Sin definir apart: a muted hero line "Sin definir este mes: $Z" (hidden at

@@ -2,6 +2,7 @@ import type { Currency, FileType, Transaction } from '../../models'
 import { convert } from '../currency/convert'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { isCountedExpense } from '../spending/spending-rules'
+import { median } from './chart-data'
 import { monthCoverage, type MonthCoverage } from './complete-months'
 import { todayAsUtcDate, toMonthKey } from '../../utils/date-utils'
 
@@ -56,14 +57,6 @@ function shiftMonth(key: string, by: number): string {
   const [y, m] = key.split('-').map(Number)
   const d = new Date(Date.UTC(y, m - 1 + by, 1))
   return toMonthKey(d)
-}
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid]
 }
 
 // A month is a gap when an account has no rows in it (`absent`) while the

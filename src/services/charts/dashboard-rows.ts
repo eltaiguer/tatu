@@ -24,6 +24,9 @@ export interface MonthlyTrendRow {
   month: string
   ingresos: number
   gastos: number
+  // The counted spend of every row that month: `gastos` when nothing is cut
+  // (Todo), the whole the household bar is part of (Hogar).
+  todoGastos: number
   neto: number
   // Every imported account covers the whole month (completeMonths). A
   // partial month is still drawn, but stays out of averages and verdicts.
@@ -115,15 +118,16 @@ export function buildMonthlyTrendRows(
   )
   return buildMonthlyTrendsConverted(coverage, homeCurrency, fxRate)
     .slice(-12)
-    .map(
-      (axis) =>
-        drawn.get(axis.month) ?? {
-          month: axis.month,
-          income: 0,
-          expense: 0,
-          net: 0,
-        }
-    )
+    .map((axis) => ({
+      ...(drawn.get(axis.month) ?? {
+        month: axis.month,
+        income: 0,
+        expense: 0,
+        net: 0,
+      }),
+      // The axis row spans every row, drawn or not.
+      todoExpense: axis.expense,
+    }))
     .map((m) => ({
       key: m.month,
       month: new Intl.DateTimeFormat('es-UY', {
@@ -133,6 +137,7 @@ export function buildMonthlyTrendRows(
       }).format(new Date(m.month + '-01T00:00:00.000Z')),
       ingresos: m.income,
       gastos: m.expense,
+      todoGastos: m.todoExpense,
       neto: m.net,
       complete: complete.has(m.month),
     }))

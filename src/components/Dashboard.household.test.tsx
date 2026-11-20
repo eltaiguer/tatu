@@ -621,8 +621,35 @@ describe('Dashboard: Todo / Hogar mode', () => {
       )
       // The axis keeps the three months (the label below counts them); the
       // $0 one has no drill of its own (round 2).
-      expect(months()).toEqual(todo.filter((m) => !/feb/.test(m ?? '')))
+      // Hogar buttons add the share (#285): compare the part before it.
+      expect(months().map((m) => m?.split(' · ')[0])).toEqual(
+        todo.filter((m) => !/feb/.test(m ?? ''))
+      )
       expect(screen.getByText(/Últimos 3 meses con datos/)).toBeInTheDocument()
+    })
+
+    it('lists a month with no household spend with its share, for keyboard and screen reader users', () => {
+      render(
+        <Harness
+          transactions={[
+            tx({ amount: 100, date: new Date('2026-01-10T00:00:00.000Z') }),
+            tx({
+              amount: 60,
+              category: Category.Restaurants,
+              date: new Date('2026-02-10T00:00:00.000Z'),
+            }),
+            tx({ amount: 100, date: new Date('2026-03-10T00:00:00.000Z') }),
+          ]}
+          initialHousehold
+          onNavigateToTransactions={() => {}}
+        />
+      )
+
+      // No drill (an empty list), but its total and its 0% are not mouse-only.
+      const items = screen.getAllByRole('listitem').map((li) => li.textContent)
+      expect(items).toContainEqual(
+        expect.stringMatching(/^feb\S* 2026 · Hogar 0% de US\$ 60,00$/)
+      )
     })
 
     it('the empty Hogar state shows the Sin categoría nudge', () => {
@@ -713,5 +740,216 @@ describe('Dashboard: Todo / Hogar mode', () => {
       )
       expect(drill('feb')).toBeInTheDocument()
     })
+  })
+})
+
+// "Un mes típico del hogar" (#285): Hogar mode's card in the savings card's
+// slot. One account (credit card, USD); the clock is Nov 2026, so July to
+// October are complete (rows in each month, first row Jul 1, last Oct 30).
+//   household spend per month: Jul 100, Aug 300, Sep 250, Oct 400
+//   (the restaurants rows are not household)
+function fourMonths(): Transaction[] {
+  const d = (day: string) => new Date(`${day}T00:00:00.000Z`)
+  return [
+    tx({ date: d('2026-07-01'), amount: 100 }),
+    tx({
+      date: d('2026-07-15'),
+      amount: 300,
+      category: Category.Restaurants,
+    }),
+    tx({ date: d('2026-08-10'), amount: 200 }),
+    tx({ date: d('2026-08-10'), amount: 100, category: Category.Utilities }),
+    tx({ date: d('2026-09-10'), amount: 150 }),
+    tx({ date: d('2026-09-10'), amount: 100, category: Category.Utilities }),
+    tx({
+      date: d('2026-09-10'),
+      amount: 50,
+      category: Category.Restaurants,
+    }),
+    tx({ date: d('2026-10-30'), amount: 400 }),
+  ]
+}
+
+function typicalCard() {
+  const heading = screen.getByRole('heading', {
+    name: 'Un mes típico del hogar',
+  })
+  return within(heading.closest('[data-slot="card"]') as HTMLElement)
+}
+
+describe('Dashboard: Un mes típico del hogar', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 9, 12))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shows the median household month, its count and band, and the top categories', () => {
+    render(<Harness transactions={fourMonths()} initialHousehold />)
+
+    const card = typicalCard()
+    expect(card.getByText('Mediana de 4 meses completos')).toBeInTheDocument()
+    expect(card.getByText('US$ 275,00')).toBeInTheDocument()
+    expect(card.getByText(/^Entre /)).toHaveTextContent(
+      'Entre US$ 100,00 y US$ 400,00 por mes'
+    )
+    expect(
+      card.getByText('Por categoría, en un mes típico')
+    ).toBeInTheDocument()
+    const items = card.getAllByRole('listitem')
+    expect(items).toHaveLength(2)
+    expect(items[0]).toHaveTextContent('Alimentación')
+    expect(items[0]).toHaveTextContent('US$ 175,00')
+    expect(items[1]).toHaveTextContent('Servicios')
+    expect(items[1]).toHaveTextContent('US$ 50,00')
+  })
+
+  it('takes the place of the savings card in Hogar mode, and only there (guard)', () => {
+    const { unmount } = render(
+      <Harness transactions={fourMonths()} initialHousehold />
+    )
+    expect(screen.queryByText('¿Estás ahorrando?')).not.toBeInTheDocument()
+    unmount()
+
+    render(<Harness transactions={fourMonths()} />)
+    expect(screen.getByText('¿Estás ahorrando?')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Un mes típico del hogar')
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the Promedio por mes completo con gastos in Todo only', () => {
+    const { unmount } = render(
+      <Harness transactions={fourMonths()} initialHousehold />
+    )
+    expect(
+      screen.queryByText('Promedio por mes completo con gastos')
+    ).not.toBeInTheDocument()
+    unmount()
+
+    render(<Harness transactions={fourMonths()} />)
+    expect(
+      screen.getByText('Promedio por mes completo con gastos')
+    ).toBeInTheDocument()
+  })
+
+  it('says there is no typical month yet when no month is complete', () => {
+    render(<Harness transactions={marchRows()} initialHousehold />)
+
+    expect(
+      typicalCard().getByText(
+        'Todavía no tenés ningún mes importado entero en todas tus cuentas, así que no hay un mes típico para comparar.'
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('says "1 mes completo" and hides the band when every month spent the same', () => {
+    render(
+      <Harness
+        transactions={[
+          tx({ date: new Date('2026-09-01T00:00:00.000Z'), amount: 100 }),
+          tx({ date: new Date('2026-09-30T00:00:00.000Z'), amount: 100 }),
+        ]}
+        initialHousehold
+      />
+    )
+
+    const card = typicalCard()
+    expect(card.getByText('Mediana de 1 mes completo')).toBeInTheDocument()
+    // the headline and the one category (all of it groceries)
+    expect(card.getAllByText('US$ 200,00')).toHaveLength(2)
+    expect(card.queryByText(/^Entre /)).not.toBeInTheDocument()
+  })
+
+  it('names the months it leaves out', () => {
+    render(
+      <Harness
+        transactions={[
+          ...fourMonths(),
+          tx({ date: new Date('2026-11-05T00:00:00.000Z'), amount: 10 }),
+        ]}
+        initialHousehold
+      />
+    )
+
+    expect(
+      typicalCard().getByText(
+        /^No cuenta nov\. 2026: le faltan datos de alguna cuenta\.$/
+      )
+    ).toBeInTheDocument()
+  })
+})
+
+describe('Dashboard: "Gasto por mes" in Hogar mode', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 9, 12))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('says the lighter bar is the Todo spend, not the income', () => {
+    render(<Harness transactions={fourMonths()} initialHousehold />)
+
+    expect(
+      screen.getByText(
+        'La barra más clara detrás de cada mes es tu gasto total'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/son tus ingresos/)).not.toBeInTheDocument()
+  })
+
+  it('says the lighter bar is the income in Todo (guard)', () => {
+    render(<Harness transactions={fourMonths()} />)
+
+    expect(screen.getByText(/son tus ingresos/)).toBeInTheDocument()
+    expect(screen.queryByText(/es tu gasto total/)).not.toBeInTheDocument()
+  })
+
+  it('puts the household share of the Todo spend in each month’s button', () => {
+    render(
+      <Harness
+        transactions={fourMonths()}
+        initialHousehold
+        onNavigateToTransactions={() => {}}
+      />
+    )
+
+    const names = within(
+      screen.getByRole('navigation', { name: 'Gastos por mes' })
+    )
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+    expect(names).toHaveLength(4)
+    expect(names[0]).toMatch(
+      /^Ver los gastos de jul\S* 2026 · Hogar 25% de US\$ 400,00$/
+    )
+    expect(names[1]).toMatch(
+      /^Ver los gastos de ago\S* 2026 · Hogar 100% de US\$ 300,00$/
+    )
+    expect(names[2]).toMatch(
+      /^Ver los gastos de (sep|set)\S* 2026 · Hogar 83% de US\$ 300,00$/
+    )
+    expect(names[3]).toMatch(
+      /^Ver los gastos de oct\S* 2026 · Hogar 100% de US\$ 400,00$/
+    )
+  })
+
+  it('leaves Todo’s buttons as they were (guard)', () => {
+    render(
+      <Harness
+        transactions={fourMonths()}
+        onNavigateToTransactions={() => {}}
+      />
+    )
+
+    expect(
+      screen.getByRole('button', { name: /^Ver los gastos de jul\S* 2026$/ })
+    ).toBeInTheDocument()
   })
 })
