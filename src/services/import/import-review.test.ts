@@ -141,7 +141,11 @@ describe('countReviewRows', () => {
   })
 
   it('counts a review-mode link the same as the table link', () => {
-    const period = { mode: 'range', from: '2025-01-01', to: '2025-12-31' }
+    const period = {
+      mode: 'range' as const,
+      from: '2025-01-01',
+      to: '2025-12-31',
+    }
     expect(
       countReviewRows(rows, { review: true, reviewMode: true, period })
     ).toBe(countReviewRows(rows, { review: true, period }))
