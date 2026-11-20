@@ -1,8 +1,8 @@
-import type { Currency, Transaction } from '../../models'
+import type { Currency, FileType, Transaction } from '../../models'
 import { convert } from '../currency/convert'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { isCountedExpense } from '../spending/spending-rules'
-import { completeMonths } from './complete-months'
+import { monthCoverage, type MonthCoverage } from './complete-months'
 import { todayAsUtcDate, toMonthKey } from '../../utils/date-utils'
 
 // "What changed": each category's spend in the latest complete month vs the
@@ -24,6 +24,15 @@ export interface CategoryChange {
   pct: number | null
 }
 
+// A reference month plus a contiguous baseline of at least two.
+const MIN_BASELINE_MONTHS = 2
+export const MIN_COMPLETE_MONTHS = 1 + MIN_BASELINE_MONTHS
+
+export interface AccountGap {
+  month: string
+  accounts: FileType[]
+}
+
 export type CategoryChanges =
   | {
       kind: 'ok'
@@ -32,7 +41,12 @@ export type CategoryChanges =
       increases: CategoryChange[]
       decrease?: CategoryChange
     }
-  | { kind: 'insufficient'; reference?: string }
+  | {
+      kind: 'insufficient'
+      reference?: string
+      completeInARow: number
+      gap?: AccountGap
+    }
 
 // Changes smaller than this (US$ 10 in the home currency) are noise.
 const NOISE_FLOOR_USD = 10
@@ -52,6 +66,42 @@ function median(values: number[]): number {
     : sorted[mid]
 }
 
+// A month is a gap when some account covers it and another has no rows in
+// it. A month nobody covers is time (the statements just end there); a
+// missing account that has rows that month has its statement imported.
+function gapAt(
+  months: MonthCoverage[],
+  month: string,
+  currentMonth: string
+): AccountGap | undefined {
+  const c = months.find((m) => m.month === month)
+  if (!c || month >= currentMonth) return undefined
+  if (c.covered.length === 0 || c.absent.length === 0) return undefined
+  return { month, accounts: c.absent }
+}
+
+// The gap next to the run of complete months ending at `reference` (after it
+// first, then before it), or, with no complete month, the newest gap.
+function gapField(
+  months: MonthCoverage[],
+  currentMonth: string,
+  reference?: string,
+  runStart?: string
+): { gap?: AccountGap } {
+  let gap: AccountGap | undefined
+  if (reference && runStart) {
+    gap =
+      gapAt(months, shiftMonth(reference, 1), currentMonth) ??
+      gapAt(months, shiftMonth(runStart, -1), currentMonth)
+  } else {
+    for (const c of [...months].reverse()) {
+      gap = gapAt(months, c.month, currentMonth)
+      if (gap) break
+    }
+  }
+  return gap ? { gap } : {}
+}
+
 export function categoryChanges(
   transactions: Transaction[],
   homeCurrency: Currency,
@@ -62,9 +112,15 @@ export function categoryChanges(
   coverage: Transaction[] = transactions
 ): CategoryChanges {
   // Today's month where the user is (todayAsUtcDate reads the local day).
-  const complete = completeMonths(coverage, toMonthKey(todayAsUtcDate(now)))
+  const currentMonth = toMonthKey(todayAsUtcDate(now))
+  const months = monthCoverage(coverage, currentMonth)
+  const complete = new Set(months.filter((c) => c.complete).map((c) => c.month))
   if (complete.size === 0) {
-    return { kind: 'insufficient' }
+    return {
+      kind: 'insufficient',
+      completeInARow: 0,
+      ...gapField(months, currentMonth),
+    }
   }
   // Latest month complete for every account.
   const reference = Array.from(complete).sort().reverse()[0]
@@ -77,7 +133,14 @@ export function categoryChanges(
     if (!complete.has(m)) break
     baseline.unshift(m)
   }
-  if (baseline.length < 2) return { kind: 'insufficient', reference }
+  if (baseline.length < MIN_BASELINE_MONTHS) {
+    return {
+      kind: 'insufficient',
+      reference,
+      completeInARow: 1 + baseline.length,
+      ...gapField(months, currentMonth, reference, baseline[0] ?? reference),
+    }
+  }
 
   // Expense spend per category per month — the same rows and conversion
   // every other expense number in Resumen uses.

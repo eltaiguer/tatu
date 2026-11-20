@@ -32,3 +32,14 @@ export function getPeriodLabel(period: UrlPeriod): string {
   }
   return 'Período'
 }
+
+// A 'YYYY-MM' month named mid-sentence: "nov. 2025" (lowercase, CONTEXT.md).
+export function shortMonthLabel(key: string): string {
+  return new Intl.DateTimeFormat('es-UY', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+    .format(new Date(`${key}-01T00:00:00.000Z`))
+    .toLowerCase()
+}
