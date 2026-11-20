@@ -105,14 +105,16 @@ function App({ auth, createRepository }: AppProps) {
   // stack duplicate history entries: a re-select replaces the entry. It keeps
   // the view's query where that holds filters (`keepsQueryOnReselect`), and
   // otherwise drops it (Resumen's Hogar mode goes back to Todo).
-  function go(view: View, search = '') {
+  // `push` forces a PUSH even from the same view, so Transacciones remounts
+  // and re-reads the link (the import dialog's, opened from Transacciones).
+  function go(view: View, search = '', push = false) {
     const reselect = view === currentView
     const sameQuery = search
       ? `?${search}` === location.search
       : keepsQueryOnReselect(view) || !location.search
     if (reselect && sameQuery) return
     navigate(pathForView(view) + (search ? `?${search}` : ''), {
-      replace: reselect,
+      replace: reselect && !push,
     })
   }
 
@@ -294,9 +296,10 @@ function App({ auth, createRepository }: AppProps) {
   }
 
   function navigateToTransactions(
-    filter: import('./models').TransactionsFilter
+    filter: import('./models').TransactionsFilter,
+    push = false
   ) {
-    go('transactions', filterToSearch(filter))
+    go('transactions', filterToSearch(filter), push)
   }
 
   const {
@@ -622,7 +625,7 @@ function App({ auth, createRepository }: AppProps) {
             onViewTransactions={(filter) => {
               importOpensReview.current = Boolean(filter.reviewMode)
               setImportOpen(false)
-              navigateToTransactions(filter)
+              navigateToTransactions(filter, true)
             }}
             onTransactionsImported={handleTransactionsImported}
           />

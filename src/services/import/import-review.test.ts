@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Transaction } from '../../models'
+import type { Transaction, TransactionsFilter } from '../../models'
 import { filterToSearch } from '../filters/url-filters'
 import { parseFilterParams } from '../filters/url-filters'
 import { filterTransactions } from '../filters/transaction-filter'
@@ -134,6 +134,21 @@ describe('countReviewRows', () => {
         period: { mode: 'range', from: '2025-01-01', to: '2025-12-31' },
       })
     ).toBe(2)
+  })
+
+  it('leaves out rows in ignored categories, as the queue does', () => {
+    const withIgnored = [
+      ...rows,
+      tx('f', { category: 'internal_transfer', categoryConfidence: 0.2 }),
+    ]
+    const link: TransactionsFilter = { review: true, reviewMode: true }
+    const queue = filterTransactions(
+      withIgnored,
+      parseFilterParams(filterToSearch(link)),
+      { householdRules: currentHouseholdRules() }
+    )
+    expect(countReviewRows(withIgnored, link)).toBe(queue.length)
+    expect(countReviewRows(withIgnored, link)).toBe(3)
   })
 
   it('counts only the given ids', () => {
