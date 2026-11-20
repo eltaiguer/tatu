@@ -247,17 +247,24 @@ export function Insights({
   ) {
     if (!onApplyHouseholdToSimilar) return
     setMarking(key, true)
-    try {
-      let affected = 0
-      for (const id of transactionIds) {
+    // A failed anchor does not stop the rest: the keys that saved stay saved,
+    // so the outcome is the summed count of those plus the first error.
+    let affected = 0
+    let saved = 0
+    let firstError: unknown
+    let failed = false
+    for (const id of transactionIds) {
+      try {
         affected += (await onApplyHouseholdToSimilar(id, true)).affected
+        saved += 1
+      } catch (markError) {
+        if (!failed) firstError = markError
+        failed = true
       }
-      toast.success(householdMarkedToast(merchant, affected))
-    } catch (markError) {
-      reportError(markError, 'No se pudo marcar como hogar')
-    } finally {
-      setMarking(key, false)
     }
+    setMarking(key, false)
+    if (saved > 0) toast.success(householdMarkedToast(merchant, affected))
+    if (failed) reportError(firstError, 'No se pudo marcar como hogar')
   }
 
   return (
@@ -417,16 +424,19 @@ export function Insights({
                 </h3>
                 <div className="flex flex-col gap-[10px]">
                   {group.items.map((insight, i) => {
-                    const key = `${group.type}-${i}`
+                    const listKey = `${group.type}-${i}`
                     const actions = actionsByInsight.get(insight)
                     if (!actions) return null
+                    // In-flight state follows the card's merchant, not its
+                    // position: a Regenerar can reorder the list mid-write.
+                    const key = `${insight.type}:${actions.merchantLabel ?? listKey}`
                     const offer =
                       actions.household?.state === 'offer'
                         ? actions.household
                         : null
                     return (
                       <InsightCard
-                        key={key}
+                        key={listKey}
                         insight={insight}
                         actions={actions}
                         onDrill={onNavigateToTransactions}

@@ -551,6 +551,39 @@ describe('Insights', () => {
       expect(onApplyHouseholdToSimilar).toHaveBeenCalledTimes(2)
     })
 
+    it('keeps marking the other keys when one fails, and reports both outcomes', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const rows = ['NETFLIX.COM', 'NETFLIX AR', 'NETFLIX UY'].map(
+        (description, i) =>
+          makeTransaction(`k${i}`, {
+            description,
+            displayDescription: 'Netflix',
+            date: new Date(`2026-0${i + 4}-05T00:00:00.000Z`),
+          })
+      )
+      seed([{ ...recurringCard, merchant: 'Netflix' }], rows)
+      const onApplyHouseholdToSimilar = vi
+        .fn()
+        .mockResolvedValueOnce({ affected: 2 })
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValueOnce({ affected: 4 })
+      render(<Toaster />)
+      renderInsights({ transactions: rows, onApplyHouseholdToSimilar })
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: /^Marcar como hogar/ })
+      )
+
+      expect(
+        await screen.findByText('Hogar: Sí en 6 transacciones de Netflix')
+      ).toBeInTheDocument()
+      expect(
+        await screen.findByText('No se pudo marcar como hogar')
+      ).toBeInTheDocument()
+      expect(onApplyHouseholdToSimilar).toHaveBeenCalledTimes(3)
+      expect(errorSpy).toHaveBeenCalled()
+    })
+
     it('reports a failed household mark', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       seed([recurringCard], netflixRows)
