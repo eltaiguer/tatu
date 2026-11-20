@@ -412,4 +412,47 @@ describe('merchant split across categories (#281)', () => {
       screen.queryByRole('button', { name: /^Aplicar a/ })
     ).not.toBeInTheDocument()
   })
+
+  it('putting the name back to the original under Todas clears the row’s own name', async () => {
+    seed([
+      tx('d1', {
+        description: NAME,
+        displayDescription: 'Foo',
+        categoryConfidence: 0.9,
+      }),
+      tx('d2', { description: NAME, categoryConfidence: 0.9 }),
+    ])
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: 'Editar Foo' })[0])
+    })
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: NAME },
+    })
+    await pickInDialog(restaurants)
+    await saveDialog()
+
+    await waitFor(() => expect(repo.row('d2')?.category).toBe('restaurants'))
+    expect(repo.row('d1')?.displayDescription).toBeUndefined()
+  })
+
+  it('offers nothing when the merchant has a refund in another category', async () => {
+    seed([
+      tx('d1', { description: NAME, categoryConfidence: 0.9 }),
+      tx('d2', { description: NAME, categoryConfidence: 0.9 }),
+      tx('r', {
+        description: NAME,
+        type: 'credit',
+        category: 'income',
+        categoryConfidence: 0.9,
+      }),
+    ])
+
+    await editFirstSolo(restaurants)
+
+    await visible(screen.findByText('Cambios guardados'))
+    expect(
+      screen.queryByRole('button', { name: /^Aplicar a/ })
+    ).not.toBeInTheDocument()
+  })
 })

@@ -12,8 +12,8 @@ import {
 // on every similar row and a save has no Deshacer: only when the category
 // changed to a real one, no transfer category is involved (stamping a
 // transfer stops its pairing from ever re-marking it), no similar row is a
-// split parent, no other similar row holds a hand-set (confidence 1) different
-// category, and the write reaches another row. The post-save offer covers the
+// split parent, no other similar row holds a hand-set (confidence 1, or none recorded)
+// different category and none is a refund (credit) in another category, and the write reaches another row. The post-save offer covers the
 // rest.
 export function defaultsToAllSimilar(
   rows: readonly Transaction[],
@@ -31,13 +31,17 @@ export function defaultsToAllSimilar(
     return false
   }
   const similar = findSimilarTransactions([...rows], transaction)
-  const blocked = similar.some(
-    (row) =>
-      row.isSplitParent ||
-      isTransferCategory(normalizeCategoryId(row.category)) ||
-      (row.id !== transaction.id &&
-        row.categoryConfidence === 1 &&
-        normalizeCategoryId(row.category) !== next)
-  )
+  const blocked = similar.some((row) => {
+    const own = normalizeCategoryId(row.category)
+    if (row.isSplitParent || isTransferCategory(own)) return true
+    if (row.id === transaction.id || own === next) return false
+    // A refund in another category (Ingresos) is not stamped by default; a
+    // categorized row with no confidence (legacy) may be hand-set, like
+    // needsCategoryReview treats it.
+    const handSet =
+      row.categoryConfidence === 1 ||
+      (row.categoryConfidence == null && own !== Category.Uncategorized)
+    return row.type === 'credit' || handSet
+  })
   return !blocked && countSimilarEditReach([...rows], transaction, false) > 1
 }

@@ -315,7 +315,11 @@ export function useCategoryWrites({
       similar.some(
         (other) =>
           other.isSplitParent ||
-          isTransferCategory(normalizeCategoryId(other.category))
+          isTransferCategory(normalizeCategoryId(other.category)) ||
+          // A refund in another category would be stamped too.
+          (other.type === 'credit' &&
+            normalizeCategoryId(other.category) !==
+              normalizeCategoryId(category))
       )
     ) {
       return false
@@ -326,6 +330,7 @@ export function useCategoryWrites({
     const uncategorized = similar.some(
       (other) =>
         other.id !== id &&
+        other.type === 'debit' &&
         normalizeCategoryId(other.category) === Category.Uncategorized
     )
     if (!split && !uncategorized) return false

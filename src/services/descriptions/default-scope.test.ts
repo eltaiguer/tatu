@@ -35,7 +35,7 @@ describe('defaultsToAllSimilar (#281, conservative default)', () => {
 
   it('is false when the category did not change, or is Sin categoría', () => {
     expect(check(trio(), 'groceries')).toBe(false)
-    expect(check(trio(), 'restaurant')).toBe(true)
+    expect(check(trio({ categoryConfidence: 0.9 }), 'restaurant')).toBe(true)
     expect(check(trio(), '')).toBe(false)
   })
 
@@ -80,5 +80,27 @@ describe('defaultsToAllSimilar (#281, conservative default)', () => {
       tx('p_split_0', 'groceries', { splitParentId: 'p' }),
     ]
     expect(check(rows)).toBe(false)
+  })
+
+  it('is false when a merchant credit (a refund) is in another category', () => {
+    const rows = [
+      ...trio({ categoryConfidence: 0.9 }),
+      tx('r', 'income', { type: 'credit', categoryConfidence: 0.9 }),
+    ]
+    expect(check(rows)).toBe(false)
+  })
+
+  it('treats a categorized row with no confidence as possibly hand-set', () => {
+    const rows = [
+      tx('a', 'groceries', { categoryConfidence: 0.9 }),
+      tx('b', 'transport'),
+    ]
+    expect(check(rows)).toBe(false)
+    // Sin categoría rows with no confidence do not block.
+    const open = [
+      tx('a', 'groceries', { categoryConfidence: 0.9 }),
+      tx('b', undefined),
+    ]
+    expect(check(open)).toBe(true)
   })
 })

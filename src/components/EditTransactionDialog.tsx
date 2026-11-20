@@ -186,14 +186,17 @@ function EditTransactionForm({
   const categoryChanged =
     category !== '' &&
     normalizeCategoryId(category) !== normalizeCategoryId(transaction.category)
+  // Scans every row: memoized, not run per keystroke.
+  const defaultsToAll = useMemo(
+    () =>
+      categoryChanged &&
+      !isSplitChildTx(transaction) &&
+      !isSplitParentTx(transaction) &&
+      defaultToAll(transaction, category),
+    [categoryChanged, defaultToAll, transaction, category]
+  )
   const applyScope: ApplyScope =
-    chosenScope ??
-    (categoryChanged &&
-    !isSplitChildTx(transaction) &&
-    !isSplitParentTx(transaction) &&
-    defaultToAll(transaction, category)
-      ? 'matching_past_and_future'
-      : 'single')
+    chosenScope ?? (defaultsToAll ? 'matching_past_and_future' : 'single')
 
   const categorySuggestions = useMemo(
     () =>

@@ -964,6 +964,30 @@ describe('transaction-mutations — apply scope', () => {
       expect(repo.row('same-2')?.displayDescription).toBeUndefined()
     })
 
+    it('clears the edited row’s own name when the name is put back to the original', async () => {
+      const repo = signedIn([
+        makeTransaction('same-1', {
+          description: MERCHANT,
+          displayDescription: 'Foo',
+        }),
+        makeTransaction('same-2', {
+          description: MERCHANT,
+          displayDescription: 'Bar',
+        }),
+      ])
+
+      await editTransaction(repo, 'same-1', {
+        displayDescription: MERCHANT,
+        category: 'restaurants',
+        applyScope: 'matching_past_and_future',
+      })
+
+      for (const read of [stored, repo.row]) {
+        expect(read('same-1')?.displayDescription).toBeUndefined()
+        expect(read('same-2')?.displayDescription).toBe('Bar')
+      }
+    })
+
     it('does not touch per-row names when only the category changed', async () => {
       const repo = signedIn([
         makeTransaction('enriched', {

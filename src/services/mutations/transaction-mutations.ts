@@ -713,7 +713,11 @@ export async function editTransaction(
     for (const tx of matching) {
       const patch: TransactionPatch = {
         ...(category && { category, categoryConfidence: 1 }),
-        ...(renamed && { displayDescription: null }),
+        // A rename clears every per-row name; a name put back to the original
+        // clears the edited row's own.
+        ...((renamed || (nameGiven && tx.id === transactionId)) && {
+          displayDescription: null,
+        }),
         ...(tx.id === transactionId && tags !== undefined && { tags }),
       }
       if (!isEmptyPatch(patch)) changes.set(tx.id, patch)

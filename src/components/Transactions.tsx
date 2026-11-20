@@ -245,6 +245,11 @@ export function Transactions({
     [transactions]
   )
 
+  const defaultToAll = useCallback(
+    (row: Transaction, c: string) => defaultsToAllSimilar(transactions, row, c),
+    [transactions]
+  )
+
   const countHouseholdSimilar = useCallback(
     (transaction: Transaction) =>
       rowsSharingMerchantRule(transactions, transaction).length,
@@ -538,7 +543,7 @@ export function Transactions({
       <EditTransactionDialog
         transaction={editingTransaction}
         countSimilar={countSimilar}
-        defaultToAll={(row, c) => defaultsToAllSimilar(transactions, row, c)}
+        defaultToAll={defaultToAll}
         countHouseholdSimilar={countHouseholdSimilar}
         knownTags={tagSuggestions}
         canSetHousehold={Boolean(onSetHousehold)}
