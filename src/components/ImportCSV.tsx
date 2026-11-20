@@ -10,20 +10,22 @@ import {
   Info,
   Loader,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   importAiErrorMessage,
   StatementReadError,
   userErrorMessage,
 } from '../utils/user-error'
-import type { FileType, TransactionsFilter } from '../models'
+import type { FileType, Transaction, TransactionsFilter } from '../models'
 import type {
   ImportStatementOptions,
   StatementFile,
   StatementImportResult,
 } from '../services/import/import-statement'
 import { ACCOUNT_LABELS } from '../utils/account-display'
+import { monthSpanLabel } from '../services/filters/period-label'
+import { countReviewRows, reviewLink } from '../services/import/import-review'
 
 // validating = reading/parsing the file; importing = the file is valid and
 // its rows are being saved.
@@ -39,26 +41,53 @@ interface ImportSummary {
   // The month "Ver transacciones" opens: the newest new row's, or the file's
   // newest when nothing was new.
   month: { y: number; m: number } | null
+  // What the file covered, whatever was new (null: no rows).
+  fileRange: { from: string; to: string } | null
+  fileRows: number
+  // Ids of the rows this import added: the "a revisar" count is read from the
+  // stored rows with these ids, since rules, AI and transfer inference change
+  // category and confidence after the import's own classification.
+  addedIds: ReadonlySet<string>
 }
 
 // One line per count in the summary. A new count (e.g. corrected rows) is one
 // more entry here.
-function summaryLines(summary: ImportSummary) {
+function summaryLines(summary: ImportSummary, toReview: number) {
   return [
-    { count: summary.added, one: 'nueva', many: 'nuevas' },
+    { count: summary.added, one: 'nueva', many: 'nuevas', hint: undefined },
+    // The file's own new rows still to review (0 says nothing is left).
+    ...(summary.added > 0
+      ? [
+          {
+            count: toReview,
+            one: 'a revisar',
+            many: 'a revisar',
+            hint: 'sin categoría o con poca seguridad',
+          },
+        ]
+      : []),
     {
       count: summary.duplicates,
       one: 'duplicada omitida',
       many: 'duplicadas omitidas',
+      hint: undefined,
     },
     {
       count: summary.previouslyDeleted,
       one: 'eliminada antes',
       many: 'eliminadas antes',
+      hint: undefined,
     },
     // Only when it happened: most imports repair nothing.
     ...(summary.repaired > 0
-      ? [{ count: summary.repaired, one: 'corregida', many: 'corregidas' }]
+      ? [
+          {
+            count: summary.repaired,
+            one: 'corregida',
+            many: 'corregidas',
+            hint: undefined,
+          },
+        ]
       : []),
   ]
 }
@@ -77,9 +106,16 @@ export type ImportOutcome = Pick<
   | 'aiPartial'
   | 'fileType'
   | 'month'
+  | 'fileRange'
+  | 'fileRows'
 >
 
 interface ImportCSVProps {
+  /**
+   * The signed-in user's rows: the summary counts what is left to review in
+   * them, live, never in the import's own result (#275).
+   */
+  transactions: Transaction[]
   /** "Ver transacciones" on the summary; the import itself never navigates. */
   onViewTransactions?: (filter: TransactionsFilter) => void
   /**
@@ -122,6 +158,7 @@ async function readFileBytes(file: File): Promise<ArrayBuffer> {
 }
 
 export function ImportCSV({
+  transactions,
   onViewTransactions,
   onTransactionsImported,
 }: ImportCSVProps) {
@@ -198,6 +235,8 @@ export function ImportCSV({
         aiPartial,
         fileType,
         month,
+        fileRange,
+        fileRows,
       } = await onTransactionsImported(
         { bytes, fileName: file.name },
         { onParsed: () => setImportState('importing') }
@@ -212,6 +251,9 @@ export function ImportCSV({
         repaired: repaired.length,
         fileType,
         month,
+        fileRange,
+        fileRows,
+        addedIds: new Set(added.map((row) => row.id)),
       })
 
       setImportState('success')
@@ -343,10 +385,12 @@ export function ImportCSV({
         {importState === 'success' && importSummary && (
           <ImportSummaryPanel
             summary={importSummary}
+            transactions={transactions}
             fileName={fileName}
             accountLabel={ACCOUNT_LABELS[importSummary.fileType]}
             headingRef={summaryHeadingRef}
             onImportAnother={resetImport}
+            onReview={onViewTransactions}
             onViewTransactions={
               onViewTransactions
                 ? () =>
@@ -470,6 +514,8 @@ export function ImportCSV({
 
 function ImportSummaryPanel({
   summary,
+  transactions,
+  onReview,
   fileName,
   accountLabel,
   headingRef,
@@ -477,6 +523,8 @@ function ImportSummaryPanel({
   onViewTransactions,
 }: {
   summary: ImportSummary
+  transactions: Transaction[]
+  onReview?: (filter: TransactionsFilter) => void
   fileName: string
   accountLabel: string
   headingRef: React.RefObject<HTMLHeadingElement>
@@ -485,6 +533,30 @@ function ImportSummaryPanel({
 }) {
   // Nothing new is not a success: the file was most likely imported before.
   const nothingNew = summary.added === 0
+
+  // Counted live from the stored rows, through the Transacciones filter, so a
+  // later transfer pairing or edit is reflected and the number is what the
+  // link opens.
+  const { toReview, link, linkCount } = useMemo(() => {
+    const link = summary.fileRange
+      ? reviewLink([
+          { fileType: summary.fileType, fileRange: summary.fileRange },
+        ])
+      : null
+    return {
+      toReview: countReviewRows(
+        transactions,
+        { review: true },
+        summary.addedIds
+      ),
+      link,
+      linkCount: link ? countReviewRows(transactions, link) : 0,
+    }
+  }, [summary, transactions])
+  const reviewAction =
+    onReview && !nothingNew && link && toReview > 0 && linkCount > 0
+      ? () => onReview(link)
+      : undefined
 
   return (
     <div className="text-center py-8 sm:py-12">
@@ -526,20 +598,30 @@ function ImportSummaryPanel({
           <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
             {accountLabel}
           </div>
+          {summary.fileRange && (
+            <p className="mt-3 text-sm text-muted-foreground">
+              {monthSpanLabel(summary.fileRange.from, summary.fileRange.to)} ·{' '}
+              <span className="font-mono tabular-nums">{summary.fileRows}</span>{' '}
+              {summary.fileRows === 1 ? 'movimiento' : 'movimientos'}
+            </p>
+          )}
           <ul
             aria-label="Resumen de la importación"
             className="mt-4 space-y-1 text-sm"
           >
-            {summaryLines(summary).map(({ count, one, many }) => (
-              <li key={many}>
-                <span className="font-mono tabular-nums font-medium">
-                  {count}
-                </span>{' '}
-                <span className="text-muted-foreground">
-                  {count === 1 ? one : many}
-                </span>
-              </li>
-            ))}
+            {summaryLines(summary, toReview).map(
+              ({ count, one, many, hint }) => (
+                <li key={many}>
+                  <span className="font-mono tabular-nums font-medium">
+                    {count}
+                  </span>{' '}
+                  <span className="text-muted-foreground">
+                    {count === 1 ? one : many}
+                    {hint && ` · ${hint}`}
+                  </span>
+                </li>
+              )
+            )}
           </ul>
         </div>
         <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4 w-full sm:w-auto">
@@ -552,9 +634,15 @@ function ImportSummaryPanel({
           {onViewTransactions && (
             <Button
               onClick={onViewTransactions}
-              variant={nothingNew ? 'outline' : 'default'}
+              variant={nothingNew || reviewAction ? 'outline' : 'default'}
             >
               Ver transacciones
+            </Button>
+          )}
+          {reviewAction && (
+            <Button onClick={reviewAction}>
+              Revisar {linkCount}{' '}
+              {linkCount === 1 ? 'movimiento' : 'movimientos'}
             </Button>
           )}
         </div>

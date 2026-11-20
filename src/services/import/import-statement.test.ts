@@ -99,6 +99,31 @@ describe('importStatement', () => {
     expect(pedidosYa?.category).not.toBe('uncategorized')
   })
 
+  it.each([
+    ['CreditCardsMovementsDetail.csv', 64, '2025-03-17', '2025-12-04'],
+    ['USDmovements.csv', 22, '2025-11-03', '2025-11-27'],
+    ['UYUmovements.csv', 13, '2025-11-04', '2025-11-27'],
+  ])(
+    'reports the period and size of the file %s',
+    async (name, rows, from, to) => {
+      const result = await importStatement(signedIn(), sample(name))
+
+      expect(result.fileRows).toBe(rows)
+      expect(result.fileRange).toEqual({ from, to })
+    }
+  )
+
+  it('reports the whole file, not only the new rows, when it is imported twice', async () => {
+    const repo = signedIn()
+    await importStatement(repo, sample('UYUmovements.csv'))
+
+    const again = await importStatement(repo, sample('UYUmovements.csv'))
+
+    expect(again.added).toEqual([])
+    expect(again.fileRows).toBe(13)
+    expect(again.fileRange).toEqual({ from: '2025-11-04', to: '2025-11-27' })
+  })
+
   it('records the import run with the file name, type and checksum', async () => {
     const repo = signedIn()
     const file = sample('USDmovements.csv')

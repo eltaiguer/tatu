@@ -11,7 +11,7 @@ import {
   importTransactions,
   type ImportResult,
 } from '../mutations/transaction-mutations'
-import { newestDataMonth } from '../../utils/date-utils'
+import { newestDataMonth, toDateKey } from '../../utils/date-utils'
 import { StatementReadError, UserFacingError } from '../../utils/user-error'
 
 const UNREADABLE =
@@ -31,6 +31,13 @@ export interface StatementImportResult extends ImportResult {
    * newest when nothing was new. Null only for a statement without rows.
    */
   month: { y: number; m: number } | null
+  /**
+   * The oldest and newest day (ISO, UTC) of the rows in the file, whatever
+   * was new. Null for a statement without rows.
+   */
+  fileRange: { from: string; to: string } | null
+  /** How many rows the file holds (new or not). */
+  fileRows: number
 }
 
 export interface ImportStatementOptions {
@@ -76,7 +83,17 @@ export async function importStatement(
     month: newestDataMonth(
       result.added.length > 0 ? result.added : parsed.transactions
     ),
+    fileRange: dayRange(parsed.transactions),
+    fileRows: parsed.transactions.length,
   }
+}
+
+function dayRange(
+  rows: ReadonlyArray<{ date: Date }>
+): { from: string; to: string } | null {
+  if (rows.length === 0) return null
+  const keys = rows.map((row) => toDateKey(row.date)).sort()
+  return { from: keys[0], to: keys[keys.length - 1] }
 }
 
 function readStatement(file: StatementFile, rules: UserRules) {

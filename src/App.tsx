@@ -605,6 +605,7 @@ function App({ auth, createRepository }: AppProps) {
             importar tus movimientos.
           </DialogDescription>
           <ImportCSV
+            transactions={transactions}
             onViewTransactions={(filter) => {
               setImportOpen(false)
               navigateToTransactions(filter)

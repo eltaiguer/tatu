@@ -10,6 +10,7 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useStore } from 'zustand'
 import { ImportCSV } from './ImportCSV'
 import { StatementReadError } from '../utils/user-error'
 import { useTransactionHandlers } from '../hooks/useTransactionHandlers'
@@ -24,6 +25,7 @@ import { createInMemoryRepository } from '../services/repository/in-memory-repos
 import { transactionStore } from '../stores/transaction-store'
 import { workspaceStore } from '../stores/workspace-state'
 import type { Transaction } from '../models'
+import { needsCategoryReview } from '../utils/transaction-display'
 
 // The dialog picks a file, hands its bytes to the import, and reports what
 // came back. What the import does with them is tested at its own interface
@@ -108,6 +110,8 @@ function result(
     repaired: [],
     fileType: 'bank_account_uyu',
     month: { y: 2026, m: 0 },
+    fileRange: null,
+    fileRows: 0,
     ...overrides,
   }
 }
@@ -145,12 +149,30 @@ function pick(name = 'movements.csv', content: BlobPart = 'a,b') {
   })
 }
 
+// The file's period line, e.g. "mar. 2025 – dic. 2025 · 64 movimientos".
+const periodLine = (text: string) => (_: string, el: Element | null) =>
+  el?.tagName === 'P' && el.textContent === text
+
 // A line of the import summary, e.g. "2 nuevas" (count and label are
 // separate elements).
 const isSummaryLine = (text: string) => (_: string, el: Element | null) =>
   el?.tagName === 'LI' && el.textContent === text
 const summaryLine = (text: string) => screen.getByText(isSummaryLine(text))
 const findSummaryLine = (text: string) => screen.findByText(isSummaryLine(text))
+
+function summaryLines() {
+  return within(screen.getByRole('list', { name: 'Resumen de la importación' }))
+    .getAllByRole('listitem')
+    .map((item) => item.textContent)
+}
+
+// The dialog as App renders it: given the rows of the store.
+function WithStoreRows(
+  props: Omit<React.ComponentProps<typeof ImportCSV>, 'transactions'>
+) {
+  const transactions = useStore(transactionStore, (state) => state.transactions)
+  return <ImportCSV transactions={transactions} {...props} />
+}
 
 describe('ImportCSV', () => {
   beforeEach(() => {
@@ -167,7 +189,9 @@ describe('ImportCSV', () => {
   describe('choosing a file by keyboard (#193)', () => {
     it('Tab reaches "Seleccionar archivo" and Enter opens the file chooser', async () => {
       const user = userEvent.setup()
-      render(<ImportCSV onTransactionsImported={parsedThen()} />)
+      render(
+        <ImportCSV transactions={[]} onTransactionsImported={parsedThen()} />
+      )
       const input = screen.getByLabelText('Seleccionar archivo')
       const click = vi.spyOn(input, 'click').mockImplementation(() => {})
       const button = screen.getByText('Seleccionar archivo')
@@ -181,7 +205,9 @@ describe('ImportCSV', () => {
 
     it('Space on the focused button opens the file chooser too', async () => {
       const user = userEvent.setup()
-      render(<ImportCSV onTransactionsImported={parsedThen()} />)
+      render(
+        <ImportCSV transactions={[]} onTransactionsImported={parsedThen()} />
+      )
       const input = screen.getByLabelText('Seleccionar archivo')
       const click = vi.spyOn(input, 'click').mockImplementation(() => {})
 
@@ -191,7 +217,9 @@ describe('ImportCSV', () => {
     })
 
     it('does not promise a clickable drop zone', () => {
-      render(<ImportCSV onTransactionsImported={parsedThen()} />)
+      render(
+        <ImportCSV transactions={[]} onTransactionsImported={parsedThen()} />
+      )
       expect(
         screen.queryByText('o hacé clic para seleccionar')
       ).not.toBeInTheDocument()
@@ -200,7 +228,9 @@ describe('ImportCSV', () => {
 
   describe('copy and states (#204)', () => {
     it('uses sentence case and the copy guide’s account names', () => {
-      render(<ImportCSV onTransactionsImported={parsedThen()} />)
+      render(
+        <ImportCSV transactions={[]} onTransactionsImported={parsedThen()} />
+      )
 
       expect(
         screen.getByRole('heading', { name: 'Importar transacciones' })
@@ -223,7 +253,7 @@ describe('ImportCSV', () => {
           return new Promise<never>(() => {})
         }
       )
-      render(<ImportCSV onTransactionsImported={saving} />)
+      render(<ImportCSV transactions={[]} onTransactionsImported={saving} />)
 
       pick()
 
@@ -235,6 +265,7 @@ describe('ImportCSV', () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       render(
         <ImportCSV
+          transactions={[]}
           onTransactionsImported={failsToSave(new Error('network down'))}
         />
       )
@@ -254,6 +285,7 @@ describe('ImportCSV', () => {
     it('labels the account type of a successful import in sentence case', async () => {
       render(
         <ImportCSV
+          transactions={[]}
           onTransactionsImported={parsedThen({
             fileType: 'credit_card',
             added: [makeTx('tx-1')],
@@ -270,7 +302,7 @@ describe('ImportCSV', () => {
 
   it('rejects non-csv files before reading them', () => {
     const importer = parsedThen()
-    render(<ImportCSV onTransactionsImported={importer} />)
+    render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
 
     pick('notes.txt', 'x')
 
@@ -283,7 +315,7 @@ describe('ImportCSV', () => {
 
   it('accepts a .CSV extension in upper case', async () => {
     const importer = parsedThen({ added: [makeTx('tx-1')] })
-    render(<ImportCSV onTransactionsImported={importer} />)
+    render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
 
     pick('MOVIMIENTOS.CSV')
 
@@ -306,7 +338,7 @@ describe('ImportCSV', () => {
     // jsdom's real FileReader reads the File's bytes.
     globalThis.FileReader = OriginalFileReader
     const importer = parsedThen()
-    render(<ImportCSV onTransactionsImported={importer} />)
+    render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
 
     pick('movements.csv', LATIN1 as BlobPart)
 
@@ -321,6 +353,7 @@ describe('ImportCSV', () => {
     const onViewTransactions = vi.fn()
     render(
       <ImportCSV
+        transactions={[]}
         onViewTransactions={onViewTransactions}
         onTransactionsImported={failsToRead(
           new StatementReadError('Fila 17: Importe ilegible: "abc"')
@@ -344,6 +377,7 @@ describe('ImportCSV', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={failsToSave(
           new TypeError("Cannot read properties of undefined (reading 'id')")
         )}
@@ -366,6 +400,7 @@ describe('ImportCSV', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={failsToRead(
           new StatementReadError(
             'No se pudo leer el archivo. Revisá que sea un extracto CSV de Santander.',
@@ -399,7 +434,12 @@ describe('ImportCSV', () => {
         repository: null,
         setError: () => {},
       })
-      return <ImportCSV onTransactionsImported={handleTransactionsImported} />
+      return (
+        <ImportCSV
+          transactions={[]}
+          onTransactionsImported={handleTransactionsImported}
+        />
+      )
     }
     render(<SignedOutImport />)
 
@@ -424,7 +464,12 @@ describe('ImportCSV', () => {
   it('reports a save failure to Sentry once, as an import failure', async () => {
     const failure = new Error('network down')
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    render(<ImportCSV onTransactionsImported={failsToSave(failure)} />)
+    render(
+      <ImportCSV
+        transactions={[]}
+        onTransactionsImported={failsToSave(failure)}
+      />
+    )
 
     pick()
 
@@ -438,7 +483,7 @@ describe('ImportCSV', () => {
       FailingFileReaderMock as unknown as typeof FileReader
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const importer = parsedThen()
-    render(<ImportCSV onTransactionsImported={importer} />)
+    render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
 
     pick()
 
@@ -461,7 +506,7 @@ describe('ImportCSV', () => {
     })
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const importer = parsedThen()
-    render(<ImportCSV onTransactionsImported={importer} />)
+    render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
 
     fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
       target: { files: [file] },
@@ -484,7 +529,12 @@ describe('ImportCSV', () => {
       "Cannot read properties of undefined (reading 'type')"
     )
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    render(<ImportCSV onTransactionsImported={failsUnexpectedly(bug)} />)
+    render(
+      <ImportCSV
+        transactions={[]}
+        onTransactionsImported={failsUnexpectedly(bug)}
+      />
+    )
 
     pick()
 
@@ -507,7 +557,7 @@ describe('ImportCSV', () => {
     } as unknown as typeof FileReader
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const importer = parsedThen()
-    render(<ImportCSV onTransactionsImported={importer} />)
+    render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
 
     pick()
 
@@ -524,6 +574,7 @@ describe('ImportCSV', () => {
       DeferredFileReaderMock as unknown as typeof FileReader
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({
           added: [makeTx('tx-1'), makeTx('tx-2'), makeTx('tx-3')],
         })}
@@ -553,6 +604,7 @@ describe('ImportCSV', () => {
     })
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={importer}
         onViewTransactions={onViewTransactions}
       />
@@ -573,6 +625,7 @@ describe('ImportCSV', () => {
   it('warns that AI categorization failed while still reporting a successful import', async () => {
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({
           added: [makeTx('tx-1'), makeTx('tx-2')],
           duplicates: [makeTx('tx-3')],
@@ -602,6 +655,7 @@ describe('ImportCSV', () => {
   it('tells the user deleted rows were skipped, with the right plural', async () => {
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({
           added: [makeTx('tx-1')],
           previouslyDeleted: [makeTx('tx-2')],
@@ -619,6 +673,7 @@ describe('ImportCSV', () => {
   it('says how many garbled descriptions the import repaired', async () => {
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({
           duplicates: [makeTx('tx-3')],
           repaired: [makeTx('tx-1'), makeTx('tx-2')],
@@ -648,6 +703,7 @@ describe('ImportCSV', () => {
   it('lists a repaired description in the summary of a successful import', async () => {
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({
           added: [makeTx('tx-2')],
           repaired: [makeTx('tx-1')],
@@ -667,6 +723,7 @@ describe('ImportCSV', () => {
   it('warns when some garbled descriptions could not be repaired', async () => {
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({
           added: [makeTx('tx-1')],
           repairsFailed: 2,
@@ -685,6 +742,7 @@ describe('ImportCSV', () => {
   it('does not warn about AI when the import reports no AI failure', async () => {
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({ added: [makeTx('tx-1')] })}
       />
     )
@@ -700,6 +758,7 @@ describe('ImportCSV', () => {
   it('suggests a smaller file when the AI answer was cut off', async () => {
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({
           added: [makeTx('tx-1')],
           aiError: new AiError('truncated'),
@@ -722,6 +781,7 @@ describe('ImportCSV', () => {
   it('warns about an AI failure even when its message is empty', async () => {
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({
           added: [makeTx('tx-1')],
           aiError: new Error(''),
@@ -745,6 +805,7 @@ describe('ImportCSV', () => {
     // "no disponible" would be plainly wrong when 10 of 12 batches enriched.
     render(
       <ImportCSV
+        transactions={[]}
         onTransactionsImported={parsedThen({
           added: [makeTx('tx-1')],
           aiPartial:
@@ -772,19 +833,12 @@ describe('ImportCSV', () => {
       )
     }
 
-    function summaryLines() {
-      return within(
-        screen.getByRole('list', { name: 'Resumen de la importación' })
-      )
-        .getAllByRole('listitem')
-        .map((item) => item.textContent)
-    }
-
     it('stays open on the summary with the counts, without navigating away', async () => {
       const user = userEvent.setup()
       const onViewTransactions = vi.fn()
       render(
         <ImportCSV
+          transactions={[]}
           onTransactionsImported={parsedThen({
             added: [makeTx('a'), makeTx('b')],
             duplicates: [makeTx('c')],
@@ -802,6 +856,7 @@ describe('ImportCSV', () => {
       expect(heading).toHaveFocus()
       expect(summaryLines()).toEqual([
         '2 nuevas',
+        '0 a revisar · sin categoría o con poca seguridad',
         '1 duplicada omitida',
         '1 eliminada antes',
       ])
@@ -815,6 +870,7 @@ describe('ImportCSV', () => {
       const onViewTransactions = vi.fn()
       render(
         <ImportCSV
+          transactions={[]}
           onTransactionsImported={parsedThen({
             added: [makeTx('a')],
             month: { y: 2026, m: 2 },
@@ -839,6 +895,7 @@ describe('ImportCSV', () => {
       const onViewTransactions = vi.fn()
       render(
         <ImportCSV
+          transactions={[]}
           onTransactionsImported={parsedThen({
             duplicates: [makeTx('a'), makeTx('b')],
             month: { y: 2025, m: 10 },
@@ -878,6 +935,7 @@ describe('ImportCSV', () => {
       const user = userEvent.setup()
       render(
         <ImportCSV
+          transactions={[]}
           onTransactionsImported={parsedThen({ added: [makeTx('a')] })}
           onViewTransactions={vi.fn()}
         />
@@ -902,6 +960,7 @@ describe('ImportCSV', () => {
       const onViewTransactions = vi.fn()
       render(
         <ImportCSV
+          transactions={[]}
           onTransactionsImported={failsToSave(new Error('network down'))}
           onViewTransactions={onViewTransactions}
         />
@@ -918,6 +977,224 @@ describe('ImportCSV', () => {
     })
   })
 
+  describe('what to review (#275)', () => {
+    const RANGE = { from: '2025-03-04', to: '2025-12-20' }
+    // Stored rows, as the store holds them after the import.
+    function stored(id: string, overrides: Partial<Transaction> = {}) {
+      return {
+        ...makeTx(id),
+        date: new Date('2025-06-01T00:00:00.000Z'),
+        category: 'uncategorized',
+        ...overrides,
+      } satisfies Transaction
+    }
+    const clean = (id: string) =>
+      stored(id, { category: 'groceries', categoryConfidence: 0.95 })
+
+    function importFile(user: ReturnType<typeof userEvent.setup>) {
+      return user.upload(
+        screen.getByLabelText('Seleccionar archivo'),
+        new File(['a,b'], 'movements.csv', { type: 'text/csv' })
+      )
+    }
+
+    const view = (
+      rows: Transaction[],
+      overrides: Partial<StatementImportResult>,
+      onViewTransactions = vi.fn()
+    ) => {
+      render(
+        <ImportCSV
+          transactions={rows}
+          onTransactionsImported={parsedThen(overrides)}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+      return onViewTransactions
+    }
+
+    it('says which period and how many movements the file holds', async () => {
+      const user = userEvent.setup()
+      view([], { fileRange: RANGE, fileRows: 64 })
+
+      await importFile(user)
+
+      expect(
+        await screen.findByText(
+          periodLine('mar. 2025 – dic. 2025 · 64 movimientos')
+        )
+      ).toBeInTheDocument()
+    })
+
+    it('uses the singular and one month for a one-movement file', async () => {
+      const user = userEvent.setup()
+      view([], {
+        fileRange: { from: '2025-11-03', to: '2025-11-03' },
+        fileRows: 1,
+      })
+
+      await importFile(user)
+
+      expect(
+        await screen.findByText(periodLine('nov. 2025 · 1 movimiento'))
+      ).toBeInTheDocument()
+    })
+
+    it('counts what to review among the stored rows of the file', async () => {
+      const user = userEvent.setup()
+      const onViewTransactions = view(
+        [stored('a'), stored('b'), stored('c'), clean('d')],
+        {
+          added: [makeTx('a'), makeTx('b'), makeTx('c'), makeTx('d')],
+          fileRange: RANGE,
+          fileRows: 4,
+        }
+      )
+
+      await importFile(user)
+      await screen.findByRole('heading', { name: 'Importación completada' })
+
+      expect(summaryLines()).toContain(
+        '3 a revisar · sin categoría o con poca seguridad'
+      )
+      await user.click(
+        screen.getByRole('button', { name: 'Revisar 3 movimientos' })
+      )
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        review: true,
+        accountType: 'bank_account',
+        currency: 'UYU',
+        period: { mode: 'range', ...RANGE },
+      })
+    })
+
+    it('says "1 movimiento" for one row and makes Revisar the main action', async () => {
+      const user = userEvent.setup()
+      view([stored('a')], {
+        added: [makeTx('a')],
+        fileRange: RANGE,
+        fileRows: 1,
+      })
+
+      await importFile(user)
+
+      expect(
+        await screen.findByRole('button', { name: 'Revisar 1 movimiento' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Ver transacciones' })
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Importar otro archivo' })
+      ).toBeInTheDocument()
+    })
+
+    it("keeps today's buttons when nothing in the file needs review", async () => {
+      const user = userEvent.setup()
+      view([clean('a')], {
+        added: [makeTx('a')],
+        fileRange: RANGE,
+        fileRows: 1,
+      })
+
+      await importFile(user)
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(summaryLines()).toContain(
+        '0 a revisar · sin categoría o con poca seguridad'
+      )
+      expect(screen.queryByRole('button', { name: /^Revisar/ })).toBeNull()
+      expect(
+        screen.getByRole('button', { name: 'Ver transacciones' })
+      ).toBeInTheDocument()
+    })
+
+    it('does not offer Revisar for older rows the file did not add', async () => {
+      const user = userEvent.setup()
+      // An older uncategorized row inside the link's dates, not in this file.
+      view([clean('a'), stored('old')], {
+        added: [makeTx('a')],
+        fileRange: RANGE,
+        fileRows: 1,
+      })
+
+      await importFile(user)
+      await screen.findByRole('heading', { name: 'Importación completada' })
+
+      expect(screen.queryByRole('button', { name: /^Revisar/ })).toBeNull()
+    })
+
+    it('counts the rows the link opens, older ones included', async () => {
+      const user = userEvent.setup()
+      view([stored('a'), stored('old')], {
+        added: [makeTx('a')],
+        fileRange: RANGE,
+        fileRows: 1,
+      })
+
+      await importFile(user)
+
+      expect(
+        await screen.findByRole('button', { name: 'Revisar 2 movimientos' })
+      ).toBeInTheDocument()
+      expect(summaryLines()).toContain(
+        '1 a revisar · sin categoría o con poca seguridad'
+      )
+    })
+
+    it('does not count a row stored as an internal transfer', async () => {
+      const user = userEvent.setup()
+      view([stored('a'), stored('t', { category: 'internal_transfer' })], {
+        added: [makeTx('a'), makeTx('t')],
+        fileRange: RANGE,
+        fileRows: 2,
+      })
+
+      await importFile(user)
+
+      expect(
+        await screen.findByRole('button', { name: 'Revisar 1 movimiento' })
+      ).toBeInTheDocument()
+    })
+
+    it('says nothing about review when nothing was new', async () => {
+      const user = userEvent.setup()
+      view([stored('old')], {
+        duplicates: [makeTx('old')],
+        fileRange: RANGE,
+        fileRows: 1,
+      })
+
+      await importFile(user)
+
+      await screen.findByText('No había movimientos nuevos')
+      expect(
+        screen.getByText(periodLine('mar. 2025 – dic. 2025 · 1 movimiento'))
+      ).toBeTruthy()
+      expect(screen.queryByText(/a revisar/)).toBeNull()
+      expect(screen.queryByRole('button', { name: /^Revisar/ })).toBeNull()
+    })
+
+    it('shows no Revisar without a way to open Transacciones', async () => {
+      const user = userEvent.setup()
+      render(
+        <ImportCSV
+          transactions={[stored('a')]}
+          onTransactionsImported={parsedThen({
+            added: [makeTx('a')],
+            fileRange: RANGE,
+            fileRows: 1,
+          })}
+        />
+      )
+
+      await importFile(user)
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(screen.queryByRole('button', { name: /^Revisar/ })).toBeNull()
+    })
+  })
+
   // The doubles above assume when the real import calls onParsed and what it
   // throws; these run it, over the in-memory repository, to keep them honest.
   describe('the real import', () => {
@@ -930,7 +1207,7 @@ describe('ImportCSV', () => {
       const repo = createInMemoryRepository()
       workspaceStore.setState({ userId: repo.userId, status: 'ready' })
       render(
-        <ImportCSV
+        <WithStoreRows
           onViewTransactions={onViewTransactions}
           onTransactionsImported={(file, options) =>
             importStatement(repo, file, options)
@@ -941,7 +1218,8 @@ describe('ImportCSV', () => {
     }
 
     afterEach(() => {
-      transactionStore.getState().clearTransactions()
+      // Still mounted: the dialog reads these rows.
+      act(() => transactionStore.getState().clearTransactions())
       workspaceStore.setState({ userId: null, status: 'idle' })
     })
 
@@ -967,6 +1245,38 @@ describe('ImportCSV', () => {
       )
       expect(onViewTransactions).toHaveBeenCalledWith({
         period: { mode: 'month', y: 2025, m: 10 },
+      })
+    })
+
+    it('says what the sample card statement leaves to review and opens it', async () => {
+      const user = userEvent.setup()
+      const onViewTransactions = vi.fn()
+      renderWithRealImport(onViewTransactions)
+      const bytes = readFileSync(
+        join(__dirname, '../../samples/CreditCardsMovementsDetail.csv')
+      )
+
+      pick('CreditCardsMovementsDetail.csv', new Uint8Array(bytes) as BlobPart)
+
+      expect(
+        await screen.findByText(
+          periodLine('mar. 2025 – dic. 2025 · 64 movimientos')
+        )
+      ).toBeInTheDocument()
+      const toReview = transactionStore
+        .getState()
+        .transactions.filter(needsCategoryReview).length
+      expect(toReview).toBeGreaterThanOrEqual(3)
+      expect(summaryLines()).toContain(
+        `${toReview} a revisar · sin categoría o con poca seguridad`
+      )
+      await user.click(
+        screen.getByRole('button', { name: `Revisar ${toReview} movimientos` })
+      )
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        review: true,
+        accountType: 'credit_card',
+        period: { mode: 'range', from: '2025-03-17', to: '2025-12-04' },
       })
     })
 
