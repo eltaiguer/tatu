@@ -139,8 +139,6 @@ describe('selection bar (#282)', () => {
       within(group())
         .getAllByRole('button')
         .map((b) => b.textContent?.trim())
-        // Auto-categorizar moves into the picker in the next commit.
-        .filter((name) => name !== 'Auto-categorizar')
     ).toEqual(['Categorizar', 'Hogar', 'No contar', 'Etiquetas', 'Eliminar'])
   })
 
@@ -384,6 +382,133 @@ describe('selection bar (#282)', () => {
 
       await waitFor(() => expect(stored('b')?.category).toBe('restaurants'))
       expect(stored('b')?.categoryConfidence).toBe(0.6)
+    })
+  })
+
+  describe('Volver a sugerir', () => {
+    it('is in the picker, not on the bar, and says what it uses', async () => {
+      seed([tx('a')])
+      await select('a')
+      expect(
+        within(group()).queryByRole('button', { name: /Auto-categorizar/ })
+      ).toBeNull()
+
+      const dialog = await openPicker()
+
+      const suggest = within(dialog).getByRole('button', {
+        name: /Volver a sugerir/,
+      })
+      expect(suggest).toHaveAccessibleDescription(
+        'Según tus reglas y los comercios que ya categorizaste'
+      )
+    })
+
+    it('with no match: says so, keeps the selection, and Categorizar a mano reopens the picker', async () => {
+      seed([
+        tx('Comercio Inventado XYZ', {
+          type: 'credit',
+          category: undefined,
+          categoryConfidence: undefined,
+        }),
+      ])
+      await select('Comercio Inventado XYZ')
+      const dialog = await openPicker()
+
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: /Volver a sugerir/ })
+      )
+
+      await visible(screen.findByText('Sin coincidencias'))
+      expect(
+        screen.getByText(
+          'Tus reglas y los comercios que ya categorizaste no sugieren otra categoría para la selección.'
+        )
+      ).toBeInTheDocument()
+      expect(stored('Comercio Inventado XYZ')?.category).toBeUndefined()
+      expect(screen.getByText('1 seleccionada')).toBeInTheDocument()
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Categorizar a mano' })
+      )
+
+      expect(
+        await screen.findByRole('dialog', { name: 'Elegir categoría' })
+      ).toBeInTheDocument()
+    })
+
+    it('Categorizar a mano does nothing once the selection is gone', async () => {
+      seed([
+        tx('Comercio Inventado XYZ', {
+          type: 'credit',
+          category: undefined,
+          categoryConfidence: undefined,
+        }),
+        tx('b'),
+      ])
+      await select('Comercio Inventado XYZ')
+      const dialog = await openPicker()
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: /Volver a sugerir/ })
+      )
+      await visible(screen.findByText('Sin coincidencias'))
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Deseleccionar' })
+      )
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Categorizar a mano' })
+      )
+      await select('b')
+
+      expect(
+        screen.queryByRole('dialog', { name: 'Elegir categoría' })
+      ).toBeNull()
+    })
+
+    it('with a match: categorizes, and Deshacer puts the row back', async () => {
+      seed([
+        tx('Devoto Supermercado', {
+          category: undefined,
+          categoryConfidence: undefined,
+        }),
+      ])
+      await select('Devoto Supermercado')
+      const dialog = await openPicker()
+
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: /Volver a sugerir/ })
+      )
+
+      await visible(screen.findByText('1 transacción categorizada'))
+      expect(stored('Devoto Supermercado')?.category).toBe('groceries')
+
+      await deshacer()
+
+      await visible(screen.findByText('Se deshizo el cambio'))
+      expect(stored('Devoto Supermercado')?.category ?? null).toBeNull()
+      expect(repo.row('Devoto Supermercado')?.category ?? null).toBeNull()
+    })
+
+    it('shows Sugiriendo… disabled while it runs', async () => {
+      seed([
+        tx('Devoto Supermercado', {
+          category: undefined,
+          categoryConfidence: undefined,
+        }),
+      ])
+      await select('Devoto Supermercado')
+      const dialog = await openPicker()
+      const gate = repo.hold('update')
+
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: /Volver a sugerir/ })
+      )
+
+      expect(
+        await screen.findByRole('button', { name: /Sugiriendo/ })
+      ).toBeDisabled()
+      await act(async () => gate.release())
+      await visible(screen.findByText('1 transacción categorizada'))
     })
   })
 })

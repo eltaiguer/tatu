@@ -185,7 +185,7 @@ export function Transactions({
     isBusy,
     categorizeOpen,
     setCategorizeOpen,
-    handleAutoCategorizeSelected,
+    handleSuggestSelected,
     handleBulkCategorizeSelected,
     handleBulkIgnore,
     handleBulkHousehold,
@@ -458,8 +458,8 @@ export function Transactions({
               : undefined
           }
           onTags={() => setTagsOpen(true)}
-          onAuto={() => {
-            void handleAutoCategorizeSelected()
+          onSuggest={() => {
+            void handleSuggestSelected()
           }}
           onIgnore={() => {
             void handleBulkIgnore()

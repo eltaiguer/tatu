@@ -412,11 +412,8 @@ describe('Transactions', () => {
         name: 'Seleccionar Devoto Supermercado',
       })[0]
     )
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /Auto-categorizar/,
-      })
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
+    fireEvent.click(screen.getByRole('button', { name: /Volver a sugerir/ }))
 
     await waitFor(() =>
       expect(onAutoCategorizeTransactions).toHaveBeenCalledWith(['tx-1'])
@@ -447,15 +444,10 @@ describe('Transactions', () => {
 
     expect(screen.getAllByText('1 seleccionada').length).toBeGreaterThan(0)
 
-    fireEvent.click(
-      screen.getByRole('button', {
-        name: /Auto-categorizar/,
-      })
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
+    fireEvent.click(screen.getByRole('button', { name: /Volver a sugerir/ }))
 
-    expect(
-      screen.getByRole('button', { name: /Auto-categorizando/ })
-    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Sugiriendo/ })).toBeDisabled()
 
     resolveAutoCategorize?.()
 
@@ -1479,7 +1471,6 @@ describe('Transactions', () => {
         'Categorizar',
         'No contar',
         'Etiquetas',
-        'Auto-categorizar',
         'Eliminar',
       ]) {
         expect(within(bar).getByRole('button', { name })).toHaveClass(

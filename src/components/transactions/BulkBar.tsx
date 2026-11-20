@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import {
   EyeOff,
   House,
@@ -22,7 +22,7 @@ export function BulkBar({
   onCategorize,
   onHousehold,
   onTags,
-  onAuto,
+  onSuggest,
   onIgnore,
   onDelete,
   isAutoCategorizing,
@@ -38,7 +38,7 @@ export function BulkBar({
   // Absent when the view cannot save the household choice.
   onHousehold?: (household: boolean | null) => void
   onTags: () => void
-  onAuto: () => void
+  onSuggest?: () => void
   onIgnore: () => void
   onDelete: () => void
   isAutoCategorizing: boolean
@@ -46,6 +46,7 @@ export function BulkBar({
   categorizeOpen: boolean
   onCategorizeOpenChange: (open: boolean) => void
 }) {
+  const suggestHintId = useId()
   // A phone: the keyboard would cover the list, so the first option takes
   // focus instead of the search (as the row's sheet does).
   const coarse =
@@ -105,8 +106,12 @@ export function BulkBar({
                 disabled={isBusy}
                 className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
               >
-                <Shapes size={13} aria-hidden="true" />
-                Categorizar
+                {isAutoCategorizing ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Shapes size={13} aria-hidden="true" />
+                )}
+                {isAutoCategorizing ? 'Sugiriendo…' : 'Categorizar'}
               </button>
             </PopoverTrigger>
             <PopoverContent
@@ -130,6 +135,28 @@ export function BulkBar({
                   onCategorize(id)
                 }}
               />
+              {onSuggest && (
+                <div className="border-t border-[var(--border)] p-2">
+                  <button
+                    type="button"
+                    aria-describedby={suggestHintId}
+                    onClick={() => {
+                      onCategorizeOpenChange(false)
+                      onSuggest()
+                    }}
+                    className="inline-flex h-[32px] w-full cursor-pointer items-center gap-[5px] rounded-[8px] border-none bg-transparent px-[8px] py-0 [font:inherit] text-[13px]! text-[var(--text)] hover:bg-[var(--muted)]"
+                  >
+                    <Sparkles size={13} aria-hidden="true" />
+                    Volver a sugerir
+                  </button>
+                  <p
+                    id={suggestHintId}
+                    className="px-[8px] pt-[2px] text-[12px] text-[var(--text-muted)]"
+                  >
+                    Según tus reglas y los comercios que ya categorizaste
+                  </p>
+                </div>
+              )}
             </PopoverContent>
           </Popover>
 
@@ -204,19 +231,6 @@ export function BulkBar({
           >
             <Tag size={13} />
             Etiquetas
-          </button>
-
-          <button
-            onClick={onAuto}
-            disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
-          >
-            {isAutoCategorizing ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Sparkles size={13} />
-            )}
-            {isAutoCategorizing ? 'Auto-categorizando...' : 'Auto-categorizar'}
           </button>
 
           <button

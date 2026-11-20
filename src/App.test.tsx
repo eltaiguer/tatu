@@ -302,10 +302,14 @@ describe('App', () => {
       fireEvent.click(checkbox)
     })
 
-    const autoCategorizeButton = screen.getByRole('button', {
-      name: /Auto-categorizar/,
+    const categorizeButton = screen.getByRole('button', {
+      name: 'Categorizar',
     })
-    await waitFor(() => expect(autoCategorizeButton).not.toBeDisabled())
+    await waitFor(() => expect(categorizeButton).not.toBeDisabled())
+    fireEvent.click(categorizeButton)
+    const autoCategorizeButton = await screen.findByRole('button', {
+      name: /Volver a sugerir/,
+    })
 
     await act(async () => {
       fireEvent.click(autoCategorizeButton)
@@ -356,21 +360,21 @@ describe('App', () => {
       fireEvent.click(checkbox)
     })
 
-    const autoCategorizeButton = screen.getByRole('button', {
-      name: /Auto-categorizar/,
+    const categorizeButton = screen.getByRole('button', {
+      name: 'Categorizar',
     })
-    await waitFor(() => expect(autoCategorizeButton).not.toBeDisabled())
+    await waitFor(() => expect(categorizeButton).not.toBeDisabled())
+    fireEvent.click(categorizeButton)
+    const autoCategorizeButton = await screen.findByRole('button', {
+      name: /Volver a sugerir/,
+    })
 
     await act(async () => {
       fireEvent.click(autoCategorizeButton)
     })
 
     await waitFor(() =>
-      expect(
-        screen.getByText(
-          'No se encontraron categorías automáticas para las transacciones seleccionadas'
-        )
-      ).toBeInTheDocument()
+      expect(screen.getByText('Sin coincidencias')).toBeInTheDocument()
     )
     // Category must not be overwritten when nothing matched — previously a bug
     // where 'uncategorized' would be written over any existing user-set category
@@ -530,19 +534,12 @@ describe('App', () => {
       screen.getAllByRole('checkbox', { name: 'Seleccionar Comercio B' })[0]
     )
 
-    await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Categorizar' }))
+    const option = await screen.findByRole('button', {
+      name: 'Entretenimiento',
     })
-
-    fireEvent.click(screen.getByRole('button', { name: /^Categoría/ }))
-    fireEvent.change(screen.getByLabelText('Buscar categoría'), {
-      target: { value: 'entretenimiento' },
-    })
-    const popoverButtons = screen.getAllByText('Entretenimiento')
-    fireEvent.click(popoverButtons[popoverButtons.length - 1])
-
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+      fireEvent.click(option)
     })
 
     await waitFor(() => {
@@ -703,10 +700,12 @@ describe('App', () => {
       (await screen.findAllByLabelText('Seleccionar Comercio A'))[0]
     )
 
-    await act(async () => {
-      fireEvent.click(screen.getAllByRole('button', { name: /Editar/ })[0])
-    })
-
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Acciones' })).getByRole(
+        'button',
+        { name: 'Etiquetas' }
+      )
+    )
     fireEvent.click(screen.getByRole('button', { name: /^Etiquetas/ }))
     fireEvent.change(screen.getByLabelText('Buscar o crear etiqueta'), {
       target: { value: 'recurrente' },
@@ -716,7 +715,7 @@ describe('App', () => {
     )
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Guardar cambios/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Agregar etiquetas' }))
     })
 
     await waitFor(() => {

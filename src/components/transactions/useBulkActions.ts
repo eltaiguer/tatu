@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { toast } from 'sonner'
 import type { Transaction } from '../../models'
@@ -110,6 +110,8 @@ export function useBulkActions({
   const [categorizeOpen, setCategorizeOpen] = useState(false)
 
   const isBusy = isAutoCategorizing || isBulkOperating
+  const selectionRef = useRef(selectedTransactionIds)
+  selectionRef.current = selectedTransactionIds
 
   // Every path that ends with the selection cleared also shuts the picker, so
   // a stale `true` never opens it on a later selection.
@@ -233,7 +235,8 @@ export function useBulkActions({
     )
   }
 
-  async function handleAutoCategorizeSelected() {
+  // "Volver a sugerir": the categorizer re-run with context on the selection.
+  async function handleSuggestSelected() {
     if (
       !onAutoCategorizeTransactions ||
       selectedTransactionIds.length === 0 ||
@@ -241,21 +244,39 @@ export function useBulkActions({
     ) {
       return
     }
+    const ids = selectedTransactionIds
     setIsAutoCategorizing(true)
     try {
-      const { categorized } = await onAutoCategorizeTransactions(
-        selectedTransactionIds
+      await runCategoryWrite(
+        ids,
+        async () => (await onAutoCategorizeTransactions(ids)).categorized,
+        'No se pudieron categorizar las transacciones',
+        (categorized, action) => {
+          if (categorized === 0) {
+            // Nothing changed: the selection stays, and the picker is one
+            // click away for doing it by hand.
+            toast('Sin coincidencias', {
+              description:
+                'Tus reglas y los comercios que ya categorizaste no sugieren otra categoría para la selección.',
+              duration: 8000,
+              action: {
+                label: 'Categorizar a mano',
+                onClick: () => {
+                  if (selectionRef.current.length > 0) setCategorizeOpen(true)
+                },
+              },
+            })
+            return
+          }
+          clearSelection()
+          const rest = ids.length - categorized
+          toast.success(txDone(categorized, 'categorizad'), {
+            description: rest > 0 ? `${rest} sin cambios` : undefined,
+            duration: 8000,
+            action,
+          })
+        }
       )
-      if (categorized === 0) {
-        toast.info(
-          'No se encontraron categorías automáticas para las transacciones seleccionadas'
-        )
-        return
-      }
-      clearSelection()
-      toast.success(txDone(categorized, 'categorizad'))
-    } catch (error) {
-      reportError(error, 'No se pudieron categorizar las transacciones')
     } finally {
       setIsAutoCategorizing(false)
     }
@@ -454,7 +475,7 @@ export function useBulkActions({
     isBusy,
     categorizeOpen,
     setCategorizeOpen,
-    handleAutoCategorizeSelected,
+    handleSuggestSelected,
     handleBulkCategorizeSelected,
     handleBulkIgnore,
     handleBulkHousehold,
