@@ -620,19 +620,39 @@ Which rows the totals add up is decided in one place, described next.
 
 A month's totals only mean something once every account's rows for it are
 imported. `completeMonths(transactions, currentMonth)`
-(`src/services/charts/complete-months.ts`) is the one rule: a month is
-complete when every account (card, USD, UYU) has data from within its first
-3 days and either runs past it or reaches its last 3 days. Months between an
-account's first and last are covered even without rows, an account silent
-for 45 days before a month is dormant and doesn't constrain it, and
-`currentMonth` and later are never complete. Resumen and Insights both
-pass today's month (`todayAsUtcDate`), so a month still running by the clock is
-never compared, even when every account already covers it to within 3 days of
-its end.
+(`src/services/charts/complete-months.ts`) is the one rule (#293, the owner's
+"hybrid" decision; it supersedes c78b8bf's leniency toward sparse accounts):
+
+- An account covers a month it has rows in, under the edge rules: in the
+  account's first month, its first row is within the first 3 days; in its
+  last month, its last row is within the last 3 days.
+- A month with no rows from an account is missing unless the account is
+  dormant: its latest earlier row is more than 45 days before the month's
+  1st (strictly; exactly 45 is still missing). This holds mid-history too, so
+  a long quiet spell doesn't stall the comparisons.
+- A month no account covers (no rows at all, or every account dormant) is
+  never complete, and neither are `currentMonth` and later.
+
+Trade-offs: the first month with no rows after a row is always caught; the
+second only if the latest earlier row is within 45 days of that month's 1st
+(roughly, the row was after the middle of the month before the gap), and later
+months of a long skip read as dormant. A quiet month within 45 days of a row
+reads as incomplete: a genuinely quiet active account (rows every other
+month) makes those months incomplete, and the hint then asks for a statement
+that adds no rows. That is the cost the owner accepted with "hybrid". A card
+billing cycle that straddles two months (Aug 5 to Sep 4) and is skipped still
+leaves rows in both and isn't detected, and neither is an account back from
+dormancy whose first row that month is on the 20th: the by-the-3rd test reads
+only the account's very first row, so that month counts as covered. Resumen and
+Insights both pass today's month (`todayAsUtcDate`), so a month still running
+by the clock is never compared, even when every account already covers it to
+within 3 days of its end.
 
 - `monthCoverage` is the same pass with the detail: per month, which
   accounts cover it (`covered`), which don't (`missing`; a dormant account is
-  in neither) and which of those have no row at all that month (`absent`).
+  in neither) and which of those have no row at all that month (`absent`:
+  before the account's first row, after its last, or a statement skipped
+  between two imported ones).
   `completeMonths` is derived from it.
 - "Qué cambió" (`categoryChanges`) and Insights' `categoryChanges` compare
   only complete months.
@@ -641,12 +661,13 @@ its end.
   mes a mes: a partir de 3 meses completos seguidos (tenés N)", N being the run of
   complete months ending at the latest one. If a month next to that run (the
   one after it first, else the one before; with no complete month, the
-  newest) is covered by some account while another has no rows in it, a
+  newest) is covered by some account while another has no rows in it (a skipped
+  statement counts when another account covers the month), a
   second line names it ("A oct. 2025 le faltan datos de Cuenta USD") with an
   "Importar extracto" button. It names only `absent` accounts, never one
   whose statement for the month is imported but starts after the 3rd or ends
   early, and says "le faltan datos de" because the rule can't tell "not
-  imported" from "quiet". Months nobody covers are time, not a gap. Hogar
+  imported" from "quiet". A month nobody covers between the first and last month with data is a gap too and names its accounts; months past the data are time. Hogar
   mode shows the same lines (completeness reads every row).
 - "Mes a mes" draws every month but marks partial ones (`MonthlyTrendRow.complete`,
   from `buildMonthlyTrendRows`): faded bars, "(mes incompleto)" on their

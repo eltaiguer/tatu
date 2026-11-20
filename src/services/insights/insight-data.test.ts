@@ -736,7 +736,8 @@ describe('recurring cadence across stored date shapes', () => {
 })
 
 describe('buildInsightInput — category changes (#239)', () => {
-  // A USD and a UYU account, both covering January to April 2026 end to end.
+  // A USD and a UYU account, both covering January to April 2026 end to
+  // end, each with rows every month.
   // April is the latest complete month; January to March are its baseline.
   const usd = (
     id: string,
@@ -757,6 +758,8 @@ describe('buildInsightInput — category changes (#239)', () => {
   const rows = [
     // The UYU account opens with a transfer: not spend, but proof of coverage.
     uyu('t1', '2026-01-01', 1000, Category.InternalTransfer),
+    uyu('t2', '2026-02-10', 1000, Category.InternalTransfer),
+    uyu('t3', '2026-03-10', 1000, Category.InternalTransfer),
     usd('g1', '2026-01-02', 200, Category.Groceries),
     usd('r1', '2026-01-28', 100, Category.Restaurants),
     usd('g2', '2026-02-10', 200, Category.Groceries),

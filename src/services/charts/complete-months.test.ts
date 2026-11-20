@@ -28,17 +28,19 @@ describe('completeMonths', () => {
         // Card: Jan 2 → Apr 10 (its April statement closes on the 10th).
         tx('2026-01-02'),
         tx('2026-02-15'),
+        tx('2026-03-15'),
         tx('2026-04-10'),
         // UYU account: imported from Feb 20 only.
         tx('2026-02-20', uyu),
+        tx('2026-03-15', uyu),
         tx('2026-04-30', uyu),
       ],
       '2026-11'
     )
 
     // January: the UYU account isn't imported yet. February: it starts on
-    // the 20th. March: both cover it (the card has no March row, but data
-    // on both sides). April: the card stops on the 10th.
+    // the 20th. March: both have rows and data on both sides. April: the
+    // card stops on the 10th.
     expect([...months]).toEqual(['2026-03'])
   })
 
@@ -55,8 +57,12 @@ describe('completeMonths', () => {
     const months = completeMonths(
       [
         tx('2026-01-01'),
+        tx('2026-02-15'),
+        tx('2026-03-15'),
+        tx('2026-04-15'),
         tx('2026-05-31'),
-        // A USD account last used in January: dormant by April.
+        // A USD account last used in January: dormant by April. March stays
+        // out: Jan 15 is exactly 45 days before Mar 1, which is not `<`.
         tx('2026-01-15', { source: 'bank_account' }),
       ],
       '2026-11'
@@ -87,8 +93,10 @@ describe('monthCoverage', () => {
       [
         tx('2026-01-02'),
         tx('2026-02-15'),
+        tx('2026-03-15'),
         tx('2026-04-10'),
         tx('2026-02-20', uyu),
+        tx('2026-03-15', uyu),
         tx('2026-04-30', uyu),
       ],
       '2026-11'
@@ -130,6 +138,9 @@ describe('monthCoverage', () => {
     const cov = monthCoverage(
       [
         tx('2026-01-01'),
+        tx('2026-02-15'),
+        tx('2026-03-15'),
+        tx('2026-04-15'),
         tx('2026-05-31'),
         tx('2026-01-15', { source: 'bank_account' }),
       ],
@@ -156,5 +167,76 @@ describe('monthCoverage', () => {
       missing: [],
       complete: false,
     })
+  })
+})
+
+describe('a statement skipped mid-history (#293)', () => {
+  const usd = { source: 'bank_account' } as const
+  // Rows on the 1st and the 28th of each month.
+  const edges = (months: string[], o: Partial<Transaction> = {}) =>
+    months.flatMap((m) => [tx(`${m}-01`, o), tx(`${m}-28`, o)])
+
+  it('leaves a month incomplete when an account has no rows in it', () => {
+    const rows = [
+      ...edges(['2026-06', '2026-07', '2026-08', '2026-09']),
+      ...edges(['2026-07', '2026-09'], usd),
+    ]
+
+    expect([...completeMonths(rows, '2026-10')]).toEqual(['2026-07', '2026-09'])
+    expect(
+      monthCoverage(rows, '2026-10').find((c) => c.month === '2026-08')
+    ).toEqual({
+      month: '2026-08',
+      complete: false,
+      covered: ['credit_card'],
+      missing: ['bank_account_usd'],
+      absent: ['bank_account_usd'],
+    })
+  })
+
+  it('reads an account as dormant in the middle of its history', () => {
+    const months = ['01', '02', '03', '04', '05', '06', '07'].map(
+      (m) => `2026-${m}`
+    )
+    const rows = [
+      ...edges(months),
+      ...edges(['2026-01', '2026-06', '2026-07'], usd),
+    ]
+
+    // Feb and Mar: USD's latest row (Jan 28) is within 45 days. Apr and May:
+    // USD is dormant.
+    expect([...completeMonths(rows, '2026-11')]).toEqual([
+      '2026-01',
+      '2026-04',
+      '2026-05',
+      '2026-06',
+      '2026-07',
+    ])
+  })
+
+  it('never completes a month without rows from any account', () => {
+    const rows = edges(['2026-01', '2026-05'])
+
+    expect([...completeMonths(rows, '2026-11')]).toEqual(['2026-01', '2026-05'])
+  })
+
+  it('reads a mid-month return after dormancy as covered', () => {
+    const months = ['01', '02', '03', '04', '05', '06', '07'].map(
+      (m) => `2026-${m}`
+    )
+    const rows = [
+      ...edges(months),
+      ...edges(['2026-01'], usd),
+      tx('2026-06-20', usd),
+      tx('2026-07-28', usd),
+    ]
+
+    expect([...completeMonths(rows, '2026-11')]).toEqual([
+      '2026-01',
+      '2026-04',
+      '2026-05',
+      '2026-06',
+      '2026-07',
+    ])
   })
 })

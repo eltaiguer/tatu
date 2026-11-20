@@ -1193,6 +1193,22 @@ describe('Dashboard', () => {
       expect(onImport).toHaveBeenCalledTimes(1)
     })
 
+    it('names an account whose statement was skipped mid-history (#293)', () => {
+      setup([
+        ...edgeRows('c', ['2026-06', '2026-07', '2026-08', '2026-09'], card),
+        ...edgeRows('b', ['2026-07', '2026-09'], bank),
+      ])
+
+      expect(
+        screen.getByText(
+          'Comparaciones mes a mes: a partir de 3 meses completos seguidos (tenés 1)'
+        )
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText('A ago. 2026 le faltan datos de Cuenta USD')
+      ).toBeInTheDocument()
+    })
+
     it('has no import button without a handler', () => {
       setup(missingAugust)
 

@@ -66,9 +66,12 @@ function median(values: number[]): number {
     : sorted[mid]
 }
 
-// A month is a gap when some account covers it and another has no rows in
-// it. A month nobody covers is time (the statements just end there); a
-// missing account that has rows that month has its statement imported.
+// A month is a gap when an account has no rows in it (`absent`) while the
+// month lies between the first and the last month with data, which is every
+// month `monthCoverage` lists: a statement skipped mid-history, covered by
+// another account or not. Months before the first or after the last data are
+// time (the statements just end there) and are never listed; a missing
+// account that has rows that month has its statement imported.
 function gapAt(
   months: MonthCoverage[],
   month: string,
@@ -76,7 +79,7 @@ function gapAt(
 ): AccountGap | undefined {
   const c = months.find((m) => m.month === month)
   if (!c || month >= currentMonth) return undefined
-  if (c.covered.length === 0 || c.absent.length === 0) return undefined
+  if (c.absent.length === 0) return undefined
   return { month, accounts: c.absent }
 }
 
