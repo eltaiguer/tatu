@@ -17,6 +17,8 @@ interface CategoryPickerProps {
   onPick: (categoryId: string) => void
   /** Touch targets (a bottom sheet): taller options. */
   touch?: boolean
+  /** Offered first (review mode): marked Sugerida while the search is empty. */
+  suggested?: string | null
 }
 
 /**
@@ -25,19 +27,27 @@ interface CategoryPickerProps {
  * into the list, Enter picks the first match). Container-agnostic — it sits in
  * a popover or a sheet; the caller closes it from `onPick`.
  */
-export function CategoryPicker({ value, onPick, touch }: CategoryPickerProps) {
+export function CategoryPicker({
+  value,
+  onPick,
+  touch,
+  suggested,
+}: CategoryPickerProps) {
   const [query, setQuery] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
-  const matches = useMemo(
-    () =>
-      filterCategorySuggestions(
-        buildCategorySuggestions([value ?? '']).filter(
-          (id) => id !== Category.Uncategorized
-        ),
-        query
+  const suggestedId = suggested ? normalizeCategoryId(suggested) : null
+  const matches = useMemo(() => {
+    const found = filterCategorySuggestions(
+      buildCategorySuggestions([value ?? '', suggested ?? '']).filter(
+        (id) => id !== Category.Uncategorized
       ),
-    [value, query]
-  )
+      query
+    )
+    // The suggestion leads an empty search, where the user has not chosen yet.
+    return suggestedId && !query.trim() && found.includes(suggestedId)
+      ? [suggestedId, ...found.filter((id) => id !== suggestedId)]
+      : found
+  }, [value, suggested, suggestedId, query])
 
   return (
     <div className="p-2 space-y-2">
@@ -76,6 +86,7 @@ export function CategoryPicker({ value, onPick, touch }: CategoryPickerProps) {
                 key={id}
                 type="button"
                 data-category-option
+                data-suggested={id === suggestedId ? '' : undefined}
                 aria-current={current ? 'true' : undefined}
                 className={cn(
                   'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent',
@@ -84,6 +95,11 @@ export function CategoryPicker({ value, onPick, touch }: CategoryPickerProps) {
                 onClick={() => onPick(id)}
               >
                 <CategoryBadge categoryId={id} size="sm" />
+                {id === suggestedId && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    Sugerida
+                  </span>
+                )}
                 {current && <Check className="h-4 w-4" aria-hidden="true" />}
               </button>
             )
