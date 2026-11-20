@@ -12,6 +12,8 @@ function TotalTile({
   accent,
   icon,
   note,
+  phoneFit,
+  className = '',
 }: {
   label: string
   value: string
@@ -22,12 +24,17 @@ function TotalTile({
   icon: React.ReactNode
   // A short line under the amount (the one-tile Hogar strip).
   note?: React.ReactNode
+  // Phones only: size the amount as if it were this string, at that size.
+  phoneFit?: { text: string; size: number }
+  // Phone layout of the tile in the strip's grid (borders, span, order).
+  className?: string
 }) {
   return (
-    // Phones: label left, amount right, one row each (three columns would
-    // shrink long peso totals to ~9px). From sm: three columns.
+    // Phones: Gastos on a line of its own (label left, amount right), then
+    // Ingresos | Balance side by side, label above amount (three columns
+    // would shrink long peso totals to ~11px). From sm: three columns.
     <div
-      className={`@container flex min-w-0 items-baseline justify-between gap-3 py-2 sm:flex-col sm:items-stretch sm:justify-start sm:gap-[3px] sm:px-4 sm:py-1 sm:first:pl-0 sm:last:pr-0${
+      className={`@container min-w-0 py-1.5 sm:py-1 ${className} flex items-baseline justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-[3px] sm:px-4 sm:first:pl-0 sm:last:pr-0${
         // The Hogar tile's note drops to its own row on phones; the plain
         // tiles keep label and amount on one row (the label ellipsizes).
         note ? ' flex-wrap sm:flex-nowrap' : ''
@@ -40,12 +47,18 @@ function TotalTile({
         </span>
       </div>
       <div
-        className="font-mono font-semibold tracking-[-0.02em] whitespace-nowrap"
-        style={{
-          // Data-driven: sized to the row's longest value; color per tile.
-          fontSize: fitMonoFontSize(fitTo, 22),
-          color: accent ?? 'var(--text)',
-        }}
+        className="font-mono font-semibold tracking-[-0.02em] whitespace-nowrap text-[length:var(--amt-sm)] sm:text-[length:var(--amt-lg)]"
+        style={
+          {
+            // Data-driven: sized to the row's longest value; color per tile.
+            '--amt-sm': fitMonoFontSize(
+              phoneFit?.text ?? fitTo,
+              phoneFit?.size ?? 22
+            ),
+            '--amt-lg': fitMonoFontSize(fitTo, 22),
+            color: accent ?? 'var(--text)',
+          } as React.CSSProperties
+        }
       >
         {value}
       </div>
@@ -110,17 +123,28 @@ export function TotalsStrip({
     b.length > a.length ? b : a
   )
 
+  // Phones read Gastos first, then Ingresos | Balance, while the DOM keeps
+  // Ingresos, Gastos, Balance (the desktop order): `order-first` + `col-span-2`.
+  const sideFit = {
+    text: incomeText.length > netText.length ? incomeText : netText,
+    size: 16,
+  }
+  const sideTile =
+    'max-sm:flex-col max-sm:items-stretch max-sm:justify-start max-sm:gap-[3px]'
+
   return (
     <div
       role="group"
       aria-label="Totales del período"
-      className="mb-4 grid grid-cols-1 divide-y divide-[var(--border)] sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+      className="mb-4 grid grid-cols-2 sm:grid-cols-3 sm:divide-x sm:divide-[var(--border)]"
     >
       <TotalTile
         label="Ingresos"
         icon={<TrendingUp size={14} />}
         value={incomeText}
         fitTo={fitTo}
+        phoneFit={sideFit}
+        className={`${sideTile} max-sm:border-r max-sm:border-[var(--border)] max-sm:pr-3`}
         accent="var(--pos)"
       />
       <TotalTile
@@ -128,12 +152,15 @@ export function TotalsStrip({
         icon={<TrendingDown size={14} />}
         value={expenseText}
         fitTo={fitTo}
+        className="order-first col-span-2 border-b border-[var(--border)] sm:order-none sm:col-span-1 sm:border-b-0"
       />
       <TotalTile
         label="Balance"
         icon={<Wallet size={14} />}
         value={netText}
         fitTo={fitTo}
+        phoneFit={sideFit}
+        className={`${sideTile} max-sm:pl-3`}
         accent={net >= 0 ? 'var(--pos)' : 'var(--neg)'}
       />
     </div>
