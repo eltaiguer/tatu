@@ -34,3 +34,13 @@ export function followOptionLabel(
 ): string {
   return `Según ${source} (${isHousehold ? 'Sí' : 'No'})`
 }
+
+/** The Insights card's action that saves a merchant's household rule. */
+export const MARK_AS_HOUSEHOLD = 'Marcar como hogar'
+
+/** The toast after it: "Hogar: Sí en 3 transacciones de Netflix". */
+export function householdMarkedToast(merchant: string, count: number): string {
+  return count === 1
+    ? `${householdValueLabel(true)} en 1 transacción de ${merchant}`
+    : `${householdValueLabel(true)} en ${count} transacciones de ${merchant}`
+}

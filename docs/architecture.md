@@ -660,8 +660,9 @@ changing.
 `src/services/merchants/merchant-key.ts` (#120) decides which rows are "the
 same merchant", so Resumen's "Mayores comercios", its drill-through to
 Transacciones (`?comercio=<key>`, matched by `filterTransactions`),
-Insights' `topMerchants` and recurring-charge detection all group the same
-rows. Never group by `description` or `getDisplayDescription` directly.
+Insights' `topMerchants`, recurring-charge detection and the Insights cards'
+drill (`insight-actions.ts`: a card's merchant label resolves to the exact key)
+all group the same rows. Never group by `description` or `getDisplayDescription` directly.
 
 - `merchantKeyOf(tx)`: the user's rename (`displayDescription`, else a live
   description override) folded (lowercase, no accents, `*` as a space, single

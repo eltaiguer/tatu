@@ -186,4 +186,27 @@ describe('hasActiveFilters', () => {
       expect(householdModeFromSearch(householdModeToSearch(true))).toBe(true)
     })
   })
+  describe('amount bound in a deep link (#286)', () => {
+    it('writes min and max as the native amount, with the period defaulting to all', () => {
+      const params = new URLSearchParams(
+        filterToSearch({
+          merchant: 'netflix',
+          min: 416.5,
+          max: 416.5,
+          currency: 'USD',
+        })
+      )
+      expect(params.get('comercio')).toBe('netflix')
+      expect(params.get('min')).toBe('416.5')
+      expect(params.get('max')).toBe('416.5')
+      expect(params.get('moneda')).toBe('USD')
+      expect(params.get('periodo')).toBe('todo')
+    })
+
+    it('reads a lone min back as the view state', () => {
+      const state = parseFilterParams(filterToSearch({ min: 10 }))
+      expect(state.min).toBe('10')
+      expect(state.max).toBe('')
+    })
+  })
 })

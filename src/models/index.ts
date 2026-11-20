@@ -43,6 +43,9 @@ export interface TransactionsFilter {
   accountType?: 'all' | 'credit_card' | 'bank_account'
   currency?: 'all' | 'USD' | 'UYU'
   type?: 'credit' | 'debit'
+  // Native absolute amount bounds (with `currency`): a link to one movement.
+  min?: number
+  max?: number
   household?: Exclude<HouseholdFilter, 'all'>
   period?: UrlPeriod
 }
