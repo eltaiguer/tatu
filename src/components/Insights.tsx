@@ -212,23 +212,51 @@ export function Insights({
     ]
   )
 
-  // The card whose "Marcar como hogar" write is in flight.
-  const [markingKey, setMarkingKey] = useState<string | null>(null)
+  // Each card's actions, decided once per cache result / data change rather
+  // than on every render (a write in flight re-renders the list).
+  const actionsByInsight = useMemo(
+    () =>
+      new Map(
+        (cached?.result.insights ?? []).map((insight) => [
+          insight,
+          insightActions(insight, actionIndex),
+        ])
+      ),
+    [cached, actionIndex]
+  )
+
+  // Every card whose "Marcar como hogar" write is in flight.
+  const [markingKeys, setMarkingKeys] = useState<ReadonlySet<string>>(
+    () => new Set()
+  )
   const { reportError } = useMutationFeedback({})
+  function setMarking(key: string, on: boolean) {
+    setMarkingKeys((current) => {
+      const next = new Set(current)
+      if (on) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }
+  // One write saves one rule, so a merchant spanning several rule keys is
+  // marked one anchor after another, with one toast for the summed count.
   async function markHousehold(
     key: string,
-    insight: Insight,
-    transactionId: string
+    merchant: string,
+    transactionIds: string[]
   ) {
     if (!onApplyHouseholdToSimilar) return
-    setMarkingKey(key)
+    setMarking(key, true)
     try {
-      const { affected } = await onApplyHouseholdToSimilar(transactionId, true)
-      toast.success(householdMarkedToast(insight.merchant ?? '', affected))
+      let affected = 0
+      for (const id of transactionIds) {
+        affected += (await onApplyHouseholdToSimilar(id, true)).affected
+      }
+      toast.success(householdMarkedToast(merchant, affected))
     } catch (markError) {
       reportError(markError, 'No se pudo marcar como hogar')
     } finally {
-      setMarkingKey(null)
+      setMarking(key, false)
     }
   }
 
@@ -390,7 +418,8 @@ export function Insights({
                 <div className="flex flex-col gap-[10px]">
                   {group.items.map((insight, i) => {
                     const key = `${group.type}-${i}`
-                    const actions = insightActions(insight, actionIndex)
+                    const actions = actionsByInsight.get(insight)
+                    if (!actions) return null
                     const offer =
                       actions.household?.state === 'offer'
                         ? actions.household
@@ -406,12 +435,14 @@ export function Insights({
                             ? () =>
                                 void markHousehold(
                                   key,
-                                  insight,
-                                  offer.transactionId
+                                  actions.merchantLabel ??
+                                    insight.merchant ??
+                                    '',
+                                  offer.transactionIds
                                 )
                             : undefined
                         }
-                        marking={markingKey === key}
+                        marking={markingKeys.has(key)}
                       />
                     )
                   })}

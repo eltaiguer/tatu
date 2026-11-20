@@ -476,6 +476,79 @@ describe('Insights', () => {
       expect(
         screen.queryByRole('button', { name: /^Marcar como hogar/ })
       ).not.toBeInTheDocument()
+      expect(screen.queryByText('Hogar: Sí')).not.toBeInTheDocument()
+    })
+
+    it('keeps each card disabled until its own write settles', async () => {
+      const otherRows = [
+        makeTransaction('s1', { description: 'SPOTIFY.COM' }),
+        makeTransaction('s2', { description: 'SPOTIFY.COM' }),
+      ]
+      const rows = [...netflixRows, ...otherRows]
+      seed(
+        [
+          recurringCard,
+          {
+            ...recurringCard,
+            title: 'Spotify cada mes',
+            merchant: merchantLabelFor(otherRows),
+          },
+        ],
+        rows
+      )
+      const pending: Array<(value: { affected: number }) => void> = []
+      const onApplyHouseholdToSimilar = vi.fn(
+        () =>
+          new Promise<{ affected: number }>((resolve) => pending.push(resolve))
+      )
+      renderInsights({ transactions: rows, onApplyHouseholdToSimilar })
+
+      const buttons = await screen.findAllByRole('button', {
+        name: /^Marcar como hogar/,
+      })
+      fireEvent.click(buttons[0])
+      fireEvent.click(buttons[1])
+      expect(
+        await screen.findAllByRole('button', { name: 'Marcando…' })
+      ).toHaveLength(2)
+
+      pending[0]({ affected: 1 })
+      await waitFor(() =>
+        expect(
+          screen.getAllByRole('button', { name: 'Marcando…' })
+        ).toHaveLength(1)
+      )
+    })
+
+    it('writes one rule per key of a merchant and toasts the summed count', async () => {
+      const rows = [
+        makeTransaction('a1', {
+          description: 'NETFLIX.COM',
+          displayDescription: 'Netflix',
+          date: new Date('2026-04-05T00:00:00.000Z'),
+        }),
+        makeTransaction('b1', {
+          description: 'NETFLIX AR',
+          displayDescription: 'Netflix',
+          date: new Date('2026-05-05T00:00:00.000Z'),
+        }),
+      ]
+      seed([{ ...recurringCard, merchant: 'Netflix' }], rows)
+      const onApplyHouseholdToSimilar = vi
+        .fn()
+        .mockResolvedValueOnce({ affected: 2 })
+        .mockResolvedValueOnce({ affected: 3 })
+      render(<Toaster />)
+      renderInsights({ transactions: rows, onApplyHouseholdToSimilar })
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: /^Marcar como hogar/ })
+      )
+
+      expect(
+        await screen.findByText('Hogar: Sí en 5 transacciones de Netflix')
+      ).toBeInTheDocument()
+      expect(onApplyHouseholdToSimilar).toHaveBeenCalledTimes(2)
     })
 
     it('reports a failed household mark', async () => {

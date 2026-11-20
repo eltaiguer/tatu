@@ -8,8 +8,9 @@ import { Category } from '../../models'
 import { buildCategorySpendingConverted } from '../charts/chart-data'
 import { convert } from '../currency/convert'
 import {
+  canHaveMerchantRule,
+  merchantRuleKey,
   resolveHousehold,
-  rowsSharingMerchantRule,
 } from '../household/household'
 import { fold, groupByMerchant } from '../merchants/merchant-key'
 import { isCountedExpense } from '../spending/spending-rules'
@@ -34,6 +35,8 @@ export interface InsightActionIndex {
   keysByLabel: Map<string, Set<string>>
   /** merchant key -> its counted expenses in the mode's rows. */
   expensesByKey: Map<string, Transaction[]>
+  /** merchant key -> its group label (what the card's merchant text means). */
+  labelByKey: Map<string, string>
   /** The "Sin categoría" count of the mode's rows (what the link opens). */
   uncategorizedCount: number
 }
@@ -51,11 +54,13 @@ export function buildInsightActionIndex(
   const expenses = ctx.rows.filter(isCountedExpense)
   const keysByLabel = new Map<string, Set<string>>()
   const expensesByKey = new Map<string, Transaction[]>()
+  const labelByKey = new Map<string, string>()
   // Labels come from two groupings: the top-merchants one (all counted
   // expenses) and the recurring one (installments left out).
   for (const group of groupByMerchant(expenses)) {
     addKey(keysByLabel, group.label, group.key)
     expensesByKey.set(group.key, group.transactions)
+    labelByKey.set(group.key, group.label)
   }
   for (const group of groupByMerchant(
     expenses.filter((t) => !isInstallment(t))
@@ -66,7 +71,7 @@ export function buildInsightActionIndex(
     buildCategorySpendingConverted(ctx.rows, ctx.homeCurrency, ctx.fxRate).find(
       (row) => row.category === Category.Uncategorized
     )?.count ?? 0
-  return { ctx, keysByLabel, expensesByKey, uncategorizedCount }
+  return { ctx, keysByLabel, expensesByKey, labelByKey, uncategorizedCount }
 }
 
 export interface InsightDrill {
@@ -74,11 +79,13 @@ export interface InsightDrill {
   filter: TransactionsFilter
 }
 export type InsightHousehold =
-  | { state: 'offer'; transactionId: string }
-  | { state: 'done' }
+  // One anchor per distinct merchant rule key still to mark, newest first.
+  { state: 'offer'; transactionIds: string[] } | { state: 'done' }
 export interface InsightActions {
   drill: InsightDrill | null
   household: InsightHousehold | null
+  /** The card's merchant as the rows spell it (null when unresolved). */
+  merchantLabel: string | null
 }
 
 const round2 = (value: number) => Math.round(value * 100) / 100
@@ -113,11 +120,12 @@ function drillFor(
     }
   }
 
-  const base: TransactionsFilter = {
-    ...(insight.category && { category: insight.category }),
-    ...(key !== null && { merchant: key, type: 'debit' as const }),
-    ...house,
-  }
+  // A resolved merchant drops the model's category: its figures were summed
+  // over every category, and the guess may not match the rows' own.
+  const base: TransactionsFilter =
+    key !== null
+      ? { merchant: key, type: 'debit' as const, ...house }
+      : { ...(insight.category && { category: insight.category }), ...house }
   if (key !== null && insight.type === 'recurring') {
     return { label: 'Ver cargos →', filter: base }
   }
@@ -164,19 +172,26 @@ function householdFor(
   if (ctx.householdMode || insight.type !== 'recurring' || key === null) {
     return null
   }
-  // A merchant rule is only written when the anchor has a rule reach.
+  // One anchor per distinct rule key (a write saves one rule under the
+  // anchor's key): the newest still-to-mark row of each. Rows that cannot take
+  // a rule (split parts, no key) are left out.
   const ruleable = (index.expensesByKey.get(key) ?? []).filter(
-    (row) =>
-      !row.splitParentId && rowsSharingMerchantRule(ctx.all, row).length > 0
+    canHaveMerchantRule
   )
   if (ruleable.length === 0) return null
-  const left = ruleable
-    .filter(
-      (row) => resolveHousehold(row, ctx.householdRules).status !== 'household'
-    )
-    .sort(newestFirst)
-  return left.length > 0
-    ? { state: 'offer', transactionId: left[0].id }
+  const anchors = new Map<string, Transaction>()
+  for (const row of [...ruleable].sort(newestFirst)) {
+    if (resolveHousehold(row, ctx.householdRules).status === 'household') {
+      continue
+    }
+    const ruleKey = merchantRuleKey(row)
+    if (ruleKey !== null && !anchors.has(ruleKey)) anchors.set(ruleKey, row)
+  }
+  return anchors.size > 0
+    ? {
+        state: 'offer',
+        transactionIds: [...anchors.values()].map((row) => row.id),
+      }
     : { state: 'done' }
 }
 
@@ -188,5 +203,6 @@ export function insightActions(
   return {
     drill: drillFor(insight, key, index),
     household: householdFor(insight, key, index),
+    merchantLabel: key === null ? null : (index.labelByKey.get(key) ?? null),
   }
 }

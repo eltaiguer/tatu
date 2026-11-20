@@ -1199,6 +1199,57 @@ describe('App', () => {
         expect(await screen.findByText('Hogar: Sí')).toBeInTheDocument()
       })
 
+      it('covers every rule key of a merchant spread over two descriptions', async () => {
+        const named = (id: string, iso: string, description: string) => ({
+          ...tx(id, iso, description, 'restaurants'),
+          displayDescription: 'Netflix',
+        })
+        const rows = [
+          named('a1', '2026-01-05T12:00:00.000Z', 'NETFLIX.COM'),
+          named('a2', '2026-02-05T12:00:00.000Z', 'NETFLIX.COM'),
+          named('b1', '2026-03-05T12:00:00.000Z', 'NETFLIX AR'),
+        ]
+        seed({
+          transactions: rows,
+          preferences: {
+            ...DEFAULT_PREFERENCES,
+            aiEnabled: true,
+            claudeApiKey: 'sk-ant-test',
+          },
+        })
+        backend.repo().insights = {
+          inputHash: 'any-hash',
+          model: 'claude-opus-4-8',
+          generatedAt: '2026-03-20T10:00:00.000Z',
+          insights: {
+            insights: [
+              {
+                type: 'recurring',
+                title: 'Netflix cada mes',
+                narrative: 'N',
+                currency: 'USD',
+                merchant: 'Netflix',
+                severity: 'medium',
+              },
+            ],
+          },
+        }
+        renderApp('/insights')
+
+        fireEvent.click(
+          await screen.findByRole('button', { name: /^Marcar como hogar/ })
+        )
+
+        expect(await screen.findByText('Hogar: Sí')).toBeInTheDocument()
+        const rules = backend.repo().householdRules
+        expect(
+          rules.get(merchantOverrideKey('NETFLIX.COM') ?? '')?.isHousehold
+        ).toBe(true)
+        expect(
+          rules.get(merchantOverrideKey('NETFLIX AR') ?? '')?.isHousehold
+        ).toBe(true)
+      })
+
       it('the sidebar’s Insights opens Todo', async () => {
         seedInsights()
         renderApp('/insights?hogar=si')

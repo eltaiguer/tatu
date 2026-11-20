@@ -37,7 +37,7 @@ export function InsightCard({
   onMarkHousehold,
   marking,
 }: InsightCardProps) {
-  const { drill, household } = actions
+  const { drill, household, merchantLabel } = actions
   return (
     <Card
       className="p-4"
@@ -57,7 +57,7 @@ export function InsightCard({
             </div>
           )}
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-[6px] text-right">
+        <div className="ml-auto flex shrink-0 flex-col items-end gap-[6px] text-right">
           {typeof insight.amount === 'number' && (
             <p className="m-0 font-mono text-[16px] font-semibold">
               {insight.amount < 0 ? '−' : ''}
@@ -81,7 +81,7 @@ export function InsightCard({
               aria-label={
                 marking
                   ? undefined
-                  : `${MARK_AS_HOUSEHOLD}: ${insight.merchant ?? ''}`
+                  : `${MARK_AS_HOUSEHOLD}: ${merchantLabel ?? ''}`
               }
             >
               <House size={14} aria-hidden="true" />

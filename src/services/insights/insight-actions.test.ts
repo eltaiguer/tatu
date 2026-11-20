@@ -107,16 +107,20 @@ describe('insightActions: the drill', () => {
     expect(drill?.filter).toEqual({ merchant: netflixKey, type: 'debit' })
   })
 
-  it('combines category and merchant', () => {
+  it('drops the model’s category once the merchant resolves', () => {
     const { drill } = actionsFor(
-      insight({ category: Category.Restaurants, merchant: netflixLabel }),
+      insight({ category: Category.Groceries, merchant: netflixLabel }),
       netflix
     )
-    expect(drill?.filter).toEqual({
-      category: Category.Restaurants,
-      merchant: netflixKey,
-      type: 'debit',
-    })
+    expect(drill?.filter).toEqual({ merchant: netflixKey, type: 'debit' })
+  })
+
+  it('returns the resolved group label, not the model’s spelling', () => {
+    const { merchantLabel } = actionsFor(
+      insight({ merchant: netflixLabel.toUpperCase() }),
+      netflix
+    )
+    expect(merchantLabel).toBe(netflixLabel)
   })
 
   it('drops an unknown merchant: category-only link, or no link', () => {
@@ -169,6 +173,15 @@ describe('insightActions: the drill', () => {
         homeCurrency: 'UYU',
       })
       expect(drill?.label).toBe('Ver movimiento →')
+    })
+
+    it('opens the one row even when the model’s category is wrong', () => {
+      const { drill } = actionsFor(
+        { ...anomaly, category: Category.Groceries },
+        [...netflix, uyu]
+      )
+      expect(drill?.label).toBe('Ver movimiento →')
+      expect(drill?.filter.category).toBeUndefined()
     })
 
     it('falls back to the merchant link when two rows convert to the amount', () => {
@@ -226,7 +239,27 @@ describe('insightActions: "Marcar como hogar"', () => {
   it('offers the newest not-yet-household row of the merchant', () => {
     expect(actionsFor(recurring, netflix).household).toEqual({
       state: 'offer',
-      transactionId: 'n3',
+      transactionIds: ['n3'],
+    })
+  })
+
+  it('anchors one row per rule key when a group spans two', () => {
+    const renamed = (id: string, description: string, day: string) =>
+      tx({
+        id,
+        description,
+        displayDescription: 'Netflix',
+        date: new Date(`2026-0${day}-05T00:00:00.000Z`),
+      })
+    const rows = [
+      renamed('a1', 'NETFLIX.COM', '1'),
+      renamed('a2', 'NETFLIX.COM', '2'),
+      renamed('b1', 'NETFLIX AR', '3'),
+    ]
+    const card = insight({ type: 'recurring', merchant: 'Netflix' })
+    expect(actionsFor(card, rows).household).toEqual({
+      state: 'offer',
+      transactionIds: ['b1', 'a2'],
     })
   })
 
