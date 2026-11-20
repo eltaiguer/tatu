@@ -1,4 +1,5 @@
-import type { HouseholdResolution } from '../../models'
+import type { Currency, HouseholdResolution } from '../../models'
+import { formatCurrency } from '../../utils/formatting'
 import { resolveCategory } from '../categories/category-registry'
 
 // THE Spanish copy of a Hogar answer, so every surface says it the same way
@@ -43,4 +44,24 @@ export function householdMarkedToast(merchant: string, count: number): string {
   return count === 1
     ? `${householdValueLabel(true)} en 1 transacción de ${merchant}`
     : `${householdValueLabel(true)} en ${count} transacciones de ${merchant}`
+}
+
+/**
+ * The household's share of a total: "Hogar 62% de US$ 2.300,00". Never claims
+ * 0% / 100% of a total it is not exactly none / all of; null with no total.
+ */
+export function householdShareLine(
+  part: number,
+  total: number,
+  currency: Currency
+): string | null {
+  if (!(total > 0)) return null
+  let share: string
+  if (part <= 0) share = '0%'
+  else if (part >= total) share = '100%'
+  else {
+    const pct = Math.round((part / total) * 100)
+    share = pct < 1 ? '<1%' : `${Math.min(pct, 99)}%`
+  }
+  return `Hogar ${share} de ${formatCurrency(total, currency)}`
 }
