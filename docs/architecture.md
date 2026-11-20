@@ -605,6 +605,7 @@ All conversion happens in the browser, at render or aggregation time, with
 | Caller                                                                                                                                                                                                         | What it converts                                                                                                    |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `uncategorizedIncome`, `buildCurrencySplit`, `spendByAccount`, `buildMerchantSpendingConverted`) | Resumen totals, charts, account cards and "Mayores comercios" (also Insights' `topMerchants`), in the home currency |
+| `typical-month.ts` (`typicalMonth`)                                                                                                                                                                            | Hogar's typical month per category                                                                                  |
 | `category-changes.ts` (`categoryChanges`)                                                                                                                                                                      | "Qué cambió" month comparisons (also Insights' `categoryChanges`) and its US$ 10 noise floor                        |
 | `insight-data.ts` (`buildInsightInput`)                                                                                                                                                                        | Every number handed to the Insights model, rounded to cents (`scope: 'hogar'` = household rows only, no income)     |
 | `Dashboard.tsx`                                                                                                                                                                                                | Recent rows                                                                                                         |
@@ -673,7 +674,9 @@ within 3 days of its end.
   from `buildMonthlyTrendRows`): faded bars, "(mes incompleto)" on their
   buttons. The savings verdict ("Mes típico", "N de M meses completos en
   positivo") and "Promedio por mes completo con gastos" use complete months
-  only, and the verdict names the months left out (#244). The rule can't tell
+  only, and the verdict names the months left out (#244). Hogar's "Un mes
+  típico del hogar" (#285) uses the same complete months, $0 household months
+  included; the Promedio is Todo only (Hogar shows the card's median). The rule can't tell
   "not imported" from "the account didn't exist yet or was quiet", so the
   copy says only what is always true: those months lack data from some
   account. Importing the missing statements brings them back.

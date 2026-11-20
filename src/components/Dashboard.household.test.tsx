@@ -621,7 +621,10 @@ describe('Dashboard: Todo / Hogar mode', () => {
       )
       // The axis keeps the three months (the label below counts them); the
       // $0 one has no drill of its own (round 2).
-      expect(months()).toEqual(todo.filter((m) => !/feb/.test(m ?? '')))
+      // Hogar buttons add the share (#285): compare the part before it.
+      expect(months().map((m) => m?.split(' · ')[0])).toEqual(
+        todo.filter((m) => !/feb/.test(m ?? ''))
+      )
       expect(screen.getByText(/Últimos 3 meses con datos/)).toBeInTheDocument()
     })
 
@@ -852,6 +855,77 @@ describe('Dashboard: Un mes típico del hogar', () => {
       typicalCard().getByText(
         /^No cuenta nov\. 2026: le faltan datos de alguna cuenta\.$/
       )
+    ).toBeInTheDocument()
+  })
+})
+
+describe('Dashboard: "Gasto por mes" in Hogar mode', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 9, 12))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('says the lighter bar is the Todo spend, not the income', () => {
+    render(<Harness transactions={fourMonths()} initialHousehold />)
+
+    expect(
+      screen.getByText(
+        'La barra más clara detrás de cada mes es tu gasto total'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/son tus ingresos/)).not.toBeInTheDocument()
+  })
+
+  it('says the lighter bar is the income in Todo (guard)', () => {
+    render(<Harness transactions={fourMonths()} />)
+
+    expect(screen.getByText(/son tus ingresos/)).toBeInTheDocument()
+    expect(screen.queryByText(/es tu gasto total/)).not.toBeInTheDocument()
+  })
+
+  it('puts the household share of the Todo spend in each month’s button', () => {
+    render(
+      <Harness
+        transactions={fourMonths()}
+        initialHousehold
+        onNavigateToTransactions={() => {}}
+      />
+    )
+
+    const names = within(
+      screen.getByRole('navigation', { name: 'Gastos por mes' })
+    )
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+    expect(names).toHaveLength(4)
+    expect(names[0]).toMatch(
+      /^Ver los gastos de jul\S* 2026 · Hogar 25% de US\$ 400,00$/
+    )
+    expect(names[1]).toMatch(
+      /^Ver los gastos de ago\S* 2026 · Hogar 100% de US\$ 300,00$/
+    )
+    expect(names[2]).toMatch(
+      /^Ver los gastos de (sep|set)\S* 2026 · Hogar 83% de US\$ 300,00$/
+    )
+    expect(names[3]).toMatch(
+      /^Ver los gastos de oct\S* 2026 · Hogar 100% de US\$ 400,00$/
+    )
+  })
+
+  it('leaves Todo’s buttons as they were (guard)', () => {
+    render(
+      <Harness
+        transactions={fourMonths()}
+        onNavigateToTransactions={() => {}}
+      />
+    )
+
+    expect(
+      screen.getByRole('button', { name: /^Ver los gastos de jul\S* 2026$/ })
     ).toBeInTheDocument()
   })
 })

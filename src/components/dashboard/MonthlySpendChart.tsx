@@ -21,6 +21,7 @@ import type { Currency } from '../../models'
 import type { MonthlyTrendRow } from '../../services/charts/dashboard-rows'
 import { formatCurrency, formatCurrencyShort } from '../../utils/formatting'
 import { averageSpendOfMonthsWithSpend } from '../../services/charts/chart-data'
+import { householdShareLine } from '../../services/household/household-copy'
 import { Card } from '../ui/card'
 import { MonthButtons } from './MonthButtons'
 
@@ -29,16 +30,18 @@ interface MonthlySpendChartProps {
   homeCurrency: Currency
   // Opens one month's rows; undefined when there is nowhere to navigate.
   openMonth?: (key: string, type?: 'credit' | 'debit') => void
-  // The income ghost bars; off in Hogar mode, where income is out of scope.
-  showIncome?: boolean
+  // The lighter bar behind each month: the income (Todo) or, in Hogar mode,
+  // where income is out of scope, the Todo spend the household bar is part of.
+  ghost?: 'income' | 'total'
 }
 
 export function MonthlySpendChart({
   monthlyTrend,
   homeCurrency,
   openMonth,
-  showIncome = true,
+  ghost = 'income',
 }: MonthlySpendChartProps) {
+  const showIncome = ghost === 'income'
   // Partial months are drawn but not averaged: ten days of a statement
   // would read as a cheap month.
   const avgMonthly = averageSpendOfMonthsWithSpend(
@@ -48,6 +51,10 @@ export function MonthlySpendChart({
   // A Hogar month with no household spend would open an empty list, so it has
   // no drill (bar or button). Todo keeps every month's.
   const opensExpenses = (m: { gastos: number }) => showIncome || m.gastos > 0
+  // Hogar only: how much of the month's Todo spend the household bar is.
+  const share = (m: MonthlyTrendRow) =>
+    showIncome ? null : householdShareLine(m.gastos, m.todoGastos, homeCurrency)
+  const shareSuffix = (m: MonthlyTrendRow) => (share(m) ? ` · ${share(m)}` : '')
 
   const tooltip = ({
     active,
@@ -75,9 +82,16 @@ export function MonthlySpendChart({
             </span>
           </p>
         )}
+        {share(d) && (
+          <p className="mx-0 my-[3px] text-[12px] text-[var(--text-faint)]">
+            {share(d)}
+          </p>
+        )}
         {!d.complete && (
           <p className="mx-0 mt-[6px] mb-0 text-[12px] text-[var(--text-faint)]">
-            Le faltan datos de alguna cuenta: no entra en el promedio
+            {showIncome
+              ? 'Le faltan datos de alguna cuenta: no entra en el promedio'
+              : 'Le faltan datos de alguna cuenta: no entra en el mes típico'}
           </p>
         )}
       </div>
@@ -89,11 +103,11 @@ export function MonthlySpendChart({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="m-0 text-title font-semibold">Gasto por mes</h3>
-          {showIncome && (
-            <p className="mx-0 mt-[2px] mb-0 text-caption text-[var(--text-faint)]">
-              La barra más clara detrás de cada mes son tus ingresos
-            </p>
-          )}
+          <p className="mx-0 mt-[2px] mb-0 text-caption text-[var(--text-faint)]">
+            {showIncome
+              ? 'La barra más clara detrás de cada mes son tus ingresos'
+              : 'La barra más clara detrás de cada mes es tu gasto total'}
+          </p>
         </div>
         {showIncome && avgMonthly !== null && (
           <div className="sm:text-right">
@@ -157,6 +171,22 @@ export function MonthlySpendChart({
               ))}
             </Bar>
           )}
+          {!showIncome && (
+            // No drill: the Hogar drill would open rows that do not sum to it.
+            <Bar
+              dataKey="todoGastos"
+              xAxisId="ghost"
+              fill="var(--neg)"
+              fillOpacity={0.2}
+              radius={[3, 3, 0, 0]}
+              maxBarSize={26}
+              isAnimationActive={false}
+            >
+              {monthlyTrend.map((m) => (
+                <Cell key={m.key} fillOpacity={m.complete ? 0.2 : 0.1} />
+              ))}
+            </Bar>
+          )}
           <Bar
             dataKey="gastos"
             fill="var(--neg)"
@@ -185,7 +215,7 @@ export function MonthlySpendChart({
               ? [
                   {
                     key: `${m.key}-debit`,
-                    text: `Ver los gastos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}`,
+                    text: `Ver los gastos de ${m.month}${m.complete ? '' : ' (mes incompleto)'}${shareSuffix(m)}`,
                     onClick: () => openMonth(m.key, 'debit'),
                   },
                 ]

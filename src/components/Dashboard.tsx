@@ -469,7 +469,7 @@ export function Dashboard({
                 monthlyTrend={monthlyTrend}
                 homeCurrency={homeCurrency}
                 openMonth={openMonth}
-                showIncome={!householdMode}
+                ghost={householdMode ? 'total' : 'income'}
               />
             </ResumenSection>
           )}
