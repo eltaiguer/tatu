@@ -558,6 +558,67 @@ describe('App', () => {
     }
   })
 
+  it('picks a category from the badge and undoes it through the real handlers (#279)', async () => {
+    seed({
+      transactions: [
+        {
+          id: 'tx-1',
+          date: new Date('2026-01-10T00:00:00.000Z'),
+          description: 'Comercio A',
+          amount: 100,
+          currency: 'UYU',
+          type: 'debit',
+          source: 'bank_account',
+          category: 'groceries',
+          categoryConfidence: 0.4,
+          rawData: {},
+        },
+      ],
+    })
+    renderApp()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Transacciones' })
+      ).toBeInTheDocument()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Transacciones' }))
+
+    const badge = (
+      await screen.findAllByRole('button', {
+        name: /^Categoría de Comercio A:/,
+      })
+    )[0]
+    fireEvent.click(badge)
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Elegir categoría',
+    })
+    await act(async () => {
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: 'Transporte' })
+      )
+    })
+    await waitFor(() =>
+      expect(backend.repo().row('tx-1')).toMatchObject({
+        category: 'transport',
+        categoryConfidence: 1,
+      })
+    )
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', { name: 'Deshacer' }))
+    })
+
+    await waitFor(() =>
+      expect(backend.repo().row('tx-1')).toMatchObject({
+        category: 'groceries',
+        categoryConfidence: 0.4,
+      })
+    )
+    expect(
+      transactionStore.getState().transactions.find((t) => t.id === 'tx-1')
+    ).toMatchObject({ category: 'groceries', categoryConfidence: 0.4 })
+  })
+
   it('bulk deletes selected transactions and removes them from the store', async () => {
     seed({
       transactions: [

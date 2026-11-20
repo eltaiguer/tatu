@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { Scissors, Slash, Pencil, Trash2, Undo2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
 import { CategoryBadge } from '../CategoryBadge'
 import { HouseToggle } from './HouseToggle'
+import { RowCategoryPicker } from './RowCategoryPicker'
+import { isCategorizeShortcut } from './category-shortcut'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency } from '../../models'
 import {
@@ -37,7 +40,9 @@ export function TransactionCard({
   onSplit,
   onUnsplit,
   onToggleHousehold,
+  onCategorize,
 }: TransactionRowProps) {
+  const [pickerOpen, setPickerOpen] = useState(false)
   const displayDescription = getDisplayDescription(transaction)
   const hasFriendlyOverride = displayDescription !== transaction.description
   const category = resolveCategory(transaction.category)
@@ -49,6 +54,20 @@ export function TransactionCard({
 
   return (
     <div
+      onKeyDown={(e) => {
+        if (
+          !onCategorize ||
+          pickerOpen ||
+          isSplitParentM ||
+          pendingTransactionIds.has(transaction.id)
+        ) {
+          return
+        }
+        if (isCategorizeShortcut(e)) {
+          e.preventDefault()
+          setPickerOpen(true)
+        }
+      }}
       // A split part is indented with a guide line on the left.
       className={`space-y-3 ${
         isSplitChildM
@@ -126,10 +145,22 @@ export function TransactionCard({
       {/* One row: what it is on the left, what you can do on the right. */}
       <div className="flex items-center gap-2">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          <CategoryBadge
-            categoryId={transaction.category || Category.Uncategorized}
-            size="sm"
-          />
+          {onCategorize && !isSplitParentM ? (
+            <RowCategoryPicker
+              transaction={transaction}
+              description={displayDescription}
+              variant="sheet"
+              open={pickerOpen}
+              onOpenChange={setPickerOpen}
+              pending={pendingTransactionIds.has(transaction.id)}
+              onPick={(id) => onCategorize(transaction, id)}
+            />
+          ) : (
+            <CategoryBadge
+              categoryId={transaction.category || Category.Uncategorized}
+              size="sm"
+            />
+          )}
           {needsCategoryReview(transaction) && <ReviewMarker />}
           {onToggleHousehold && (
             <HouseToggle

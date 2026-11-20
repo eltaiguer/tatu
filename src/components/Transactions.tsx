@@ -42,6 +42,7 @@ import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
 import { useHouseholdWrites } from './transactions/useHouseholdWrites'
+import { useCategoryWrites } from './transactions/useCategoryWrites'
 import {
   currentHouseholdRules,
   rowsSharingMerchantRule,
@@ -59,6 +60,7 @@ export function Transactions({
   homeCurrency = 'USD',
   fxRate = 40.5,
   onUpdateTransaction,
+  onRestoreCategories,
   onDeleteTransaction,
   onAutoCategorizeTransactions,
   onBulkCategorize,
@@ -221,6 +223,14 @@ export function Transactions({
       setPending,
       reportError,
     })
+
+  const { handlePickCategory } = useCategoryWrites({
+    transactions,
+    onUpdateTransaction,
+    onRestoreCategories,
+    setPending,
+    reportError,
+  })
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
@@ -523,6 +533,13 @@ export function Transactions({
           onUnsplitTransaction
             ? (transaction) => {
                 void handleUnsplit(transaction)
+              }
+            : undefined
+        }
+        onCategorize={
+          onUpdateTransaction
+            ? (transaction, categoryId) => {
+                void handlePickCategory(transaction, categoryId)
               }
             : undefined
         }
