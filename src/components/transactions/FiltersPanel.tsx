@@ -1,7 +1,9 @@
-import { useId } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Eye, EyeOff, Filter } from 'lucide-react'
 import { Checkbox } from '../ui/checkbox'
 import { cn } from '../ui/utils'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { filterControlClass } from './filter-control-class'
 import { Input } from '../ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { SegmentedToggle } from '../ui/segmented-toggle'
@@ -15,7 +17,11 @@ import {
 } from '../ui/sheet'
 import type { FilterPatch } from '../../services/filters/transaction-filter'
 import type { UrlFilterState } from '../../services/filters/url-filters'
-import { ACCOUNT_OPTIONS, SECONDARY_FILTERS_CLEARED } from './secondary-filters'
+import {
+  ACCOUNT_OPTIONS,
+  SECONDARY_FILTERS_CLEARED,
+  typePatch,
+} from './secondary-filters'
 
 const SECTION_LABEL =
   'text-xs font-medium text-muted-foreground uppercase tracking-wider'
@@ -32,11 +38,16 @@ function PanelBody({
   onChange: (patch: FilterPatch) => void
 }) {
   const accountLabelId = useId()
+  const bodyRef = useRef<HTMLDivElement>(null)
   const minId = useId()
   const maxId = useId()
-  const { accounts, type, currency, household, min, max, showIgnored } = filters
+  const { accounts, type, currency, min, max, showIgnored } = filters
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      ref={bodyRef}
+      tabIndex={-1}
+      className="flex flex-col gap-4 outline-none"
+    >
       <div className="flex flex-col gap-2">
         <span id={accountLabelId} className={SECTION_LABEL}>
           Cuenta
@@ -81,13 +92,7 @@ function PanelBody({
             { value: 'debit' as const, label: 'Gastos' },
           ]}
           value={type}
-          onChange={(next) =>
-            onChange(
-              next === 'credit' && household !== 'all'
-                ? { type: next, household: 'all' }
-                : { type: next }
-            )
-          }
+          onChange={(next) => onChange(typePatch(filters, next))}
           size="sm"
           aria-label="Tipo de transacción"
         />
@@ -145,7 +150,7 @@ function PanelBody({
         onClick={() => onChange({ showIgnored: !showIgnored })}
         aria-pressed={showIgnored}
         disabled={ignoredCount === 0}
-        title="Las transferencias se ignoran de los totales"
+        title="Los movimientos ignorados no cuentan en los totales"
         className={cn(
           'inline-flex h-[32px] items-center gap-[6px] self-start rounded-[8px] border bg-transparent px-[10px] py-0 text-[13px] font-medium',
           showIgnored
@@ -162,8 +167,8 @@ function PanelBody({
           <EyeOff size={14} aria-hidden="true" />
         )}
         {ignoredCount === 0
-          ? 'Sin transferencias ignoradas'
-          : `${showIgnored ? 'Ocultar' : 'Mostrar'} transferencias ignoradas`}
+          ? 'Sin movimientos ignorados'
+          : `${showIgnored ? 'Ocultar' : 'Mostrar'} movimientos ignorados`}
         {ignoredCount > 0 && (
           <span className="font-[family-name:var(--font-mono)] text-[11px] text-[color:var(--text-muted)]">
             · {ignoredCount}
@@ -171,19 +176,22 @@ function PanelBody({
         )}
       </button>
 
-      {activeCount > 0 && (
-        <div className="flex justify-end border-t border-[var(--border)] pt-3">
-          {/* Only the panel's own filters: search, Categoría, Hogar, A
+      <div className="flex justify-end border-t border-[var(--border)] pt-3">
+        {/* Only the panel's own filters: search, Categoría, Hogar, A
               revisar and the period stay. */}
-          <button
-            type="button"
-            onClick={() => onChange(SECONDARY_FILTERS_CLEARED)}
-            className="cursor-pointer border-none [background:none] px-[4px] py-0 text-[13px] font-[500] text-[var(--brand)]"
-          >
-            Limpiar
-          </button>
-        </div>
-      )}
+        <button
+          type="button"
+          disabled={activeCount === 0}
+          onClick={() => {
+            onChange(SECONDARY_FILTERS_CLEARED)
+            // The button goes disabled: keep focus in the panel.
+            bodyRef.current?.focus()
+          }}
+          className="cursor-pointer border-none [background:none] px-[4px] py-0 text-[13px] font-[500] text-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Limpiar
+        </button>
+      </div>
     </div>
   )
 }
@@ -203,19 +211,12 @@ export function FiltersPanel({
   activeCount: number
   onChange: (patch: FilterPatch) => void
 }) {
-  const wide =
-    typeof window !== 'undefined' &&
-    !!window.matchMedia?.('(min-width: 768px)').matches
+  // Followed, not read once: crossing 768px with the panel open swaps the
+  // variant, and `open` lives here so the swap keeps it open.
+  const wide = useMediaQuery('(min-width: 768px)')
+  const [open, setOpen] = useState(false)
   const trigger = (
-    <button
-      type="button"
-      className={cn(
-        'bg-input-background focus-visible:ring-ring/50 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]',
-        activeCount > 0
-          ? 'border-[var(--brand)] text-[var(--brand-text,var(--brand))]'
-          : 'border-input focus-visible:border-ring'
-      )}
-    >
+    <button type="button" className={filterControlClass(activeCount > 0)}>
       <Filter size={14} aria-hidden="true" />
       {activeCount > 0 ? `Filtros (${activeCount})` : 'Filtros'}
     </button>
@@ -231,7 +232,7 @@ export function FiltersPanel({
 
   if (wide) {
     return (
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         <PopoverContent align="end" aria-label="Filtros" className="w-80">
           {body}
@@ -240,7 +241,7 @@ export function FiltersPanel({
     )
   }
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
       <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto">
         <SheetHeader>

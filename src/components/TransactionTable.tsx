@@ -99,8 +99,8 @@ export function TransactionTable({
           // Filtros panel's toggle is where they come back.
           <span className="text-[13px] text-[color:var(--text-muted)]">
             {ignoredCount === 1
-              ? '1 transferencia oculta'
-              : `${ignoredCount} transferencias ocultas`}
+              ? '1 movimiento oculto'
+              : `${ignoredCount} movimientos ocultos`}
           </span>
         )}
       </div>

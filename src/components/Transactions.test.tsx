@@ -123,10 +123,10 @@ describe('Transactions', () => {
         .map((el) => el.textContent)
     ).toEqual(['Ingresos', 'Gastos', 'Balance'])
     // The toolbar says rows are hidden without opening anything.
-    expect(screen.getByText('1 transferencia oculta')).toBeInTheDocument()
+    expect(screen.getByText('1 movimiento oculto')).toBeInTheDocument()
     const panel = await openFilters()
     const toggle = panel.getByRole('button', {
-      name: /transferencias ignoradas/,
+      name: /movimientos ignorados/,
     })
     expect(toggle).toHaveTextContent('· 1')
     expect(toggle).toHaveAttribute('aria-pressed', 'false')
@@ -203,7 +203,7 @@ describe('Transactions', () => {
 
     const panel = await openFilters()
     expect(
-      panel.getByRole('button', { name: /Sin transferencias ignoradas/ })
+      panel.getByRole('button', { name: /Sin movimientos ignorados/ })
     ).toBeDisabled()
   })
 
@@ -322,7 +322,7 @@ describe('Transactions', () => {
     expect(screen.queryByText('supermarket')).not.toBeInTheDocument()
   })
 
-  it('filters transactions by description, date range, category and account', () => {
+  it('filters transactions by description, date range, category and account', async () => {
     const transactions: Transaction[] = [
       {
         ...makeTransaction(1, 'Alpha Market'),
@@ -359,6 +359,9 @@ describe('Transactions', () => {
     fireEvent.change(screen.getByLabelText('Filtro categoría'), {
       target: { value: 'groceries' },
     })
+    const panel = await openFilters()
+    fireEvent.click(panel.getByRole('checkbox', { name: 'Tarjeta' }))
+    await closeFilters()
 
     expect(screen.getAllByText('Alpha Card').length).toBeGreaterThan(0)
     expect(screen.queryByText('Alpha Market')).not.toBeInTheDocument()
@@ -1792,7 +1795,7 @@ describe('Transactions month range', () => {
         fireEvent.click(screen.getByRole('button', { name: /^Filtros/ }))
         const panel = within(screen.getByRole('dialog', { name: 'Filtros' }))
         fireEvent.click(
-          panel.getByRole('button', { name: /transferencias ignoradas/ })
+          panel.getByRole('button', { name: /movimientos ignorados/ })
         )
         fireEvent.click(panel.getByRole('button', { name: 'Cerrar' }))
         expect(screen.queryByRole('dialog')).toBeNull()

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   SECONDARY_FILTERS_CLEARED,
+  householdTogglePatch,
   secondaryFilterChips,
+  typePatch,
 } from './secondary-filters'
 import {
   DEFAULT_URL_FILTERS,
@@ -64,7 +66,7 @@ describe('secondaryFilterChips', () => {
   it('says when ignored transfers are shown', () => {
     expect(secondaryFilterChips(state({ showIgnored: true }))).toEqual([
       {
-        label: 'Transferencias ignoradas: visibles',
+        label: 'Ignorados: visibles',
         clear: { showIgnored: false },
       },
     ])
@@ -86,7 +88,7 @@ describe('secondaryFilterChips', () => {
       'Tipo: Gastos',
       'Moneda: US$',
       'Monto: 0–9',
-      'Transferencias ignoradas: visibles',
+      'Ignorados: visibles',
     ])
   })
 })
@@ -113,5 +115,36 @@ describe('SECONDARY_FILTERS_CLEARED', () => {
     expect(hasActiveFilters({ ...only, ...SECONDARY_FILTERS_CLEARED })).toBe(
       false
     )
+  })
+})
+
+describe('Hogar and income never combine', () => {
+  it('turning Hogar on puts income back to Ambos', () => {
+    expect(householdTogglePatch({ household: 'all', type: 'credit' })).toEqual({
+      household: 'household',
+      type: 'all',
+    })
+    expect(householdTogglePatch({ household: 'all', type: 'debit' })).toEqual({
+      household: 'household',
+    })
+  })
+
+  it('turning Hogar off keeps the type', () => {
+    expect(
+      householdTogglePatch({ household: 'household', type: 'debit' })
+    ).toEqual({ household: 'all' })
+  })
+
+  it('picking Ingresos under Hogar drops Hogar; Gastos keeps it', () => {
+    expect(typePatch({ household: 'household' }, 'credit')).toEqual({
+      type: 'credit',
+      household: 'all',
+    })
+    expect(typePatch({ household: 'household' }, 'debit')).toEqual({
+      type: 'debit',
+    })
+    expect(typePatch({ household: 'all' }, 'credit')).toEqual({
+      type: 'credit',
+    })
   })
 })

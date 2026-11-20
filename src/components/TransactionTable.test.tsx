@@ -361,29 +361,27 @@ describe('TransactionTable', () => {
       expect(screen.getAllByText('Ignorada')).toHaveLength(2)
     })
 
-    it('says how many ignored transfers are hidden, as text', () => {
+    it('says how many ignored rows are hidden, as text', () => {
       renderTable({ ignoredCount: 3 })
 
-      expect(screen.getByText('3 transferencias ocultas')).toBeInTheDocument()
-      expect(
-        screen.queryByRole('button', { name: /transferencias/ })
-      ).toBeNull()
+      expect(screen.getByText('3 movimientos ocultos')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /ignorados/ })).toBeNull()
     })
 
     it('says it in the singular for one', () => {
       renderTable({ ignoredCount: 1 })
 
-      expect(screen.getByText('1 transferencia oculta')).toBeInTheDocument()
+      expect(screen.getByText('1 movimiento oculto')).toBeInTheDocument()
     })
 
     it('says nothing when they are shown', () => {
       renderTable({ ignoredCount: 3, showIgnored: true })
-      expect(screen.queryByText(/transferencias? ocultas?/)).toBeNull()
+      expect(screen.queryByText(/movimientos? ocultos?/)).toBeNull()
     })
 
     it('says nothing when nothing is ignored', () => {
       renderTable({ ignoredCount: 0 })
-      expect(screen.queryByText(/transferencias? ocultas?/)).toBeNull()
+      expect(screen.queryByText(/movimientos? ocultos?/)).toBeNull()
     })
   })
 

@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  act,
   fireEvent,
   render,
   screen,
   waitFor,
   within,
 } from '@testing-library/react'
-import type { ComponentProps } from 'react'
+import { useState, type ComponentProps } from 'react'
 import { TransactionFilters } from './TransactionFilters'
 import { resolveCategory } from '../services/categories/category-registry'
 import {
@@ -154,7 +155,7 @@ describe('TransactionFilters', () => {
       expect(screen.queryByRole('radiogroup', { name: 'Moneda' })).toBeNull()
       expect(screen.queryByLabelText('Monto mínimo')).toBeNull()
       expect(
-        screen.queryByRole('button', { name: /transferencias/ })
+        screen.queryByRole('button', { name: /movimientos ignorados/ })
       ).toBeNull()
     })
 
@@ -180,7 +181,7 @@ describe('TransactionFilters', () => {
       expect(panel.getByLabelText('Monto mínimo')).toBeInTheDocument()
       expect(panel.getByLabelText('Monto máximo')).toBeInTheDocument()
       expect(
-        panel.getByRole('button', { name: /transferencias/ })
+        panel.getByRole('button', { name: /movimientos ignorados/ })
       ).toBeInTheDocument()
     })
 
@@ -212,6 +213,35 @@ describe('TransactionFilters', () => {
         // A popover is not modal: the page behind stays reachable.
         expect(screen.getByLabelText('Filtro categoría')).toBeInTheDocument()
       })
+
+      it('stays open when the window crosses 768px', async () => {
+        const listeners = new Set<() => void>()
+        let wide = false
+        window.matchMedia = ((query: string) => ({
+          get matches() {
+            return query === '(min-width: 768px)' && wide
+          },
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: (_: string, l: () => void) => listeners.add(l),
+          removeEventListener: (_: string, l: () => void) =>
+            listeners.delete(l),
+          dispatchEvent: vi.fn(),
+        })) as unknown as typeof window.matchMedia
+        renderFilters()
+        await openFilters()
+
+        wide = true
+        act(() => listeners.forEach((l) => l()))
+
+        // Still open, now as the popover, and the sheet is gone.
+        const dialog = await screen.findByRole('dialog', { name: 'Filtros' })
+        expect(dialog).toHaveAttribute('data-slot', 'popover-content')
+        expect(screen.getAllByRole('dialog')).toHaveLength(1)
+        expect(within(dialog).getByLabelText('Monto mínimo')).toBeVisible()
+      })
     })
 
     it('gives focus back to the Filtros button when it closes', async () => {
@@ -223,10 +253,46 @@ describe('TransactionFilters', () => {
     })
 
     describe('Limpiar', () => {
-      it('is absent while no panel filter is active', async () => {
+      it('is disabled while no panel filter is active', async () => {
         renderFilters({ search: 'disco', categories: ['groceries'] })
         const panel = await openFilters()
-        expect(panel.queryByRole('button', { name: 'Limpiar' })).toBeNull()
+        expect(panel.getByRole('button', { name: 'Limpiar' })).toBeDisabled()
+      })
+
+      it('keeps focus inside the panel after clearing', async () => {
+        // A stateful bar, so the click really empties the panel's filters.
+        function Bar() {
+          const [filters, setFilters] = useState<FilterState>({
+            ...DEFAULT_URL_FILTERS,
+            period: { mode: 'all' },
+            currency: 'UYU',
+          })
+          return (
+            <TransactionFilters
+              filters={filters}
+              hasActiveFilters={hasActiveFilters(filters)}
+              dateRange={{ from: '', to: '' }}
+              availableCategories={[]}
+              ignoredCount={0}
+              onChange={(patch) => setFilters((f) => ({ ...f, ...patch }))}
+              onDateBoundChange={vi.fn()}
+              onClearAll={vi.fn()}
+            />
+          )
+        }
+        render(<Bar />)
+        const panel = await openFilters()
+        fireEvent.click(panel.getByRole('button', { name: 'Limpiar' }))
+
+        // Nothing left to clear: the button stays, disabled.
+        await waitFor(() =>
+          expect(panel.getByRole('button', { name: 'Limpiar' })).toBeDisabled()
+        )
+        expect(
+          screen
+            .getByRole('dialog', { name: 'Filtros' })
+            .contains(document.activeElement)
+        ).toBe(true)
       })
 
       it('clears only the panel filters', async () => {
@@ -352,13 +418,13 @@ describe('TransactionFilters', () => {
     })
   })
 
-  describe('ignored transfers', () => {
+  describe('ignored rows', () => {
     it('toggles showing them and says how many there are', async () => {
       const props = renderFilters({}, { ignoredCount: 3 })
       const panel = await openFilters()
 
       const toggle = panel.getByRole('button', {
-        name: /Mostrar transferencias ignoradas/,
+        name: /Mostrar movimientos ignorados/,
       })
       expect(toggle).toHaveTextContent('· 3')
       expect(toggle).toHaveAttribute('aria-pressed', 'false')
@@ -372,7 +438,7 @@ describe('TransactionFilters', () => {
       const panel = await openFilters()
 
       fireEvent.click(
-        panel.getByRole('button', { name: /Ocultar transferencias ignoradas/ })
+        panel.getByRole('button', { name: /Ocultar movimientos ignorados/ })
       )
       expect(props.onChange).toHaveBeenCalledWith({ showIgnored: false })
     })
@@ -382,7 +448,7 @@ describe('TransactionFilters', () => {
       const panel = await openFilters()
 
       expect(
-        panel.getByRole('button', { name: /transferencias ignoradas/ })
+        panel.getByRole('button', { name: /movimientos ignorados/ })
       ).toBeDisabled()
     })
 
@@ -393,11 +459,73 @@ describe('TransactionFilters', () => {
         screen.getByRole('button', { name: 'Filtros (1)' })
       ).toBeInTheDocument()
       fireEvent.click(
-        screen.getByLabelText(
-          'Quitar filtro Transferencias ignoradas: visibles'
-        )
+        screen.getByLabelText('Quitar filtro Ignorados: visibles')
       )
       expect(props.onChange).toHaveBeenCalledWith({ showIgnored: false })
+    })
+  })
+
+  describe('date range', () => {
+    it('edits the from and to dates', () => {
+      const props = renderFilters()
+
+      fireEvent.change(screen.getByLabelText('Filtro fecha desde'), {
+        target: { value: '2025-01-01' },
+      })
+      fireEvent.change(screen.getByLabelText('Filtro fecha hasta'), {
+        target: { value: '2025-01-31' },
+      })
+
+      expect(props.onDateBoundChange).toHaveBeenCalledWith('from', '2025-01-01')
+      expect(props.onDateBoundChange).toHaveBeenCalledWith('to', '2025-01-31')
+      expect(props.onChange).not.toHaveBeenCalled()
+    })
+
+    it("shows the period's days", () => {
+      renderFilters(
+        { period: { mode: 'month', y: 2026, m: 2 } },
+        { dateRange: { from: '2026-03-01', to: '2026-03-31' } }
+      )
+
+      expect(screen.getByLabelText('Filtro fecha desde')).toHaveValue(
+        '2026-03-01'
+      )
+      expect(screen.getByLabelText('Filtro fecha hasta')).toHaveValue(
+        '2026-03-31'
+      )
+    })
+  })
+
+  describe('clear all', () => {
+    it('resets every filter at once', () => {
+      const props = renderFilters({
+        categories: ['groceries'],
+        type: 'debit',
+        currency: 'USD',
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Limpiar todo' }))
+
+      expect(props.onClearAll).toHaveBeenCalledTimes(1)
+    })
+
+    it('is not offered when no filter is active', () => {
+      renderFilters()
+
+      expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
+    })
+
+    // The view decides what counts as "filtrado" once, for the header too.
+    // With Hogar the only filter there are no chips, and the gate still
+    // follows the view.
+    it('follows whether the view says a filter is active', () => {
+      renderFilters({ categories: ['groceries'] }, { hasActiveFilters: false })
+      expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
+    })
+
+    it('follows it for Hogar alone too', () => {
+      renderFilters({ household: 'household' }, { hasActiveFilters: false })
+      expect(screen.queryByRole('button', { name: 'Limpiar todo' })).toBeNull()
     })
   })
 

@@ -34,7 +34,7 @@ function TotalTile({
     // Ingresos | Balance side by side, label above amount (three columns
     // would shrink long peso totals to ~11px). From sm: three columns.
     <div
-      className={`@container min-w-0 py-1.5 sm:py-1 ${className} flex items-baseline justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-[3px] sm:px-4 sm:first:pl-0 sm:last:pr-0${
+      className={`@container min-w-0 py-2 sm:py-1 ${className} flex items-baseline justify-between gap-3 sm:flex-col sm:items-stretch sm:justify-start sm:gap-[3px] sm:px-4 sm:first:pl-0 sm:last:pr-0${
         // The Hogar tile's note drops to its own row on phones; the plain
         // tiles keep label and amount on one row (the label ellipsizes).
         note ? ' flex-wrap sm:flex-nowrap' : ''
@@ -144,7 +144,7 @@ export function TotalsStrip({
         value={incomeText}
         fitTo={fitTo}
         phoneFit={sideFit}
-        className={`${sideTile} max-sm:border-r max-sm:border-[var(--border)] max-sm:pr-3`}
+        className={`${sideTile} max-sm:py-1.5 max-sm:border-r max-sm:border-[var(--border)] max-sm:pr-3`}
         accent="var(--pos)"
       />
       <TotalTile
@@ -152,7 +152,8 @@ export function TotalsStrip({
         icon={<TrendingDown size={14} />}
         value={expenseText}
         fitTo={fitTo}
-        className="order-first col-span-2 border-b border-[var(--border)] sm:order-none sm:col-span-1 sm:border-b-0"
+        phoneFit={{ text: expenseText, size: 22 }}
+        className="order-first col-span-2 max-sm:py-1.5 border-b border-[var(--border)] sm:order-none sm:col-span-1 sm:border-b-0"
       />
       <TotalTile
         label="Balance"
@@ -160,7 +161,7 @@ export function TotalsStrip({
         value={netText}
         fitTo={fitTo}
         phoneFit={sideFit}
-        className={`${sideTile} max-sm:pl-3`}
+        className={`${sideTile} max-sm:py-1.5 max-sm:pl-3`}
         accent={net >= 0 ? 'var(--pos)' : 'var(--neg)'}
       />
     </div>

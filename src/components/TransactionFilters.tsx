@@ -3,7 +3,11 @@ import { House, Search, X } from 'lucide-react'
 import { cn } from './ui/utils'
 import { Input } from './ui/input'
 import { FiltersPanel } from './transactions/FiltersPanel'
-import { secondaryFilterChips } from './transactions/secondary-filters'
+import { filterControlClass } from './transactions/filter-control-class'
+import {
+  householdTogglePatch,
+  secondaryFilterChips,
+} from './transactions/secondary-filters'
 import { resolveCategory } from '../services/categories/category-registry'
 import { useClickOutside } from '../hooks/useClickOutside'
 import type { UrlFilterState } from '../services/filters/url-filters'
@@ -44,12 +48,7 @@ function MultiSelectPopover<T extends string>({
         type="button"
         aria-label={ariaLabel ?? label}
         onClick={() => setOpen((o) => !o)}
-        className={cn(
-          'bg-input-background focus-visible:ring-ring/50 inline-flex h-9 min-w-[120px] items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]',
-          isActive
-            ? 'border-[var(--brand)] text-[var(--brand-text,var(--brand))]'
-            : 'border-input focus-visible:border-ring'
-        )}
+        className={filterControlClass(isActive, 'min-w-[120px]')}
       >
         <span>
           {label}
@@ -159,7 +158,7 @@ export function TransactionFilters({
     return { value: cat, label, color }
   })
 
-  const { search, categories, type, household, review } = filters
+  const { search, categories, household, review } = filters
 
   // Active chips (search has its own × in the input, date is MonthNav):
   // categories, then the Filtros panel's, then A revisar.
@@ -181,6 +180,10 @@ export function TransactionFilters({
       onClear: () => onChange({ review: false }),
     })
   }
+
+  // Hogar has no chip of its own (the pressed button is its state), but its
+  // row still offers "Limpiar todo".
+  const showChipRow = chips.length > 0 || household !== 'all'
 
   return (
     // No card of its own: it heads the movements card it filters.
@@ -215,21 +218,8 @@ export function TransactionFilters({
           type="button"
           aria-pressed={household !== 'all'}
           aria-label="Filtro Hogar"
-          onClick={() =>
-            onChange(
-              household !== 'all'
-                ? { household: 'all' }
-                : type === 'credit'
-                  ? { household: 'household', type: 'all' }
-                  : { household: 'household' }
-            )
-          }
-          className={cn(
-            'bg-input-background focus-visible:ring-ring/50 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]',
-            household !== 'all'
-              ? 'border-[var(--brand)] text-[var(--brand-text,var(--brand))]'
-              : 'border-input focus-visible:border-ring'
-          )}
+          onClick={() => onChange(householdTogglePatch(filters))}
+          className={filterControlClass(household !== 'all')}
         >
           <House size={14} aria-hidden="true" />
           Hogar
@@ -244,7 +234,7 @@ export function TransactionFilters({
       </div>
 
       {/* Active filter chips */}
-      {(chips.length > 0 || household !== 'all') && (
+      {showChipRow && (
         <div className="flex flex-wrap items-center gap-[8px]">
           {chips.map((chip, i) => (
             <span
@@ -262,7 +252,7 @@ export function TransactionFilters({
               </button>
             </span>
           ))}
-          {hasActiveFilters && (chips.length > 0 || household !== 'all') && (
+          {hasActiveFilters && showChipRow && (
             <button
               type="button"
               onClick={onClearAll}

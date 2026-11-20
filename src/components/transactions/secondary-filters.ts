@@ -55,9 +55,29 @@ export function secondaryFilterChips(
   }
   if (showIgnored) {
     chips.push({
-      label: 'Transferencias ignoradas: visibles',
+      label: 'Ignorados: visibles',
       clear: { showIgnored: false },
     })
   }
   return chips
+}
+
+// The Hogar chip and the Tipo control never combine on income: income has no
+// household answer, so the latest pick wins. One rule for both controls.
+export function typePatch(
+  filters: Pick<UrlFilterState, 'household'>,
+  next: UrlFilterState['type']
+): FilterPatch {
+  return next === 'credit' && filters.household !== 'all'
+    ? { type: next, household: 'all' }
+    : { type: next }
+}
+
+export function householdTogglePatch(
+  filters: Pick<UrlFilterState, 'household' | 'type'>
+): FilterPatch {
+  if (filters.household !== 'all') return { household: 'all' }
+  return filters.type === 'credit'
+    ? { household: 'household', type: 'all' }
+    : { household: 'household' }
 }
