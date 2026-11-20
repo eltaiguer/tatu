@@ -67,6 +67,7 @@ import {
 import { transactionStore } from '../../stores/transaction-store'
 import { replaceCustomPatterns } from '../categorizer/custom-patterns'
 import { workspaceStore } from '../../stores/workspace-state'
+import { buildDescriptionOverrideKey } from '../descriptions/normalization'
 import { parseBankAccountCSV } from '../parsers/bank-account-parser'
 import {
   createInMemoryRepository,
@@ -964,7 +965,7 @@ describe('transaction-mutations — apply scope', () => {
       expect(repo.row('same-2')?.displayDescription).toBeUndefined()
     })
 
-    it('clears the edited row’s own name when the name is put back to the original', async () => {
+    it('clears every similar row’s own name when the name is put back to the original', async () => {
       const repo = signedIn([
         makeTransaction('same-1', {
           description: MERCHANT,
@@ -984,13 +985,14 @@ describe('transaction-mutations — apply scope', () => {
 
       for (const read of [stored, repo.row]) {
         expect(read('same-1')?.displayDescription).toBeUndefined()
-        expect(read('same-2')?.displayDescription).toBe('Bar')
+        expect(read('same-2')?.displayDescription).toBeUndefined()
       }
     })
 
     describe('the clean label typed back is the original name (#296)', () => {
       const RAW =
         'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+      const KEY = buildDescriptionOverrideKey(RAW)!
       const bankRows = () => [
         makeTransaction('same-1', {
           description: RAW,
@@ -1001,9 +1003,31 @@ describe('transaction-mutations — apply scope', () => {
           displayDescription: 'Bar',
         }),
       ]
+      // A live merchant-wide name, in the store and on the server.
+      const withOverride = (rows: Transaction[]) => {
+        const repo = signedIn(rows, {
+          descriptionOverrides: [
+            {
+              descriptionNormalized: KEY,
+              descriptionOriginal: RAW,
+              friendlyDescription: 'Lavadero',
+              createdAt: '',
+              updatedAt: '',
+            },
+          ],
+        })
+        replaceDescriptionOverrides({
+          [KEY]: {
+            descriptionOriginal: RAW,
+            friendlyDescription: 'Lavadero',
+            updatedAt: '',
+          },
+        })
+        return repo
+      }
 
-      it('clears the edited row’s own name under Todas and stores no override', async () => {
-        const repo = signedIn(bankRows())
+      it('Todas puts every similar row back to the original and leaves no override', async () => {
+        const repo = withOverride(bankRows())
 
         await editTransaction(repo, 'same-1', {
           displayDescription: 'Tintoreria Martinizi',
@@ -1013,12 +1037,26 @@ describe('transaction-mutations — apply scope', () => {
 
         for (const read of [stored, repo.row]) {
           expect(read('same-1')?.displayDescription).toBeUndefined()
-          expect(read('same-2')?.displayDescription).toBe('Bar')
+          expect(read('same-2')?.displayDescription).toBeUndefined()
         }
+        expect(repo.descriptionOverrides.size).toBe(0)
+        expect(getDescriptionOverride(RAW)).toBeNull()
+      })
+
+      it('future_matching_only clears the edited row’s name and the override', async () => {
+        const repo = withOverride(bankRows())
+
+        await editTransaction(repo, 'same-1', {
+          displayDescription: 'Tintoreria Martinizi',
+          applyScope: 'future_matching_only',
+        })
+
+        expect(repo.row('same-1')?.displayDescription).toBeUndefined()
+        expect(repo.row('same-2')?.displayDescription).toBe('Bar')
         expect(repo.descriptionOverrides.size).toBe(0)
       })
 
-      it('clears the row’s own name under Solo esta instead of storing the label', async () => {
+      it('Solo esta without an override clears the row’s own name', async () => {
         const repo = signedIn(bankRows())
 
         await editTransaction(repo, 'same-1', {
@@ -1028,6 +1066,26 @@ describe('transaction-mutations — apply scope', () => {
 
         expect(repo.row('same-1')?.displayDescription).toBeUndefined()
         expect(stored('same-1')?.displayDescription).toBeUndefined()
+      })
+
+      it('Solo esta under a live override stores the typed text, so the row shows it', async () => {
+        const repo = withOverride([
+          makeTransaction('same-1', { description: RAW }),
+          makeTransaction('same-2', { description: RAW }),
+        ])
+
+        await editTransaction(repo, 'same-1', {
+          displayDescription: 'Tintoreria Martinizi',
+          applyScope: 'single',
+        })
+
+        for (const read of [stored, repo.row]) {
+          expect(read('same-1')?.displayDescription).toBe(
+            'Tintoreria Martinizi'
+          )
+          expect(read('same-2')?.displayDescription).toBeUndefined()
+        }
+        expect(repo.descriptionOverrides.size).toBe(1)
       })
     })
 

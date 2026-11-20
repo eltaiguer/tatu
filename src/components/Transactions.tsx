@@ -277,9 +277,8 @@ export function Transactions({
     // must not re-write the category as the user's own (confidence 1): nothing
     // about name, category or tags changed (a name/category scope still runs).
     const householdChanged = canSaveHousehold(draft.household)
-    // The dialog opens with the row's label: untouched (or retyped the same)
-    // is no name at all.
-    const nameKept = draft.description === transactionLabel(editing).trim()
+    // The dialog decided it once (against the label it opened with).
+    const nameKept = !draft.nameTouched
     const unchanged =
       nameKept &&
       draft.category === ((editing.category ?? '').trim() || null) &&

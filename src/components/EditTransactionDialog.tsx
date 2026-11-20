@@ -17,10 +17,7 @@ import { Category, isSplitChildTx, isSplitParentTx } from '../models'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import type { Currency, Transaction } from '../models'
 import { formatCurrency, formatDate } from '../utils/formatting'
-import {
-  isOriginalName,
-  transactionLabel,
-} from '../services/merchants/merchant-key'
+import { transactionLabel } from '../services/merchants/merchant-key'
 import {
   buildCategorySuggestions,
   buildTagSuggestions,
@@ -48,6 +45,9 @@ export type ApplyScope =
 // too, #119).
 export interface EditTransactionDraft {
   description: string
+  // Whether the name differs from the label the field opened with. When false,
+  // the caller sends no name at all.
+  nameTouched: boolean
   category: string | null
   tags: string[]
   // What the name and category reach. The Hogar choice has no scope: its box
@@ -175,13 +175,13 @@ function EditTransactionForm({
   // number of rows the save will touch.
   const name = description.trim()
   // An untouched name is not a rename, even when the row has its own.
-  const renamed =
-    !!name &&
-    !isOriginalName(name, transaction.description) &&
-    name !== openedName.trim()
+  // Decided once: the count, the draft's `nameTouched` and the write share it.
+  // A touched name that is the original (statement text or its label) reaches
+  // the same rows as a rename: it clears their names and the merchant-wide one.
+  const nameTouched = name !== openedName.trim()
   const similarCount = useMemo(
-    () => countSimilar(transaction, renamed),
-    [countSimilar, transaction, renamed]
+    () => countSimilar(transaction, nameTouched),
+    [countSimilar, transaction, nameTouched]
   )
 
   // A changed category favours the whole merchant (#281). Derived, not
@@ -254,6 +254,7 @@ function EditTransactionForm({
     setError('')
     onSave({
       description: trimmed,
+      nameTouched,
       category: category.trim() || null,
       tags,
       applyScope,

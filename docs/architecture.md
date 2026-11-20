@@ -805,8 +805,10 @@ all group the same rows. Never group by `description` or `getDisplayDescription`
   edit dialog's "Descripción visible" opens with `transactionLabel` and keeps
   its "Original:" line. `Transactions.tsx` sends `displayDescription` only when
   the field differs from that label; a name equal to the raw text or its clean
-  label is the original (`isOriginalName`): it clears a per-row name and never
-  stores a rename. CSV/PDF export,
+  label is the original (`isOriginalName`): under Todas it clears every similar
+  row's name and the merchant-wide one, never stores a rename (the draft's
+  `nameTouched` is decided once, in the dialog; Solo esta on a row a live
+  override names stores the typed text, or the override would keep showing). CSV/PDF export,
   `DuplicatesReview` and `SplitTransactionDialog` keep the raw text.
 - `npx vite-node scripts/merchant-groups.ts [paths…]` prints, for Santander
   CSVs or Tatu's own CSV export, every key that merges several variants.

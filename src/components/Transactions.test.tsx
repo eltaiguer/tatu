@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -16,6 +17,10 @@ import { merchantKeyOf } from '../services/merchants/merchant-key'
 import { captureCsvDownload } from '../test/csv-download'
 import { parseSantanderDate } from '../services/parsers/utils'
 import { toMonthKey } from '../utils/date-utils'
+import {
+  replaceDescriptionOverrides,
+  setDescriptionOverride,
+} from '../services/descriptions/description-overrides'
 import { createInMemoryRepository } from '../services/repository/in-memory-repository'
 import { workspaceStore } from '../stores/workspace-state'
 
@@ -633,6 +638,10 @@ describe('Transactions', () => {
     const RAW =
       'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
 
+    beforeEach(() => {
+      replaceDescriptionOverrides({})
+    })
+
     function openRow() {
       const onUpdateTransaction = vi.fn().mockResolvedValue({ affected: 1 })
       render(
@@ -670,6 +679,23 @@ describe('Transactions', () => {
       const input = screen.getByLabelText('Descripción edición')
       fireEvent.change(input, { target: { value: '' } })
       fireEvent.change(input, { target: { value: 'Tintoreria Martinizi' } })
+
+      pickCategoryAndSave()
+
+      await waitFor(() => expect(onUpdateTransaction).toHaveBeenCalled())
+      expect(onUpdateTransaction.mock.calls[0][1].displayDescription).toBe(
+        undefined
+      )
+    })
+
+    it('an override that changes while the dialog is open does not turn an untouched save into a rename', async () => {
+      const onUpdateTransaction = openRow()
+      act(() =>
+        setDescriptionOverride({
+          description: RAW,
+          friendlyDescription: 'Lavadero Martinizi',
+        })
+      )
 
       pickCategoryAndSave()
 

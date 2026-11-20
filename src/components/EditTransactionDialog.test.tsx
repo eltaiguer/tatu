@@ -91,6 +91,7 @@ describe('EditTransactionDialog', () => {
 
     expect(props.onSave).toHaveBeenCalledWith({
       description: 'Disco',
+      nameTouched: false,
       category: 'groceries',
       tags: ['super'],
       applyScope: 'single',
@@ -114,6 +115,7 @@ describe('EditTransactionDialog', () => {
 
     expect(props.onSave).toHaveBeenCalledWith({
       description: 'Disco Pocitos',
+      nameTouched: true,
       category: 'restaurants',
       tags: ['super', 'viaje'],
       applyScope: 'matching_past_and_future',
@@ -270,13 +272,13 @@ describe('EditTransactionDialog', () => {
     ).toBeInTheDocument()
   })
 
-  it('counts the similar reach as a rename only when the name differs from the original', () => {
+  it('counts the similar reach as a name write only when the name differs from the one opened', () => {
     const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
       renamed ? 2 : 1
     )
     render(<EditTransactionDialog {...baseProps({ countSimilar })} />)
 
-    // "Disco" is the row's own name, as opened: not a rename.
+    // "Disco" is the row's own name, as opened: untouched.
     expect(countSimilar).toHaveBeenLastCalledWith(transaction, false)
 
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
@@ -288,12 +290,14 @@ describe('EditTransactionDialog', () => {
       target: { value: 'POS COMPRA DISCO 123' },
     })
 
+    // The statement text is a touched name: under Todas it clears every
+    // similar row's name, as a rename does.
+    expect(countSimilar).toHaveBeenLastCalledWith(transaction, true)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Disco' },
+    })
     expect(countSimilar).toHaveBeenLastCalledWith(transaction, false)
-    expect(
-      categoryScope().getByLabelText(
-        'Todas las similares · solo esta por ahora (y las futuras)'
-      )
-    ).toBeInTheDocument()
   })
 
   it('starts a fresh draft for the next transaction', () => {
@@ -597,7 +601,7 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
       )
     })
 
-    it('counts a rename against the opened label: the label or the statement text typed back is not one (#296)', () => {
+    it('counts a touched name against the opened label: only the opened label typed back is untouched (#296)', () => {
       const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
         renamed ? 2 : 4
       )
@@ -621,13 +625,15 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
       expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
       type('Tintoreria Martinizi')
       expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
-      type('Lavadero Martinizi')
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
+      // The statement text is a touched name: the write reaches the same rows
+      // (it clears names and the override), so the count says so.
       type(RAW)
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
+      type('Tintoreria Martinizi')
       expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
     })
 
-    it('counts the clean label typed over another own name as no rename (#296)', () => {
+    it('counts the clean label typed over another own name: the write reaches every similar row (#296)', () => {
       const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
         renamed ? 2 : 4
       )
@@ -637,15 +643,51 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
           {...baseProps({ transaction: tx, countSimilar })}
         />
       )
+
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+      fireEvent.change(screen.getByLabelText('Descripción edición'), {
+        target: { value: 'Tintoreria Martinizi' },
+      })
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
+    })
+
+    it('says whether the name was touched in the draft, decided once (#296)', () => {
+      const onSave = vi.fn()
+      const tx = {
+        ...transaction,
+        description: RAW,
+        displayDescription: undefined,
+      }
+      render(
+        <EditTransactionDialog {...baseProps({ transaction: tx, onSave })} />
+      )
       const type = (value: string) =>
         fireEvent.change(screen.getByLabelText('Descripción edición'), {
           target: { value },
         })
 
+      save()
+      expect(onSave).toHaveBeenLastCalledWith(
+        expect.objectContaining({ nameTouched: false })
+      )
       type('Lavadero Martinizi')
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
-      type('Tintoreria Martinizi')
-      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+      save()
+      expect(onSave).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          nameTouched: true,
+          description: 'Lavadero Martinizi',
+        })
+      )
+      type('  Tintoreria Martinizi ')
+      save()
+      expect(onSave).toHaveBeenLastCalledWith(
+        expect.objectContaining({ nameTouched: false })
+      )
+      type(RAW)
+      save()
+      expect(onSave).toHaveBeenLastCalledWith(
+        expect.objectContaining({ nameTouched: true, description: RAW })
+      )
     })
 
     it('saves an untouched bank row with its clean label as the draft name (#296)', () => {
