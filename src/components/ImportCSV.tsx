@@ -2,15 +2,8 @@
 
 import { Card } from './ui/card'
 import { Button } from './ui/button'
-import {
-  Upload,
-  FileText,
-  Check,
-  CircleAlert,
-  Info,
-  Loader,
-} from 'lucide-react'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Upload, FileText, CircleAlert, Loader } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   importAiErrorMessage,
@@ -18,80 +11,22 @@ import {
   userErrorMessage,
   WorkspaceChangedError,
 } from '../utils/user-error'
-import type { FileType, Transaction, TransactionsFilter } from '../models'
+import type { Transaction, TransactionsFilter } from '../models'
 import type {
   ImportStatementOptions,
   StatementFile,
   StatementImportResult,
 } from '../services/import/import-statement'
 import { ACCOUNT_LABELS } from '../utils/account-display'
-import { monthSpanLabel } from '../services/filters/period-label'
-import { countReviewRows, reviewLink } from '../services/import/import-review'
+import {
+  ImportSummaryPanel,
+  type FileOutcome,
+  type ImportSummary,
+} from './import/ImportSummaryPanel'
 
 // validating = reading/parsing the file; importing = the file is valid and
 // its rows are being saved.
 type ImportState = 'idle' | 'validating' | 'importing' | 'success' | 'error'
-
-interface ImportSummary {
-  added: number
-  duplicates: number
-  previouslyDeleted: number
-  /** Stored rows whose garbled description this import repaired (#192). */
-  repaired: number
-  fileType: FileType
-  // The month "Ver transacciones" opens: the newest new row's, or the file's
-  // newest when nothing was new.
-  month: { y: number; m: number } | null
-  // What the file covered, whatever was new (null: no rows).
-  fileRange: { from: string; to: string } | null
-  fileRows: number
-  // Ids of the rows this import added: the "a revisar" count is read from the
-  // stored rows with these ids, since rules, AI and transfer inference change
-  // category and confidence after the import's own classification.
-  addedIds: ReadonlySet<string>
-}
-
-// One line per count in the summary. A new count (e.g. corrected rows) is one
-// more entry here.
-function summaryLines(summary: ImportSummary, toReview: number) {
-  return [
-    { count: summary.added, one: 'nueva', many: 'nuevas', hint: undefined },
-    // The file's own new rows still to review (0 says nothing is left).
-    ...(summary.added > 0
-      ? [
-          {
-            count: toReview,
-            one: 'a revisar',
-            many: 'a revisar',
-            hint: 'sin categoría o con poca seguridad',
-          },
-        ]
-      : []),
-    {
-      count: summary.duplicates,
-      one: 'duplicada omitida',
-      many: 'duplicadas omitidas',
-      hint: undefined,
-    },
-    {
-      count: summary.previouslyDeleted,
-      one: 'eliminada antes',
-      many: 'eliminadas antes',
-      hint: undefined,
-    },
-    // Only when it happened: most imports repair nothing.
-    ...(summary.repaired > 0
-      ? [
-          {
-            count: summary.repaired,
-            one: 'corregida',
-            many: 'corregidas',
-            hint: undefined,
-          },
-        ]
-      : []),
-  ]
-}
 
 // The part of an import's result the dialog reads. Type-only imports: the
 // dialog has no runtime dependency on the import service, and a test double
@@ -110,16 +45,6 @@ export type ImportOutcome = Pick<
   | 'fileRange'
   | 'fileRows'
 >
-
-// One picked file's result: what it imported, or why it could not be.
-type FileOutcome =
-  | { kind: 'imported'; fileName: string; summary: ImportSummary }
-  | {
-      kind: 'failed'
-      fileName: string
-      title: string
-      message: string
-    }
 
 interface ImportCSVProps {
   /**
@@ -166,6 +91,52 @@ async function readFileBytes(file: File): Promise<ArrayBuffer> {
     reader.onerror = () => reject(new StatementReadError(READ_FAILED))
     reader.readAsArrayBuffer(file)
   })
+}
+
+type ImportedResult = ImportOutcome & { fileName: string }
+
+// "a, b y c"
+function listNames(names: string[]): string {
+  return names.length < 2
+    ? names.join('')
+    : `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`
+}
+
+// The warnings of a batch (repairs, AI), said once for all of it. With one
+// file picked they read exactly as they always did; with several they name
+// the files, since "se usaron las reglas" is not true of the ones that
+// were enriched.
+function warnAboutBatch(done: ImportedResult[], picked: number) {
+  const repairsFailed = done.reduce((n, d) => n + (d.repairsFailed ?? 0), 0)
+  if (repairsFailed > 0) {
+    toast.warning(
+      `No se ${repairsFailed === 1 ? 'pudo' : 'pudieron'} corregir ${repairsFailed} descripci${repairsFailed === 1 ? 'ón' : 'ones'}. Importá el archivo de nuevo para reintentar.`
+    )
+  }
+
+  // The import succeeded, but the AI step did not — say so, otherwise a
+  // dead API key looks identical to poor categorization. Total failure
+  // and partial failure need different wording: telling the user "no
+  // disponible" when 10 of 12 batches did enrich is simply wrong.
+  const failed = done.filter((d) => d.aiError !== undefined)
+  const partial = done.filter((d) => d.aiError === undefined && d.aiPartial)
+  const parts: string[] = []
+  if (failed.length > 0) {
+    const reason = importAiErrorMessage(failed[0].aiError)
+    parts.push(
+      picked === 1 || failed.length === done.length
+        ? `Categorización con IA no disponible: ${reason}. Se usaron las reglas de categorización.`
+        : `Categorización con IA no disponible en ${listNames(failed.map((d) => d.fileName))}: ${reason}. En ${failed.length === 1 ? 'ese archivo' : 'esos archivos'} se usaron las reglas de categorización.`
+    )
+  }
+  if (partial.length > 0) {
+    parts.push(
+      picked === 1
+        ? `Categorización con IA incompleta: ${partial[0].aiPartial}. El resto se categorizó con reglas.`
+        : `Categorización con IA incompleta en ${listNames(partial.map((d) => `${d.fileName} (${d.aiPartial})`))}. El resto se categorizó con reglas.`
+    )
+  }
+  if (parts.length > 0) toast.warning(parts.join(' '))
 }
 
 interface ImportedFile {
@@ -321,9 +292,8 @@ export function ImportCSV({
   const handleFiles = async (files: File[]) => {
     cancelledRef.current = false
     const done: FileOutcome[] = []
-    let repairsFailed = 0
-    let aiError: StatementImportResult['aiError']
-    let aiPartial: StatementImportResult['aiPartial']
+    // What the files that imported came back with, for the warnings.
+    const imported: ImportedResult[] = []
 
     for (const [index, file] of files.entries()) {
       if (cancelledRef.current) return
@@ -332,18 +302,25 @@ export function ImportCSV({
       setImportState('validating')
 
       // A file that is not a CSV is refused on the spot, before any await.
-      const imported = isCsv(file)
+      const next = isCsv(file)
         ? await importOne(file)
         : failure(file, 'Error al validar archivo', undefined)
-      if (cancelledRef.current) return
-      done.push(imported.outcome)
-      if (imported.result) {
-        repairsFailed += imported.result.repairsFailed ?? 0
-        aiError ??= imported.result.aiError
-        aiPartial ??= imported.result.aiPartial
+      // Another user is signed in: the rest would fail the same way, and
+      // nothing of this batch may reach them (no summary, no toasts).
+      if (next.workspaceChanged) {
+        cancelledRef.current = true
+        setImportState('idle')
+        setOutcomes([])
+        return
       }
-      // The rest would fail the same way: another user is signed in.
-      if (imported.workspaceChanged) break
+      done.push(next.outcome)
+      if (next.result) imported.push({ fileName: file.name, ...next.result })
+      // The dialog closed meanwhile: the file in flight finished, so its
+      // warnings (AI, repairs) are still said; the rest is not started.
+      if (cancelledRef.current) {
+        warnAboutBatch(imported, files.length)
+        return
+      }
     }
 
     setOutcomes(done)
@@ -351,27 +328,7 @@ export function ImportCSV({
     setImportState(
       files.length === 1 && done[0]?.kind === 'failed' ? 'error' : 'success'
     )
-
-    // Said once for the batch, not per file.
-    if (repairsFailed > 0) {
-      toast.warning(
-        `No se ${repairsFailed === 1 ? 'pudo' : 'pudieron'} corregir ${repairsFailed} descripci${repairsFailed === 1 ? 'ón' : 'ones'}. Importá el archivo de nuevo para reintentar.`
-      )
-    }
-
-    // The import succeeded, but the AI step did not — say so, otherwise a
-    // dead API key looks identical to poor categorization. Total failure
-    // and partial failure need different wording: telling the user "no
-    // disponible" when 10 of 12 batches did enrich is simply wrong.
-    if (aiError !== undefined) {
-      toast.warning(
-        `Categorización con IA no disponible: ${importAiErrorMessage(aiError)}. Se usaron las reglas de categorización.`
-      )
-    } else if (aiPartial) {
-      toast.warning(
-        `Categorización con IA incompleta: ${aiPartial}. El resto se categorizó con reglas.`
-      )
-    }
+    warnAboutBatch(imported, files.length)
   }
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -450,7 +407,14 @@ export function ImportCSV({
               <div>
                 {progress.total > 1 && (
                   <p className="text-sm text-muted-foreground mb-1">
-                    Archivo {progress.index} de {progress.total}
+                    Archivo{' '}
+                    <span className="font-mono tabular-nums">
+                      {progress.index}
+                    </span>{' '}
+                    de{' '}
+                    <span className="font-mono tabular-nums">
+                      {progress.total}
+                    </span>
                   </p>
                 )}
                 <p className="font-medium mb-1">
@@ -576,241 +540,6 @@ export function ImportCSV({
           información financiera.
         </p>
       </Card>
-    </div>
-  )
-}
-
-function plural(count: number, one: string, many: string) {
-  return count === 1 ? one : many
-}
-
-// What one imported file came to: its account, its period, its counts.
-function FileSummary({
-  summary,
-  toReview,
-}: {
-  summary: ImportSummary
-  toReview: number
-}) {
-  return (
-    <>
-      <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
-        {ACCOUNT_LABELS[summary.fileType]}
-      </div>
-      {summary.fileRange && (
-        <p className="mt-3 text-sm text-muted-foreground">
-          {monthSpanLabel(summary.fileRange.from, summary.fileRange.to)} ·{' '}
-          <span className="font-mono tabular-nums">{summary.fileRows}</span>{' '}
-          {plural(summary.fileRows, 'movimiento', 'movimientos')}
-        </p>
-      )}
-      <ul
-        aria-label="Resumen de la importación"
-        className="mt-4 space-y-1 text-sm"
-      >
-        {summaryLines(summary, toReview).map(({ count, one, many, hint }) => (
-          <li key={many}>
-            <span className="font-mono tabular-nums font-medium">{count}</span>{' '}
-            <span className="text-muted-foreground">
-              {plural(count, one, many)}
-              {hint && ` · ${hint}`}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </>
-  )
-}
-
-function ImportSummaryPanel({
-  outcomes,
-  transactions,
-  headingRef,
-  onImportAnother,
-  onViewTransactions,
-}: {
-  outcomes: FileOutcome[]
-  transactions: Transaction[]
-  headingRef: React.RefObject<HTMLHeadingElement>
-  onImportAnother: () => void
-  onViewTransactions?: (filter: TransactionsFilter) => void
-}) {
-  const sectionId = useId()
-  const several = outcomes.length > 1
-  const imported = outcomes.flatMap((o) => (o.kind === 'imported' ? [o] : []))
-  const failedCount = outcomes.length - imported.length
-  // Nothing new is not a success: the files were most likely imported before.
-  const nothingNew = imported.every(({ summary }) => summary.added === 0)
-  const allFailed = imported.length === 0
-  const repaired = imported.reduce((sum, o) => sum + o.summary.repaired, 0)
-
-  // Counted live from the stored rows, through the Transacciones filter, so a
-  // later transfer pairing or edit is reflected and the number is what the
-  // link opens.
-  const { perFile, link, linkCount } = useMemo(() => {
-    const perFile = outcomes.map((outcome) =>
-      outcome.kind === 'imported'
-        ? countReviewRows(
-            transactions,
-            { review: true },
-            outcome.summary.addedIds
-          )
-        : 0
-    )
-    const link = reviewLink(
-      imported.flatMap(({ summary }) =>
-        summary.added > 0 && summary.fileRange
-          ? [{ fileType: summary.fileType, fileRange: summary.fileRange }]
-          : []
-      )
-    )
-    return {
-      perFile,
-      link,
-      linkCount: link ? countReviewRows(transactions, link) : 0,
-    }
-    // `imported` is derived from `outcomes`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outcomes, transactions])
-  const toReviewTotal = perFile.reduce((sum, n) => sum + n, 0)
-  // The button opens exactly `linkCount` rows; it only shows when this
-  // import's own new rows have something to review.
-  const reviewAction =
-    onViewTransactions && link && toReviewTotal > 0 && linkCount > 0
-      ? () => onViewTransactions(link)
-      : undefined
-  // "Ver transacciones" opens the newest month among the imported files.
-  const viewMonth = imported
-    .flatMap(({ summary }) => (summary.month ? [summary.month] : []))
-    .reduce<{
-      y: number
-      m: number
-    } | null>(
-      (newest, month) =>
-        !newest || month.y * 12 + month.m > newest.y * 12 + newest.m
-          ? month
-          : newest,
-      null
-    )
-  const viewAction = onViewTransactions
-    ? () =>
-        onViewTransactions(
-          viewMonth ? { period: { mode: 'month', ...viewMonth } } : {}
-        )
-    : undefined
-
-  const heading = allFailed
-    ? 'No se pudieron importar los archivos'
-    : nothingNew
-      ? 'No había movimientos nuevos'
-      : 'Importación completada'
-
-  return (
-    <div className="text-center py-8 sm:py-12">
-      <div className="flex flex-col items-center gap-4">
-        {allFailed ? (
-          <div className="p-4 rounded-full bg-neg-soft">
-            <CircleAlert className="text-destructive" size={48} />
-          </div>
-        ) : nothingNew ? (
-          <div className="p-4 rounded-full bg-muted">
-            <Info className="text-muted-foreground" size={48} />
-          </div>
-        ) : (
-          <div className="p-4 rounded-full bg-pos-soft">
-            <Check className="text-pos" size={48} />
-          </div>
-        )}
-        <div className="w-full">
-          <h3
-            ref={headingRef}
-            tabIndex={-1}
-            className="font-medium mb-1 outline-none"
-          >
-            {heading}
-          </h3>
-          {!allFailed && nothingNew && failedCount === 0 && (
-            <p className="text-sm text-muted-foreground mb-1">
-              {several
-                ? 'Estos archivos ya estaban importados.'
-                : 'Este archivo ya estaba importado.'}
-            </p>
-          )}
-          {nothingNew && repaired > 0 && (
-            <p className="text-sm text-muted-foreground mb-1">
-              {repaired === 1
-                ? 'Se corrigió 1 descripción.'
-                : `Se corrigieron ${repaired} descripciones.`}
-            </p>
-          )}
-          {several && failedCount > 0 && !allFailed && (
-            <p className="text-sm text-muted-foreground mb-1">
-              {failedCount === 1
-                ? '1 archivo no se pudo importar.'
-                : `${failedCount} archivos no se pudieron importar.`}
-            </p>
-          )}
-          {outcomes.map((outcome, index) => {
-            const body =
-              outcome.kind === 'imported' ? (
-                <FileSummary
-                  summary={outcome.summary}
-                  toReview={perFile[index]}
-                />
-              ) : (
-                <>
-                  <p className="text-sm font-medium">{outcome.title}</p>
-                  <p className="text-sm text-destructive">{outcome.message}</p>
-                </>
-              )
-            // One file reads as it always did; several get a section each.
-            return several ? (
-              <section
-                key={index}
-                aria-labelledby={`${sectionId}-${index}`}
-                className="mt-6 border-t border-border pt-4 first:mt-4"
-              >
-                <h4
-                  id={`${sectionId}-${index}`}
-                  className="mb-2 break-all text-sm font-medium"
-                >
-                  {outcome.fileName}
-                </h4>
-                {body}
-              </section>
-            ) : (
-              <div key={index}>
-                <p className="text-sm text-muted-foreground mb-4 break-all">
-                  {outcome.fileName}
-                </p>
-                {body}
-              </div>
-            )
-          })}
-        </div>
-        <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4 w-full sm:w-auto">
-          <Button
-            onClick={onImportAnother}
-            variant={nothingNew || !onViewTransactions ? 'default' : 'outline'}
-          >
-            Importar otro archivo
-          </Button>
-          {viewAction && !allFailed && (
-            <Button
-              onClick={viewAction}
-              variant={nothingNew || reviewAction ? 'outline' : 'default'}
-            >
-              Ver transacciones
-            </Button>
-          )}
-          {reviewAction && (
-            <Button onClick={reviewAction}>
-              Revisar {linkCount}{' '}
-              {plural(linkCount, 'movimiento', 'movimientos')}
-            </Button>
-          )}
-        </div>
-      </div>
     </div>
   )
 }

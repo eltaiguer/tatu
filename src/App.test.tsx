@@ -265,6 +265,34 @@ describe('App', () => {
     expect(
       screen.getByRole('button', { name: 'Quitar filtro A revisar' })
     ).toBeInTheDocument()
+    // The table lists the N rows the button promised, each with the marker.
+    // (A split part listed under its parent can add the parent's row to the
+    // count; a fresh import has no splits.)
+    expect(await screen.findByText('Mostrando 1-1 de 1')).toBeInTheDocument()
+    expect(
+      screen.getAllByText(/categoría sin asignar o asignada/).length
+    ).toBeGreaterThan(0)
+  })
+
+  it('starts the import dialog over when another user signs in under it (#275)', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await user.click(await screen.findByRole('button', { name: 'Importar' }))
+    await user.upload(
+      screen.getByLabelText('Seleccionar archivo'),
+      new File([UYU_STATEMENT_CSV], 'UYUmovements.csv', { type: 'text/csv' })
+    )
+    await screen.findByRole('heading', { name: 'Importación completada' })
+
+    act(() => backend.auth.emit(makeSession('user-2', 'other@example.com')))
+
+    // A fresh dialog for the new user: no summary of the old one's batch.
+    expect(
+      await screen.findByRole('button', { name: 'Seleccionar archivo' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Importación completada' })
+    ).toBeNull()
   })
 
   it('shows supported file types on import view', async () => {

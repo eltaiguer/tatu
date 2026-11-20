@@ -72,6 +72,25 @@ describe('reviewLink', () => {
     ).toMatchObject({ accountType: 'bank_account', currency: 'UYU' })
   })
 
+  it('scopes two bank files to the bank account, whatever the currency', () => {
+    expect(
+      reviewLink([
+        {
+          fileType: 'bank_account_usd',
+          fileRange: range('2025-11-03', '2025-11-27'),
+        },
+        {
+          fileType: 'bank_account_uyu',
+          fileRange: range('2025-11-04', '2025-11-30'),
+        },
+      ])
+    ).toEqual({
+      review: true,
+      accountType: 'bank_account',
+      period: { mode: 'range', from: '2025-11-03', to: '2025-11-30' },
+    })
+  })
+
   it('keeps only the period when the files are of different accounts', () => {
     expect(
       reviewLink([

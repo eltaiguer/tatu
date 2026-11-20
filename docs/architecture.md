@@ -63,7 +63,7 @@ Transacciones on the month of the newest new row (the file's newest when
 nothing was new; `newestDataMonth` in `src/utils/date-utils.ts`; the newest
 among several files), through the same `navigateToTransactions` link Resumen
 uses; "Importar otro archivo" resets the dialog to the file picker. A toast
-(AI unavailable or incomplete, repairs failed) is said once for the whole batch.
+(AI unavailable or incomplete, repairs failed) is said once for the whole batch, naming the files it is about when several were picked; closing the dialog mid-batch still says the toasts of the files already imported, and a user change under the dialog (it is keyed by user id) shows nothing of the old batch. "Revisar N" opens the table with N rows, except that a split part listed under its parent (`groupSplitRows`) can add the parent's row to the list; a fresh import has no splits. Two bank files (USD and UYU) link to the bank account without a currency.
 
 ```mermaid
 flowchart TD

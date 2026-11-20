@@ -67,6 +67,7 @@ src/
     settings/              # Configuración sub-components: DuplicatesReview ("Buscar posibles duplicados" row + review dialog, #167)
     Settings.tsx           # Configuración view — theme, currency, AI, account, data management (one SectionCard each); dev panels in one closed "Herramientas de desarrollo" <details> (DEV builds only)
     ImportCSV.tsx          # CSV import dialog (Radix Dialog, not a view): picks one or several files, hands each one's bytes to importStatement via a required handler, one after the other (stops if the dialog closes), and stays open on a summary: per file its period, counts and "N a revisar", plus a "Revisar N movimientos" link (#202, #275); takes the user's `transactions` as a required prop to count live
+    import/                # ImportSummaryPanel: the import dialog's summary (per-file section: period line, counts, "N a revisar"; the Revisar / Ver transacciones footer), moved out of ImportCSV.tsx
     CategoryBreakdownList.tsx  # Ranked category list with progress bars
     FxChip.tsx             # The rate as "1 US$ = $U 40,50 (manual) · cambiar", edited inline (accepts a comma)
     CurrencyToggle.tsx     # Home-currency switch (sm in the hero's rate line)

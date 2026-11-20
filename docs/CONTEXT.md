@@ -105,7 +105,7 @@ Real strings from `src/`:
 
 | Do (voseo, from the code)                                         | Don't                                           | Where                      |
 | ----------------------------------------------------------------- | ----------------------------------------------- | -------------------------- |
-| "Arrastrá tu archivo CSV aquí"                                    | "Arrastra tu archivo…" / "Arrastre su archivo…" | `ImportCSV.tsx`            |
+| "Arrastrá tus archivos CSV aquí"                                  | "Arrastra tu archivo…" / "Arrastre su archivo…" | `ImportCSV.tsx`            |
 | "Elegí una categoría."                                            | "Elige una categoría."                          | `transaction-mutations.ts` |
 | "Importá tu primer extracto de Santander…"                        | "Importa tu primer extracto…"                   | `Onboarding.tsx`           |
 | "Probá ampliar el rango o limpiarlos."                            | "Prueba ampliar el rango…"                      | `TransactionTable.tsx`     |

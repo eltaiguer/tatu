@@ -22,16 +22,24 @@ export function reviewLink(files: ReviewedFile[]): TransactionsFilter | null {
     .map((f) => f.fileRange.from)
     .reduce((a, b) => (b < a ? b : a))
   const to = files.map((f) => f.fileRange.to).reduce((a, b) => (b > a ? b : a))
-  const fileType = files[0].fileType
-  const sameAccount = files.every((f) => f.fileType === fileType)
-  const account: TransactionsFilter = !sameAccount
-    ? {}
-    : fileType === 'credit_card'
-      ? { accountType: 'credit_card' }
-      : {
-          accountType: 'bank_account',
-          currency: fileType === 'bank_account_usd' ? 'USD' : 'UYU',
-        }
+  const types = new Set(files.map((f) => f.fileType))
+  const isBank = (t: FileType) => t !== 'credit_card'
+  // One card statement scopes to the card; one bank statement to its account
+  // and currency; bank statements of both currencies to the bank account
+  // (never the card); cards mixed with banks leave only the period.
+  let account: TransactionsFilter = {}
+  if (types.size === 1) {
+    const [fileType] = [...types]
+    account =
+      fileType === 'credit_card'
+        ? { accountType: 'credit_card' }
+        : {
+            accountType: 'bank_account',
+            currency: fileType === 'bank_account_usd' ? 'USD' : 'UYU',
+          }
+  } else if ([...types].every(isBank)) {
+    account = { accountType: 'bank_account' }
+  }
   return { review: true, ...account, period: { mode: 'range', from, to } }
 }
 

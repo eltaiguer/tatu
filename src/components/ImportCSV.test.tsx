@@ -12,7 +12,11 @@ import {
 import userEvent from '@testing-library/user-event'
 import { useStore } from 'zustand'
 import { ImportCSV } from './ImportCSV'
-import { StatementReadError, WorkspaceChangedError } from '../utils/user-error'
+import {
+  StatementReadError,
+  UserFacingError,
+  WorkspaceChangedError,
+} from '../utils/user-error'
 import { useTransactionHandlers } from '../hooks/useTransactionHandlers'
 import { AiError } from '../services/ai/ai-error'
 import {
@@ -26,7 +30,6 @@ import { transactionStore } from '../stores/transaction-store'
 import { workspaceStore } from '../stores/workspace-state'
 import type { Transaction } from '../models'
 import { countReviewRows } from '../services/import/import-review'
-import { needsCategoryReview } from '../utils/transaction-display'
 
 // The dialog picks a file, hands its bytes to the import, and reports what
 // came back. What the import does with them is tested at its own interface
@@ -149,6 +152,10 @@ function pick(name = 'movements.csv', content: BlobPart = 'a,b') {
     target: { files: [new File([content], name, { type: 'text/csv' })] },
   })
 }
+
+// A paragraph by its whole text (counts sit in their own elements).
+const paragraph = (text: string) => (_: string, el: Element | null) =>
+  el?.tagName === 'P' && el.textContent === text
 
 // The file's period line, e.g. "mar. 2025 – dic. 2025 · 64 movimientos".
 const periodLine = (text: string) => (_: string, el: Element | null) =>
@@ -1267,7 +1274,7 @@ describe('ImportCSV', () => {
       for (const name of NAMES) {
         expect(
           within(section(name)).getByRole('list', {
-            name: 'Resumen de la importación',
+            name: `Resumen de la importación: ${name}`,
           })
         ).toBeInTheDocument()
       }
@@ -1300,11 +1307,11 @@ describe('ImportCSV', () => {
 
       pickMany()
       await waitFor(() => expect(resolvers).toHaveLength(1))
-      expect(screen.getByText('Archivo 1 de 3')).toBeInTheDocument()
+      expect(screen.getByText(paragraph('Archivo 1 de 3'))).toBeInTheDocument()
       await act(async () => resolvers[0]())
       await waitFor(() => expect(resolvers).toHaveLength(2))
 
-      expect(screen.getByText('Archivo 2 de 3')).toBeInTheDocument()
+      expect(screen.getByText(paragraph('Archivo 2 de 3'))).toBeInTheDocument()
       expect(screen.getByText('usd.csv')).toBeInTheDocument()
       await act(async () => resolvers[1]())
       await waitFor(() => expect(resolvers).toHaveLength(3))
@@ -1326,7 +1333,7 @@ describe('ImportCSV', () => {
       pickMany(['one.csv'])
       await waitFor(() => expect(resolvers).toHaveLength(1))
 
-      expect(screen.queryByText(/^Archivo 1 de/)).toBeNull()
+      expect(screen.queryByText(paragraph('Archivo 1 de 1'))).toBeNull()
       await act(async () => resolvers[0]())
       await screen.findByRole('heading', { name: 'Importación completada' })
     })
@@ -1351,10 +1358,12 @@ describe('ImportCSV', () => {
       expect(within(failed).getByText('El archivo está vacío.')).toBeVisible()
       expect(
         within(section('uyu.csv')).getByRole('list', {
-          name: 'Resumen de la importación',
+          name: 'Resumen de la importación: uyu.csv',
         })
       ).toBeInTheDocument()
-      expect(screen.getByText('1 archivo no se pudo importar.')).toBeVisible()
+      expect(
+        screen.getByText(paragraph('1 archivo no se pudo importar.'))
+      ).toBeVisible()
       expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
     })
 
@@ -1370,7 +1379,9 @@ describe('ImportCSV', () => {
       pickMany()
 
       expect(
-        await screen.findByText('2 archivos no se pudieron importar.')
+        await screen.findByText(
+          paragraph('2 archivos no se pudieron importar.')
+        )
       ).toBeVisible()
     })
 
@@ -1549,22 +1560,6 @@ describe('ImportCSV', () => {
       expect(toastMock.warning.mock.calls[0][0]).toContain('no disponible')
     })
 
-    it('says "incompleta" once for partial results', async () => {
-      const importer = byName({
-        'card.csv': { ...added('a'), aiPartial: '1 de 3 lotes' },
-        'usd.csv': { ...added('b'), aiPartial: '2 de 3 lotes' },
-      })
-      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
-
-      pickMany(['card.csv', 'usd.csv'])
-
-      await screen.findByRole('heading', { name: 'Importación completada' })
-      expect(toastMock.warning).toHaveBeenCalledTimes(1)
-      expect(toastMock.warning).toHaveBeenCalledWith(
-        'Categorización con IA incompleta: 1 de 3 lotes. El resto se categorizó con reglas.'
-      )
-    })
-
     it('adds up the repairs that failed into one toast', async () => {
       const importer = byName({
         'card.csv': { ...added('a'), repairsFailed: 1 },
@@ -1606,7 +1601,7 @@ describe('ImportCSV', () => {
       expect(toastMock.warning).not.toHaveBeenCalled()
     })
 
-    it('stops the batch when the workspace changed under it', async () => {
+    it('shows nothing of the old batch when the workspace changed under it', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const importer = byName({
         'card.csv': new WorkspaceChangedError(),
@@ -1617,11 +1612,210 @@ describe('ImportCSV', () => {
 
       pickMany()
 
-      await screen.findByRole('heading', {
-        name: 'No se pudieron importar los archivos',
-      })
-      expect(importer).toHaveBeenCalledTimes(1)
+      await waitFor(() => expect(errorSpy).toHaveBeenCalled())
       expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+      // Same as a cancellation: the rest is not attempted and nothing about
+      // the old batch (summary, failure, toasts) reaches the new user.
+      expect(
+        await screen.findByRole('button', { name: 'Seleccionar archivo' })
+      ).toBeInTheDocument()
+      expect(importer).toHaveBeenCalledTimes(1)
+      expect(screen.queryByRole('heading', { level: 3 })).toBeNull()
+      expect(toastMock.warning).not.toHaveBeenCalled()
+    })
+
+    it('still warns about AI and repairs of the files imported when the dialog closes', async () => {
+      const resolvers: Array<() => void> = []
+      const importer = vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+        async (_file, { onParsed }) => {
+          onParsed?.()
+          await new Promise<void>((resolve) => resolvers.push(resolve))
+          return result({
+            ...added('a'),
+            aiError: new AiError('auth'),
+            repairsFailed: 1,
+          })
+        }
+      )
+      const { unmount } = render(
+        <ImportCSV transactions={[]} onTransactionsImported={importer} />
+      )
+
+      pickMany(['one.csv'])
+      await waitFor(() => expect(resolvers).toHaveLength(1))
+      unmount()
+      await act(async () => resolvers[0]())
+
+      await waitFor(() => expect(toastMock.warning).toHaveBeenCalledTimes(2))
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        'Categorización con IA no disponible: la clave API de Anthropic no es válida. Se usaron las reglas de categorización.'
+      )
+    })
+
+    it('warns for the files imported before the dialog closed, and stops the rest', async () => {
+      const resolvers: Array<() => void> = []
+      const importer = vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+        async (_file, { onParsed }) => {
+          onParsed?.()
+          await new Promise<void>((resolve) => resolvers.push(resolve))
+          return result({ ...added('a'), aiError: new AiError('auth') })
+        }
+      )
+      const { unmount } = render(
+        <ImportCSV transactions={[]} onTransactionsImported={importer} />
+      )
+
+      pickMany()
+      await waitFor(() => expect(resolvers).toHaveLength(1))
+      await act(async () => resolvers[0]())
+      await waitFor(() => expect(resolvers).toHaveLength(2))
+      unmount()
+      await act(async () => resolvers[1]())
+
+      await waitFor(() => expect(toastMock.warning).toHaveBeenCalledTimes(1))
+      expect(importer).toHaveBeenCalledTimes(2)
+    })
+
+    it('names the files where AI failed when the others were fine', async () => {
+      const importer = byName({
+        'card.csv': added('a'),
+        'usd.csv': { ...added('b'), aiError: new AiError('auth') },
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany(['card.csv', 'usd.csv'])
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(toastMock.warning).toHaveBeenCalledTimes(1)
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        'Categorización con IA no disponible en usd.csv: la clave API de Anthropic no es válida. En ese archivo se usaron las reglas de categorización.'
+      )
+    })
+
+    it('names the files with an incomplete AI pass and keeps each count', async () => {
+      const importer = byName({
+        'card.csv': { ...added('a'), aiPartial: '1 de 3 lotes fallaron' },
+        'usd.csv': { ...added('b'), aiPartial: '2 de 3 lotes fallaron' },
+        'uyu.csv': added('c'),
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany()
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(toastMock.warning).toHaveBeenCalledTimes(1)
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        'Categorización con IA incompleta en card.csv (1 de 3 lotes fallaron) y usd.csv (2 de 3 lotes fallaron). El resto se categorizó con reglas.'
+      )
+    })
+
+    it('opens the newest month among the files that added rows', async () => {
+      const user = userEvent.setup()
+      const onViewTransactions = vi.fn()
+      const importer = byName({
+        'card.csv': { ...added('a'), month: { y: 2025, m: 2 } },
+        // Nothing new, but its newest row is later: not the month to open.
+        'usd.csv': { duplicates: [makeTx('b')], month: { y: 2025, m: 10 } },
+      })
+      render(
+        <ImportCSV
+          transactions={[]}
+          onTransactionsImported={importer}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      pickMany(['card.csv', 'usd.csv'])
+      await user.click(
+        await screen.findByRole('button', { name: 'Ver transacciones' })
+      )
+
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2025, m: 2 },
+      })
+    })
+
+    it('falls back to the newest file month when nothing was new', async () => {
+      const user = userEvent.setup()
+      const onViewTransactions = vi.fn()
+      const importer = byName({
+        'card.csv': { duplicates: [makeTx('a')], month: { y: 2025, m: 2 } },
+        'usd.csv': { duplicates: [makeTx('b')], month: { y: 2025, m: 10 } },
+      })
+      render(
+        <ImportCSV
+          transactions={[]}
+          onTransactionsImported={importer}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      pickMany(['card.csv', 'usd.csv'])
+      await user.click(
+        await screen.findByRole('button', { name: 'Ver transacciones' })
+      )
+
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2025, m: 10 },
+      })
+    })
+
+    it('shows a partial save as failed and leaves it out of the Revisar range', async () => {
+      const user = userEvent.setup()
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const onViewTransactions = vi.fn()
+      const importer = byName({
+        'card.csv': {
+          ...added('a'),
+          fileType: 'bank_account_usd',
+          fileRange: { from: '2025-05-01', to: '2025-06-01' },
+        },
+        'usd.csv': new UserFacingError(
+          'Se guardaron 3 de 5 movimientos. Importá el archivo de nuevo.'
+        ),
+      })
+      render(
+        <ImportCSV
+          transactions={[stored('a', { currency: 'USD' })]}
+          onTransactionsImported={importer}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      pickMany(['card.csv', 'usd.csv'])
+      await user.click(
+        await screen.findByRole('button', { name: 'Revisar 1 movimiento' })
+      )
+
+      expect(
+        within(section('usd.csv')).getByText(/Se guardaron 3 de 5/)
+      ).toBeVisible()
+      expect(onViewTransactions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          period: { mode: 'range', from: '2025-05-01', to: '2025-06-01' },
+        })
+      )
+    })
+
+    it('hides the zero lines of each file but a single file keeps them', async () => {
+      const importer = byName({
+        'card.csv': added('a'),
+        'usd.csv': added('b'),
+      })
+      const { unmount } = render(
+        <ImportCSV transactions={[]} onTransactionsImported={importer} />
+      )
+      pickMany(['card.csv', 'usd.csv'])
+      await screen.findByRole('heading', { name: 'Importación completada' })
+
+      const lines = within(section('card.csv'))
+        .getAllByRole('listitem')
+        .map((item) => item.textContent)
+      expect(lines).toEqual([
+        '1 nueva',
+        '0 a revisar · sin categoría o con poca seguridad',
+      ])
+      unmount()
     })
 
     it('goes back to the picker with "Importar otro archivo"', async () => {
@@ -1719,9 +1913,10 @@ describe('ImportCSV', () => {
           periodLine('mar. 2025 – dic. 2025 · 64 movimientos')
         )
       ).toBeInTheDocument()
-      const toReview = transactionStore
-        .getState()
-        .transactions.filter(needsCategoryReview).length
+      const toReview = countReviewRows(
+        transactionStore.getState().transactions,
+        { review: true }
+      )
       expect(toReview).toBeGreaterThanOrEqual(3)
       expect(summaryLines()).toContain(
         `${toReview} a revisar · sin categoría o con poca seguridad`
