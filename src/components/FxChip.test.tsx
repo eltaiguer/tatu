@@ -69,6 +69,19 @@ describe('FxChip', () => {
   })
 
   it.each(['Enter', 'Escape'])(
+    'swallows the %s keypress so the refocused button is not clicked',
+    (key) => {
+      // A browser sends the key's activation to the newly focused button,
+      // which would reopen the editor right after the commit.
+      const { input } = openEditor()
+
+      const notPrevented = fireEvent.keyDown(input, { key })
+
+      expect(notPrevented).toBe(false)
+    }
+  )
+
+  it.each(['Enter', 'Escape'])(
     'focus goes back to the button after %s',
     (key) => {
       const { input } = openEditor()

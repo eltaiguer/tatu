@@ -52,11 +52,13 @@ export function FxChip({ fxRate, onSetFxRate }: FxChipProps) {
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
+              e.preventDefault()
               commit()
               refocus.current = true
               setEditing(false)
             }
             if (e.key === 'Escape') {
+              e.preventDefault()
               refocus.current = true
               setEditing(false)
             }
