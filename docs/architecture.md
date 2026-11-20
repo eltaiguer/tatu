@@ -560,6 +560,10 @@ its end.
   "not imported" from "the account didn't exist yet or was quiet", so the
   copy says only what is always true: those months lack data from some
   account. Importing the missing statements brings them back.
+- Transacciones' month picker marks months with rows that aren't complete (a
+  hollow dot, "mes incompleto"). It uses every row and today's month, like
+  Resumen. Its counts come from `monthRowCounts`, so a caption equals the
+  header's "N movimientos" after picking that month.
 - In Resumen's Hogar mode the rows drawn are a subset, but the months and
   their completeness are about the statements: `buildMonthlyTrendRows` and
   `categoryChanges` take an optional `coverage` (every row) for

@@ -13,7 +13,8 @@ import {
 import { useHouseholdRules } from './useHouseholdRules'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { sortCategoryIdsByLabel } from '../services/categories/category-registry'
-import { newestDate, todayAsUtcDate } from '../utils/date-utils'
+import { newestDate, toMonthKey, todayAsUtcDate } from '../utils/date-utils'
+import { completeMonths } from '../services/charts/complete-months'
 import type { Transaction } from '../models'
 import {
   DEFAULT_URL_FILTERS,
@@ -22,6 +23,7 @@ import {
 import {
   filterTransactions,
   groupSplitRows,
+  monthRowCounts,
   periodDateRange,
   periodWithDateBound,
   sortTransactions,
@@ -218,6 +220,43 @@ export function useTransactionFiltering({
     ]
   )
 
+  // What the month picker needs besides the period: the newest row of ALL
+  // rows (null only without rows), the rows each month would list under the
+  // other filters (so a caption equals the header after picking), and which
+  // months are complete (the statements, not the filters: as in Resumen).
+  // The filters without the period, as a stable value: changing the month or
+  // the page doesn't redo the pass (plain data, so JSON round-trips it).
+  const periodlessKey = JSON.stringify({ ...filters, period: null })
+  const monthCounts = useMemo(
+    () =>
+      monthRowCounts(transactions, JSON.parse(periodlessKey), {
+        householdRules,
+      }),
+    [transactions, periodlessKey, householdRules]
+  )
+  // Years the arrows can reach: every row, whatever the filters say.
+  const rowYears = useMemo(
+    () =>
+      new Set(
+        transactions.filter(countsAsRow).map((tx) => tx.date.getUTCFullYear())
+      ),
+    [transactions]
+  )
+  const currentMonth = toMonthKey(todayAsUtcDate())
+  const completeMonthKeys = useMemo(
+    () => completeMonths(transactions, currentMonth),
+    [transactions, currentMonth]
+  )
+  const monthNav = useMemo(
+    () => ({
+      newest: newestRowDate ?? todayAsUtcDate(),
+      monthCounts,
+      completeMonthKeys,
+      rowYears,
+    }),
+    [newestRowDate, monthCounts, completeMonthKeys, rowYears]
+  )
+
   const showIgnored = filters.showIgnored
   const filteredTransactions = useMemo(() => {
     if (showIgnored) return allFilteredTransactions
@@ -320,7 +359,7 @@ export function useTransactionFiltering({
     filteredTransactions,
     ignoredCount,
     availableCategories,
-    newestRowDate,
+    monthNav,
     currentPage,
     setCurrentPage,
     totalPages,
