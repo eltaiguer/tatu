@@ -1477,6 +1477,64 @@ describe('App', () => {
     ).toBeGreaterThan(0)
   })
 
+  describe('review mode', () => {
+    const REVIEW_URL =
+      '/transacciones?categoria=uncategorized&tipo=debit&revisar=si&modo=revisar&periodo=todo'
+    const seedReview = () =>
+      seed({
+        transactions: [
+          tx('a', '2026-03-10T12:00:00.000Z', 'Kiosco Uno', ''),
+          {
+            ...tx('b', '2026-03-11T12:00:00.000Z', 'Kiosco Dos', ''),
+            amount: 300,
+          },
+          tx('c', '2026-03-12T12:00:00.000Z', 'Devoto', 'groceries'),
+        ],
+      })
+
+    it('opens from the Resumen nudge, one row at a time', async () => {
+      seedReview()
+      renderApp('/')
+
+      fireEvent.click(
+        await screen.findByRole('button', {
+          name: 'Ver los gastos sin categoría',
+        })
+      )
+
+      await waitFor(() => expect(currentUrl()).toBe(REVIEW_URL))
+      expect(await screen.findByText('1 de 2')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Kiosco Dos' })).toBeVisible()
+      expect(
+        screen.getByRole('textbox', { name: 'Buscar categoría' })
+      ).toHaveFocus()
+
+      fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
+      expect(await screen.findByText('2 de 2')).toBeInTheDocument()
+    })
+
+    it('shows the panel again on a reload', async () => {
+      seedReview()
+      renderApp(REVIEW_URL)
+
+      expect(await screen.findByText('1 de 2')).toBeInTheDocument()
+    })
+
+    it('goes to Resumen from the done state', async () => {
+      seedReview()
+      renderApp(REVIEW_URL)
+      await screen.findByText('1 de 2')
+      fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
+      await screen.findByText('2 de 2')
+      fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Ver Resumen' })
+      )
+      await waitFor(() => expect(currentUrl()).toBe('/'))
+    })
+  })
+
   it('opens the mobile menu without React ref warnings', async () => {
     // Installed before the first open: React reports this warning once per
     // component, so a later spy would pass vacuously.

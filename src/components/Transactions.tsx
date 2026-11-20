@@ -1,11 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { PageHeader } from './ui/page-header'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast, type ExternalToast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
 import { defaultsToAllSimilar } from '../services/descriptions/default-scope'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
-import { Download, X } from 'lucide-react'
-import { Button } from './ui/button'
 import { DEFAULT_CATEGORY_COLOR } from '../models'
 import type { Transaction } from '../models'
 import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
@@ -15,7 +12,6 @@ import { SplitTransactionDialog } from './SplitTransactionDialog'
 import { TransactionFilters } from './TransactionFilters'
 import { TransactionTable } from './TransactionTable'
 import { newestDataMonth } from '../utils/date-utils'
-import { exportTransactions } from '../services/export/export'
 import { addCustomCategoryWithSync } from '../services/categories/category-store'
 import { buildTagSuggestions } from '../services/suggestions/suggestions'
 import { isCountedExpense } from '../services/spending/spending-rules'
@@ -30,11 +26,11 @@ import {
   type UrlFilterState,
   type UrlPeriod,
 } from '../services/filters/url-filters'
-import { getPeriodLabel } from '../services/filters/period-label'
-import { MonthNav } from './transactions/MonthNav'
+import { TransactionsHeader } from './transactions/TransactionsHeader'
 import { TotalsStrip } from './transactions/TotalsStrip'
 import { BulkBar } from './transactions/BulkBar'
 import { BulkTagsDialog } from './transactions/BulkTagsDialog'
+import { ReviewMode, ReviewModeButton } from './transactions/ReviewMode'
 import { TransactionsPagination } from './transactions/TransactionsPagination'
 import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
@@ -42,10 +38,7 @@ import { useBulkActions } from './transactions/useBulkActions'
 import { useHouseholdWrites } from './transactions/useHouseholdWrites'
 import { useCategoryWrites } from './transactions/useCategoryWrites'
 import { usePendingRows } from './transactions/usePendingRows'
-import {
-  currentHouseholdRules,
-  rowsSharingMerchantRule,
-} from '../services/household/household'
+import { rowsSharingMerchantRule } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
 import { getDisplayDescription } from '../utils/transaction-display'
 import { transactionLabel } from '../services/merchants/merchant-key'
@@ -73,6 +66,7 @@ export function Transactions({
   onForgetHouseholdRule,
   onRestoreTransactions,
   onReload,
+  onGoToOverview,
   repository,
 }: TransactionsProps) {
   /* ---- Filter state (period included) ---- */
@@ -393,51 +387,50 @@ export function Transactions({
     }
   }
 
-  const periodLabelText = getPeriodLabel(period)
+  // One-shot: the entry button takes focus on the render right after leaving.
+  const leftReview = useRef(false)
+  useEffect(() => {
+    leftReview.current = false
+  })
+  const leaveReview = () => {
+    leftReview.current = true
+    updateFilters({ reviewMode: false })
+  }
+  if (filters.review && filters.reviewMode) {
+    return (
+      <ReviewMode
+        rows={filteredTransactions}
+        transactions={transactions}
+        homeCurrency={homeCurrency}
+        fxRate={fxRate}
+        writes={categoryWrites}
+        pending={pendingTransactionIds}
+        onLeave={leaveReview}
+        onGoToOverview={onGoToOverview}
+      />
+    )
+  }
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Transacciones"
-        subtitle={
-          <>
-            {filteredTransactions.length} movimiento
-            {filteredTransactions.length !== 1 ? 's' : ''}
-            {filtered ? ' · filtrado' : ''} · {periodLabelText}
-          </>
-        }
-        actions={
-          <>
-            <MonthNav period={period} setPeriod={setPeriod} {...monthNav} />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                exportTransactions(filteredTransactions, {
-                  format: 'csv',
-                  householdRules: currentHouseholdRules(),
-                })
-              }
-              className="gap-[6px]"
-            >
-              <Download size={15} />
-              Exportar
-            </Button>
-          </>
-        }
+      <TransactionsHeader
+        rows={filteredTransactions}
+        filtered={filtered}
+        period={period}
+        setPeriod={setPeriod}
+        monthNav={monthNav}
+        merchantLabel={merchantFilter && merchantLabel}
+        onClearMerchant={() => updateFilters({ merchant: '' })}
       >
-        {merchantFilter && (
-          <button
-            type="button"
-            onClick={() => updateFilters({ merchant: '' })}
-            aria-label={`Quitar filtro de comercio ${merchantLabel}`}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs"
-          >
-            Comercio: <strong>{merchantLabel}</strong>
-            <X size={12} aria-hidden />
-          </button>
-        )}
-      </PageHeader>
+        {filters.review &&
+          onUpdateTransaction &&
+          filteredTransactions.length > 0 && (
+            <ReviewModeButton
+              autoFocus={leftReview.current}
+              onClick={() => updateFilters({ reviewMode: true })}
+            />
+          )}
+      </TransactionsHeader>
 
       {/* Totals strip */}
       <TotalsStrip

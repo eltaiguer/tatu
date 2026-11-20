@@ -529,6 +529,28 @@ The A revisar filter (`review`, `?revisar=si`) keeps the rows
 under 0.55), the same ones the "Revisar" marker shows; it ANDs with every other
 filter and counts as "filtrado". The import summary's "Revisar N" link uses it.
 
+The review mode (`reviewMode`, `?modo=revisar`) is a mode on top of that
+filter, not a filter: it parses only beside `revisar=si` (alone it reads as
+off), serializes right after it, `hasActiveFilters` and `filterTransactions`
+ignore it, and "Limpiar todo" resets it. With it on, `Transactions` renders
+`ReviewMode` (`components/transactions/ReviewMode.tsx`) in place of the table:
+the A revisar rows one at a time, biggest home-currency amount first, with the
+category picker open and the suggestion (`reviewSuggestion`: the row's own
+low-confidence category, else the most frequent one among its confident
+similar rows) first. The queue (`buildReviewQueue`, `services/review/`) is a
+snapshot taken on mount and never re-derived from the live filter, so
+progress ("4 de 7") does not shrink under the user. A queue row is done when
+the live store says it no longer `needsCategoryReview` (or it was skipped
+with `s`), so a pick, an "Aplicar", a transfer inference or a delete all
+advance it without a second source of truth. Picks go through
+`useCategoryWrites.pickForReview` (the badge's write and guards without its
+toast): an inline strip offers "Aplicar a las N similares" and "Deshacer"
+(the same guarded actions as the toast), and the card is busy while a write of
+the row is in flight. Escape / "Salir" return to the A revisar table.
+Entries: Resumen's "Sin categoría" nudge, Categorías' "Revisar N" and the
+table's "Revisar uno por uno" button. A reload restarts at "1 de M" over what
+is left.
+
 `useTransactionFiltering` holds that state in React as one value (seeded once
 from the URL; the view fills in its default period first): it returns
 `filters` (a `FilterState`, period always set), `update(patch)` (merges the
@@ -582,6 +604,7 @@ All conversion happens in the browser, at render or aggregation time, with
 | `Dashboard.tsx`                                                                                                                                                                         | Recent rows                                                                                                         |
 | `Transactions.tsx`                                                                                                                                                                      | Filtered-set totals                                                                                                 |
 | `TransactionTable.tsx`                                                                                                                                                                  | The faint `≈` converted amount next to a native one                                                                 |
+| `review-queue.ts` (`toHome`)                                                                                                                                                            | The review mode's queue order, its done total and the card's `≈` line                                               |
 
 The home currency (`preferredCurrency` from `useUserWorkspace`, passed down as
 `homeCurrency`) and `fxRate` (default 40.5) come from `user_preferences`.

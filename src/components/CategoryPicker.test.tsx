@@ -112,3 +112,71 @@ describe('CategoryPicker', () => {
     ).toHaveAttribute('aria-current', 'true')
   })
 })
+
+describe('CategoryPicker suggested', () => {
+  beforeEach(() => {
+    replaceCustomCategories([])
+  })
+
+  it('lists the suggested category first, named Sugerida', () => {
+    render(<CategoryPicker suggested="entertainment" onPick={vi.fn()} />)
+
+    const first = screen.getAllByRole('button')[0]
+    expect(first).toHaveAccessibleName(/Entretenimiento.*Sugerida/)
+    expect(first).toHaveAttribute('data-suggested')
+  })
+
+  it('picks the suggestion on Enter in an empty search, only when asked', async () => {
+    const onPick = vi.fn()
+    const { rerender } = render(
+      <CategoryPicker suggested="entertainment" onPick={onPick} />
+    )
+    await userEvent.type(screen.getByLabelText('Buscar categoría'), '{Enter}')
+    expect(onPick).not.toHaveBeenCalled()
+
+    rerender(
+      <CategoryPicker
+        suggested="entertainment"
+        enterPicksSuggested
+        onPick={onPick}
+      />
+    )
+    await userEvent.type(screen.getByLabelText('Buscar categoría'), '{Enter}')
+    expect(onPick).toHaveBeenCalledWith('entertainment')
+  })
+
+  it('tells a screen reader what Enter picks', () => {
+    const { rerender } = render(
+      <CategoryPicker suggested="entertainment" onPick={vi.fn()} />
+    )
+    expect(
+      screen.getByLabelText('Buscar categoría')
+    ).not.toHaveAccessibleDescription(/Enter elige/)
+
+    rerender(
+      <CategoryPicker
+        suggested="entertainment"
+        enterPicksSuggested
+        onPick={vi.fn()}
+      />
+    )
+    expect(
+      screen.getByLabelText('Buscar categoría')
+    ).toHaveAccessibleDescription('Enter elige la sugerida: Entretenimiento')
+  })
+
+  it('does not reorder while searching', async () => {
+    render(<CategoryPicker suggested="entertainment" onPick={vi.fn()} />)
+    await userEvent.type(screen.getByLabelText('Buscar categoría'), 'res')
+
+    expect(screen.getAllByRole('button')[0]).not.toHaveAttribute(
+      'data-suggested'
+    )
+  })
+
+  it('lists a suggested custom id the store does not know', () => {
+    render(<CategoryPicker suggested="ghost_cat" onPick={vi.fn()} />)
+
+    expect(screen.getAllByRole('button')[0]).toHaveAttribute('data-suggested')
+  })
+})

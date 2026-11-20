@@ -71,6 +71,8 @@ interface BaseTransactionsProps {
     transactionId: string,
     shown: boolean | null
   ) => Promise<ForgetResult>
+  // Where the review mode's "Ver Resumen" goes (the view has no router).
+  onGoToOverview?: () => void
   // Offered on error toasts so the user can re-sync after a partial write.
   onReload?: () => void
   // The signed-in user's repository: a category created inline saves there.

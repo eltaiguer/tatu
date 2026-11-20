@@ -29,6 +29,10 @@ export interface UrlFilterState {
   // A revisar: only rows `needsCategoryReview` flags (uncategorized or
   // low-confidence). Independent of the others: it ANDs with every filter.
   review: boolean
+  // Review mode (`?modo=revisar`): one row at a time over the A revisar rows.
+  // Not a filter (filterTransactions and hasActiveFilters ignore it); it never
+  // stands without `review`.
+  reviewMode: boolean
   // Undefined when the URL doesn't say; the view picks its default.
   period?: UrlPeriod
 }
@@ -45,6 +49,7 @@ export const DEFAULT_URL_FILTERS: UrlFilterState = {
   showIgnored: false,
   household: 'all',
   review: false,
+  reviewMode: false,
 }
 
 // Whether the view is "filtrado" — and whether a link filters at all: every
@@ -106,6 +111,9 @@ const HOUSEHOLD_YES = 'si'
 // A revisar (`?revisar=si`): the rows `needsCategoryReview` flags.
 const REVIEW_PARAM = 'revisar'
 const REVIEW_YES = 'si'
+// The review mode on top of it (`?modo=revisar`): never without the filter.
+const REVIEW_MODE_PARAM = 'modo'
+const REVIEW_MODE_VALUE = 'revisar'
 
 export function householdModeFromSearch(search: string): boolean {
   return new URLSearchParams(search).get(HOUSEHOLD_PARAM) === HOUSEHOLD_YES
@@ -125,6 +133,7 @@ export function parseFilterParams(search: string): UrlFilterState {
   const min = params.get('min') ?? ''
   const max = params.get('max') ?? ''
   const hogar = params.get(HOUSEHOLD_PARAM)
+  const review = params.get(REVIEW_PARAM) === REVIEW_YES
   return {
     search: params.get('q') ?? '',
     merchant: params.get('comercio') ?? '',
@@ -139,7 +148,8 @@ export function parseFilterParams(search: string): UrlFilterState {
     min: isNumeric(min) ? min : '',
     max: isNumeric(max) ? max : '',
     showIgnored: params.get('ignoradas') === '1',
-    review: params.get(REVIEW_PARAM) === REVIEW_YES,
+    review,
+    reviewMode: review && params.get(REVIEW_MODE_PARAM) === REVIEW_MODE_VALUE,
     // Income has no household answer, so that mix would list nothing: the
     // income type wins and hogar is dropped.
     household:
@@ -165,7 +175,10 @@ export function serializeFilterParams(state: UrlFilterState): string {
     if (state.household === 'household')
       params.set(HOUSEHOLD_PARAM, HOUSEHOLD_YES)
   }
-  if (state.review) params.set(REVIEW_PARAM, REVIEW_YES)
+  if (state.review) {
+    params.set(REVIEW_PARAM, REVIEW_YES)
+    if (state.reviewMode) params.set(REVIEW_MODE_PARAM, REVIEW_MODE_VALUE)
+  }
   const period = state.period
   if (period?.mode === 'all') params.set('periodo', 'todo')
   if (period?.mode === 'month') {
@@ -198,7 +211,8 @@ export function filterToSearch(filter: TransactionsFilter): string {
     currency: filter.currency ?? 'all',
     type: filter.type ?? 'all',
     household: filter.household ?? 'all',
-    review: filter.review === true,
+    review: filter.review === true || filter.reviewMode === true,
+    reviewMode: filter.reviewMode === true,
     min: filter.min === undefined ? '' : String(filter.min),
     max: filter.max === undefined ? '' : String(filter.max),
   }

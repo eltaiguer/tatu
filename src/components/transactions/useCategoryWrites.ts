@@ -24,6 +24,12 @@ const STALE_UNDO =
 const STALE_APPLY =
   'Mientras tanto cambió la categoría de esta transacción; no se aplicó a las similares.'
 
+export interface ReviewPick {
+  others: number
+  apply?: () => Promise<void>
+  undo?: () => Promise<boolean>
+}
+
 /**
  * The category a row's badge picks in place (#279), with the toast around it:
  * "Deshacer" (the row's category and confidence put back) and "Aplicar a las N
@@ -158,25 +164,50 @@ export function useCategoryWrites({
         ? 'Aplicar a la otra similar'
         : `Aplicar a las ${others} similares`,
     onClick: () => {
-      if (!holds(id, seq, category)) {
-        toast(STALE_APPLY)
-        return
-      }
-      void applyToSimilar(id, category, others)
+      void applyIfHolds(id, seq, category, others)
     },
   })
+  // "Aplicar a las N similares", guarded; settles when the write did.
+  const applyIfHolds = async (
+    id: string,
+    seq: number,
+    category: string,
+    others: number
+  ) => {
+    if (!holds(id, seq, category)) {
+      toast(STALE_APPLY)
+      return
+    }
+    await applyToSimilar(id, category, others)
+  }
+  // "Deshacer", guarded the same way; true when the category was put back.
+  const undoIfHolds = async (
+    previous: CategorySnapshot,
+    seq: number,
+    picked: string
+  ) => {
+    if (!holds(previous.id, seq, picked)) {
+      toast(STALE_UNDO)
+      return false
+    }
+    return undo(previous, picked)
+  }
 
-  async function handlePickCategory(
+  // The write of an in-place pick, with its guards (lock, newest-write
+  // counter, error report with a retry through `again`). Null: nothing was
+  // saved (reported, or nothing to write). Else what the offers need.
+  async function saveCategory(
     transaction: Transaction,
-    category: string
+    category: string,
+    again: () => void
   ) {
-    if (!onUpdateTransaction) return
+    if (!onUpdateTransaction) return null
     const current = rowOf(transaction.id) ?? transaction
     if (
       normalizeCategoryId(current.category) === normalizeCategoryId(category) &&
       current.categoryConfidence === 1
     ) {
-      return
+      return null
     }
     const previous = snapshotOf(current)
     const id = transaction.id
@@ -187,20 +218,31 @@ export function useCategoryWrites({
     } catch (error) {
       reportError(error, 'No se pudo cambiar la categoría', '', () => {
         if (writes.current.get(id) === seq && matches(previous, rowOf(id))) {
-          void handlePickCategory(transaction, category)
+          again()
         }
       })
-      return
+      return null
     } finally {
       setPending(id, false)
     }
 
     // N: the rows a merchant rule would write, the same rule the write uses,
     // over all of the user's rows (not the filtered page).
-    const others =
-      transaction.splitParentId || !onUpdateTransaction
-        ? 0
-        : countSimilarEditReach(transactionsRef.current, current, false) - 1
+    const others = transaction.splitParentId
+      ? 0
+      : countSimilarEditReach(transactionsRef.current, current, false) - 1
+    return { id, seq, previous, others }
+  }
+
+  async function handlePickCategory(
+    transaction: Transaction,
+    category: string
+  ) {
+    const saved = await saveCategory(transaction, category, () => {
+      void handlePickCategory(transaction, category)
+    })
+    if (!saved) return
+    const { id, seq, previous, others } = saved
     const offer = toast('Cambios guardados', {
       description: `${resolveCategory(category).label} en esta transacción`,
       duration: 8000,
@@ -219,16 +261,40 @@ export function useCategoryWrites({
         cancel: {
           label: 'Deshacer',
           onClick: () => {
-            if (!holds(id, seq, category)) {
-              toast(STALE_UNDO)
-              return
-            }
-            void undo(previous, category)
+            void undoIfHolds(previous, seq, category)
           },
         },
       }),
     })
     offers.current.set(id, offer)
+  }
+
+  // The review mode's pick (#280): the badge's write and guards, without the
+  // toast. Null: nothing saved (the error was reported) or nothing to write.
+  // `apply` (the merchant rule) is there when others ≥ 1; `undo` when the
+  // view can restore. Both are the toast's own guarded actions.
+  async function pickForReview(
+    transaction: Transaction,
+    category: string,
+    // Called with the result of the save, including a toast's Reintentar.
+    onSaved?: (result: ReviewPick) => void
+  ) {
+    const saved = await saveCategory(transaction, category, () => {
+      void pickForReview(transaction, category, onSaved)
+    })
+    if (!saved) return null
+    const { id, seq, previous, others } = saved
+    const result: ReviewPick = {
+      others,
+      ...(others >= 1 && {
+        apply: () => applyIfHolds(id, seq, category, others),
+      }),
+      ...(onRestoreCategories && {
+        undo: () => undoIfHolds(previous, seq, category),
+      }),
+    }
+    onSaved?.(result)
+    return result
   }
 
   async function applyToSimilar(id: string, category: string, others: number) {
@@ -267,19 +333,24 @@ export function useCategoryWrites({
     }
   }
 
-  async function undo(previous: CategorySnapshot, picked: string) {
-    if (!onRestoreCategories) return
+  async function undo(
+    previous: CategorySnapshot,
+    picked: string
+  ): Promise<boolean> {
+    if (!onRestoreCategories) return false
     const id = previous.id
     const seq = start(id)
     setPending(id, true)
     try {
       await onRestoreCategories([previous])
       toast.success('Se deshizo el cambio')
+      return true
     } catch (error) {
       reportError(error, 'No se pudo deshacer', '', () => {
         if (holds(id, seq, picked)) void undo(previous, picked)
         else toast(STALE_UNDO)
       })
+      return false
     } finally {
       setPending(id, false)
     }
@@ -382,5 +453,12 @@ export function useCategoryWrites({
     },
   }
 
-  return { onCategorize, categorySplits, toastEdit, supersede, rowWrites }
+  return {
+    onCategorize,
+    categorySplits,
+    toastEdit,
+    supersede,
+    rowWrites,
+    pickForReview,
+  }
 }

@@ -493,6 +493,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
       expect(go).toHaveBeenCalledWith({
         categories: [Category.Uncategorized],
         type: 'debit',
+        reviewMode: true,
       })
     })
 

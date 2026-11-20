@@ -105,6 +105,7 @@ export function CategoryCard({
                   onClick={() =>
                     onNavigateToTransactions({
                       categories: [Category.Uncategorized],
+                      reviewMode: true,
                     })
                   }
                   className="text-[11px] font-medium text-[color:var(--brand-text)] underline-offset-2 hover:underline"
