@@ -173,6 +173,19 @@ describe('url filters — review mode', () => {
       'categoria=uncategorized&tipo=debit&revisar=si&modo=revisar&periodo=todo'
     )
   })
+
+  it('builds the Hogar link of the Insights Revisar entry', () => {
+    expect(
+      filterToSearch({
+        categories: ['uncategorized'],
+        type: 'debit',
+        household: 'household',
+        reviewMode: true,
+      })
+    ).toBe(
+      'categoria=uncategorized&tipo=debit&hogar=si&revisar=si&modo=revisar&periodo=todo'
+    )
+  })
 })
 
 describe('url filters — Hogar', () => {

@@ -433,6 +433,7 @@ describe('Insights', () => {
       expect(onNavigateToTransactions).toHaveBeenCalledWith({
         categories: [Category.Uncategorized],
         type: 'debit',
+        reviewMode: true,
       })
     })
 

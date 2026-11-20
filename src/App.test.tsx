@@ -1519,6 +1519,26 @@ describe('App', () => {
       expect(await screen.findByText('2 de 2')).toBeInTheDocument()
     })
 
+    it('keeps the Hogar cut in the queue (#305)', async () => {
+      seed({
+        transactions: [
+          {
+            ...tx('h', '2026-03-10T12:00:00.000Z', 'Kiosco Hogar', ''),
+            household: true,
+          },
+          tx('n', '2026-03-11T12:00:00.000Z', 'Kiosco Otro', ''),
+        ],
+      })
+      renderApp(
+        '/transacciones?categoria=uncategorized&tipo=debit&hogar=si&revisar=si&modo=revisar&periodo=todo'
+      )
+
+      expect(await screen.findByText('1 de 1')).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Kiosco Hogar' })
+      ).toBeVisible()
+    })
+
     it('shows the panel again on a reload', async () => {
       seedReview()
       renderApp(REVIEW_URL)
