@@ -12,7 +12,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { useStore } from 'zustand'
 import { ImportCSV } from './ImportCSV'
-import { StatementReadError } from '../utils/user-error'
+import { StatementReadError, WorkspaceChangedError } from '../utils/user-error'
 import { useTransactionHandlers } from '../hooks/useTransactionHandlers'
 import { AiError } from '../services/ai/ai-error'
 import {
@@ -25,6 +25,7 @@ import { createInMemoryRepository } from '../services/repository/in-memory-repos
 import { transactionStore } from '../stores/transaction-store'
 import { workspaceStore } from '../stores/workspace-state'
 import type { Transaction } from '../models'
+import { countReviewRows } from '../services/import/import-review'
 import { needsCategoryReview } from '../utils/transaction-display'
 
 // The dialog picks a file, hands its bytes to the import, and reports what
@@ -1195,6 +1196,461 @@ describe('ImportCSV', () => {
     })
   })
 
+  describe('several files at once (#275)', () => {
+    const NAMES = ['card.csv', 'usd.csv', 'uyu.csv']
+    const files = (names = NAMES) =>
+      names.map((n) => new File(['a,b'], n, { type: 'text/csv' }))
+    const pickMany = (names = NAMES) =>
+      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+        target: { files: files(names) },
+      })
+    const dropMany = (names = NAMES) =>
+      fireEvent.drop(screen.getByText('Seleccionar archivo'), {
+        dataTransfer: { files: files(names) },
+      })
+    const stored = (id: string, overrides: Partial<Transaction> = {}) => ({
+      ...makeTx(id),
+      date: new Date('2025-06-01T00:00:00.000Z'),
+      category: 'uncategorized',
+      ...overrides,
+    })
+    const added = (id: string) => ({
+      added: [makeTx(id)],
+      fileRange: { from: '2025-03-04', to: '2025-12-20' },
+      fileRows: 1,
+    })
+    // An importer answering per file name; an Error is thrown instead.
+    const byName = (
+      answers: Record<string, Partial<StatementImportResult> | Error>
+    ) =>
+      vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+        async (file, { onParsed }) => {
+          const answer = answers[file.fileName]
+          if (answer instanceof Error) throw answer
+          onParsed?.()
+          return result(answer)
+        }
+      )
+    const section = (name: string) => screen.getByRole('region', { name })
+
+    it('imports the files one after the other, never two at once', async () => {
+      let running = 0
+      let peak = 0
+      const resolvers: Array<() => void> = []
+      const importer = vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+        async (_file, { onParsed }) => {
+          onParsed?.()
+          running += 1
+          peak = Math.max(peak, running)
+          await new Promise<void>((resolve) => resolvers.push(resolve))
+          running -= 1
+          return result(added('a'))
+        }
+      )
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany()
+
+      await waitFor(() => expect(importer).toHaveBeenCalledTimes(1))
+      expect(importer.mock.calls[0][0].fileName).toBe('card.csv')
+      await act(async () => resolvers[0]())
+      await waitFor(() => expect(importer).toHaveBeenCalledTimes(2))
+      expect(importer.mock.calls[1][0].fileName).toBe('usd.csv')
+      await act(async () => resolvers[1]())
+      await waitFor(() => expect(importer).toHaveBeenCalledTimes(3))
+      await act(async () => resolvers[2]())
+
+      expect(
+        await screen.findByRole('heading', { name: 'Importación completada' })
+      ).toBeInTheDocument()
+      expect(peak).toBe(1)
+      for (const name of NAMES) {
+        expect(
+          within(section(name)).getByRole('list', {
+            name: 'Resumen de la importación',
+          })
+        ).toBeInTheDocument()
+      }
+    })
+
+    it('takes every file of a drop', async () => {
+      const importer = byName({
+        'card.csv': added('a'),
+        'usd.csv': added('b'),
+        'uyu.csv': added('c'),
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      dropMany()
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(importer.mock.calls.map(([f]) => f.fileName)).toEqual(NAMES)
+    })
+
+    it('says which file is running', async () => {
+      const resolvers: Array<() => void> = []
+      const importer = vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+        async (_file, { onParsed }) => {
+          onParsed?.()
+          await new Promise<void>((resolve) => resolvers.push(resolve))
+          return result(added('a'))
+        }
+      )
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany()
+      await waitFor(() => expect(resolvers).toHaveLength(1))
+      expect(screen.getByText('Archivo 1 de 3')).toBeInTheDocument()
+      await act(async () => resolvers[0]())
+      await waitFor(() => expect(resolvers).toHaveLength(2))
+
+      expect(screen.getByText('Archivo 2 de 3')).toBeInTheDocument()
+      expect(screen.getByText('usd.csv')).toBeInTheDocument()
+      await act(async () => resolvers[1]())
+      await waitFor(() => expect(resolvers).toHaveLength(3))
+      await act(async () => resolvers[2]())
+      await screen.findByRole('heading', { name: 'Importación completada' })
+    })
+
+    it('does not show a count of files for one file', async () => {
+      const resolvers: Array<() => void> = []
+      const importer = vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+        async (_file, { onParsed }) => {
+          onParsed?.()
+          await new Promise<void>((resolve) => resolvers.push(resolve))
+          return result(added('a'))
+        }
+      )
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany(['one.csv'])
+      await waitFor(() => expect(resolvers).toHaveLength(1))
+
+      expect(screen.queryByText(/^Archivo 1 de/)).toBeNull()
+      await act(async () => resolvers[0]())
+      await screen.findByRole('heading', { name: 'Importación completada' })
+    })
+
+    it('keeps going past a file that fails and says why in its section', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const importer = byName({
+        'card.csv': added('a'),
+        'usd.csv': new StatementReadError('El archivo está vacío.'),
+        'uyu.csv': added('c'),
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany()
+
+      expect(
+        await screen.findByRole('heading', { name: 'Importación completada' })
+      ).toBeInTheDocument()
+      expect(importer).toHaveBeenCalledTimes(3)
+      const failed = section('usd.csv')
+      expect(within(failed).getByText('Error al validar archivo')).toBeVisible()
+      expect(within(failed).getByText('El archivo está vacío.')).toBeVisible()
+      expect(
+        within(section('uyu.csv')).getByRole('list', {
+          name: 'Resumen de la importación',
+        })
+      ).toBeInTheDocument()
+      expect(screen.getByText('1 archivo no se pudo importar.')).toBeVisible()
+      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+    })
+
+    it('says several files failed to import in the plural', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const importer = byName({
+        'card.csv': added('a'),
+        'usd.csv': new StatementReadError('x'),
+        'uyu.csv': new StatementReadError('y'),
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany()
+
+      expect(
+        await screen.findByText('2 archivos no se pudieron importar.')
+      ).toBeVisible()
+    })
+
+    it('says when a failed file was a save failure, not a bad file', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const importer = byName({
+        'card.csv': new Error('boom'),
+        'usd.csv': added('b'),
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany(['card.csv', 'usd.csv'])
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(
+        within(section('card.csv')).getByText('No se pudo importar')
+      ).toBeVisible()
+    })
+
+    it('a file that is not a CSV fails its own section and the rest import', async () => {
+      const importer = byName({ 'usd.csv': added('b') })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany(['notes.txt', 'usd.csv'])
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(importer).toHaveBeenCalledTimes(1)
+      expect(
+        within(section('notes.txt')).getByText(
+          'El archivo debe estar en formato CSV'
+        )
+      ).toBeVisible()
+    })
+
+    it('says nothing was new when every file was already imported', async () => {
+      const importer = byName({
+        'card.csv': { duplicates: [makeTx('a')] },
+        'usd.csv': { duplicates: [makeTx('b')] },
+        'uyu.csv': { duplicates: [makeTx('c')] },
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany()
+
+      const heading = await screen.findByRole('heading', {
+        name: 'No había movimientos nuevos',
+      })
+      expect(heading).toHaveFocus()
+      expect(
+        screen.getByText('Estos archivos ya estaban importados.')
+      ).toBeVisible()
+    })
+
+    it('says no file could be imported when all of them failed', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const importer = byName({
+        'card.csv': new StatementReadError('x'),
+        'usd.csv': new StatementReadError('y'),
+        'uyu.csv': new StatementReadError('z'),
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany()
+
+      expect(
+        await screen.findByRole('heading', {
+          name: 'No se pudieron importar los archivos',
+        })
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText('Estos archivos ya estaban importados.')
+      ).toBeNull()
+      expect(screen.queryByText(/no se pudo importar\.$/)).toBeNull()
+    })
+
+    it('offers one Revisar for every file that added rows, over all their dates', async () => {
+      const user = userEvent.setup()
+      const onViewTransactions = vi.fn()
+      const importer = byName({
+        'card.csv': {
+          added: [makeTx('a')],
+          fileType: 'bank_account_usd',
+          fileRange: { from: '2025-03-04', to: '2025-06-20' },
+          fileRows: 1,
+        },
+        'usd.csv': {
+          added: [makeTx('b')],
+          fileType: 'bank_account_usd',
+          fileRange: { from: '2025-05-01', to: '2025-12-20' },
+          fileRows: 1,
+        },
+        'uyu.csv': { duplicates: [makeTx('z')] },
+      })
+      render(
+        <ImportCSV
+          transactions={[
+            stored('a', { currency: 'USD' }),
+            stored('b', { currency: 'USD' }),
+          ]}
+          onTransactionsImported={importer}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      pickMany()
+      await user.click(
+        await screen.findByRole('button', { name: 'Revisar 2 movimientos' })
+      )
+
+      expect(screen.getAllByRole('button', { name: /^Revisar/ })).toHaveLength(
+        1
+      )
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        review: true,
+        accountType: 'bank_account',
+        currency: 'USD',
+        period: { mode: 'range', from: '2025-03-04', to: '2025-12-20' },
+      })
+    })
+
+    it('opens the newest month among the files with "Ver transacciones"', async () => {
+      const user = userEvent.setup()
+      const onViewTransactions = vi.fn()
+      const importer = byName({
+        'card.csv': { ...added('a'), month: { y: 2025, m: 2 } },
+        'usd.csv': { ...added('b'), month: { y: 2025, m: 10 } },
+        'uyu.csv': new StatementReadError('x'),
+      })
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      render(
+        <ImportCSV
+          transactions={[]}
+          onTransactionsImported={importer}
+          onViewTransactions={onViewTransactions}
+        />
+      )
+
+      pickMany()
+      await user.click(
+        await screen.findByRole('button', { name: 'Ver transacciones' })
+      )
+
+      expect(onViewTransactions).toHaveBeenCalledWith({
+        period: { mode: 'month', y: 2025, m: 10 },
+      })
+    })
+
+    it('warns once about AI failing in every file', async () => {
+      const importer = byName({
+        'card.csv': { ...added('a'), aiError: new AiError('auth') },
+        'usd.csv': { ...added('b'), aiError: new AiError('auth') },
+        'uyu.csv': { ...added('c'), aiError: new AiError('auth') },
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany()
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(toastMock.warning).toHaveBeenCalledTimes(1)
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        'Categorización con IA no disponible: la clave API de Anthropic no es válida. Se usaron las reglas de categorización.'
+      )
+    })
+
+    it('says "no disponible" once when a file failed and another was partial', async () => {
+      const importer = byName({
+        'card.csv': { ...added('a'), aiPartial: '1 de 3 lotes' },
+        'usd.csv': { ...added('b'), aiError: new AiError('auth') },
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany(['card.csv', 'usd.csv'])
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(toastMock.warning).toHaveBeenCalledTimes(1)
+      expect(toastMock.warning.mock.calls[0][0]).toContain('no disponible')
+    })
+
+    it('says "incompleta" once for partial results', async () => {
+      const importer = byName({
+        'card.csv': { ...added('a'), aiPartial: '1 de 3 lotes' },
+        'usd.csv': { ...added('b'), aiPartial: '2 de 3 lotes' },
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany(['card.csv', 'usd.csv'])
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(toastMock.warning).toHaveBeenCalledTimes(1)
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        'Categorización con IA incompleta: 1 de 3 lotes. El resto se categorizó con reglas.'
+      )
+    })
+
+    it('adds up the repairs that failed into one toast', async () => {
+      const importer = byName({
+        'card.csv': { ...added('a'), repairsFailed: 1 },
+        'usd.csv': { ...added('b'), repairsFailed: 2 },
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany(['card.csv', 'usd.csv'])
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      expect(toastMock.warning).toHaveBeenCalledTimes(1)
+      expect(toastMock.warning).toHaveBeenCalledWith(
+        'No se pudieron corregir 3 descripciones. Importá el archivo de nuevo para reintentar.'
+      )
+    })
+
+    it('stops importing the rest when the dialog closes mid-batch', async () => {
+      const resolvers: Array<() => void> = []
+      const importer = vi.fn<Parameters<Importer>, ReturnType<Importer>>(
+        async (_file, { onParsed }) => {
+          onParsed?.()
+          await new Promise<void>((resolve) => resolvers.push(resolve))
+          return result(added('a'))
+        }
+      )
+      const { unmount } = render(
+        <ImportCSV transactions={[]} onTransactionsImported={importer} />
+      )
+
+      pickMany()
+      await waitFor(() => expect(resolvers).toHaveLength(1))
+      unmount()
+      await act(async () => resolvers[0]())
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      })
+
+      expect(importer).toHaveBeenCalledTimes(1)
+      expect(toastMock.warning).not.toHaveBeenCalled()
+    })
+
+    it('stops the batch when the workspace changed under it', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const importer = byName({
+        'card.csv': new WorkspaceChangedError(),
+        'usd.csv': added('b'),
+        'uyu.csv': added('c'),
+      })
+      render(<ImportCSV transactions={[]} onTransactionsImported={importer} />)
+
+      pickMany()
+
+      await screen.findByRole('heading', {
+        name: 'No se pudieron importar los archivos',
+      })
+      expect(importer).toHaveBeenCalledTimes(1)
+      expect(errorSpy).toHaveBeenCalledWith('import failed:', expect.any(Error))
+    })
+
+    it('goes back to the picker with "Importar otro archivo"', async () => {
+      const user = userEvent.setup()
+      render(
+        <ImportCSV
+          transactions={[]}
+          onTransactionsImported={byName({
+            'a.csv': added('a'),
+            'b.csv': added('b'),
+          })}
+          onViewTransactions={vi.fn()}
+        />
+      )
+
+      pickMany(['a.csv', 'b.csv'])
+      await user.click(
+        await screen.findByRole('button', { name: 'Importar otro archivo' })
+      )
+
+      expect(
+        screen.getByRole('button', { name: 'Seleccionar archivo' })
+      ).toHaveFocus()
+      expect(screen.getByLabelText('Seleccionar archivo')).toHaveAttribute(
+        'multiple'
+      )
+    })
+  })
+
   // The doubles above assume when the real import calls onParsed and what it
   // throws; these run it, over the in-memory repository, to keep them honest.
   describe('the real import', () => {
@@ -1278,6 +1734,62 @@ describe('ImportCSV', () => {
         accountType: 'credit_card',
         period: { mode: 'range', from: '2025-03-17', to: '2025-12-04' },
       })
+    })
+
+    it('imports the three sample statements in one pick', async () => {
+      const user = userEvent.setup()
+      const onViewTransactions = vi.fn()
+      renderWithRealImport(onViewTransactions)
+      const names = [
+        'CreditCardsMovementsDetail.csv',
+        'USDmovements.csv',
+        'UYUmovements.csv',
+      ]
+
+      fireEvent.change(screen.getByLabelText('Seleccionar archivo'), {
+        target: {
+          files: names.map(
+            (name) =>
+              new File(
+                [
+                  new Uint8Array(
+                    readFileSync(join(__dirname, '../../samples', name))
+                  ) as BlobPart,
+                ],
+                name,
+                { type: 'text/csv' }
+              )
+          ),
+        },
+      })
+
+      await screen.findByRole('heading', { name: 'Importación completada' })
+      for (const name of names) {
+        expect(screen.getByRole('region', { name })).toBeInTheDocument()
+      }
+      const rows = transactionStore.getState().transactions
+      expect(rows).toHaveLength(64 + 22 + 13)
+      // Per file: its own new rows still to review, read from the store
+      // after the whole batch (a transfer pair across files stops counting).
+      const toReviewOf = (name: string) =>
+        within(screen.getByRole('region', { name }))
+          .getAllByRole('listitem')
+          .map((item) => item.textContent)
+          .find((text) => text?.includes('a revisar'))
+      expect(toReviewOf(names[0])).toMatch(/^3 a revisar/)
+      expect(toReviewOf(names[1])).toMatch(/^3 a revisar/)
+      expect(toReviewOf(names[2])).toMatch(/^1 a revisar/)
+      // Mixed accounts: the link is the period alone, and the button's count
+      // is what that link lists.
+      await user.click(
+        screen.getByRole('button', { name: 'Revisar 7 movimientos' })
+      )
+      const link = onViewTransactions.mock.calls[0][0]
+      expect(link).toEqual({
+        review: true,
+        period: { mode: 'range', from: '2025-03-17', to: '2025-12-04' },
+      })
+      expect(countReviewRows(rows, link)).toBe(7)
     })
 
     it('explains in Spanish that another bank’s CSV is not recognized (#198)', async () => {

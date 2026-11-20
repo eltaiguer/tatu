@@ -180,7 +180,9 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', { name: 'Importar transacciones' })
     ).toBeInTheDocument()
-    expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
+    expect(
+      screen.getByText('Arrastrá tus archivos CSV aquí')
+    ).toBeInTheDocument()
   })
 
   it('returns focus to the sidebar Importar button when the import dialog closes', async () => {
@@ -485,7 +487,9 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', { name: 'Importar transacciones' })
     ).toBeInTheDocument()
-    expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
+    expect(
+      screen.getByText('Arrastrá tus archivos CSV aquí')
+    ).toBeInTheDocument()
   })
 
   it('applies dark theme when user preferences return dark', async () => {
