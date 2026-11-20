@@ -202,8 +202,8 @@ describe('ReviewMode', () => {
       usd10(),
     ])
 
-    const suggested = option(/Sugerida/)
-    expect(suggested).toHaveFocus()
+    expect(option(/Sugerida/)).toBeVisible()
+    expect(search()).toHaveFocus()
     await userEvent.keyboard('{Enter}')
 
     await waitFor(() =>
@@ -212,6 +212,23 @@ describe('ReviewMode', () => {
         categoryConfidence: 1,
       })
     )
+  })
+
+  it('types s into the search of a suggested row instead of skipping', async () => {
+    seed([
+      tx('low', {
+        description: 'BETA TIENDA',
+        category: 'restaurants',
+        categoryConfidence: 0.4,
+        amount: 50,
+        currency: 'USD',
+      }),
+      usd10(),
+    ])
+    await userEvent.keyboard('super')
+
+    expect(search()).toHaveValue('super')
+    expect(screen.getByText('1 de 2')).toBeInTheDocument()
   })
 
   it('suggests what confident similar rows say', () => {
@@ -230,7 +247,8 @@ describe('ReviewMode', () => {
       }),
     ])
 
-    expect(option(/Restaurantes.*Sugerida/)).toHaveFocus()
+    expect(option(/Restaurantes.*Sugerida/)).toBeVisible()
+    expect(search()).toHaveFocus()
   })
 
   it('does not chain-pick on a held Enter', async () => {
@@ -313,6 +331,20 @@ describe('ReviewMode', () => {
       )
     })
 
+    it('undoes once on a double click, with no stale toast', async () => {
+      seed(rows())
+      await userEvent.click(option(/Alimentación/))
+      const undo = await screen.findByRole('button', { name: 'Deshacer' })
+      const release = repo.hold('update')
+      await userEvent.dblClick(undo)
+      act(() => release.release())
+
+      await waitFor(() =>
+        expect(stored('m1')?.category).toBe(Category.Uncategorized)
+      )
+      expect(screen.queryByText(/Mientras tanto/)).not.toBeInTheDocument()
+    })
+
     it('puts the row back with Deshacer', async () => {
       seed(rows())
       await userEvent.click(option(/Alimentación/))
@@ -348,6 +380,9 @@ describe('ReviewMode', () => {
     await waitFor(() => expect(stored('uyu')?.categoryConfidence).toBe(1))
     await waitFor(() => expect(screen.getByText('2 de 3')).toBeInTheDocument())
     expect(screen.queryByText('Cambios guardados')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Alimentación en ALFA SERVICIOS'
+    )
   })
 
   it('keeps the total while the filtered rows shrink', async () => {
@@ -435,6 +470,22 @@ describe('ReviewMode', () => {
     expect(
       screen.getByRole('button', { name: 'Revisar uno por uno' })
     ).toHaveFocus()
+  })
+
+  it('grabs focus on leaving once, not on every later re-mount', async () => {
+    seed(basicRows())
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Revisar uno por uno' })
+      ).toHaveFocus()
+    )
+
+    const box = screen.getByPlaceholderText(/Buscar por comercio/)
+    await userEvent.type(box, 'zzzz')
+    await userEvent.clear(box)
+
+    expect(box).toHaveFocus()
   })
 
   it('leaves with Salir', async () => {

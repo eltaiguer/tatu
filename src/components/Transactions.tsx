@@ -387,7 +387,11 @@ export function Transactions({
     }
   }
 
+  // One-shot: the entry button takes focus on the render right after leaving.
   const leftReview = useRef(false)
+  useEffect(() => {
+    leftReview.current = false
+  })
   const leaveReview = () => {
     leftReview.current = true
     updateFilters({ reviewMode: false })

@@ -77,7 +77,7 @@ src/
     SplitTransactionDialog.tsx # Split one transaction into parts (see is_split_parent / split_parent_id)
     ConfirmDialog.tsx      # Shared confirmation modal
     CategoryBadge.tsx      # Category badge with color dot
-    CategoryPicker.tsx     # The one category picker body: search, keys, Enter picks the first match; `suggested` lists a category first as "Sugerida" (the review mode); used by the row badge (#279) and the bulk bar (#282); the edit dialog still has its own picker (follow-up)
+    CategoryPicker.tsx     # The one category picker body: search, keys, Enter picks the first match; `suggested` lists a category first as "Sugerida", highlighted, and `enterPicksSuggested` makes Enter in an empty search pick it (the review mode); used by the row badge (#279) and the bulk bar (#282); the edit dialog still has its own picker (follow-up)
     ConfidenceBadge.tsx    # 3-bar confidence meter
     Onboarding.tsx         # First-run empty state (no transactions yet)
     EmptyState.tsx         # Generic empty state

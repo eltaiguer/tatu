@@ -19,6 +19,8 @@ interface CategoryPickerProps {
   touch?: boolean
   /** Offered first (review mode): marked Sugerida while the search is empty. */
   suggested?: string | null
+  /** Enter in an empty search picks `suggested` (the review mode). */
+  enterPicksSuggested?: boolean
 }
 
 /**
@@ -32,6 +34,7 @@ export function CategoryPicker({
   onPick,
   touch,
   suggested,
+  enterPicksSuggested,
 }: CategoryPickerProps) {
   const [query, setQuery] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
@@ -59,8 +62,13 @@ export function CategoryPicker({
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault()
-            // An empty search is not a choice: no first-in-the-list pick.
-            if (query.trim() && matches[0]) onPick(matches[0])
+            // An empty search is not a choice: no first-in-the-list pick
+            // (only an explicit suggestion).
+            if (query.trim()) {
+              if (matches[0]) onPick(matches[0])
+            } else if (enterPicksSuggested && suggestedId) {
+              onPick(suggestedId)
+            }
           } else if (event.key === 'ArrowDown') {
             event.preventDefault()
             focusFirstOption(listRef.current)
@@ -90,7 +98,8 @@ export function CategoryPicker({
                 aria-current={current ? 'true' : undefined}
                 className={cn(
                   'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent',
-                  touch && 'min-h-11'
+                  touch && 'min-h-11',
+                  id === suggestedId && 'bg-accent ring-1 ring-ring/60'
                 )}
                 onClick={() => onPick(id)}
               >

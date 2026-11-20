@@ -24,6 +24,12 @@ const STALE_UNDO =
 const STALE_APPLY =
   'Mientras tanto cambió la categoría de esta transacción; no se aplicó a las similares.'
 
+export interface ReviewPick {
+  others: number
+  apply?: () => Promise<void>
+  undo?: () => Promise<boolean>
+}
+
 /**
  * The category a row's badge picks in place (#279), with the toast around it:
  * "Deshacer" (the row's category and confidence put back) and "Aplicar a las N
@@ -267,13 +273,18 @@ export function useCategoryWrites({
   // toast. Null: nothing saved (the error was reported) or nothing to write.
   // `apply` (the merchant rule) is there when others ≥ 1; `undo` when the
   // view can restore. Both are the toast's own guarded actions.
-  async function pickForReview(transaction: Transaction, category: string) {
+  async function pickForReview(
+    transaction: Transaction,
+    category: string,
+    // Called with the result of the save, including a toast's Reintentar.
+    onSaved?: (result: ReviewPick) => void
+  ) {
     const saved = await saveCategory(transaction, category, () => {
-      void pickForReview(transaction, category)
+      void pickForReview(transaction, category, onSaved)
     })
     if (!saved) return null
     const { id, seq, previous, others } = saved
-    return {
+    const result: ReviewPick = {
       others,
       ...(others >= 1 && {
         apply: () => applyIfHolds(id, seq, category, others),
@@ -281,11 +292,9 @@ export function useCategoryWrites({
       ...(onRestoreCategories && {
         undo: () => undoIfHolds(previous, seq, category),
       }),
-    } as {
-      others: number
-      apply?: () => Promise<void>
-      undo?: () => Promise<boolean>
     }
+    onSaved?.(result)
+    return result
   }
 
   async function applyToSimilar(id: string, category: string, others: number) {

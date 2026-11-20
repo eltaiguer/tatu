@@ -126,6 +126,25 @@ describe('CategoryPicker suggested', () => {
     expect(first).toHaveAttribute('data-suggested')
   })
 
+  it('picks the suggestion on Enter in an empty search, only when asked', async () => {
+    const onPick = vi.fn()
+    const { rerender } = render(
+      <CategoryPicker suggested="entertainment" onPick={onPick} />
+    )
+    await userEvent.type(screen.getByLabelText('Buscar categoría'), '{Enter}')
+    expect(onPick).not.toHaveBeenCalled()
+
+    rerender(
+      <CategoryPicker
+        suggested="entertainment"
+        enterPicksSuggested
+        onPick={onPick}
+      />
+    )
+    await userEvent.type(screen.getByLabelText('Buscar categoría'), '{Enter}')
+    expect(onPick).toHaveBeenCalledWith('entertainment')
+  })
+
   it('does not reorder while searching', async () => {
     render(<CategoryPicker suggested="entertainment" onPick={vi.fn()} />)
     await userEvent.type(screen.getByLabelText('Buscar categoría'), 'res')

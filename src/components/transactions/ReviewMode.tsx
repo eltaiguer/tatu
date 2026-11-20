@@ -15,12 +15,9 @@ import { CategoryPicker } from '../CategoryPicker'
 import { Button } from '../ui/button'
 import { PageHeader } from '../ui/page-header'
 import { isPlainShortcut } from './category-shortcut'
-import type { useCategoryWrites } from './useCategoryWrites'
+import type { ReviewPick, useCategoryWrites } from './useCategoryWrites'
 
 type ReviewWrites = Pick<ReturnType<typeof useCategoryWrites>, 'pickForReview'>
-type PickResult = NonNullable<
-  Awaited<ReturnType<ReviewWrites['pickForReview']>>
->
 
 export interface ReviewModeProps {
   // The A revisar rows the view lists: the queue is taken from them once.
@@ -58,7 +55,7 @@ export function ReviewModeButton({
   )
 }
 
-interface LastPick extends PickResult {
+interface LastPick extends ReviewPick {
   row: Transaction
   category: string
 }
@@ -107,17 +104,17 @@ export function ReviewMode({
     [current, transactions]
   )
 
+  // Desktop keeps the search box (typing finds another category; the
+  // suggestion is highlighted and Enter picks it). Touch focuses an option so
+  // the keyboard does not cover the list.
   function focusPicker() {
     const root = rootRef.current
     if (!root) return
     const coarse = window.matchMedia?.('(pointer: coarse)').matches
-    const target =
-      root.querySelector<HTMLElement>('[data-suggested]') ??
-      (coarse
-        ? root.querySelector<HTMLElement>('[data-category-option]')
-        : root.querySelector<HTMLElement>(
-            'input[aria-label="Buscar categoría"]'
-          ))
+    const target = coarse
+      ? (root.querySelector<HTMLElement>('[data-suggested]') ??
+        root.querySelector<HTMLElement>('[data-category-option]'))
+      : root.querySelector<HTMLElement>('input[aria-label="Buscar categoría"]')
     target?.focus()
   }
 
@@ -140,8 +137,9 @@ export function ReviewMode({
     setWorking(true)
     setLastPick(null)
     try {
-      const result = await writes.pickForReview(current, category)
-      if (result) setLastPick({ ...result, row: current, category })
+      await writes.pickForReview(current, category, (result) =>
+        setLastPick({ ...result, row: current, category })
+      )
     } finally {
       workingRef.current = false
       setWorking(false)
@@ -161,7 +159,7 @@ export function ReviewMode({
 
   async function applyToSimilar() {
     const apply = lastPick?.apply
-    if (!apply) return
+    if (!apply || busy || workingRef.current) return
     // Its Deshacer would be stale once the rule is written.
     setLastPick(null)
     await runOffer(apply)
@@ -170,8 +168,10 @@ export function ReviewMode({
 
   async function undoLast() {
     const undo = lastPick?.undo
-    if (!undo) return
-    if (await runOffer(undo)) setLastPick(null)
+    if (!undo || busy || workingRef.current) return
+    // A stale or failed undo has said so (toast): the strip is spent too.
+    await runOffer(undo)
+    setLastPick(null)
   }
 
   // s and Escape work from the review or from the page body (focus drops
@@ -226,7 +226,12 @@ export function ReviewMode({
         title="Revisar movimientos"
         subtitle="Uno por uno, el más grande primero"
         actions={
-          <Button variant="outline" size="sm" onClick={onLeave}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onLeave}
+            aria-keyshortcuts="Escape"
+          >
             Salir
           </Button>
         }
@@ -241,7 +246,7 @@ export function ReviewMode({
               <div className="flex items-center justify-between gap-3">
                 <p
                   aria-live="polite"
-                  className="text-sm text-muted-foreground tabular-nums"
+                  className="font-mono text-sm text-muted-foreground tabular-nums"
                 >
                   {`${handled + 1} de ${queue.length}`}
                 </p>
@@ -279,6 +284,7 @@ export function ReviewMode({
                     variant="link"
                     size="sm"
                     className="h-auto p-0"
+                    disabled={busy}
                     onClick={() => void applyToSimilar()}
                   >
                     {lastPick.others === 1
@@ -291,6 +297,7 @@ export function ReviewMode({
                     variant="link"
                     size="sm"
                     className="h-auto p-0"
+                    disabled={busy}
                     onClick={() => void undoLast()}
                   >
                     Deshacer
@@ -300,13 +307,15 @@ export function ReviewMode({
             )}
             <CurrentRow row={current} home={home} fxRate={fxRate} />
             <div
+              role="group"
+              aria-label="Elegir categoría"
               aria-busy={busy}
-              aria-disabled={busy}
-              className={busy ? 'opacity-60' : undefined}
+              className={busy ? 'pointer-events-none opacity-60' : undefined}
             >
               <CategoryPicker
                 key={current.id}
                 suggested={suggested}
+                enterPicksSuggested
                 touch={!!window.matchMedia?.('(pointer: coarse)').matches}
                 onPick={(category) => void pick(category)}
               />
