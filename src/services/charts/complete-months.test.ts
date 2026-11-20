@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Transaction } from '../../models'
-import { completeMonths } from './complete-months'
+import { completeMonths, monthCoverage } from './complete-months'
 
 let seq = 0
 function tx(isoDay: string, overrides: Partial<Transaction> = {}): Transaction {
@@ -78,5 +78,83 @@ describe('completeMonths', () => {
     // January starts with a transfer; February's only end-of-month row is
     // a split parent, which isn't a row of its own.
     expect([...months]).toEqual(['2026-01'])
+  })
+})
+
+describe('monthCoverage', () => {
+  it('says which accounts leave each month incomplete', () => {
+    const cov = monthCoverage(
+      [
+        tx('2026-01-02'),
+        tx('2026-02-15'),
+        tx('2026-04-10'),
+        tx('2026-02-20', uyu),
+        tx('2026-04-30', uyu),
+      ],
+      '2026-11'
+    )
+
+    expect(cov).toEqual([
+      {
+        month: '2026-01',
+        complete: false,
+        covered: ['credit_card'],
+        missing: ['bank_account_uyu'],
+        absent: ['bank_account_uyu'],
+      },
+      {
+        month: '2026-02',
+        complete: false,
+        covered: ['credit_card'],
+        missing: ['bank_account_uyu'],
+        absent: [],
+      },
+      {
+        month: '2026-03',
+        complete: true,
+        covered: ['credit_card', 'bank_account_uyu'],
+        missing: [],
+        absent: [],
+      },
+      {
+        month: '2026-04',
+        complete: false,
+        covered: ['bank_account_uyu'],
+        missing: ['credit_card'],
+        absent: [],
+      },
+    ])
+  })
+
+  it('leaves a dormant account out of both covered and missing', () => {
+    const cov = monthCoverage(
+      [
+        tx('2026-01-01'),
+        tx('2026-05-31'),
+        tx('2026-01-15', { source: 'bank_account' }),
+      ],
+      '2026-11'
+    )
+
+    expect(cov.find((c) => c.month === '2026-01')?.missing).toEqual([
+      'bank_account_usd',
+    ])
+    expect(cov.find((c) => c.month === '2026-04')).toMatchObject({
+      covered: ['credit_card'],
+      missing: [],
+      complete: true,
+    })
+  })
+
+  it('never completes the current month, even fully covered', () => {
+    const cov = monthCoverage(
+      [tx('2026-09-01'), tx('2026-10-30'), tx('2026-11-30')],
+      '2026-10'
+    )
+
+    expect(cov.find((c) => c.month === '2026-10')).toMatchObject({
+      missing: [],
+      complete: false,
+    })
   })
 })
