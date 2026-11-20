@@ -211,7 +211,7 @@ export function Transactions({
       reportError,
     })
 
-  const { onCategorize } = useCategoryWrites({
+  const categoryWrites = useCategoryWrites({
     transactions,
     onUpdateTransaction,
     onRestoreCategories,
@@ -284,6 +284,8 @@ export function Transactions({
     setPending(editingId, true)
     try {
       if (!(unchanged && householdChanged && draft.applyScope === 'single')) {
+        // The newest write of the row: an old in-place toast must not replay.
+        categoryWrites.supersede(editingId)
         const { affected } = await onUpdateTransaction(editingId, {
           displayDescription: draft.description,
           category: draft.category,
@@ -319,7 +321,9 @@ export function Transactions({
       message = outcome.message
       toastOptions = outcome.options
     }
-    if (message) toast.success(message, toastOptions)
+    if (message) {
+      categoryWrites.toastEdit(editing, draft, message, toastOptions)
+    }
     setEditingTransaction(null)
     setPending(editingId, false)
   }
@@ -519,7 +523,8 @@ export function Transactions({
               }
             : undefined
         }
-        onCategorize={onCategorize}
+        onCategorize={categoryWrites.onCategorize}
+        categorySplits={categoryWrites.categorySplits}
         onToggleHousehold={
           onSetHousehold
             ? (transaction) => {

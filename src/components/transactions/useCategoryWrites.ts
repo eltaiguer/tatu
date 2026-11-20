@@ -1,9 +1,18 @@
-import { useEffect, useRef } from 'react'
-import { toast } from 'sonner'
+import { useEffect, useMemo, useRef } from 'react'
+import { toast, type ExternalToast } from 'sonner'
 import type { Transaction } from '../../models'
 import { normalizeCategoryId } from '../../services/categories/category-aliases'
 import { resolveCategory } from '../../services/categories/category-registry'
-import { countSimilarEditReach } from '../../services/descriptions/similar-transactions'
+import {
+  categorySplitLine,
+  findCategorySplits,
+} from '../../services/descriptions/category-splits'
+import {
+  countSimilarEditReach,
+  findSimilarTransactions,
+} from '../../services/descriptions/similar-transactions'
+import { transactionLabel } from '../../services/merchants/merchant-key'
+import { isTransferCategory } from '../../services/transfers/internal-transfers'
 import type { CategorySnapshot } from '../../services/mutations/transaction-mutations'
 import { transactionStore } from '../../stores/transaction-store'
 import { PartialWriteError, UserFacingError } from '../../utils/user-error'
@@ -43,6 +52,11 @@ export function useCategoryWrites({
   const writes = useRef(new Map<string, number>())
   // The toast offering Deshacer / Aplicar, per row, while it shows.
   const offers = useRef(new Map<string, string | number>())
+  // Over every row of the user (not the page): one pass, a Map.get per row.
+  const categorySplits = useMemo(
+    () => findCategorySplits(transactions),
+    [transactions]
+  )
   const transactionsRef = useRef(transactions)
   transactionsRef.current = transactions
 
@@ -125,6 +139,27 @@ export function useCategoryWrites({
     )
   }
 
+  // The toast button "Aplicar a las N similares": guarded like every action
+  // of an offer, so an old click never overwrites a newer write.
+  const applyAction = (
+    id: string,
+    seq: number,
+    category: string,
+    others: number
+  ) => ({
+    label:
+      others === 1
+        ? 'Aplicar a la otra similar'
+        : `Aplicar a las ${others} similares`,
+    onClick: () => {
+      if (!holds(id, seq, category)) {
+        toast(STALE_APPLY)
+        return
+      }
+      void applyToSimilar(id, category, others)
+    },
+  })
+
   async function handlePickCategory(
     transaction: Transaction,
     category: string
@@ -173,21 +208,7 @@ export function useCategoryWrites({
             cancelButton: 'ml-0!',
           },
         }),
-      ...(others >= 1 && {
-        action: {
-          label:
-            others === 1
-              ? 'Aplicar a la otra similar'
-              : `Aplicar a las ${others} similares`,
-          onClick: () => {
-            if (!holds(id, seq, category)) {
-              toast(STALE_APPLY)
-              return
-            }
-            void applyToSimilar(id, category, others)
-          },
-        },
-      }),
+      ...(others >= 1 && { action: applyAction(id, seq, category, others) }),
       ...(onRestoreCategories && {
         cancel: {
           label: 'Deshacer',
@@ -266,5 +287,68 @@ export function useCategoryWrites({
       }
     : undefined
 
-  return { onCategorize }
+  // After the edit dialog saved `category` on this row alone: when its similar
+  // rows are now in other categories, shows the save's toast with
+  // "Aplicar a las N similares". False when there is nothing to offer (the
+  // caller shows its own toast). No Deshacer: restoreCategories puts back only
+  // category and confidence, not the name or tags the same save may have
+  // changed.
+  const offerAfterEdit = (
+    edited: Transaction,
+    category: string | null,
+    message: string
+  ) => {
+    const id = edited.id
+    const previousCategory = edited.category
+    if (!onUpdateTransaction || category === null) return false
+    if (normalizeCategoryId(category) === normalizeCategoryId(previousCategory))
+      return false
+    // The store's rows: the props have not re-rendered after the await.
+    const rows = transactionStore.getState().transactions
+    const row = rows.find((tx) => tx.id === id)
+    if (!row || row.splitParentId) return false
+    const target = normalizeCategoryId(category)
+    const disagrees = findSimilarTransactions(rows, row).some(
+      (other) =>
+        other.id !== id &&
+        !other.isSplitParent &&
+        !isTransferCategory(normalizeCategoryId(other.category)) &&
+        normalizeCategoryId(other.category) !== target
+    )
+    if (!disagrees) return false
+    // The dialog's save is the newest write of the row.
+    const seq = start(id)
+    const others = countSimilarEditReach(rows, row, false) - 1
+    const split = findCategorySplits(rows).get(id)
+    const offer = toast.success(message, {
+      description: split
+        ? categorySplitLine(split, transactionLabel(row))
+        : undefined,
+      duration: 8000,
+      action: applyAction(id, seq, category, others),
+    })
+    offers.current.set(id, offer)
+    return true
+  }
+  // The toast of a dialog save: the offer when the category changed on this
+  // row alone (not when the household "forget" owns the toast's action), else
+  // the plain message.
+  const toastEdit = (
+    edited: Transaction,
+    draft: { category: string | null; applyScope: string },
+    message: string,
+    options?: ExternalToast
+  ) => {
+    const offered =
+      draft.applyScope === 'single' &&
+      !options &&
+      offerAfterEdit(edited, draft.category, message)
+    if (!offered) toast.success(message, options)
+  }
+  // A dialog save is the newest write of the row: withdraws its old toast.
+  const supersede = (id: string) => {
+    start(id)
+  }
+
+  return { onCategorize, categorySplits, toastEdit, supersede }
 }

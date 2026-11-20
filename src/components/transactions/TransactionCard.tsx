@@ -23,9 +23,11 @@ import { countsTowardTotals } from '../../services/spending/spending-rules'
 import {
   getAccountIcon,
   getAccountLabel,
+  CategorySplitMarker,
   ReviewMarker,
 } from './transaction-row-parts'
 import type { TransactionRowProps } from './TransactionRow'
+import { categorySplitLine } from '../../services/descriptions/category-splits'
 
 // One transaction as a mobile card.
 export function TransactionCard({
@@ -42,6 +44,7 @@ export function TransactionCard({
   onUnsplit,
   onToggleHousehold,
   onCategorize,
+  categorySplit,
 }: TransactionRowProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const displayDescription = transactionLabel(transaction)
@@ -170,6 +173,11 @@ export function TransactionCard({
             <CategoryBadge
               categoryId={transaction.category || Category.Uncategorized}
               size="sm"
+            />
+          )}
+          {categorySplit && (
+            <CategorySplitMarker
+              line={categorySplitLine(categorySplit, displayDescription)}
             />
           )}
           {needsCategoryReview(transaction) && <ReviewMarker />}
