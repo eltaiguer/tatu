@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Dashboard } from './Dashboard'
 import type { Transaction } from '../models'
@@ -939,8 +939,11 @@ describe('Dashboard', () => {
           onNavigateToImport={onImport}
         />
       )
-      vi.useRealTimers()
     }
+    // Keep the fake clock for the whole test: a re-render reads it again.
+    afterEach(() => {
+      vi.useRealTimers()
+    })
 
     // Card covers Jun–Sep; the USD account only Sep.
     const missingAugust = [
@@ -962,7 +965,7 @@ describe('Dashboard', () => {
       ])
 
       const line = screen.getByText(
-        'Comparaciones mes a mes: a partir de 3 meses completos (tenés 2)'
+        'Comparaciones mes a mes: a partir de 3 meses completos seguidos (tenés 2)'
       )
       expect(screen.queryByText(/Qué cambió/)).not.toBeInTheDocument()
       expect(
@@ -981,7 +984,7 @@ describe('Dashboard', () => {
 
       expect(
         screen.getByText(
-          'Comparaciones mes a mes: a partir de 3 meses completos (tenés 1)'
+          'Comparaciones mes a mes: a partir de 3 meses completos seguidos (tenés 1)'
         )
       ).toBeInTheDocument()
       expect(

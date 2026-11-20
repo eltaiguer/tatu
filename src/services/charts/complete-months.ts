@@ -41,8 +41,7 @@ function lastDay(key: string): number {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
-// The complete months between the first and the last month with data,
-// oldest first.
+// One month's coverage: which accounts span it and which don't.
 export interface MonthCoverage {
   month: string // 'YYYY-MM'
   complete: boolean // missing is empty AND month < currentMonth

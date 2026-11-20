@@ -28,7 +28,7 @@ export function ComparisonHint({
     <>
       <p className="text-small text-muted-foreground">
         Comparaciones mes a mes: a partir de {MIN_COMPLETE_MONTHS} meses
-        completos (tenés {completeInARow})
+        completos seguidos (tenés {completeInARow})
       </p>
       {gap && (
         <p className="text-small text-muted-foreground">
@@ -42,10 +42,15 @@ export function ComparisonHint({
               <button
                 type="button"
                 onClick={onImport}
-                className="cursor-pointer rounded-sm border-none bg-transparent p-0 font-semibold text-[var(--text)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline cursor-pointer rounded-sm border-none bg-transparent p-0 text-small text-muted-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Importar extracto
-                <span aria-hidden="true"> →</span>
+                <span
+                  aria-hidden="true"
+                  className="ml-1 font-semibold text-[var(--text)]"
+                >
+                  →
+                </span>
               </button>
             </>
           )}

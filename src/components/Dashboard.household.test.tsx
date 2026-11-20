@@ -130,7 +130,7 @@ describe('Dashboard: Todo / Hogar mode', () => {
     const expectHint = () => {
       expect(
         screen.getByText(
-          'Comparaciones mes a mes: a partir de 3 meses completos (tenés 2)'
+          'Comparaciones mes a mes: a partir de 3 meses completos seguidos (tenés 2)'
         )
       ).toBeInTheDocument()
       expect(

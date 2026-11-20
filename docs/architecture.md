@@ -524,7 +524,7 @@ its end.
   only complete months.
 - When "Qué cambió" can't compare (fewer than 3 complete months in a row),
   Resumen shows no card: the hero carries `ComparisonHint`, "Comparaciones
-  mes a mes: a partir de 3 meses completos (tenés N)", N being the run of
+  mes a mes: a partir de 3 meses completos seguidos (tenés N)", N being the run of
   complete months ending at the latest one. If a month next to that run (the
   one after it first, else the one before; with no complete month, the
   newest) is covered by some account while another has no rows in it, a
