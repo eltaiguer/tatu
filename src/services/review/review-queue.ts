@@ -18,7 +18,8 @@ export function toHome(
 }
 
 /**
- * The ids of `rows` for the review mode, biggest home-currency amount first.
+ * The ids of `rows` for the review mode: expenses first, then credits, each
+ * biggest home-currency amount first.
  * Ties go by date (newest first), then id. A snapshot: callers take it once.
  */
 export function buildReviewQueue(
@@ -30,6 +31,9 @@ export function buildReviewQueue(
     .map((tx) => ({ tx, home: toHome(tx, homeCurrency, fxRate) }))
     .sort(
       (a, b) =>
+        // Expenses first: the review is about where the money went, so a big
+        // uncategorized credit (a salary) waits behind the spend.
+        Number(a.tx.type === 'credit') - Number(b.tx.type === 'credit') ||
         b.home - a.home ||
         b.tx.date.getTime() - a.tx.date.getTime() ||
         (a.tx.id < b.tx.id ? -1 : a.tx.id > b.tx.id ? 1 : 0)

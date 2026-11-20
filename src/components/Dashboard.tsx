@@ -12,6 +12,7 @@ import {
   buildCategorySpendingConverted,
   buildCurrencySplit,
   spendByAccount,
+  uncategorizedIncome,
 } from '../services/charts/chart-data'
 import {
   buildDonutRows,
@@ -194,10 +195,11 @@ export function Dashboard({
     [rows, transactions, homeCurrency, fxRate, currentMonth]
   )
 
-  // Uncategorized expenses over every row, in both modes: an uncategorized
-  // row is rarely household, so the household cut would hide the to-do. The
-  // category list's own row, so the nudge's numbers equal the rows its link
-  // opens.
+  // Uncategorized rows over every row, in both modes: an uncategorized row is
+  // rarely household, so the household cut would hide the to-do. The expense
+  // part is the category list's own row; the counts (expenses + credits) equal
+  // the rows the nudge's link opens, and the amount is the expense part of
+  // them (the list's Gastos tile).
   const allRowsCategorySpending = useMemo(
     () =>
       householdMode
@@ -211,6 +213,11 @@ export function Dashboard({
         (row) => row.category === Category.Uncategorized
       ),
     [allRowsCategorySpending]
+  )
+
+  const uncategorizedCreditCount = useMemo(
+    () => uncategorizedIncome(transactions, homeCurrency, fxRate).count,
+    [transactions, homeCurrency, fxRate]
   )
 
   const totalExpenses = categoryData.reduce((s, c) => s + c.value, 0)
@@ -274,20 +281,24 @@ export function Dashboard({
   )
 
   // The nudge of the "¿A dónde se fue la plata?" section: Sin categoría, in
-  // both modes. It opens the rows without the household filter, so what it
-  // opens is what it counts.
-  const uncategorizedNudge = uncategorizedSpend && (
+  // both modes. It opens the rows without the household filter (and without a
+  // type: credits too), so the counts are the rows it opens; the amount is the
+  // expense part of them.
+  const uncategorizedExpenseCount = uncategorizedSpend?.count ?? 0
+  const uncategorizedNudge = uncategorizedExpenseCount +
+    uncategorizedCreditCount >
+    0 && (
     <SpendNudge
       title="Sin categoría"
-      total={uncategorizedSpend.total}
-      count={uncategorizedSpend.count}
+      total={uncategorizedSpend?.total ?? 0}
+      count={uncategorizedExpenseCount}
+      incomeCount={uncategorizedCreditCount}
       homeCurrency={homeCurrency}
       filter={{
         categories: [Category.Uncategorized],
-        type: 'debit',
         reviewMode: true,
       }}
-      label="Ver los gastos sin categoría"
+      label="Ver los movimientos sin categoría"
       cta="Categorizalos →"
       onNavigateToTransactions={onNavigateToTransactions}
     />

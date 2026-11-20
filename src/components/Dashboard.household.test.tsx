@@ -440,7 +440,8 @@ describe('Dashboard: Todo / Hogar mode', () => {
 
   describe('Sin categoría in Hogar mode', () => {
     // Uncategorized rows with no choice are not household: March 30 + Feb
-    // 800 UYU (= 20) -> 50 all time; households stay 190.
+    // 800 UYU (= 20) -> 50 all time (+ one uncategorized credit, counted but
+    // not in the amount); households stay 190.
     const withUncategorized = () => [
       ...marchRows(),
       tx({
@@ -455,9 +456,15 @@ describe('Dashboard: Todo / Hogar mode', () => {
         category: Category.Uncategorized,
         date: new Date('2026-02-10T00:00:00.000Z'),
       }),
+      tx({
+        description: 'Reintegro Kiosco',
+        amount: 25,
+        type: 'credit',
+        category: Category.Uncategorized,
+      }),
     ]
     const nudge = () =>
-      screen.getByRole('button', { name: 'Ver los gastos sin categoría' })
+      screen.getByRole('button', { name: /Ver los movimientos sin categoría/ })
 
     function setup(rows = withUncategorized(), initialHousehold = true) {
       const go = vi.fn()
@@ -482,17 +489,18 @@ describe('Dashboard: Todo / Hogar mode', () => {
       setup()
       const hogar = nudge().textContent
       expect(nudge()).toHaveTextContent('US$ 50,00')
-      expect(nudge()).toHaveTextContent('2 gastos · todo el historial')
+      expect(nudge()).toHaveTextContent(
+        '2 gastos (US$ 50,00) y 1 ingreso · todo el historial'
+      )
       fireEvent.click(screen.getByRole('radio', { name: 'Todo' }))
       expect(nudge().textContent).toBe(hogar)
     })
 
-    it('opens the uncategorized expenses without the household filter', () => {
+    it('opens the uncategorized rows without the household filter', () => {
       const go = setup()
       fireEvent.click(nudge())
       expect(go).toHaveBeenCalledWith({
         categories: [Category.Uncategorized],
-        type: 'debit',
         reviewMode: true,
       })
     })
@@ -500,7 +508,9 @@ describe('Dashboard: Todo / Hogar mode', () => {
     it('has no nudge when nothing is uncategorized', () => {
       setup(marchRows())
       expect(
-        screen.queryByRole('button', { name: 'Ver los gastos sin categoría' })
+        screen.queryByRole('button', {
+          name: /Ver los movimientos sin categoría/,
+        })
       ).not.toBeInTheDocument()
     })
 
@@ -630,7 +640,9 @@ describe('Dashboard: Todo / Hogar mode', () => {
         screen.getByText('Todavía no hay gastos del hogar')
       ).toBeInTheDocument()
       expect(
-        screen.getByRole('button', { name: 'Ver los gastos sin categoría' })
+        screen.getByRole('button', {
+          name: /Ver los movimientos sin categoría/,
+        })
       ).toHaveTextContent('US$ 30,00')
     })
 

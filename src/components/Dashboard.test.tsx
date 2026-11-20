@@ -716,9 +716,152 @@ describe('Dashboard', () => {
     )
 
     expect(
-      screen.queryByRole('button', { name: 'Ver los gastos sin categoría' })
+      screen.queryByRole('button', {
+        name: /Ver los movimientos sin categoría/,
+      })
     ).not.toBeInTheDocument()
     expect(screen.queryByText('Sin categoría')).not.toBeInTheDocument()
+  })
+
+  describe('uncategorized credits (#278)', () => {
+    const uncategorizedRows = [
+      makeTransaction({ id: 'd1', amount: 10, currency: 'USD' }),
+      makeTransaction({ id: 'd2', amount: 20, currency: 'USD' }),
+      makeTransaction({
+        id: 'c1',
+        amount: 12,
+        currency: 'USD',
+        type: 'credit',
+      }),
+    ]
+
+    it('counts expenses and income in the nudge and opens both', () => {
+      const go = vi.fn()
+      render(
+        <Dashboard
+          transactions={uncategorizedRows}
+          homeCurrency="USD"
+          fxRate={40}
+          onNavigateToTransactions={go}
+        />
+      )
+
+      const nudge = screen.getByRole('button', {
+        name: /Ver los movimientos sin categoría/,
+      })
+      expect(nudge).toHaveAccessibleName(
+        'Ver los movimientos sin categoría: 2 gastos (US$ 30,00) y 1 ingreso'
+      )
+      expect(nudge).toHaveTextContent(
+        '2 gastos (US$ 30,00) y 1 ingreso · todo el historial'
+      )
+      fireEvent.click(nudge)
+      expect(go).toHaveBeenLastCalledWith({
+        categories: [Category.Uncategorized],
+        reviewMode: true,
+      })
+    })
+
+    it('uses plural income and a singular expense', () => {
+      render(
+        <Dashboard
+          transactions={[
+            uncategorizedRows[0],
+            makeTransaction({ id: 'c2', type: 'credit', currency: 'USD' }),
+            makeTransaction({ id: 'c3', type: 'credit', currency: 'USD' }),
+          ]}
+          homeCurrency="USD"
+          fxRate={40}
+          onNavigateToTransactions={() => {}}
+        />
+      )
+      expect(
+        screen.getByRole('button', {
+          name: /Ver los movimientos sin categoría/,
+        })
+      ).toHaveTextContent(
+        '1 gasto (US$ 10,00) y 2 ingresos · todo el historial'
+      )
+    })
+
+    it('shows the nudge for credits alone, without a zero amount', () => {
+      render(
+        <Dashboard
+          transactions={[
+            makeTransaction({ id: 'c1', type: 'credit', currency: 'USD' }),
+            makeTransaction({ id: 'c2', type: 'credit', currency: 'USD' }),
+            makeTransaction({ id: 'c3', type: 'credit', currency: 'USD' }),
+          ]}
+          homeCurrency="USD"
+          fxRate={40}
+          onNavigateToTransactions={() => {}}
+        />
+      )
+      const nudge = screen.getByRole('button', {
+        name: /Ver los movimientos sin categoría/,
+      })
+      expect(nudge).toHaveTextContent('3 ingresos · todo el historial')
+      expect(nudge).not.toHaveTextContent('US$ 0,00')
+    })
+
+    it('says in the hero how much of the income is uncategorized', () => {
+      render(
+        <Dashboard
+          transactions={uncategorizedRows}
+          homeCurrency="USD"
+          fxRate={40}
+          onNavigateToTransactions={() => {}}
+        />
+      )
+      const income = screen.getByRole('button', {
+        name: 'Ver los ingresos del mes, incluye US$ 12,00 sin categoría',
+      })
+      expect(income).toHaveTextContent('incluye US$ 12,00 sin categoría')
+    })
+
+    it('leaves the caption out when the amount rounds to zero cents', () => {
+      render(
+        <Dashboard
+          transactions={[
+            makeTransaction({
+              id: 'c1',
+              type: 'credit',
+              currency: 'USD',
+              amount: 0.004,
+            }),
+          ]}
+          homeCurrency="USD"
+          fxRate={40}
+          onNavigateToTransactions={() => {}}
+        />
+      )
+      const income = screen.getByRole('button', {
+        name: /Ver los ingresos del mes/,
+      })
+      expect(income).not.toHaveTextContent('incluye')
+      expect(income).toHaveAccessibleName('Ver los ingresos del mes')
+    })
+
+    it('leaves the hero caption out when no income is uncategorized', () => {
+      render(
+        <Dashboard
+          transactions={[
+            makeTransaction({
+              id: 'c1',
+              type: 'credit',
+              currency: 'USD',
+              category: Category.Income,
+            }),
+          ]}
+          homeCurrency="USD"
+          fxRate={40}
+          onNavigateToTransactions={() => {}}
+        />
+      )
+      expect(
+        screen.getByRole('button', { name: 'Ver los ingresos del mes' })
+      ).not.toHaveTextContent('sin categoría')
+    })
   })
 
   it('does not call a mostly-losing year "saving" because of one large inflow', () => {
@@ -1153,16 +1296,19 @@ describe('Dashboard', () => {
 
       expect(screen.queryByText('Categorías activas')).not.toBeInTheDocument()
       fireEvent.click(
-        screen.getByRole('button', { name: 'Ver los gastos sin categoría' })
+        screen.getByRole('button', {
+          name: /Ver los movimientos sin categoría/,
+        })
       )
       expect(go).toHaveBeenLastCalledWith({
         categories: ['uncategorized'],
-        type: 'debit',
         reviewMode: true,
       })
       expect(
-        screen.getByText(/4 gastos · todo el historial/)
-      ).toBeInTheDocument()
+        screen.getByRole('button', {
+          name: /Ver los movimientos sin categoría/,
+        })
+      ).toHaveTextContent('4 gastos (US$ 80,00) · todo el historial')
     })
 
     it('labels each account card with the period of its own expenses', () => {

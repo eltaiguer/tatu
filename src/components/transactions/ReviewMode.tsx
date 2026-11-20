@@ -34,6 +34,22 @@ export interface ReviewModeProps {
 }
 
 /** The table's way into the mode (over the A revisar rows). */
+// "US$ 110,00 ahora tiene categoría" for spend alone; credits get their own
+// figure so the expense one equals the nudge's amount.
+function categorizedLine(
+  expense: number,
+  income: number,
+  home: Currency
+): string {
+  if (income <= 0) {
+    return `${formatCurrency(expense, home)} ahora tiene categoría`
+  }
+  if (expense <= 0) {
+    return `${formatCurrency(income, home)} en ingresos ahora tienen categoría`
+  }
+  return `${formatCurrency(expense, home)} en gastos y ${formatCurrency(income, home)} en ingresos ahora tienen categoría`
+}
+
 export function ReviewModeButton({
   onClick,
   autoFocus,
@@ -210,13 +226,19 @@ export function ReviewMode({
     const live = byId.get(id)
     return !!live && skipped.has(id) && needsCategoryReview(live)
   }).length
-  // Money that now has a category: the queue's rows, full precision.
-  const categorized = queue.reduce((sum, id) => {
-    const live = byId.get(id)
-    return live && !needsCategoryReview(live)
-      ? sum + toHome(live, home, fxRate)
-      : sum
-  }, 0)
+  // Money that now has a category: the queue's rows, full precision, expenses
+  // and credits apart (the queue holds both; the nudge's amount is spend).
+  const categorized = queue.reduce(
+    (sum, id) => {
+      const live = byId.get(id)
+      if (!live || needsCategoryReview(live)) return sum
+      const amount = toHome(live, home, fxRate)
+      return live.type === 'credit'
+        ? { ...sum, income: sum.income + amount }
+        : { ...sum, expense: sum.expense + amount }
+    },
+    { expense: 0, income: 0 }
+  )
 
   return (
     <div
@@ -401,7 +423,7 @@ function Done({
   titleRef: React.RefObject<HTMLHeadingElement>
   empty: boolean
   skipped: number
-  categorized: number
+  categorized: { expense: number; income: number }
   home: Currency
   onReviewSkipped: () => void
   onGoToOverview?: () => void
@@ -435,9 +457,9 @@ function Done({
             : `Saltaste ${skipped} · siguen en la lista`}
         </p>
       )}
-      {!empty && categorized > 0 && (
+      {!empty && categorized.expense + categorized.income > 0 && (
         <p className="font-mono text-sm tabular-nums">
-          {formatCurrency(categorized, home)} ahora tiene categoría
+          {categorizedLine(categorized.expense, categorized.income, home)}
         </p>
       )}
       <div className="flex flex-wrap gap-2">

@@ -8,11 +8,13 @@ import {
   summarizeSavings,
   niceTicks,
   buildMerchantSpendingConverted,
+  uncategorizedIncome,
 } from './chart-data'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
 import { parseSantanderDate } from '../parsers/utils'
 import { toMonthKey } from '../../utils/date-utils'
+import { replaceCustomCategories } from '../categories/category-store'
 
 function makeTransaction(
   id: string,
@@ -173,6 +175,99 @@ describe('chart-data multicurrency converting selectors', () => {
       const result = buildMonthlyTrendsConverted(txs, 'USD', RATE)
       expect(result[0].income).toBe(65)
       expect(result[0].expense).toBe(0)
+    })
+  })
+
+  describe('uncategorizedIncome', () => {
+    const rows = [
+      makeTx('usd', { type: 'credit', amount: 10, currency: 'USD' }),
+      makeTx('uyu', { type: 'credit', amount: 405, currency: 'UYU' }),
+      makeTx('empty', {
+        type: 'credit',
+        amount: 5,
+        currency: 'USD',
+        category: '',
+      }),
+      makeTx('debit', {
+        type: 'debit',
+        amount: 99,
+        category: Category.Uncategorized,
+      }),
+      makeTx('groceries', {
+        type: 'credit',
+        amount: 77,
+        category: Category.Groceries,
+      }),
+      makeTx('parent', { type: 'credit', amount: 66, isSplitParent: true }),
+    ]
+
+    it('sums and counts uncategorized credits in a USD home', () => {
+      expect(uncategorizedIncome(rows, 'USD', 40.5)).toEqual({
+        total: 25,
+        count: 3,
+      })
+    })
+
+    it('converts into a UYU home', () => {
+      expect(uncategorizedIncome(rows, 'UYU', 40.5)).toEqual({
+        total: 1012.5,
+        count: 3,
+      })
+    })
+
+    it('skips credits when Sin categoría is flagged ignored in totals', () => {
+      replaceCustomCategories([
+        {
+          id: Category.Uncategorized,
+          label: 'Sin categoría',
+          color: '#999999',
+          isIgnored: true,
+        },
+      ])
+      try {
+        expect(uncategorizedIncome(rows, 'USD', 40.5)).toEqual({
+          total: 0,
+          count: 0,
+        })
+      } finally {
+        replaceCustomCategories([])
+      }
+    })
+
+    it('is empty when there are no uncategorized credits', () => {
+      expect(uncategorizedIncome([rows[3], rows[4]], 'USD', 40.5)).toEqual({
+        total: 0,
+        count: 0,
+      })
+    })
+  })
+
+  describe('buildCurrentMonthSummary uncategorized income', () => {
+    it('counts only the reference month and zero when empty', () => {
+      const txs = [
+        makeTx('jan', {
+          date: new Date('2025-01-15T00:00:00.000Z'),
+          type: 'credit',
+          amount: 12,
+        }),
+        makeTx('dec', {
+          date: new Date('2024-12-15T00:00:00.000Z'),
+          type: 'credit',
+          amount: 30,
+        }),
+        makeTx('jan-groceries', {
+          date: new Date('2025-01-16T00:00:00.000Z'),
+          type: 'credit',
+          amount: 50,
+          category: Category.Groceries,
+        }),
+      ]
+      const result = buildCurrentMonthSummary(txs, 'USD', RATE)
+      expect(result.uncategorizedIncome).toBe(12)
+      expect(result.income).toBe(62)
+      expect(
+        buildCurrentMonthSummary([], 'USD', RATE).uncategorizedIncome
+      ).toBe(0)
     })
   })
 
