@@ -133,3 +133,6 @@ future ones) that does not come up for household spending.
   and step 6's "group Ver gastos, house icon" (now a visible "Ver:" label). One
   vocabulary: "Hogar" for the flag and the mode, "Hogar: Sí" / "Hogar: No" for
   its values, "No es del hogar" for the complement; no "casita".
+- Since #284 Transacciones' Hogar filter is one labelled toggle chip, "Hogar"
+  (pressed = `?hogar=si`, unpressed = every row): only its presentation
+  changed; the two values, the URL and `filterTransactions` did not.

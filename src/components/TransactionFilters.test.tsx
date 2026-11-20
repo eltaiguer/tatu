@@ -257,7 +257,7 @@ describe('TransactionFilters', () => {
   })
 
   describe('the first option of each group (#265)', () => {
-    it('reads Ambos for the type, Todo for Hogar and Ambas for the currency', () => {
+    it('reads Ambos for the type and Ambas for the currency', () => {
       renderFilters()
       const first = (group: string) =>
         within(screen.getByRole('radiogroup', { name: group }))
@@ -268,28 +268,33 @@ describe('TransactionFilters', () => {
         'Ingresos',
         'Gastos',
       ])
-      expect(first('Hogar')).toEqual(['Todo', 'Hogar'])
       expect(first('Moneda')).toEqual(['Ambas', '$U', 'US$'])
     })
   })
 
   describe('Hogar', () => {
-    it('is a group of Todo / Hogar that sets the filter', () => {
-      const props = renderFilters()
-      const group = screen.getByRole('radiogroup', { name: 'Hogar' })
-      expect(
-        within(group)
-          .getAllByRole('radio')
-          .map((r) => r.getAttribute('aria-label') ?? r.textContent)
-      ).toEqual(['Todo', 'Hogar'])
+    const chip = () => screen.getByRole('button', { name: 'Filtro Hogar' })
 
-      fireEvent.click(segment('Hogar', 'Hogar'))
+    it('is one toggle chip, pressed when the filter is on', () => {
+      renderFilters()
+      expect(chip()).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.queryByRole('radiogroup', { name: 'Hogar' })).toBeNull()
+    })
+
+    it('reads pressed under the household filter', () => {
+      renderFilters({ household: 'household' })
+      expect(chip()).toHaveAttribute('aria-pressed', 'true')
+    })
+
+    it('sets the filter when clicked', () => {
+      const props = renderFilters()
+      fireEvent.click(chip())
       expect(props.onChange).toHaveBeenCalledWith({ household: 'household' })
     })
 
     it('puts the type back to Ambos when income would leave nothing', () => {
       const props = renderFilters({ type: 'credit' })
-      fireEvent.click(segment('Hogar', 'Hogar'))
+      fireEvent.click(chip())
       expect(props.onChange).toHaveBeenCalledWith({
         household: 'household',
         type: 'all',
@@ -313,16 +318,21 @@ describe('TransactionFilters', () => {
 
     it('keeps the type when going back to Todo', () => {
       const props = renderFilters({ type: 'credit', household: 'household' })
-      fireEvent.click(segment('Hogar', 'Todo'))
+      fireEvent.click(chip())
       expect(props.onChange).toHaveBeenCalledWith({ household: 'all' })
     })
 
-    it('shows a chip that clears it', () => {
+    it('has no removable chip: the pressed chip is the state', () => {
+      renderFilters({ household: 'household' })
+      expect(
+        screen.queryByRole('button', { name: 'Quitar filtro Hogar' })
+      ).toBeNull()
+    })
+
+    it('offers Limpiar todo when Hogar is the only filter', () => {
       const props = renderFilters({ household: 'household' })
-      fireEvent.click(
-        screen.getByRole('button', { name: 'Quitar filtro Hogar' })
-      )
-      expect(props.onChange).toHaveBeenCalledWith({ household: 'all' })
+      fireEvent.click(screen.getByRole('button', { name: 'Limpiar todo' }))
+      expect(props.onClearAll).toHaveBeenCalled()
     })
   })
 

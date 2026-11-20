@@ -208,12 +208,6 @@ export function TransactionFilters({
       onClear: () => onChange({ type: 'all' }),
     })
   }
-  if (household !== 'all') {
-    chips.push({
-      label: 'Hogar',
-      onClear: () => onChange({ household: 'all' }),
-    })
-  }
   if (review) {
     chips.push({
       label: 'A revisar',
@@ -280,31 +274,32 @@ export function TransactionFilters({
           aria-label="Tipo de transacción"
         />
 
-        {/* Household filter. Income has no household answer, so the two never
-            combine: the latest pick wins (here and in the type toggle). */}
-        <div className="inline-flex items-center gap-[6px]">
-          <House
-            size={14}
-            aria-hidden="true"
-            className="shrink-0 text-[var(--text-muted)]"
-          />
-          <SegmentedToggle
-            options={[
-              { value: 'all' as const, label: 'Todo' },
-              { value: 'household' as const, label: 'Hogar' },
-            ]}
-            value={household}
-            onChange={(next) =>
-              onChange(
-                next !== 'all' && type === 'credit'
-                  ? { household: next, type: 'all' }
-                  : { household: next }
-              )
-            }
-            size="sm"
-            aria-label="Hogar"
-          />
-        </div>
+        {/* Household filter: one toggle chip, the pressed state is the filter.
+            Income has no household answer, so the two never combine: the
+            latest pick wins (here and in the type toggle). */}
+        <button
+          type="button"
+          aria-pressed={household !== 'all'}
+          aria-label="Filtro Hogar"
+          onClick={() =>
+            onChange(
+              household !== 'all'
+                ? { household: 'all' }
+                : type === 'credit'
+                  ? { household: 'household', type: 'all' }
+                  : { household: 'household' }
+            )
+          }
+          className={cn(
+            'bg-input-background focus-visible:ring-ring/50 inline-flex h-9 items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]',
+            household !== 'all'
+              ? 'border-[var(--brand)] text-[var(--brand-text,var(--brand))]'
+              : 'border-input focus-visible:border-ring'
+          )}
+        >
+          <House size={14} aria-hidden="true" />
+          Hogar
+        </button>
 
         {/* Currency filter */}
         <SegmentedToggle
@@ -370,7 +365,7 @@ export function TransactionFilters({
       )}
 
       {/* Active filter chips */}
-      {chips.length > 0 && (
+      {(chips.length > 0 || household !== 'all') && (
         <div className="flex flex-wrap items-center gap-[8px]">
           {chips.map((chip, i) => (
             <span
@@ -387,7 +382,7 @@ export function TransactionFilters({
               </button>
             </span>
           ))}
-          {hasActiveFilters && chips.length > 0 && (
+          {hasActiveFilters && (chips.length > 0 || household !== 'all') && (
             <button
               onClick={onClearAll}
               className="cursor-pointer border-none [background:none] px-[4px] py-0 text-[13px] font-[500] text-[var(--brand)]"

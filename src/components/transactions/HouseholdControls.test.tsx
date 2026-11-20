@@ -948,20 +948,15 @@ describe('the house shows Hogar or No (#265)', () => {
     tx('Sueldo', { type: 'credit', category: 'income' }),
     tx('Misterio', { category: 'uncategorized' }),
   ]
-  const pick = (option: string) =>
-    fireEvent.click(
-      within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
-        'radio',
-        { name: option }
-      )
-    )
+  const chip = () => screen.getByRole('button', { name: 'Filtro Hogar' })
+  const pick = () => fireEvent.click(chip())
   const listed = (description: string) =>
     screen.queryAllByText(description, { selector: 'td *, td' }).length > 0
 
   it('Hogar shows only household expenses and writes ?hogar=si', () => {
     const urls: string[] = []
     seed(rows(), (search) => urls.push(search))
-    pick('Hogar')
+    pick()
 
     expect(listed('Devoto')).toBe(true)
     expect(listed('Cena')).toBe(false)
@@ -970,14 +965,16 @@ describe('the house shows Hogar or No (#265)', () => {
     expect(urls[urls.length - 1]).toBe('hogar=si&periodo=todo')
   })
 
-  it('the filter offers Todo · Hogar only', () => {
-    seed(rows())
-    const group = screen.getByRole('radiogroup', { name: 'Hogar' })
-    expect(
-      within(group)
-        .getAllByRole('radio')
-        .map((r) => r.getAttribute('aria-label') ?? r.textContent)
-    ).toEqual(['Todo', 'Hogar'])
+  it('the filter is one toggle chip', () => {
+    const urls: string[] = []
+    seed(rows(), (search) => urls.push(search))
+    expect(chip()).toHaveAttribute('aria-pressed', 'false')
+    pick()
+    expect(chip()).toHaveAttribute('aria-pressed', 'true')
+    expect(urls[urls.length - 1]).toContain('hogar=si')
+    pick()
+    expect(chip()).toHaveAttribute('aria-pressed', 'false')
+    expect(urls[urls.length - 1]).not.toContain('hogar=si')
   })
 
   it('picking Hogar while Ingresos is chosen goes back to Ambos', () => {
@@ -988,7 +985,7 @@ describe('the house shows Hogar or No (#265)', () => {
       ).getByRole('radio', { name: 'Ingresos' })
     )
     expect(listed('Sueldo')).toBe(true)
-    pick('Hogar')
+    pick()
 
     expect(
       within(
@@ -1000,39 +997,29 @@ describe('the house shows Hogar or No (#265)', () => {
 
   it('picking Ingresos while Hogar is on goes back to Todo in Hogar', () => {
     seed(rows())
-    pick('Hogar')
+    pick()
     fireEvent.click(
       within(
         screen.getByRole('radiogroup', { name: 'Tipo de transacción' })
       ).getByRole('radio', { name: 'Ingresos' })
     )
 
-    expect(
-      within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
-        'radio',
-        { name: 'Todo' }
-      )
-    ).toBeChecked()
+    expect(chip()).toHaveAttribute('aria-pressed', 'false')
     expect(listed('Sueldo')).toBe(true)
   })
 
   it('Limpiar todo brings Hogar back to Todo', () => {
     seed(rows())
-    pick('Hogar')
+    pick()
     fireEvent.click(screen.getByRole('button', { name: 'Limpiar todo' }))
 
-    expect(
-      within(screen.getByRole('radiogroup', { name: 'Hogar' })).getByRole(
-        'radio',
-        { name: 'Todo' }
-      )
-    ).toBeChecked()
+    expect(chip()).toHaveAttribute('aria-pressed', 'false')
     expect(listed('Cena')).toBe(true)
   })
 
   it("flipping a row's house off removes it from the list", async () => {
     seed(rows())
-    pick('Hogar')
+    pick()
     expect(listed('Devoto')).toBe(true)
 
     await act(async () => {
