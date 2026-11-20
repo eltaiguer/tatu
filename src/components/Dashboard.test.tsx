@@ -1244,6 +1244,19 @@ describe('the rate and home currency under the hero (#276)', () => {
     expect(onSetHomeCurrency).toHaveBeenCalledWith('UYU')
   })
 
+  it('draws no empty actions box without a mode handler', () => {
+    render(
+      <Dashboard
+        transactions={[makeTransaction()]}
+        homeCurrency="USD"
+        fxRate={40.5}
+      />
+    )
+
+    const header = screen.getByRole('heading', { level: 1 }).closest('header')!
+    expect(header.children).toHaveLength(1)
+  })
+
   it('drops the old "Combina…" sentence', () => {
     renderWithSetters()
 
@@ -1259,7 +1272,12 @@ describe('the rate and home currency under the hero (#276)', () => {
       />
     )
 
-    expect(screen.getByText('1 US$ = $U 40,50 (manual)')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        (_, el) => el?.textContent === '1 US$ = $U 40,50 (manual)',
+        { selector: 'span' }
+      )
+    ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /cambiar/ })).toBeNull()
     expect(screen.queryByRole('radiogroup', { name: 'Moneda principal' })).toBe(
       null

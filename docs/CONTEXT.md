@@ -109,7 +109,6 @@ Real strings from `src/`:
 | "La transacción ya no existe. Recargá para ver el estado actual." | "Recarga para ver…"                             | `transaction-mutations.ts` |
 | "Tu sesión terminó. Iniciá sesión de nuevo para guardar cambios." | "Inicia sesión…"                                | `repository.ts`            |
 | "Seleccioná la cuenta o tarjeta que querés exportar"              | "Selecciona la cuenta… que quieres exportar"    | `ImportCSV.tsx`            |
-| "Tipo de cambio que ingresaste vos · editar"                      | "…que ingresaste tú…"                           | `FxChip.tsx`               |
 
 With an enclitic pronoun the stress moves and the accent goes away:
 "seleccionalo" (`Onboarding.tsx`), not "seleccionálo" or "selecciónalo".

@@ -112,7 +112,10 @@ describe('Dashboard: Todo / Hogar mode', () => {
     render(<Harness transactions={marchRows()} initialHousehold />)
 
     const hero = screen.getByRole('heading', { name: /Gastos del hogar/ })
-    const rate = screen.getByText('1 US$ = $U 40,00 (manual)')
+    const rate = screen.getByText(
+      (_, el) => el?.textContent === '1 US$ = $U 40,00 (manual)',
+      { selector: 'span' }
+    )
     expect(
       hero.compareDocumentPosition(rate) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()

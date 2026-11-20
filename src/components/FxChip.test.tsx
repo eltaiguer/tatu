@@ -39,7 +39,7 @@ describe('FxChip', () => {
     expect(input).toHaveValue('40,5')
   })
 
-  it.each(['41abc', '1.234,5', 'abc', '0', ''])(
+  it.each(['41abc', '1.234,5', 'abc', '0', '', '1e3', '0x29', '.5'])(
     'does not save an invalid rate (%j)',
     (value) => {
       const { onSetFxRate, input } = openEditor()
@@ -61,10 +61,62 @@ describe('FxChip', () => {
     expect(screen.getByRole('button', { name: BUTTON })).toBeInTheDocument()
   })
 
+  it('does not call the setter when the draft is unchanged', () => {
+    const { onSetFxRate, input } = openEditor()
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onSetFxRate).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /cambiar/ })).toBeInTheDocument()
+  })
+
+  it('keeps the editor open and marks it invalid on Enter with a bad draft', () => {
+    const { onSetFxRate, input } = openEditor()
+
+    fireEvent.change(input, { target: { value: 'abc' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onSetFxRate).not.toHaveBeenCalled()
+    const still = screen.getByRole('textbox', { name: 'Tipo de cambio' })
+    expect(still).toHaveAttribute('aria-invalid', 'true')
+
+    fireEvent.change(still, { target: { value: '41' } })
+    expect(still).not.toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('does not save when a blur follows Escape', () => {
+    const { onSetFxRate, input } = openEditor()
+
+    fireEvent.change(input, { target: { value: '50' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    fireEvent.blur(input)
+
+    expect(onSetFxRate).not.toHaveBeenCalled()
+  })
+
+  it('shows the number in the mono font', () => {
+    render(<FxChip fxRate={40.5} onSetFxRate={vi.fn()} />)
+
+    expect(screen.getByText('40,50')).toHaveClass('font-mono', 'tabular-nums')
+  })
+
+  it('has no title now that "(manual)" is visible', () => {
+    render(<FxChip fxRate={40.5} onSetFxRate={vi.fn()} />)
+
+    expect(screen.getByRole('button', { name: /cambiar/ })).not.toHaveAttribute(
+      'title'
+    )
+  })
+
   it('is read-only without a setter', () => {
     render(<FxChip fxRate={40.5} />)
 
-    expect(screen.getByText('1 US$ = $U 40,50 (manual)')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        (_, el) => el?.textContent === '1 US$ = $U 40,50 (manual)',
+        { selector: 'span' }
+      )
+    ).toBeInTheDocument()
     expect(screen.queryByRole('button')).toBeNull()
   })
 

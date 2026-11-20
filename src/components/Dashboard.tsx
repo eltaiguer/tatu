@@ -316,15 +316,12 @@ export function Dashboard({
         }
         actions={
           hasTransactions &&
-          !allIgnored && (
-            <>
-              {onHouseholdModeChange && (
-                <HouseholdModeToggle
-                  householdMode={householdMode}
-                  onChange={onHouseholdModeChange}
-                />
-              )}
-            </>
+          !allIgnored &&
+          onHouseholdModeChange && (
+            <HouseholdModeToggle
+              householdMode={householdMode}
+              onChange={onHouseholdModeChange}
+            />
           )
         }
       />
