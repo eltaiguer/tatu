@@ -1,7 +1,9 @@
+import { Category } from '../../models'
 import type { Currency, Transaction } from '../../models'
 import {
   countsTowardTotals,
   isCountedExpense,
+  isCountedIncome,
   sumCountedTotals,
 } from '../spending/spending-rules'
 import { groupByMerchant } from '../merchants/merchant-key'
@@ -33,6 +35,9 @@ export interface MonthSummary {
   net: number
   count: number
   split: { USD: number; UYU: number }
+  // The part of `income` whose category is still Sin categoría (home
+  // currency): the credits nobody has answered yet.
+  uncategorizedIncome: number
   monthLabel: string
   // True when the latest month with data is today's calendar month — only
   // then may the UI call it "este mes".
@@ -95,6 +100,24 @@ export function buildMonthlyTrendsConverted(
   })).sort((a, b) => a.month.localeCompare(b.month))
 }
 
+export function uncategorizedIncome(
+  transactions: Transaction[],
+  homeCurrency: Currency,
+  fxRate: number
+): { total: number; count: number } {
+  let total = 0
+  let count = 0
+  for (const tx of transactions) {
+    // The same predicates as the Transacciones list the nudge opens
+    // (isCountedIncome + the normalized id), so the count equals its rows.
+    if (!isCountedIncome(tx)) continue
+    if (normalizeCategoryId(tx.category) !== Category.Uncategorized) continue
+    total += convert(tx.amount, tx.currency, homeCurrency, fxRate)
+    count += 1
+  }
+  return { total, count }
+}
+
 export function buildCurrentMonthSummary(
   transactions: Transaction[],
   homeCurrency: Currency,
@@ -117,6 +140,7 @@ export function buildCurrentMonthSummary(
       net: 0,
       count: 0,
       split: { USD: 0, UYU: 0 },
+      uncategorizedIncome: 0,
       monthLabel: '',
       isCurrentMonth: false,
     }
@@ -155,6 +179,8 @@ export function buildCurrentMonthSummary(
     net,
     count: monthTxs.length,
     split,
+    uncategorizedIncome: uncategorizedIncome(monthTxs, homeCurrency, fxRate)
+      .total,
     monthLabel,
     isCurrentMonth,
     y,
