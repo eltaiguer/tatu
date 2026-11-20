@@ -13,7 +13,7 @@ import { getUserRename } from '../../utils/transaction-display'
 // Not pure in `tx` alone: live description overrides are read from the
 // description-overrides module (same as getDisplayDescription).
 
-const DIACRITICS = /[̀-ͯ]/g
+export const DIACRITICS = /[̀-ͯ]/g
 
 // Lowercase, accent-free, `*` as a separator ("MERPAGO*FOO" = "Merpago Foo"),
 // single spaces. Also how Insights compares a merchant name the model echoes.
@@ -193,7 +193,7 @@ export function rawMerchantKey(description: string): string {
 }
 
 export function merchantKeyOf(tx: Transaction): string {
-  const rename = getUserRename(tx)
+  const rename = renameOf(tx)
   if (rename) return fold(rename)
   // A split part is prefilled with the parent's bank description, so it goes
   // through the same stripping as its unsplit siblings; a user-typed part
@@ -261,7 +261,7 @@ const UPPERCASE_WORDS = new Set(['sa', 'srl', 'sas'])
 // "Cafe-Bar"), and every letter of an initialism ("s.a" → "S.A"). A dotted
 // name ("ezequi.handy") only capitalizes its first letter.
 function capitalize(word: string): string {
-  const parts = word.split('.')
+  const parts = word.split('.').filter((part) => part !== '')
   if (parts.length > 1 && parts.every((part) => part.length === 1)) {
     return word.toUpperCase()
   }
@@ -302,6 +302,8 @@ function debitPayee(key: string): string | null {
 
 // Pure in the description (live renames are applied by transactionLabel, never
 // here), so each description is labelled once.
+// Bounded: cleared when full.
+const STATEMENT_LABELS_LIMIT = 20000
 const STATEMENT_LABELS = new Map<string, string>()
 
 // THE label of an un-renamed bank description (#274), read off its merchant
@@ -313,6 +315,7 @@ const STATEMENT_LABELS = new Map<string, string>()
 export function statementLabel(description: string): string {
   const cached = STATEMENT_LABELS.get(description)
   if (cached !== undefined) return cached
+  if (STATEMENT_LABELS.size >= STATEMENT_LABELS_LIMIT) STATEMENT_LABELS.clear()
   const key = rawMerchantKey(description)
   const label =
     counterpartyLabel(description, key) ??

@@ -484,6 +484,21 @@ describe('groupByMerchant', () => {
     ])
     expect(groups[1].label).toBe('SPOTIFY P3D110F721')
   })
+
+  it("keeps a row saved with its raw text as its name in its siblings' group (#274)", () => {
+    const raw = (city: string) =>
+      `COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, ${city} TARJ: ############9172`
+    const groups = groupByMerchant([
+      tx({ id: '1', description: raw('MONTEVIDEO') }),
+      tx({
+        id: '2',
+        description: raw('MONTEVIDEO'),
+        displayDescription: raw('MONTEVIDEO'),
+      }),
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0].label).toBe('Tintoreria Martinizi · Tarjeta de débito')
+  })
 })
 
 const DEBIT = (rest: string) =>
@@ -571,6 +586,11 @@ describe('statementLabel casing (#274 review)', () => {
       'Cafe-Bar La Esquina'
     )
     expect(statementLabel(DEBIT('MC DONALD S.A.'))).toBe('Mc Donald S.A')
+    expect(
+      statementLabel(
+        'COMPRA CON TARJETA DEBITO S.A. TIENDA, MONTEVIDEO TARJ: ####1'
+      )
+    ).toBe('S.A. Tienda')
     expect(statementLabel(DEBIT('PUESTO EZEQUI.HANDY'))).toBe(
       'Puesto Ezequi.handy'
     )

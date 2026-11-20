@@ -2,7 +2,11 @@ import type { HouseholdRules, Transaction } from '../../models'
 import { rowHouseholdView } from '../household/household'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { countsAsRow, countsTowardTotals } from '../spending/spending-rules'
-import { merchantKeyOf, transactionLabel } from '../merchants/merchant-key'
+import {
+  DIACRITICS,
+  merchantKeyOf,
+  transactionLabel,
+} from '../merchants/merchant-key'
 import { newestDate, toDateKey, todayAsUtcDate } from '../../utils/date-utils'
 import type { UrlFilterState, UrlPeriod } from './url-filters'
 
@@ -35,7 +39,7 @@ export interface TransactionFilterOptions {
 
 // Lowercase and accent-free, so "credito" finds a row labelled "crédito".
 function foldAccents(text: string): string {
-  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  return text.normalize('NFD').replace(DIACRITICS, '').toLowerCase()
 }
 
 function utcDay(y: number, m: number, d: number): Date {
