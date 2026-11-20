@@ -705,4 +705,35 @@ describe('workspace store', () => {
       })
     })
   })
+
+  it('leaves a row a rule categorized alone on load (#289)', async () => {
+    const repo = createInMemoryRepository({
+      userId: 'a',
+      transactions: [
+        {
+          ...tx('rule-row'),
+          description: 'DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA 5506',
+          source: 'bank_account',
+          category: 'personal',
+          categoryConfidence: 0.95,
+        },
+      ],
+      customPatterns: [
+        {
+          id: 'p1',
+          pattern: 'NRO FAMILIA',
+          matchType: 'contains',
+          category: 'personal',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    })
+
+    await signIn(repo)
+
+    expect(
+      transactionStore.getState().transactions.find((t) => t.id === 'rule-row')
+        ?.category
+    ).toBe('personal')
+  })
 })

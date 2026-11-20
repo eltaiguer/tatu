@@ -3,6 +3,7 @@ import {
   currentUserRules,
   emptyUserRules,
   hasUserRule,
+  isCategorizedByRule,
   rowsRuleWouldChange,
   countRowsEachRuleWouldChange,
 } from './user-rules'
@@ -292,5 +293,83 @@ describe('rowsRuleWouldChange — the rows a rule would change now', () => {
       )
     }
     expect([...counts.values()]).toEqual([1, 1])
+  })
+})
+
+describe('isCategorizedByRule', () => {
+  const rule = {
+    pattern: 'NRO FAMILIA',
+    matchType: 'contains' as const,
+    category: 'personal',
+  }
+  const row = (overrides: Partial<Transaction> = {}): Transaction => ({
+    id: 't',
+    date: new Date('2026-03-01T00:00:00.000Z'),
+    description: 'DEBITO NRO FAMILIA 5506',
+    amount: 10,
+    currency: 'UYU',
+    type: 'debit',
+    source: 'bank_account',
+    category: 'personal',
+    categoryConfidence: 0.95,
+    rawData: {},
+    ...overrides,
+  })
+
+  it('is true when the winning rule gives the row its category', () => {
+    expect(
+      isCategorizedByRule(row(), userRules({ customPatterns: [rule] }))
+    ).toBe(true)
+  })
+
+  it("is false when the category differs from the rule's", () => {
+    expect(
+      isCategorizedByRule(
+        row({ category: 'shopping' }),
+        userRules({ customPatterns: [rule] })
+      )
+    ).toBe(false)
+  })
+
+  it('is false when a categorized description override covers the row', () => {
+    const rules = userRules({
+      customPatterns: [rule],
+      descriptionOverrides: [
+        {
+          description: 'DEBITO NRO FAMILIA 5506',
+          friendlyDescription: 'Familia',
+          category: 'shopping',
+        },
+      ],
+    })
+    expect(isCategorizedByRule(row(), rules)).toBe(false)
+  })
+
+  it('is false when a merchant override covers the row', () => {
+    const rules = userRules({
+      customPatterns: [rule],
+      merchantOverrides: [
+        { merchantName: 'DEBITO NRO FAMILIA 5506', category: 'shopping' },
+      ],
+    })
+    expect(isCategorizedByRule(row(), rules)).toBe(false)
+  })
+
+  it('is false for a row without a category', () => {
+    expect(
+      isCategorizedByRule(
+        row({ category: undefined }),
+        userRules({ customPatterns: [rule] })
+      )
+    ).toBe(false)
+  })
+
+  it('compares a legacy rule id by its current id', () => {
+    expect(
+      isCategorizedByRule(
+        row({ category: 'groceries' }),
+        userRules({ customPatterns: [{ ...rule, category: 'food' }] })
+      )
+    ).toBe(true)
   })
 })

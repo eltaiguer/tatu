@@ -1,5 +1,6 @@
 import type { Transaction } from '../../models'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
+import { isCategorizedByRule, type UserRules } from '../categorizer/user-rules'
 import { calendarDaysBetween, utcDayNumber } from '../../utils/date-utils'
 
 const TRANSFER_DESCRIPTION_KEYWORDS = [
@@ -54,7 +55,10 @@ function hasExternalBeneficiary(description: string): boolean {
   return EXTERNAL_BENEFICIARY_RE.test(normalizeText(description))
 }
 
-function canAutoAssignTransfer(transaction: Transaction): boolean {
+function canAutoAssignTransfer(
+  transaction: Transaction,
+  isRuleOwned: (transaction: Transaction) => boolean
+): boolean {
   if (!isBankTransaction(transaction)) {
     return false
   }
@@ -72,7 +76,8 @@ function canAutoAssignTransfer(transaction: Transaction): boolean {
     return false
   }
 
-  return true
+  // A row the user's rule categorized (#289). Last: it is the dearest check.
+  return !isRuleOwned(transaction)
 }
 
 function markTransfer(
@@ -119,20 +124,34 @@ export function isTransferCategory(category: string | undefined): boolean {
  * The pass is idempotent and only updates auto-categorizable rows.
  */
 export function inferInternalTransfers(
-  transactions: Transaction[]
+  transactions: Transaction[],
+  rules: UserRules
 ): Transaction[] {
   const next = transactions.map((transaction) => ({ ...transaction }))
   const byId = new Map(next.map((transaction) => [transaction.id, transaction]))
   const pairedIds = new Set<string>()
+
+  // Rule ownership is judged on the row as it came in, once per row per call,
+  // and only for rows that pass the cheap gates.
+  const ruleOwned = new Map<string, boolean>()
+  const isRuleOwned = (transaction: Transaction): boolean => {
+    if (rules.customPatterns.length === 0) return false
+    let owned = ruleOwned.get(transaction.id)
+    if (owned === undefined) {
+      owned = isCategorizedByRule(transaction, rules)
+      ruleOwned.set(transaction.id, owned)
+    }
+    return owned
+  }
 
   next.forEach((transaction) => {
     // Only speculatively mark debit transactions in the first pass.
     // Credits are handled by the pairing pass so that unpaired incoming
     // transfers from external parties are not excluded from income.
     if (
-      canAutoAssignTransfer(transaction) &&
       transaction.type !== 'credit' &&
-      isTransferDescription(transaction.description)
+      isTransferDescription(transaction.description) &&
+      canAutoAssignTransfer(transaction, isRuleOwned)
     ) {
       if (hasExternalBeneficiary(transaction.description)) {
         byId.set(transaction.id, markExternalTransfer(transaction, 0.9))
@@ -263,11 +282,11 @@ export function inferInternalTransfers(
     const leftCurrent = byId.get(left.id)
     const rightCurrent = byId.get(bestMatch.id)
 
-    if (leftCurrent && canAutoAssignTransfer(leftCurrent)) {
+    if (leftCurrent && canAutoAssignTransfer(leftCurrent, isRuleOwned)) {
       byId.set(left.id, markTransfer(leftCurrent, confidence))
     }
 
-    if (rightCurrent && canAutoAssignTransfer(rightCurrent)) {
+    if (rightCurrent && canAutoAssignTransfer(rightCurrent, isRuleOwned)) {
       byId.set(bestMatch.id, markTransfer(rightCurrent, confidence))
     }
 

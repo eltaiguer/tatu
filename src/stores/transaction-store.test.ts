@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createTransactionStore } from './transaction-store'
 import type { Transaction } from '../models'
+import { replaceCustomPatterns } from '../services/categorizer/custom-patterns'
 
 function makeTransaction(id: string, overrides: Partial<Transaction> = {}) {
   const base: Transaction = {
@@ -191,5 +192,44 @@ describe('Transaction Store - setTransactions normalization', () => {
     const stored = store.getState().transactions[0]
     expect(stored.date).toBeInstanceOf(Date)
     expect(stored.date.toISOString()).toBe(date.toISOString())
+  })
+})
+
+describe('Transaction Store - rows a user rule categorized (#289)', () => {
+  const rule = {
+    id: 'r1',
+    pattern: 'NRO FAMILIA',
+    matchType: 'contains' as const,
+    category: 'personal',
+    createdAt: '',
+  }
+  const ruleRow = () =>
+    makeTransaction('rule-row', {
+      description: 'DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA 5506',
+      category: 'personal',
+      categoryConfidence: 0.95,
+    })
+
+  afterEach(() => {
+    replaceCustomPatterns([])
+  })
+
+  it('keeps the rule category through every write while the rule is listed, and loses it once the rule is gone', () => {
+    const store = createTransactionStore()
+    replaceCustomPatterns([rule])
+
+    store.getState().setTransactions([ruleRow(), makeTransaction('other')])
+    const get = () =>
+      store.getState().transactions.find((t) => t.id === 'rule-row')
+    expect(get()?.category).toBe('personal')
+
+    store.getState().updateTransaction('other', { amount: 11 })
+    expect(get()?.category).toBe('personal')
+
+    // No re-inference on the rule write itself: the next store write.
+    replaceCustomPatterns([])
+    expect(get()?.category).toBe('personal')
+    store.getState().updateTransaction('other', { amount: 12 })
+    expect(get()?.category).toBe('internal_transfer')
   })
 })

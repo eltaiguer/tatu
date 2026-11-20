@@ -87,7 +87,10 @@ import {
 import { currentHouseholdRules, resolveHousehold } from '../household/household'
 import { getDisplayDescription } from '../../utils/transaction-display'
 import { categorizeTransaction } from '../categorizer/transaction-categorizer'
-import { currentUserRules } from '../categorizer/user-rules'
+import {
+  currentUserRules,
+  rowsRuleWouldChange,
+} from '../categorizer/user-rules'
 import {
   getMerchantCategoryOverride,
   listMerchantCategoryOverrides,
@@ -2920,6 +2923,35 @@ describe('transaction-mutations — applying a new rule to past rows', () => {
     })
     expect(stored('c')?.category).toBe('groceries')
     expect(stored('part')?.category).toBe('restaurants')
+  })
+
+  it('leaves a transfer-looking row alone once its rule is applied, and offers no more rows (#289)', async () => {
+    const familia = {
+      id: 'fam',
+      pattern: 'NRO FAMILIA',
+      matchType: 'contains' as const,
+      category: 'personal',
+      createdAt: '',
+    }
+    replaceCustomPatterns([familia])
+    const repo = signedIn([
+      makeTransaction('fam-row', {
+        description: 'DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA 5506',
+        category: 'groceries',
+      }),
+    ])
+    expect(stored('fam-row')?.category).toBe('internal_transfer')
+
+    await applyPatternToPast(repo, familia)
+
+    expect(stored('fam-row')?.category).toBe('personal')
+    expect(
+      rowsRuleWouldChange(
+        transactionStore.getState().transactions,
+        familia,
+        currentUserRules()
+      )
+    ).toEqual([])
   })
 
   it('never overwrites a row the user categorized by hand', async () => {

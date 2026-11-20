@@ -87,6 +87,22 @@ export function isRenamedByUser(
     ?.friendlyDescription
 }
 
+// The custom pattern the categorizer would pick for this description, or null
+// when a categorized description override or a merchant override wins first
+// (categorizer steps 1-3).
+function winningRule(
+  description: string,
+  rules: UserRules
+): CustomPattern | null {
+  if (
+    findDescriptionOverride(rules.descriptionOverrides, description)?.category
+  )
+    return null
+  if (findMerchantCategoryOverride(rules.merchantOverrides, description))
+    return null
+  return firstMatchingPattern(description, rules.customPatterns) ?? null
+}
+
 // A row any rule may still change: not a split row, not categorized by hand,
 // and no categorized description override or merchant override wins over a
 // custom pattern (categorizer steps 1-3).
@@ -164,4 +180,24 @@ export function countRowsEachRuleWouldChange(
     }
   }
   return counts
+}
+
+/**
+ * True when the row carries the category its winning custom pattern gives it:
+ * the row has a category, no categorized description override or merchant
+ * override wins over the pattern, and the first matching pattern's category
+ * (normalized: a rule can hold a legacy id) is the row's. Such a row is the
+ * user's rule at work, so transfer inference leaves it alone (#289). Compares
+ * the category only, never the name.
+ */
+export function isCategorizedByRule(
+  tx: Transaction,
+  rules: UserRules
+): boolean {
+  if (!tx.category || rules.customPatterns.length === 0) return false
+  const winner = winningRule(tx.description, rules)
+  return (
+    !!winner &&
+    normalizeCategoryId(tx.category) === normalizeCategoryId(winner.category)
+  )
 }

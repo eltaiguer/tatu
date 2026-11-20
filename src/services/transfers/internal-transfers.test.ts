@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Transaction } from '../../models'
 import { Category } from '../../models'
+import { emptyUserRules } from '../categorizer/user-rules'
+import { userRules } from '../../test/user-rules'
+import { sumCountedTotals } from '../spending/spending-rules'
 import {
   inferInternalTransfers,
   isTransferCategory,
@@ -25,34 +28,40 @@ function makeTransaction(
 
 describe('internal transfer inference', () => {
   it('marks transfer-like bank descriptions as transfer', () => {
-    const result = inferInternalTransfers([
-      makeTransaction('tx-1', {
-        description: 'Pago tarjeta credito santander',
-        type: 'debit',
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('tx-1', {
+          description: 'Pago tarjeta credito santander',
+          type: 'debit',
+        }),
+      ],
+      emptyUserRules()
+    )
 
     expect(result[0].category).toBe(Category.InternalTransfer)
     expect((result[0].categoryConfidence ?? 0) > 0).toBe(true)
   })
 
   it('matches debit/credit pair with same amount as internal transfer', () => {
-    const result = inferInternalTransfers([
-      makeTransaction('debit-1', {
-        description: 'Transferencia enviada supernet ref 123456',
-        type: 'debit',
-        amount: 1500,
-        currency: 'UYU',
-        rawData: { referencia: '123456' },
-      }),
-      makeTransaction('credit-1', {
-        description: 'Transferencia recibida supernet ref 123456',
-        type: 'credit',
-        amount: 1500,
-        currency: 'UYU',
-        rawData: { referencia: '123456' },
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('debit-1', {
+          description: 'Transferencia enviada supernet ref 123456',
+          type: 'debit',
+          amount: 1500,
+          currency: 'UYU',
+          rawData: { referencia: '123456' },
+        }),
+        makeTransaction('credit-1', {
+          description: 'Transferencia recibida supernet ref 123456',
+          type: 'credit',
+          amount: 1500,
+          currency: 'UYU',
+          rawData: { referencia: '123456' },
+        }),
+      ],
+      emptyUserRules()
+    )
 
     expect(
       result.every((tx) => tx.category === Category.InternalTransfer)
@@ -60,13 +69,16 @@ describe('internal transfer inference', () => {
   })
 
   it('does not override explicit non-transfer category with confidence 1', () => {
-    const result = inferInternalTransfers([
-      makeTransaction('tx-1', {
-        description: 'Transferencia enviada a cuenta propia',
-        category: Category.Utilities,
-        categoryConfidence: 1,
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('tx-1', {
+          description: 'Transferencia enviada a cuenta propia',
+          category: Category.Utilities,
+          categoryConfidence: 1,
+        }),
+      ],
+      emptyUserRules()
+    )
 
     expect(result[0].category).toBe(Category.Utilities)
   })
@@ -79,52 +91,61 @@ describe('internal transfer inference', () => {
   })
 
   it('marks TRANSFERENCIA ENVIADA TRF. PLAZA- NAME as external transfer', () => {
-    const result = inferInternalTransfers([
-      makeTransaction('debit-ext', {
-        description:
-          'TRANSFERENCIA ENVIADA 797258TT55557944 TRF. PLAZA- FEDERICO GAZZANO',
-        type: 'debit',
-        amount: 476.81,
-        currency: 'UYU',
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('debit-ext', {
+          description:
+            'TRANSFERENCIA ENVIADA 797258TT55557944 TRF. PLAZA- FEDERICO GAZZANO',
+          type: 'debit',
+          amount: 476.81,
+          currency: 'UYU',
+        }),
+      ],
+      emptyUserRules()
+    )
 
     const debit = result.find((tx) => tx.id === 'debit-ext')!
     expect(debit.category).toBe(Category.ExternalTransfer)
   })
 
   it('marks TRANSF INSTANTANEA ENVIADA NRR: NAME as external transfer', () => {
-    const result = inferInternalTransfers([
-      makeTransaction('debit-ext', {
-        description:
-          'TRANSF INSTANTANEA ENVIADA 381239LE NRR:182500517 JOSE PREX',
-        type: 'debit',
-        amount: 250,
-        currency: 'UYU',
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('debit-ext', {
+          description:
+            'TRANSF INSTANTANEA ENVIADA 381239LE NRR:182500517 JOSE PREX',
+          type: 'debit',
+          amount: 250,
+          currency: 'UYU',
+        }),
+      ],
+      emptyUserRules()
+    )
 
     const debit = result.find((tx) => tx.id === 'debit-ext')!
     expect(debit.category).toBe(Category.ExternalTransfer)
   })
 
   it('still marks legitimate internal transfers as Transfer', () => {
-    const result = inferInternalTransfers([
-      makeTransaction('debit-int', {
-        description: 'Transferencia enviada supernet ref 999999',
-        type: 'debit',
-        amount: 1500,
-        currency: 'UYU',
-        rawData: { referencia: '999999' },
-      }),
-      makeTransaction('credit-int', {
-        description: 'Transferencia recibida supernet ref 999999',
-        type: 'credit',
-        amount: 1500,
-        currency: 'UYU',
-        rawData: { referencia: '999999' },
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('debit-int', {
+          description: 'Transferencia enviada supernet ref 999999',
+          type: 'debit',
+          amount: 1500,
+          currency: 'UYU',
+          rawData: { referencia: '999999' },
+        }),
+        makeTransaction('credit-int', {
+          description: 'Transferencia recibida supernet ref 999999',
+          type: 'credit',
+          amount: 1500,
+          currency: 'UYU',
+          rawData: { referencia: '999999' },
+        }),
+      ],
+      emptyUserRules()
+    )
 
     expect(
       result.every((tx) => tx.category === Category.InternalTransfer)
@@ -135,15 +156,18 @@ describe('internal transfer inference', () => {
     // "CREDITO POR OPERACION EN SUPERNET TAIRTAGS/NAME" has no matching debit —
     // it is an external payment received, not a self-transfer, so it should
     // remain uncategorized and count as income in charts.
-    const result = inferInternalTransfers([
-      makeTransaction('credit-ext', {
-        description:
-          'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY MARIA CONSTANZA',
-        type: 'credit',
-        amount: 145,
-        currency: 'USD',
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('credit-ext', {
+          description:
+            'CREDITO POR OPERACION EN SUPERNET TAIRTAGS/HARGUINDEGUY MARIA CONSTANZA',
+          type: 'credit',
+          amount: 145,
+          currency: 'USD',
+        }),
+      ],
+      emptyUserRules()
+    )
 
     const credit = result.find((tx) => tx.id === 'credit-ext')!
     expect(credit.category).not.toBe(Category.InternalTransfer)
@@ -151,23 +175,26 @@ describe('internal transfer inference', () => {
 
   it('pairs CREDITO POR OPERACION EN SUPERNET P--/NAME with matching debit (self-transfer)', () => {
     // Same amount, same day — the debit/credit pair is an own-account transfer.
-    const result = inferInternalTransfers([
-      makeTransaction('debit-self', {
-        description: 'DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA 5506',
-        type: 'debit',
-        amount: 6820,
-        currency: 'UYU',
-        rawData: { referencia: '000000' },
-      }),
-      makeTransaction('credit-self', {
-        description:
-          'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE',
-        type: 'credit',
-        amount: 6820,
-        currency: 'UYU',
-        rawData: { referencia: '000000' },
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('debit-self', {
+          description: 'DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA 5506',
+          type: 'debit',
+          amount: 6820,
+          currency: 'UYU',
+          rawData: { referencia: '000000' },
+        }),
+        makeTransaction('credit-self', {
+          description:
+            'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE',
+          type: 'credit',
+          amount: 6820,
+          currency: 'UYU',
+          rawData: { referencia: '000000' },
+        }),
+      ],
+      emptyUserRules()
+    )
 
     expect(
       result.every((tx) => tx.category === Category.InternalTransfer)
@@ -178,26 +205,29 @@ describe('internal transfer inference', () => {
     // Credit card shows "PAGO RECIBIDO" — AI tagged it as transfer (confidence 0.85).
     // Bank account shows "PAGO ELECTRONICO TARJETA CREDITO" — rule-based transfer.
     // The fix to candidates filter allows the credit card tx to be a pairing candidate.
-    const result = inferInternalTransfers([
-      makeTransaction('cc-payment', {
-        description: 'PAGO RECIBIDO',
-        type: 'credit',
-        source: 'credit_card',
-        amount: 1500,
-        currency: 'UYU',
-        category: Category.InternalTransfer,
-        categoryConfidence: 0.85,
-        date: new Date('2025-03-15T00:00:00.000Z'),
-      }),
-      makeTransaction('bank-debit', {
-        description: 'PAGO ELECTRONICO TARJETA CREDITO',
-        type: 'debit',
-        source: 'bank_account',
-        amount: 1500,
-        currency: 'UYU',
-        date: new Date('2025-03-15T00:00:00.000Z'),
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('cc-payment', {
+          description: 'PAGO RECIBIDO',
+          type: 'credit',
+          source: 'credit_card',
+          amount: 1500,
+          currency: 'UYU',
+          category: Category.InternalTransfer,
+          categoryConfidence: 0.85,
+          date: new Date('2025-03-15T00:00:00.000Z'),
+        }),
+        makeTransaction('bank-debit', {
+          description: 'PAGO ELECTRONICO TARJETA CREDITO',
+          type: 'debit',
+          source: 'bank_account',
+          amount: 1500,
+          currency: 'UYU',
+          date: new Date('2025-03-15T00:00:00.000Z'),
+        }),
+      ],
+      emptyUserRules()
+    )
 
     expect(
       result.every((tx) => tx.category === Category.InternalTransfer)
@@ -207,25 +237,28 @@ describe('internal transfer inference', () => {
   it('does not pair unrelated debit and credit across currencies just because both are transfer descriptions', () => {
     // PAGO ELECTRONICO TARJETA CREDITO (USD) and TRANSFERENCIA RECIBIDA (UYU)
     // happen near the same date but are unrelated; score should not reach threshold.
-    const result = inferInternalTransfers([
-      makeTransaction('debit-cc', {
-        description: 'PAGO ELECTRONICO TARJETA CREDITO',
-        type: 'debit',
-        amount: 2238.54,
-        currency: 'USD',
-        date: new Date('2025-11-06T00:00:00.000Z'),
-        category: Category.InternalTransfer,
-        categoryConfidence: 0.9,
-      }),
-      makeTransaction('credit-received', {
-        description:
-          'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA /GAZZANO DE MARCO, FEDERICO J',
-        type: 'credit',
-        amount: 2350,
-        currency: 'UYU',
-        date: new Date('2025-11-04T00:00:00.000Z'),
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('debit-cc', {
+          description: 'PAGO ELECTRONICO TARJETA CREDITO',
+          type: 'debit',
+          amount: 2238.54,
+          currency: 'USD',
+          date: new Date('2025-11-06T00:00:00.000Z'),
+          category: Category.InternalTransfer,
+          categoryConfidence: 0.9,
+        }),
+        makeTransaction('credit-received', {
+          description:
+            'TRANSFERENCIA RECIBIDA 569729TT RECIBIDA /GAZZANO DE MARCO, FEDERICO J',
+          type: 'credit',
+          amount: 2350,
+          currency: 'UYU',
+          date: new Date('2025-11-04T00:00:00.000Z'),
+        }),
+      ],
+      emptyUserRules()
+    )
 
     const credit = result.find((tx) => tx.id === 'credit-received')!
     expect(credit.category).not.toBe(Category.InternalTransfer)
@@ -234,27 +267,33 @@ describe('internal transfer inference', () => {
 
 describe('split transaction guards in transfer inference', () => {
   it('does not auto-tag a split parent as a transfer', () => {
-    const result = inferInternalTransfers([
-      makeTransaction('parent', {
-        description: 'Transferencia supernet',
-        type: 'debit',
-        source: 'bank_account',
-        isSplitParent: true,
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('parent', {
+          description: 'Transferencia supernet',
+          type: 'debit',
+          source: 'bank_account',
+          isSplitParent: true,
+        }),
+      ],
+      emptyUserRules()
+    )
     const parent = result.find((tx) => tx.id === 'parent')!
     expect(parent.category).not.toBe(Category.InternalTransfer)
   })
 
   it('does not auto-tag a split child as a transfer', () => {
-    const result = inferInternalTransfers([
-      makeTransaction('child', {
-        description: 'Transferencia supernet',
-        type: 'debit',
-        source: 'bank_account',
-        splitParentId: 'some-parent',
-      }),
-    ])
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('child', {
+          description: 'Transferencia supernet',
+          type: 'debit',
+          source: 'bank_account',
+          splitParentId: 'some-parent',
+        }),
+      ],
+      emptyUserRules()
+    )
     const child = result.find((tx) => tx.id === 'child')!
     expect(child.category).not.toBe(Category.InternalTransfer)
   })
@@ -265,22 +304,25 @@ describe('split transaction guards in transfer inference', () => {
 // so mixing the two shapes neither widens nor narrows it.
 describe('transfer pairing window across stored date shapes', () => {
   function pair(debitIso: string, creditIso: string) {
-    return inferInternalTransfers([
-      makeTransaction('debit', {
-        description: 'Transferencia enviada supernet',
-        type: 'debit',
-        amount: 1500,
-        currency: 'UYU',
-        date: new Date(debitIso),
-      }),
-      makeTransaction('credit', {
-        description: 'Transferencia recibida supernet',
-        type: 'credit',
-        amount: 1500,
-        currency: 'UYU',
-        date: new Date(creditIso),
-      }),
-    ])
+    return inferInternalTransfers(
+      [
+        makeTransaction('debit', {
+          description: 'Transferencia enviada supernet',
+          type: 'debit',
+          amount: 1500,
+          currency: 'UYU',
+          date: new Date(debitIso),
+        }),
+        makeTransaction('credit', {
+          description: 'Transferencia recibida supernet',
+          type: 'credit',
+          amount: 1500,
+          currency: 'UYU',
+          date: new Date(creditIso),
+        }),
+      ],
+      emptyUserRules()
+    )
   }
 
   it('pairs a new debit with a pre-#58 credit two calendar days later', () => {
@@ -294,5 +336,175 @@ describe('transfer pairing window across stored date shapes', () => {
   it('does not pair rows three calendar days apart', () => {
     const result = pair('2026-03-01T03:00:00.000Z', '2026-03-04T00:00:00.000Z')
     expect(result[1].category).not.toBe(Category.InternalTransfer)
+  })
+})
+
+describe('rows a user rule categorized (#289)', () => {
+  const FAMILIA = 'DEBITO OPERACION EN SUPERNET O SMS NRO FAMILIA 5506'
+  const familiaRule = {
+    pattern: 'NRO FAMILIA',
+    matchType: 'contains' as const,
+    category: 'personal',
+  }
+  const rules = userRules({ customPatterns: [familiaRule] })
+  const ruleDebit = (overrides: Partial<Transaction> = {}) =>
+    makeTransaction('debit', {
+      description: FAMILIA,
+      category: 'personal',
+      categoryConfidence: 0.95,
+      ...overrides,
+    })
+
+  it('leaves a transfer-looking debit alone when its rule gave it its category', () => {
+    const [row] = inferInternalTransfers([ruleDebit()], rules)
+
+    expect(row.category).toBe('personal')
+    expect(row.categoryConfidence).toBe(0.95)
+  })
+
+  it('does not turn an external-beneficiary debit a rule categorized into an external transfer', () => {
+    const [row] = inferInternalTransfers(
+      [
+        ruleDebit({
+          description:
+            'TRANSF INSTANTANEA ENVIADA 871947LE NRR:183230909 ROMINA FERRARO',
+        }),
+      ],
+      userRules({
+        customPatterns: [{ ...familiaRule, pattern: 'ROMINA FERRARO' }],
+      })
+    )
+
+    expect(row.category).toBe('personal')
+  })
+
+  it("still marks a row whose category is not the rule's", () => {
+    const [row] = inferInternalTransfers(
+      [ruleDebit({ category: 'shopping', categoryConfidence: 0.8 })],
+      rules
+    )
+
+    expect(row.category).toBe(Category.InternalTransfer)
+  })
+
+  it('still marks a row when an earlier rule with another category wins', () => {
+    const [row] = inferInternalTransfers(
+      [ruleDebit()],
+      userRules({
+        customPatterns: [
+          { pattern: 'SUPERNET', matchType: 'contains', category: 'shopping' },
+          familiaRule,
+        ],
+      })
+    )
+
+    expect(row.category).toBe(Category.InternalTransfer)
+  })
+
+  it('still marks a row when a merchant override covers it', () => {
+    const [row] = inferInternalTransfers(
+      [ruleDebit()],
+      userRules({
+        customPatterns: [familiaRule],
+        merchantOverrides: [{ merchantName: FAMILIA, category: 'shopping' }],
+      })
+    )
+
+    expect(row.category).toBe(Category.InternalTransfer)
+  })
+
+  it('protects a row whose rule holds a legacy category id', () => {
+    const [row] = inferInternalTransfers(
+      [ruleDebit({ category: 'groceries' })],
+      userRules({ customPatterns: [{ ...familiaRule, category: 'food' }] })
+    )
+
+    expect(row.category).toBe('groceries')
+  })
+
+  it('keeps a row a transfer when the rule itself says transfer', () => {
+    const [row] = inferInternalTransfers(
+      [ruleDebit({ category: Category.InternalTransfer })],
+      userRules({
+        customPatterns: [
+          { ...familiaRule, category: Category.InternalTransfer },
+        ],
+      })
+    )
+
+    expect(row.category).toBe(Category.InternalTransfer)
+  })
+
+  it('still pairs a rule-owned debit: it keeps its category, its counterpart is a transfer', () => {
+    const result = inferInternalTransfers(
+      [
+        ruleDebit({ amount: 6820, currency: 'UYU' }),
+        makeTransaction('credit', {
+          description: 'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO',
+          type: 'credit',
+          amount: 6820,
+          currency: 'UYU',
+        }),
+      ],
+      rules
+    )
+
+    expect(result[0].category).toBe('personal')
+    expect(result[1].category).toBe(Category.InternalTransfer)
+  })
+
+  it('leaves a rule-owned credit alone when it pairs with a transfer debit', () => {
+    const result = inferInternalTransfers(
+      [
+        makeTransaction('debit', {
+          description: 'TRANSFERENCIA ENVIADA SUPERNET',
+          amount: 500,
+          currency: 'UYU',
+        }),
+        makeTransaction('credit', {
+          description: 'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO',
+          type: 'credit',
+          amount: 500,
+          currency: 'UYU',
+          category: 'income',
+          categoryConfidence: 0.95,
+        }),
+      ],
+      userRules({
+        customPatterns: [
+          {
+            pattern: 'CREDITO POR OPERACION',
+            matchType: 'contains',
+            category: 'income',
+          },
+        ],
+      })
+    )
+
+    expect(result[0].category).toBe(Category.InternalTransfer)
+    expect(result[1].category).toBe('income')
+  })
+
+  it("counts the issue's 6820 debit as an expense and not the credit as income", () => {
+    const result = inferInternalTransfers(
+      [
+        ruleDebit({ amount: 6820, currency: 'UYU' }),
+        makeTransaction('credit', {
+          description:
+            'CREDITO POR OPERACION EN SUPERNET P--/GAZZANO ARISMENDI JOSE',
+          type: 'credit',
+          amount: 6820,
+          currency: 'UYU',
+        }),
+      ],
+      rules
+    )
+
+    const uyu = sumCountedTotals(result, 'UYU', 40.5)
+    expect(uyu.expense).toBe(6820)
+    expect(uyu.income).toBe(0)
+    const usd = sumCountedTotals(result, 'USD', 40.5)
+    expect(usd.expense).toBeCloseTo(6820 / 40.5, 6)
+    expect(usd.income).toBe(0)
   })
 })
