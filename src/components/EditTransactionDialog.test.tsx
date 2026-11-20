@@ -627,6 +627,27 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
       expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
     })
 
+    it('counts the clean label typed over another own name as no rename (#296)', () => {
+      const countSimilar = vi.fn((_tx: Transaction, renamed: boolean) =>
+        renamed ? 2 : 4
+      )
+      const tx = { ...transaction, description: RAW, displayDescription: 'Foo' }
+      render(
+        <EditTransactionDialog
+          {...baseProps({ transaction: tx, countSimilar })}
+        />
+      )
+      const type = (value: string) =>
+        fireEvent.change(screen.getByLabelText('Descripción edición'), {
+          target: { value },
+        })
+
+      type('Lavadero Martinizi')
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, true)
+      type('Tintoreria Martinizi')
+      expect(countSimilar).toHaveBeenLastCalledWith(tx, false)
+    })
+
     it('saves an untouched bank row with its clean label as the draft name (#296)', () => {
       const onSave = vi.fn()
       render(

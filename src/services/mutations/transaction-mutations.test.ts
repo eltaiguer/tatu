@@ -988,6 +988,49 @@ describe('transaction-mutations — apply scope', () => {
       }
     })
 
+    describe('the clean label typed back is the original name (#296)', () => {
+      const RAW =
+        'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+      const bankRows = () => [
+        makeTransaction('same-1', {
+          description: RAW,
+          displayDescription: 'Foo',
+        }),
+        makeTransaction('same-2', {
+          description: RAW,
+          displayDescription: 'Bar',
+        }),
+      ]
+
+      it('clears the edited row’s own name under Todas and stores no override', async () => {
+        const repo = signedIn(bankRows())
+
+        await editTransaction(repo, 'same-1', {
+          displayDescription: 'Tintoreria Martinizi',
+          category: 'restaurants',
+          applyScope: 'matching_past_and_future',
+        })
+
+        for (const read of [stored, repo.row]) {
+          expect(read('same-1')?.displayDescription).toBeUndefined()
+          expect(read('same-2')?.displayDescription).toBe('Bar')
+        }
+        expect(repo.descriptionOverrides.size).toBe(0)
+      })
+
+      it('clears the row’s own name under Solo esta instead of storing the label', async () => {
+        const repo = signedIn(bankRows())
+
+        await editTransaction(repo, 'same-1', {
+          displayDescription: 'Tintoreria Martinizi',
+          applyScope: 'single',
+        })
+
+        expect(repo.row('same-1')?.displayDescription).toBeUndefined()
+        expect(stored('same-1')?.displayDescription).toBeUndefined()
+      })
+    })
+
     it('does not touch per-row names when only the category changed', async () => {
       const repo = signedIn([
         makeTransaction('enriched', {

@@ -78,6 +78,7 @@ import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import { applyAiEnrichment, enrichTransactionsWithAi, getAiConfig } from '../ai'
 import { buildCorrectionContext } from '../ai/correction-context'
+import { isOriginalName } from '../merchants/merchant-key'
 import {
   NeedsConfirmationError,
   PartialWriteError,
@@ -696,7 +697,7 @@ export async function editTransaction(
   const name = edit.displayDescription?.trim()
   // An absent name leaves names alone, like an absent category or tags.
   const nameGiven = edit.displayDescription !== undefined
-  const renamed = !!name && name !== current.description
+  const renamed = !!name && !isOriginalName(name, current.description)
   const category =
     edit.category === undefined ? undefined : edit.category?.trim() || null
   const tags = edit.tags

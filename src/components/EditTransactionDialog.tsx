@@ -17,7 +17,10 @@ import { Category, isSplitChildTx, isSplitParentTx } from '../models'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import type { Currency, Transaction } from '../models'
 import { formatCurrency, formatDate } from '../utils/formatting'
-import { transactionLabel } from '../services/merchants/merchant-key'
+import {
+  isOriginalName,
+  transactionLabel,
+} from '../services/merchants/merchant-key'
 import {
   buildCategorySuggestions,
   buildTagSuggestions,
@@ -174,7 +177,7 @@ function EditTransactionForm({
   // An untouched name is not a rename, even when the row has its own.
   const renamed =
     !!name &&
-    name !== transaction.description.trim() &&
+    !isOriginalName(name, transaction.description) &&
     name !== openedName.trim()
   const similarCount = useMemo(
     () => countSimilar(transaction, renamed),

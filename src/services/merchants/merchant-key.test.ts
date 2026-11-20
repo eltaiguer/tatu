@@ -8,6 +8,7 @@ import {
 } from '../descriptions/description-overrides'
 import {
   groupByMerchant,
+  isOriginalName,
   merchantKeyOf,
   merchantLabelFor,
   rawMerchantKey,
@@ -672,5 +673,43 @@ describe('merchantLabelFor on bank rows', () => {
         tx({ description: 'PAGO ELECTRONICO TARJETA CREDITO' }),
       ])
     ).toBe('Pago de tarjeta de crédito')
+  })
+})
+
+describe('isOriginalName (#296)', () => {
+  const RAW =
+    'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+  const TRANSFER = 'TRANSFERENCIA ENVIADA 7972TT55 TRF. PLAZA- FEDERICO GAZZANO'
+
+  it('is true for the statement text, the surrounding spaces ignored', () => {
+    expect(isOriginalName(RAW, RAW)).toBe(true)
+    expect(isOriginalName(RAW, `  ${RAW} `)).toBe(true)
+  })
+
+  it('is true for the clean label of a bank row', () => {
+    expect(isOriginalName('Tintoreria Martinizi', RAW)).toBe(true)
+  })
+
+  it('is false for another name', () => {
+    expect(isOriginalName('Lavadero Martinizi', RAW)).toBe(false)
+  })
+
+  it('treats a card row’s raw text as its label: only that text is the original', () => {
+    expect(isOriginalName('DEVOTO 123', 'DEVOTO 123')).toBe(true)
+    expect(isOriginalName('Devoto', 'DEVOTO 123')).toBe(false)
+  })
+
+  it('ignores the trailing space of a card description', () => {
+    expect(isOriginalName('DEVOTO 123', 'DEVOTO 123 ')).toBe(true)
+  })
+
+  it('is true for a transfer’s label and false for the bare counterparty', () => {
+    expect(isOriginalName(statementLabel(TRANSFER), TRANSFER)).toBe(true)
+    expect(isOriginalName('FEDERICO GAZZANO', TRANSFER)).toBe(false)
+  })
+
+  it('matches exactly: a case or accent variant is a real rename', () => {
+    expect(isOriginalName('TINTORERIA MARTINIZI', RAW)).toBe(false)
+    expect(isOriginalName('Tintorería Martinizi', RAW)).toBe(false)
   })
 })
