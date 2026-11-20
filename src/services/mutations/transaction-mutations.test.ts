@@ -2605,6 +2605,36 @@ describe('transaction-mutations — applying a new rule to past rows', () => {
     expect(stored('part')?.category).toBe('restaurants')
   })
 
+  it('never overwrites a row the user categorized by hand', async () => {
+    const repo = signedIn([
+      makeTransaction('hand', {
+        description: 'UBER TRIP',
+        categoryConfidence: 1,
+      }),
+      makeTransaction('auto', { description: 'UBER TRIP' }),
+    ])
+
+    const result = await applyPatternToPast(repo, rule)
+
+    expect(result).toEqual({ updated: 1, failed: 0 })
+    expect(stored('hand')?.category).toBe('groceries')
+    expect(stored('auto')?.category).toBe('transport')
+  })
+
+  it('leaves split parents alone', async () => {
+    const repo = signedIn([
+      makeTransaction('parent', {
+        description: 'UBER TRIP',
+        isSplitParent: true,
+      }),
+    ])
+
+    const result = await applyPatternToPast(repo, rule)
+
+    expect(result).toEqual({ updated: 0, failed: 0 })
+    expect(stored('parent')?.category).toBe('groceries')
+  })
+
   it('keeps and counts only the rows that saved when a chunk fails', async () => {
     const repo = signedIn(rows())
     repo.failOn('update')

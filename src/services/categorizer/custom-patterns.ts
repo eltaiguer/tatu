@@ -137,13 +137,24 @@ function testNormalized(normalized: string, pattern: CustomPattern): boolean {
   }
 }
 
+/**
+ * The first pattern in `from` that matches the description: list order is
+ * precedence (categorizer step 3). The one definition of "which rule wins".
+ */
+export function firstMatchingPattern(
+  description: string,
+  from: readonly CustomPattern[]
+): CustomPattern | null {
+  const normalized = normalizeMerchantName(description)
+  return from.find((pattern) => testNormalized(normalized, pattern)) ?? null
+}
+
 /** The first pattern in `from` that matches the description, as a match. */
 export function matchCustomPattern(
   description: string,
   from: readonly CustomPattern[]
 ): PatternMatch | null {
-  const normalized = normalizeMerchantName(description)
-  const custom = from.find((pattern) => testNormalized(normalized, pattern))
+  const custom = firstMatchingPattern(description, from)
   if (!custom) return null
   return {
     category: custom.category as PatternMatch['category'],
