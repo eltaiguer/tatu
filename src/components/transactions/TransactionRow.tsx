@@ -19,11 +19,16 @@ import {
 } from '../../utils/transaction-display'
 import { formatCurrency, formatDate } from '../../utils/formatting'
 import { transactionLabel } from '../../services/merchants/merchant-key'
+import {
+  categorySplitLine,
+  type CategorySplit,
+} from '../../services/descriptions/category-splits'
 import { convert } from '../../services/currency/convert'
 import { countsTowardTotals } from '../../services/spending/spending-rules'
 import {
   getAccountIcon,
   getAccountLabel,
+  CategorySplitMarker,
   ReviewMarker,
 } from './transaction-row-parts'
 
@@ -42,6 +47,8 @@ export interface TransactionRowProps {
   onToggleHousehold?: (transaction: Transaction) => void
   // Picks a category from the badge (#279); without it the badge is plain.
   onCategorize?: (transaction: Transaction, categoryId: string) => void
+  // Where the merchant's other rows are, when it is split across categories.
+  categorySplit?: CategorySplit
 }
 
 // One transaction as a desktop table row.
@@ -59,6 +66,7 @@ export function TransactionRow({
   onUnsplit,
   onToggleHousehold,
   onCategorize,
+  categorySplit,
 }: TransactionRowProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const displayDescription = transactionLabel(transaction)
@@ -200,6 +208,11 @@ export function TransactionRow({
             <CategoryBadge
               categoryId={transaction.category || Category.Uncategorized}
               size="sm"
+            />
+          )}
+          {categorySplit && (
+            <CategorySplitMarker
+              line={categorySplitLine(categorySplit, displayDescription)}
             />
           )}
           {needsCategoryReview(transaction) && <ReviewMarker />}

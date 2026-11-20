@@ -8,6 +8,7 @@ import type { Transaction } from '../models'
 import type { SortField, SortDirection } from '../hooks/useTransactionFiltering'
 import { TransactionRow } from './transactions/TransactionRow'
 import { TransactionCard } from './transactions/TransactionCard'
+import type { CategorySplit } from '../services/descriptions/category-splits'
 
 // Kept importable from here (EditTransactionDialog uses it).
 export { getAccountLabel } from './transactions/transaction-row-parts'
@@ -41,6 +42,8 @@ interface TransactionTableProps {
   onUnsplit?: (transaction: Transaction) => void
   onToggleHousehold?: (transaction: Transaction) => void
   onCategorize?: (transaction: Transaction, categoryId: string) => void
+  // Per row id: merchants split across categories (the ≠ hint).
+  categorySplits?: ReadonlyMap<string, CategorySplit>
 }
 
 export function TransactionTable({
@@ -71,6 +74,7 @@ export function TransactionTable({
   onUnsplit,
   onToggleHousehold,
   onCategorize,
+  categorySplits,
 }: TransactionTableProps) {
   return (
     <Card
@@ -270,6 +274,7 @@ export function TransactionTable({
                   onUnsplit={onUnsplit}
                   onToggleHousehold={onToggleHousehold}
                   onCategorize={onCategorize}
+                  categorySplit={categorySplits?.get(transaction.id)}
                 />
               ))}
             </tbody>
@@ -329,6 +334,7 @@ export function TransactionTable({
               onUnsplit={onUnsplit}
               onToggleHousehold={onToggleHousehold}
               onCategorize={onCategorize}
+              categorySplit={categorySplits?.get(transaction.id)}
             />
           ))}
         </div>

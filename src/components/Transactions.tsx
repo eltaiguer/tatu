@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import { toast, type ExternalToast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
+import { defaultsToAllSimilar } from '../services/descriptions/default-scope'
 import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
 import { Download, X } from 'lucide-react'
 import { Button } from './ui/button'
@@ -211,7 +212,7 @@ export function Transactions({
       reportError,
     })
 
-  const { onCategorize } = useCategoryWrites({
+  const categoryWrites = useCategoryWrites({
     transactions,
     onUpdateTransaction,
     onRestoreCategories,
@@ -241,6 +242,11 @@ export function Transactions({
   const countSimilar = useCallback(
     (transaction: Transaction, renamed: boolean) =>
       countSimilarEditReach(transactions, transaction, renamed),
+    [transactions]
+  )
+
+  const defaultToAll = useCallback(
+    (row: Transaction, c: string) => defaultsToAllSimilar(transactions, row, c),
     [transactions]
   )
 
@@ -276,16 +282,20 @@ export function Transactions({
     // must not re-write the category as the user's own (confidence 1): nothing
     // about name, category or tags changed (a name/category scope still runs).
     const householdChanged = canSaveHousehold(draft.household)
+    const nameKept = draft.description === getDisplayDescription(editing)
     const unchanged =
-      draft.description === getDisplayDescription(editing) &&
+      nameKept &&
       draft.category === ((editing.category ?? '').trim() || null) &&
       sameTags(draft.tags, editing.tags ?? [])
     let message: string | null = null
     setPending(editingId, true)
     try {
       if (!(unchanged && householdChanged && draft.applyScope === 'single')) {
+        // The newest write of the row: an old in-place toast must not replay.
+        categoryWrites.supersede(editingId)
         const { affected } = await onUpdateTransaction(editingId, {
-          displayDescription: draft.description,
+          // Only a typed name: an untouched own name would spread.
+          displayDescription: nameKept ? undefined : draft.description,
           category: draft.category,
           tags: draft.tags,
           applyScope: draft.applyScope,
@@ -319,7 +329,7 @@ export function Transactions({
       message = outcome.message
       toastOptions = outcome.options
     }
-    if (message) toast.success(message, toastOptions)
+    if (message) categoryWrites.toastEdit(editing, draft, message, toastOptions)
     setEditingTransaction(null)
     setPending(editingId, false)
   }
@@ -519,7 +529,8 @@ export function Transactions({
               }
             : undefined
         }
-        onCategorize={onCategorize}
+        onCategorize={categoryWrites.onCategorize}
+        categorySplits={categoryWrites.categorySplits}
         onToggleHousehold={
           onSetHousehold
             ? (transaction) => {
@@ -532,6 +543,7 @@ export function Transactions({
       <EditTransactionDialog
         transaction={editingTransaction}
         countSimilar={countSimilar}
+        defaultToAll={defaultToAll}
         countHouseholdSimilar={countHouseholdSimilar}
         knownTags={tagSuggestions}
         canSetHousehold={Boolean(onSetHousehold)}

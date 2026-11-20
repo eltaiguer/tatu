@@ -1154,6 +1154,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     await openEdit(D1)
     remember()
     await pickCategory(/Alimentación/)
+    categoryScope('Solo esta transacción')
     await save()
 
     await waitFor(() => expect(repo.householdRules.size).toBe(0))
@@ -1272,6 +1273,42 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     expect(on(D2) && on(D3)).toBe(true)
     // The row keeps the choice the forget wrote.
     expect(repo.row(D1)?.household).toBe(true)
+  })
+
+  it('a save that also forgets the rule keeps its single Deshacer and offers no Aplicar (#281)', async () => {
+    seed(devotos())
+    await rememberAsYes()
+    await waitFor(() => expect(on(D3)).toBe(true))
+
+    await openEdit(D1)
+    remember()
+    await pickCategory(/Alimentación/)
+    categoryScope('Solo esta transacción')
+    await save()
+
+    expect(
+      await screen.findByText(/Cambios guardados · ya no se recuerda/)
+    ).toBeVisible()
+    expect(screen.getAllByRole('button', { name: 'Deshacer' })).toHaveLength(1)
+    expect(
+      screen.queryByRole('button', { name: /^Aplicar a/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it('a save that remembers a rule keeps the category offer, with the combined message (#281)', async () => {
+    seed(devotos())
+    await openEdit(D1)
+
+    await pickCategory(/Alimentación/)
+    categoryScope('Solo esta transacción')
+    remember()
+    fireEvent.click(screen.getByLabelText('Sí'))
+    await save()
+
+    expect(
+      await screen.findByRole('button', { name: 'Aplicar a las 2 similares' })
+    ).toBeVisible()
+    expect(screen.getByText(/Hogar: Sí/)).toBeVisible()
   })
 
   it('Deshacer does not overwrite a rule saved for the merchant meanwhile', async () => {
@@ -1466,6 +1503,7 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     await openEdit(D1)
 
     await pickCategory(/Alimentación/)
+    categoryScope('Solo esta transacción')
     remember()
     fireEvent.click(screen.getByLabelText('Sí'))
     await save()

@@ -13,7 +13,8 @@ import {
 } from './ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { CategoryBadge } from './CategoryBadge'
-import { Category } from '../models'
+import { Category, isSplitChildTx, isSplitParentTx } from '../models'
+import { normalizeCategoryId } from '../services/categories/category-aliases'
 import type { Currency, Transaction } from '../models'
 import { formatCurrency, formatDate } from '../utils/formatting'
 import { getDisplayDescription } from '../utils/transaction-display'
@@ -60,6 +61,9 @@ interface EditTransactionDialogProps {
   // (countSimilarEditReach), given whether the draft renames it. Takes the
   // row so the count holds while the dialog animates closed.
   countSimilar: (transaction: Transaction, renamed: boolean) => number
+  // Whether a change to `category` opens on "Todas las similares" (#281; the
+  // conservative rule in services/descriptions/default-scope.ts).
+  defaultToAll: (transaction: Transaction, category: string) => boolean
   // Tags already in use, offered as suggestions.
   knownTags: string[]
   isSaving: boolean
@@ -130,6 +134,7 @@ export function EditTransactionDialog({
 function EditTransactionForm({
   transaction,
   countSimilar,
+  defaultToAll,
   countHouseholdSimilar,
   knownTags,
   isSaving,
@@ -146,7 +151,8 @@ function EditTransactionForm({
   )
   const [category, setCategory] = useState(transaction.category ?? '')
   const [tags, setTags] = useState<string[]>(transaction.tags ?? [])
-  const [applyScope, setApplyScope] = useState<ApplyScope>('single')
+  // null until the user touches the radio: then the default follows the form.
+  const [chosenScope, setChosenScope] = useState<ApplyScope | null>(null)
   const household = useHouseholdDraft({
     transaction,
     category,
@@ -162,12 +168,35 @@ function EditTransactionForm({
 
   // "Renamed" exactly as the save decides it, so the number shown is the
   // number of rows the save will touch.
+  const [openedName] = useState(() => getDisplayDescription(transaction))
   const name = description.trim()
-  const renamed = !!name && name !== transaction.description
+  // An untouched name is not a rename, even when the row has its own.
+  const renamed =
+    !!name && name !== transaction.description && name !== openedName
   const similarCount = useMemo(
     () => countSimilar(transaction, renamed),
     [countSimilar, transaction, renamed]
   )
+
+  // A changed category favours the whole merchant (#281). Derived, not
+  // initial state: the save always sends the row's category, and a matching
+  // scope would stamp it on every similar row, so a rename-, tags- or
+  // Hogar-only save must stay on this row. Sin categoría would delete the
+  // merchant override; split rows have their category per part.
+  const categoryChanged =
+    category !== '' &&
+    normalizeCategoryId(category) !== normalizeCategoryId(transaction.category)
+  // Scans every row: memoized, not run per keystroke.
+  const defaultsToAll = useMemo(
+    () =>
+      categoryChanged &&
+      !isSplitChildTx(transaction) &&
+      !isSplitParentTx(transaction) &&
+      defaultToAll(transaction, category),
+    [categoryChanged, defaultToAll, transaction, category]
+  )
+  const applyScope: ApplyScope =
+    chosenScope ?? (defaultsToAll ? 'matching_past_and_future' : 'single')
 
   const categorySuggestions = useMemo(
     () =>
@@ -336,7 +365,7 @@ function EditTransactionForm({
           legend="Aplicar nombre y categoría a"
           name="apply-scope"
           value={applyScope}
-          onChange={setApplyScope}
+          onChange={setChosenScope}
           options={[
             { value: 'single', label: 'Solo esta transacción' },
             {
