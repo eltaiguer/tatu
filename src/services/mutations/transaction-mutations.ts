@@ -545,7 +545,8 @@ async function writeOverrides(
     nameGiven: boolean
     renamed: boolean
     name?: string
-    category: string | null
+    // undefined: no category given; null: cleared (Sin categoría).
+    category: string | null | undefined
   }
 ): Promise<void> {
   const description = current.description
@@ -573,7 +574,10 @@ async function writeOverrides(
         setDescriptionOverride({
           description,
           friendlyDescription: previousDesc.friendlyDescription,
-          category: intent.category ?? previousDesc.category,
+          category:
+            intent.category === undefined
+              ? previousDesc.category
+              : (intent.category ?? undefined),
         })
       }
     } else {
@@ -594,7 +598,10 @@ async function writeOverrides(
         descriptionNormalized: descKey,
         descriptionOriginal: description,
         friendlyDescription: previousDesc!.friendlyDescription,
-        category: intent.category ?? previousDesc!.category,
+        category:
+          intent.category === undefined
+            ? previousDesc!.category
+            : (intent.category ?? undefined),
       })
     } else {
       await repo.deleteDescriptionOverride(descKey)
@@ -694,7 +701,7 @@ export async function editTransaction(
       nameGiven,
       renamed,
       name,
-      category: category ?? null,
+      category,
     })
 
     const changes = new Map<string, TransactionPatch>()
@@ -723,7 +730,7 @@ export async function editTransaction(
       nameGiven,
       renamed,
       name,
-      category: category ?? null,
+      category,
     })
   }
 

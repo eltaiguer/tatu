@@ -1418,6 +1418,23 @@ describe('transaction-mutations — apply scope', () => {
       expect(repo.requests.deleteDescriptionOverride ?? 0).toBe(0)
     })
 
+    it("drops the override's category when the edit clears it (Sin categoría)", async () => {
+      const repo = seedWithDescriptionOverride()
+
+      await editTransaction(repo, 'same-1', {
+        category: null,
+        applyScope: 'future_matching_only',
+      })
+
+      for (const override of [
+        repo.descriptionOverrides.get('supermercado disco'),
+        getDescriptionOverride(MERCHANT),
+      ]) {
+        expect(override?.friendlyDescription).toBe('Disco viejo')
+        expect(override?.category).toBeUndefined()
+      }
+    })
+
     it("keeps the override's own category when the edit has none", async () => {
       const repo = seedWithDescriptionOverride()
 

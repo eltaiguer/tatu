@@ -75,7 +75,6 @@ function Harness({
         }
         onRestoreCategories={(rows) => restoreCategories(repo, rows)}
       />
-      <Toaster />
     </>
   )
 }
@@ -87,7 +86,8 @@ function seed(
   repo = createInMemoryRepository({ transactions: rows })
   transactionStore.getState().setTransactions(rows)
   workspaceStore.setState({ userId: repo.userId, status: 'ready' })
-  render(
+  render(<Toaster />)
+  return render(
     <Harness
       initialFilters={{
         ...DEFAULT_URL_FILTERS,
@@ -552,7 +552,44 @@ describe('categorize in place (#279)', () => {
 
     fireEvent.click(apply)
 
-    expect(await screen.findByText('Se aplicó a 3 transacciones')).toBeVisible()
+    const done = await screen.findByText('Se aplicó a 3 transacciones')
+    await waitFor(() => expect(done).toBeVisible())
+  })
+
+  it('withdraws its toast when the view goes away', async () => {
+    const view = seed(devotos())
+    await pick(DEVOTO(11), 'Restaurantes')
+    await screen.findByRole('button', { name: 'Aplicar a las 2 similares' })
+
+    view.unmount()
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: /Aplicar a/ })
+      ).not.toBeInTheDocument()
+    )
+  })
+
+  it('locks the row while a retried "Aplicar" writes', async () => {
+    seed(devotos())
+    await pick(DEVOTO(11), 'Restaurantes')
+    const apply = await screen.findByRole('button', {
+      name: 'Aplicar a las 2 similares',
+    })
+    repo.failOn('update', { error: new Error('timeout'), times: 1 })
+    fireEvent.click(apply)
+    const retry = await screen.findByRole('button', { name: 'Reintentar' })
+    const gate = repo.hold('update')
+
+    fireEvent.click(retry)
+
+    await waitFor(() =>
+      expect(badge(DEVOTO(11))).toHaveAttribute('aria-disabled', 'true')
+    )
+    await act(async () => gate.release())
+    await waitFor(() =>
+      expect(badge(DEVOTO(11))).not.toHaveAttribute('aria-disabled')
+    )
   })
 
   describe('an old "Aplicar"', () => {

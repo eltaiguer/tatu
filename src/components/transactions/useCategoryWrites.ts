@@ -1,10 +1,11 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import type { Transaction } from '../../models'
 import { normalizeCategoryId } from '../../services/categories/category-aliases'
 import { resolveCategory } from '../../services/categories/category-registry'
 import { countSimilarEditReach } from '../../services/descriptions/similar-transactions'
 import type { CategorySnapshot } from '../../services/mutations/transaction-mutations'
+import { transactionStore } from '../../stores/transaction-store'
 import { PartialWriteError, UserFacingError } from '../../utils/user-error'
 import type { TransactionsProps } from './transactions-props'
 
@@ -45,6 +46,16 @@ export function useCategoryWrites({
   const transactionsRef = useRef(transactions)
   transactionsRef.current = transactions
 
+  // Toasts outlive the view (8 s): leaving it withdraws them, since their
+  // actions belong to this instance's counters.
+  useEffect(
+    () => () => {
+      for (const offer of offers.current.values()) toast.dismiss(offer)
+      offers.current.clear()
+    },
+    []
+  )
+
   const rowOf = (id: string) =>
     transactionsRef.current.find((tx) => tx.id === id)
   const snapshotOf = (tx: Transaction): CategorySnapshot => ({
@@ -73,7 +84,11 @@ export function useCategoryWrites({
   }
   // Nothing else wrote the row since `seq`, and it still holds the pick.
   const holds = (id: string, seq: number, category: string) => {
-    const row = rowOf(id)
+    // The store's rows, not this render's props: a toast's click can come
+    // after the view was rebuilt.
+    const row = transactionStore
+      .getState()
+      .transactions.find((tx) => tx.id === id)
     return (
       writes.current.get(id) === seq &&
       !!row &&
@@ -96,10 +111,15 @@ export function useCategoryWrites({
       error.message,
       error.done,
       error.total,
-      () =>
-        holds(id, seq, category)
-          ? retry()
-          : Promise.reject(new UserFacingError(stale)),
+      () => {
+        if (!holds(id, seq, category)) {
+          return Promise.reject(new UserFacingError(stale))
+        }
+        // The retry is a write of the row: it locks it like the first one.
+        start(id)
+        setPending(id, true)
+        return retry().finally(() => setPending(id, false))
+      },
       error.result,
       error.cause
     )
