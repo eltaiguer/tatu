@@ -47,6 +47,8 @@ export interface TransactionsFilter {
   min?: number
   max?: number
   household?: Exclude<HouseholdFilter, 'all'>
+  // Only the rows that need a category review (`needsCategoryReview`).
+  review?: true
   period?: UrlPeriod
 }
 export type { CustomCategoryRecord } from './custom-category'

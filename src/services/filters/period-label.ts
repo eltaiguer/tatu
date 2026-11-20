@@ -43,3 +43,10 @@ export function shortMonthLabel(key: string): string {
     .format(new Date(`${key}-01T00:00:00.000Z`))
     .toLowerCase()
 }
+
+// A file's span, "mar. 2025 – dic. 2025" (en dash); one month → "nov. 2025".
+export function monthSpanLabel(from: string, to: string): string {
+  const start = shortMonthLabel(from.slice(0, 7))
+  const end = shortMonthLabel(to.slice(0, 7))
+  return start === end ? start : `${start} – ${end}`
+}

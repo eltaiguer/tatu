@@ -174,6 +174,7 @@ export function TransactionFilters({
     currency,
     type,
     household,
+    review,
     min: minAmount,
     max: maxAmount,
   } = filters
@@ -211,6 +212,12 @@ export function TransactionFilters({
     chips.push({
       label: 'Hogar',
       onClear: () => onChange({ household: 'all' }),
+    })
+  }
+  if (review) {
+    chips.push({
+      label: 'A revisar',
+      onClear: () => onChange({ review: false }),
     })
   }
   if (minAmount || maxAmount) {

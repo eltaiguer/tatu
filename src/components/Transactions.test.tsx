@@ -213,6 +213,35 @@ describe('Transactions', () => {
     expect(flagged.length).toBe(4)
   })
 
+  it('lists only the rows the Revisar marker flags with the A revisar filter', () => {
+    render(
+      <Transactions
+        transactions={[
+          { ...makeTransaction(0, 'sin categoria'), category: undefined },
+          {
+            ...makeTransaction(1, 'dudosa'),
+            category: 'groceries',
+            categoryConfidence: 0.4,
+          },
+          {
+            ...makeTransaction(2, 'segura'),
+            category: 'groceries',
+            categoryConfidence: 0.9,
+          },
+        ]}
+        initialFilters={{
+          ...DEFAULT_URL_FILTERS,
+          period: { mode: 'all' },
+          review: true,
+        }}
+      />
+    )
+
+    expect(screen.getByText('Mostrando 1-2 de 2')).toBeInTheDocument()
+    expect(screen.queryByText('segura')).toBeNull()
+    expect(screen.getAllByText('dudosa').length).toBeGreaterThan(0)
+  })
+
   it('clamps pagination when filtering reduces total pages', () => {
     // More than one page, all in one month, so "Siguiente" really moves on.
     const transactions = Array.from({ length: ITEMS_PER_PAGE + 5 }, (_, i) => ({

@@ -2,66 +2,32 @@
 
 import { Card } from './ui/card'
 import { Button } from './ui/button'
-import {
-  Upload,
-  FileText,
-  Check,
-  CircleAlert,
-  Info,
-  Loader,
-} from 'lucide-react'
+import { Upload, FileText, CircleAlert, Loader } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import {
   importAiErrorMessage,
   StatementReadError,
   userErrorMessage,
+  WorkspaceChangedError,
 } from '../utils/user-error'
-import type { FileType, TransactionsFilter } from '../models'
+import type { Transaction, TransactionsFilter } from '../models'
 import type {
   ImportStatementOptions,
   StatementFile,
   StatementImportResult,
 } from '../services/import/import-statement'
+import { workspaceStore } from '../stores/workspace-state'
 import { ACCOUNT_LABELS } from '../utils/account-display'
+import {
+  ImportSummaryPanel,
+  type FileOutcome,
+  type ImportSummary,
+} from './import/ImportSummaryPanel'
 
 // validating = reading/parsing the file; importing = the file is valid and
 // its rows are being saved.
 type ImportState = 'idle' | 'validating' | 'importing' | 'success' | 'error'
-
-interface ImportSummary {
-  added: number
-  duplicates: number
-  previouslyDeleted: number
-  /** Stored rows whose garbled description this import repaired (#192). */
-  repaired: number
-  fileType: FileType
-  // The month "Ver transacciones" opens: the newest new row's, or the file's
-  // newest when nothing was new.
-  month: { y: number; m: number } | null
-}
-
-// One line per count in the summary. A new count (e.g. corrected rows) is one
-// more entry here.
-function summaryLines(summary: ImportSummary) {
-  return [
-    { count: summary.added, one: 'nueva', many: 'nuevas' },
-    {
-      count: summary.duplicates,
-      one: 'duplicada omitida',
-      many: 'duplicadas omitidas',
-    },
-    {
-      count: summary.previouslyDeleted,
-      one: 'eliminada antes',
-      many: 'eliminadas antes',
-    },
-    // Only when it happened: most imports repair nothing.
-    ...(summary.repaired > 0
-      ? [{ count: summary.repaired, one: 'corregida', many: 'corregidas' }]
-      : []),
-  ]
-}
 
 // The part of an import's result the dialog reads. Type-only imports: the
 // dialog has no runtime dependency on the import service, and a test double
@@ -77,9 +43,16 @@ export type ImportOutcome = Pick<
   | 'aiPartial'
   | 'fileType'
   | 'month'
+  | 'fileRange'
+  | 'fileRows'
 >
 
 interface ImportCSVProps {
+  /**
+   * The signed-in user's rows: the summary counts what is left to review in
+   * them, live, never in the import's own result (#275).
+   */
+  transactions: Transaction[]
   /** "Ver transacciones" on the summary; the import itself never navigates. */
   onViewTransactions?: (filter: TransactionsFilter) => void
   /**
@@ -121,18 +94,115 @@ async function readFileBytes(file: File): Promise<ArrayBuffer> {
   })
 }
 
+type ImportedResult = ImportOutcome & { fileName: string }
+
+// "a, b y c"
+function listNames(names: string[]): string {
+  return names.length < 2
+    ? names.join('')
+    : `${names.slice(0, -1).join(', ')} y ${names[names.length - 1]}`
+}
+
+// The warnings of a batch (repairs, AI), said once for all of it. With one
+// file picked they read exactly as they always did; with several they name
+// the files, since "se usaron las reglas" is not true of the ones that
+// were enriched.
+function warnAboutBatch(done: ImportedResult[], picked: number) {
+  const repairsFailed = done.reduce((n, d) => n + (d.repairsFailed ?? 0), 0)
+  if (repairsFailed > 0) {
+    toast.warning(
+      `No se ${repairsFailed === 1 ? 'pudo' : 'pudieron'} corregir ${repairsFailed} descripci${repairsFailed === 1 ? 'ón' : 'ones'}. Importá el archivo de nuevo para reintentar.`
+    )
+  }
+
+  // The import succeeded, but the AI step did not — say so, otherwise a
+  // dead API key looks identical to poor categorization. Total failure
+  // and partial failure need different wording: telling the user "no
+  // disponible" when 10 of 12 batches did enrich is simply wrong.
+  const failed = done.filter((d) => d.aiError !== undefined)
+  const partial = done.filter((d) => d.aiError === undefined && d.aiPartial)
+  const parts: string[] = []
+  if (failed.length > 0) {
+    const reason = importAiErrorMessage(failed[0].aiError)
+    parts.push(
+      picked === 1 || failed.length === done.length
+        ? `Categorización con IA no disponible: ${reason}. Se usaron las reglas de categorización.`
+        : `Categorización con IA no disponible en ${listNames(failed.map((d) => d.fileName))}: ${reason}. En ${failed.length === 1 ? 'ese archivo' : 'esos archivos'} se usaron las reglas de categorización.`
+    )
+  }
+  if (partial.length > 0) {
+    parts.push(
+      picked === 1
+        ? `Categorización con IA incompleta: ${partial[0].aiPartial}. El resto se categorizó con reglas.`
+        : `Categorización con IA incompleta en ${listNames(partial.map((d) => `${d.fileName} (${d.aiPartial})`))}. El resto se categorizó con reglas.`
+    )
+  }
+  if (parts.length > 0) toast.warning(parts.join(' '))
+}
+
+interface ImportedFile {
+  outcome: FileOutcome
+  /** Set when the file imported. */
+  result?: ImportOutcome
+  /** The signed-in user changed under the import: the batch stops. */
+  workspaceChanged?: boolean
+}
+
+function summarize(result: ImportOutcome): ImportSummary {
+  return {
+    added: result.added.length,
+    duplicates: result.duplicates.length,
+    previouslyDeleted: result.previouslyDeleted.length,
+    repaired: result.repaired.length,
+    fileType: result.fileType,
+    month: result.month,
+    fileRange: result.fileRange,
+    fileRows: result.fileRows,
+    addedIds: new Set(result.added.map((row) => row.id)),
+  }
+}
+
+function isCsv(file: File): boolean {
+  return file.name.toLowerCase().endsWith('.csv')
+}
+
+function failure(file: File, title: string, error: unknown): ImportedFile {
+  const unreadable = error === undefined || error instanceof StatementReadError
+  return {
+    workspaceChanged: error instanceof WorkspaceChangedError,
+    outcome: {
+      kind: 'failed',
+      fileName: file.name,
+      title,
+      message:
+        error === undefined
+          ? 'El archivo debe estar en formato CSV'
+          : userErrorMessage(
+              error,
+              'No se pudo guardar la importación',
+              // Reported once, by userErrorMessage. A parse crash may mean
+              // Santander changed its export format.
+              unreadable ? 'import-parse' : 'import'
+            ),
+    },
+  }
+}
+
 export function ImportCSV({
+  transactions,
   onViewTransactions,
   onTransactionsImported,
 }: ImportCSVProps) {
   const [importState, setImportState] = useState<ImportState>('idle')
   const [dragActive, setDragActive] = useState(false)
+  // The file being imported, and its place in the batch.
   const [fileName, setFileName] = useState<string>('')
-  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null)
-  const [errorMessage, setErrorMessage] = useState<string>('')
-  // Whether the failure happened after the file was understood (saving), so
-  // a valid file is never reported as a validation error.
-  const [failedWhileSaving, setFailedWhileSaving] = useState(false)
+  const [progress, setProgress] = useState<{ index: number; total: number }>({
+    index: 1,
+    total: 1,
+  })
+  // What each picked file came to, in pick order.
+  const [outcomes, setOutcomes] = useState<FileOutcome[]>([])
   // The real file input stays hidden; a real button opens it, so the picker
   // is reachable by Tab and Enter/Space (a <label> is not focusable, #193).
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -141,6 +211,15 @@ export function ImportCSV({
   const summaryHeadingRef = useRef<HTMLHeadingElement>(null)
   // Set by "Importar otro archivo", so focus goes back to the picker.
   const focusPickerRef = useRef(false)
+  // Set when the dialog closes (or the user signs out) mid-batch: the file in
+  // flight finishes, the rest are never started and nothing more is shown.
+  const cancelledRef = useRef(false)
+  useEffect(() => {
+    cancelledRef.current = false
+    return () => {
+      cancelledRef.current = true
+    }
+  }, [])
 
   // The import replaces what had focus (the picker) with the summary; move
   // focus to its heading so it is announced and Tab starts from there.
@@ -169,71 +248,29 @@ export function ImportCSV({
     setDragActive(false)
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      void handleFile(e.dataTransfer.files[0])
+      void handleFiles(Array.from(e.dataTransfer.files))
     }
   }
 
-  const handleFile = async (file: File) => {
-    setFailedWhileSaving(false)
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      setImportState('error')
-      setFileName(file.name)
-      setErrorMessage('El archivo debe estar en formato CSV')
-      return
-    }
-
-    setFileName(file.name)
-    setImportState('validating')
-    setErrorMessage('')
-
+  // Imports one file. Never rejects: a failure is the outcome.
+  const importOne = async (file: File): Promise<ImportedFile> => {
     try {
       const bytes = await readFileBytes(file)
-      const {
-        added,
-        duplicates,
-        previouslyDeleted,
-        repaired,
-        repairsFailed = 0,
-        aiError,
-        aiPartial,
-        fileType,
-        month,
-      } = await onTransactionsImported(
+      const result = await onTransactionsImported(
         { bytes, fileName: file.name },
-        { onParsed: () => setImportState('importing') }
+        {
+          onParsed: () => {
+            if (!cancelledRef.current) setImportState('importing')
+          },
+        }
       )
-
-      // The dialog stays open on this summary (#202): no toast, no
-      // navigation until the user picks "Ver transacciones".
-      setImportSummary({
-        added: added.length,
-        duplicates: duplicates.length,
-        previouslyDeleted: previouslyDeleted.length,
-        repaired: repaired.length,
-        fileType,
-        month,
-      })
-
-      setImportState('success')
-
-      if (repairsFailed > 0) {
-        toast.warning(
-          `No se ${repairsFailed === 1 ? 'pudo' : 'pudieron'} corregir ${repairsFailed} descripci${repairsFailed === 1 ? 'ón' : 'ones'}. Importá el archivo de nuevo para reintentar.`
-        )
-      }
-
-      // The import succeeded, but the AI step did not — say so, otherwise a
-      // dead API key looks identical to poor categorization. Total failure
-      // and partial failure need different wording: telling the user "no
-      // disponible" when 10 of 12 batches did enrich is simply wrong.
-      if (aiError !== undefined) {
-        toast.warning(
-          `Categorización con IA no disponible: ${importAiErrorMessage(aiError)}. Se usaron las reglas de categorización.`
-        )
-      } else if (aiPartial) {
-        toast.warning(
-          `Categorización con IA incompleta: ${aiPartial}. El resto se categorizó con reglas.`
-        )
+      return {
+        outcome: {
+          kind: 'imported',
+          fileName: file.name,
+          summary: summarize(result),
+        },
+        result,
       }
     } catch (error) {
       console.error('import failed:', error)
@@ -241,24 +278,67 @@ export function ImportCSV({
       // show; a parser crash travels as its cause). Anything else — saving,
       // the network, a session that ended — is a failure to import, and its
       // text is translated so raw English never shows.
-      const unreadable = error instanceof StatementReadError
-      setImportState('error')
-      setFailedWhileSaving(!unreadable)
-      setErrorMessage(
-        userErrorMessage(
-          error,
-          'No se pudo guardar la importación',
-          // Reported once, by userErrorMessage. A parse crash may mean
-          // Santander changed its export format.
-          unreadable ? 'import-parse' : 'import'
-        )
+      return failure(
+        file,
+        error instanceof StatementReadError
+          ? 'Error al validar archivo'
+          : 'No se pudo importar',
+        error
       )
     }
   }
 
+  // The files go strictly one after the other: each import reads the rows the
+  // previous one stored (dedup, taken ids, transfer pairing).
+  const handleFiles = async (files: File[]) => {
+    cancelledRef.current = false
+    // Whose batch this is: a warning is only for them.
+    const batchOwner = workspaceStore.getState().userId
+    const done: FileOutcome[] = []
+    // What the files that imported came back with, for the warnings.
+    const imported: ImportedResult[] = []
+
+    for (const [index, file] of files.entries()) {
+      if (cancelledRef.current) return
+      setFileName(file.name)
+      setProgress({ index: index + 1, total: files.length })
+      setImportState('validating')
+
+      // A file that is not a CSV is refused on the spot, before any await.
+      const next = isCsv(file)
+        ? await importOne(file)
+        : failure(file, 'Error al validar archivo', undefined)
+      // Another user is signed in: the rest would fail the same way, and
+      // nothing of this batch may reach them (no summary, no toasts).
+      if (next.workspaceChanged) {
+        cancelledRef.current = true
+        setImportState('idle')
+        setOutcomes([])
+        return
+      }
+      done.push(next.outcome)
+      if (next.result) imported.push({ fileName: file.name, ...next.result })
+      // The dialog closed meanwhile: the file in flight finished, so its
+      // warnings (AI, repairs) are still said; the rest is not started.
+      if (cancelledRef.current) {
+        if (workspaceStore.getState().userId === batchOwner) {
+          warnAboutBatch(imported, files.length)
+        }
+        return
+      }
+    }
+
+    setOutcomes(done)
+    // One file that failed keeps the error screen with "Intentar nuevamente".
+    setImportState(
+      files.length === 1 && done[0]?.kind === 'failed' ? 'error' : 'success'
+    )
+    warnAboutBatch(imported, files.length)
+  }
+
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      void handleFile(e.target.files[0])
+      void handleFiles(Array.from(e.target.files))
     }
   }
 
@@ -266,9 +346,7 @@ export function ImportCSV({
     focusPickerRef.current = true
     setImportState('idle')
     setFileName('')
-    setImportSummary(null)
-    setErrorMessage('')
-    setFailedWhileSaving(false)
+    setOutcomes([])
   }
 
   return (
@@ -300,15 +378,18 @@ export function ImportCSV({
               </div>
               {/* Phones can't drag files: below md only the button shows. */}
               <div className="hidden md:block">
-                <p className="font-medium mb-1">Arrastrá tu archivo CSV aquí</p>
+                <p className="font-medium mb-1">
+                  Arrastrá tus archivos CSV aquí
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  o seleccioná un archivo
+                  o seleccioná uno o varios
                 </p>
               </div>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".csv"
+                multiple
                 onChange={handleFileInput}
                 className="hidden"
                 tabIndex={-1}
@@ -329,6 +410,18 @@ export function ImportCSV({
             <div className="flex flex-col items-center gap-4">
               <Loader className="animate-spin text-primary" size={48} />
               <div>
+                {progress.total > 1 && (
+                  <p className="text-sm text-muted-foreground mb-1">
+                    Archivo{' '}
+                    <span className="font-mono tabular-nums">
+                      {progress.index}
+                    </span>{' '}
+                    de{' '}
+                    <span className="font-mono tabular-nums">
+                      {progress.total}
+                    </span>
+                  </p>
+                )}
                 <p className="font-medium mb-1">
                   {importState === 'importing'
                     ? 'Importando…'
@@ -340,41 +433,29 @@ export function ImportCSV({
           </div>
         )}
 
-        {importState === 'success' && importSummary && (
+        {importState === 'success' && (
           <ImportSummaryPanel
-            summary={importSummary}
-            fileName={fileName}
-            accountLabel={ACCOUNT_LABELS[importSummary.fileType]}
+            outcomes={outcomes}
+            transactions={transactions}
             headingRef={summaryHeadingRef}
             onImportAnother={resetImport}
-            onViewTransactions={
-              onViewTransactions
-                ? () =>
-                    onViewTransactions(
-                      importSummary.month
-                        ? { period: { mode: 'month', ...importSummary.month } }
-                        : {}
-                    )
-                : undefined
-            }
+            onViewTransactions={onViewTransactions}
           />
         )}
 
-        {importState === 'error' && (
+        {importState === 'error' && outcomes[0]?.kind === 'failed' && (
           <div className="text-center py-12">
             <div className="flex flex-col items-center gap-4">
               <div className="p-4 rounded-full bg-neg-soft">
                 <CircleAlert className="text-destructive" size={48} />
               </div>
               <div>
-                <p className="font-medium mb-1">
-                  {failedWhileSaving
-                    ? 'No se pudo importar'
-                    : 'Error al validar archivo'}
+                <p className="font-medium mb-1">{outcomes[0].title}</p>
+                <p className="text-sm text-muted-foreground mb-2">
+                  {outcomes[0].fileName}
                 </p>
-                <p className="text-sm text-muted-foreground mb-2">{fileName}</p>
                 <p className="text-sm text-destructive">
-                  {errorMessage || 'El archivo debe estar en formato CSV'}
+                  {outcomes[0].message}
                 </p>
               </div>
               <Button onClick={resetImport}>Intentar nuevamente</Button>
@@ -464,101 +545,6 @@ export function ImportCSV({
           información financiera.
         </p>
       </Card>
-    </div>
-  )
-}
-
-function ImportSummaryPanel({
-  summary,
-  fileName,
-  accountLabel,
-  headingRef,
-  onImportAnother,
-  onViewTransactions,
-}: {
-  summary: ImportSummary
-  fileName: string
-  accountLabel: string
-  headingRef: React.RefObject<HTMLHeadingElement>
-  onImportAnother: () => void
-  onViewTransactions?: () => void
-}) {
-  // Nothing new is not a success: the file was most likely imported before.
-  const nothingNew = summary.added === 0
-
-  return (
-    <div className="text-center py-8 sm:py-12">
-      <div className="flex flex-col items-center gap-4">
-        {nothingNew ? (
-          <div className="p-4 rounded-full bg-muted">
-            <Info className="text-muted-foreground" size={48} />
-          </div>
-        ) : (
-          <div className="p-4 rounded-full bg-pos-soft">
-            <Check className="text-pos" size={48} />
-          </div>
-        )}
-        <div>
-          <h3
-            ref={headingRef}
-            tabIndex={-1}
-            className="font-medium mb-1 outline-none"
-          >
-            {nothingNew
-              ? 'No había movimientos nuevos'
-              : 'Importación completada'}
-          </h3>
-          {nothingNew && (
-            <p className="text-sm text-muted-foreground mb-1">
-              Este archivo ya estaba importado.
-            </p>
-          )}
-          {nothingNew && summary.repaired > 0 && (
-            <p className="text-sm text-muted-foreground mb-1">
-              {summary.repaired === 1
-                ? 'Se corrigió 1 descripción.'
-                : `Se corrigieron ${summary.repaired} descripciones.`}
-            </p>
-          )}
-          <p className="text-sm text-muted-foreground mb-4 break-all">
-            {fileName}
-          </p>
-          <div className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm">
-            {accountLabel}
-          </div>
-          <ul
-            aria-label="Resumen de la importación"
-            className="mt-4 space-y-1 text-sm"
-          >
-            {summaryLines(summary).map(({ count, one, many }) => (
-              <li key={many}>
-                <span className="font-mono tabular-nums font-medium">
-                  {count}
-                </span>{' '}
-                <span className="text-muted-foreground">
-                  {count === 1 ? one : many}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4 w-full sm:w-auto">
-          <Button
-            onClick={onImportAnother}
-            variant={nothingNew || !onViewTransactions ? 'default' : 'outline'}
-          >
-            Importar otro archivo
-          </Button>
-          {onViewTransactions && (
-            <Button
-              onClick={onViewTransactions}
-              variant={nothingNew ? 'outline' : 'default'}
-            >
-              Ver transacciones
-            </Button>
-          )}
-        </div>
-      </div>
     </div>
   )
 }

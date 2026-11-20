@@ -325,4 +325,15 @@ describe('TransactionFilters', () => {
       expect(props.onChange).toHaveBeenCalledWith({ household: 'all' })
     })
   })
+
+  describe('A revisar', () => {
+    it('shows a chip that clears it', () => {
+      const props = renderFilters({ review: true })
+      expect(screen.getByText('A revisar')).toBeInTheDocument()
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Quitar filtro A revisar' })
+      )
+      expect(props.onChange).toHaveBeenCalledWith({ review: false })
+    })
+  })
 })

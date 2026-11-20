@@ -33,17 +33,37 @@ never call the categorizer. They keep the statement's text as `description`;
 the clean name a bank row shows is derived at render by `statementLabel`
 (see [Merchant key](#merchant-key)), not stored.
 
-When the import finishes, the dialog stays open on a summary of the
-`ImportResult` counts (nuevas · duplicadas omitidas · eliminadas antes, plus
-corregidas when the import repaired descriptions; one entry per count in
-`summaryLines`). A file with nothing new shows a neutral "No había movimientos
-nuevos" state instead of success, adding "Se corrigieron N descripciones" when
-it repaired some. Nothing navigates on
-its own: "Ver transacciones" closes the dialog and opens Transacciones on the
-month of the newest new row (the file's newest row when nothing was new;
-`newestDataMonth` in `src/utils/date-utils.ts`),
-through the same `navigateToTransactions` link Resumen uses; "Importar otro
-archivo" resets the dialog to the file picker. Errors stay in the dialog.
+The dialog takes one or several files (#275) and imports them strictly one
+after the other (each import reads the rows the previous one stored: dedup,
+taken ids, transfer pairing); closing the dialog or signing out stops the
+batch (the file in flight finishes), and so does a `WorkspaceChangedError`.
+A file that fails does not stop the rest: with one file the dialog keeps its
+error screen ("Intentar nuevamente"); with several, the failed file gets its
+own section.
+
+When the import finishes, the dialog stays open on a summary: per file its
+account, the period it covers and its row count (`fileRange` / `fileRows` of
+`StatementImportResult`: the whole file, whatever was new, "mar. 2025 – dic.
+2025 · 64 movimientos"), and the `ImportResult` counts (nuevas · a revisar ·
+duplicadas omitidas · eliminadas antes, plus corregidas when the import
+repaired descriptions; one entry per count in `summaryLines`). Several files
+get one section each, one heading and one set of buttons. A file with nothing
+new shows a neutral "No había movimientos nuevos" state instead of success,
+adding "Se corrigieron N descripciones" when it repaired some. "N a revisar" is
+read live from the stored rows with the ids the import added, through the
+Transacciones filter (`countReviewRows` in `services/import/import-review.ts`),
+never from `result.added`: rules, AI enrichment and transfer inference change
+category and confidence after the rows were classified, and a transfer pairing
+a later file completes should stop counting. When at least one new row needs
+review, "Revisar N movimientos" opens Transacciones with `?revisar=si` over the
+files' dates (`reviewLink`: the account too when every file shares one; N is
+what that link lists, so it can exceed the per-file lines by older rows in the
+same dates). Nothing navigates on its own: "Ver transacciones" closes the dialog and opens
+Transacciones on the month of the newest new row (the file's newest when
+nothing was new; `newestDataMonth` in `src/utils/date-utils.ts`; the newest
+among several files), through the same `navigateToTransactions` link Resumen
+uses; "Importar otro archivo" resets the dialog to the file picker. A toast
+(AI unavailable or incomplete, repairs failed) is said once for the whole batch, naming the files it is about when several were picked; closing the dialog mid-batch still says the toasts of the files already imported, and a user change under the dialog (it is keyed by user id) shows nothing of the old batch. "Revisar N" opens the table with N rows, except that a split part listed under its parent (`groupSplitRows`) can add the parent's row to the list; a fresh import has no splits. Two bank files (USD and UYU) link to the bank account without a currency.
 
 ```mermaid
 flowchart TD
@@ -496,6 +516,11 @@ whose `rowHouseholdView` status is household; it takes the user's category
 rules as `options.householdRules` (callers pass
 `currentHouseholdRules()`: category defaults + merchant rules; `useTransactionFiltering` reads it at render, so
 a changed default re-filters). `sortTransactions` orders the result.
+
+The A revisar filter (`review`, `?revisar=si`) keeps the rows
+`needsCategoryReview` flags (uncategorized, or automatic with a confidence
+under 0.55), the same ones the "Revisar" marker shows; it ANDs with every other
+filter and counts as "filtrado". The import summary's "Revisar N" link uses it.
 
 `useTransactionFiltering` holds that state in React as one value (seeded once
 from the URL; the view fills in its default period first): it returns

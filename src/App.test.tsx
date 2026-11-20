@@ -73,6 +73,11 @@ Fecha,Referencia,Concepto,Descripción,Débito,Crédito,Saldos,
 24/11/2025,532500606784,"COMPRA CON TARJETA DEBITO PEDIDOSYA, MONTEVIDEO TARJ: ############9172",,-47.00,,339.92,
 `
 
+// The same statement plus one purchase no merchant rule knows: it lands
+// uncategorized, so the import has something to review.
+const UYU_WITH_UNKNOWN_MERCHANT_CSV = `${UYU_STATEMENT_CSV}26/11/2025,532500606999,"COMPRA CON TARJETA DEBITO ZQXW KLMNOPQ, MONTEVIDEO TARJ: ############9172",,-321.00,,100.00,
+`
+
 function tx(
   id: string,
   isoDate: string,
@@ -175,7 +180,9 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', { name: 'Importar transacciones' })
     ).toBeInTheDocument()
-    expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
+    expect(
+      screen.getByText('Arrastrá tus archivos CSV aquí')
+    ).toBeInTheDocument()
   })
 
   it('returns focus to the sidebar Importar button when the import dialog closes', async () => {
@@ -224,6 +231,68 @@ describe('App', () => {
       expect(currentUrl()).toBe('/transacciones?periodo=2025-11')
     )
     await waitFor(() => expect(opener).toHaveFocus())
+  })
+
+  it('opens what the import leaves to review from "Revisar N" on the summary (#275)', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await user.click(await screen.findByRole('button', { name: 'Importar' }))
+
+    await user.upload(
+      screen.getByLabelText('Seleccionar archivo'),
+      new File([UYU_WITH_UNKNOWN_MERCHANT_CSV], 'UYUmovements.csv', {
+        type: 'text/csv',
+      })
+    )
+
+    await screen.findByRole('heading', { name: 'Importación completada' })
+    expect(
+      screen.getByText(
+        (_, el) =>
+          el?.tagName === 'P' && el.textContent === 'nov. 2025 · 5 movimientos'
+      )
+    ).toBeInTheDocument()
+    await user.click(
+      screen.getByRole('button', { name: 'Revisar 1 movimiento' })
+    )
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() =>
+      expect(currentUrl()).toBe(
+        '/transacciones?cuenta=bank_account&moneda=UYU&revisar=si&desde=2025-11-24&hasta=2025-11-27'
+      )
+    )
+    expect(
+      screen.getByRole('button', { name: 'Quitar filtro A revisar' })
+    ).toBeInTheDocument()
+    // The table lists the N rows the button promised, each with the marker.
+    // (A split part listed under its parent can add the parent's row to the
+    // count; a fresh import has no splits.)
+    expect(await screen.findByText('Mostrando 1-1 de 1')).toBeInTheDocument()
+    expect(
+      screen.getAllByText(/categoría sin asignar o asignada/).length
+    ).toBeGreaterThan(0)
+  })
+
+  it('starts the import dialog over when another user signs in under it (#275)', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await user.click(await screen.findByRole('button', { name: 'Importar' }))
+    await user.upload(
+      screen.getByLabelText('Seleccionar archivo'),
+      new File([UYU_STATEMENT_CSV], 'UYUmovements.csv', { type: 'text/csv' })
+    )
+    await screen.findByRole('heading', { name: 'Importación completada' })
+
+    act(() => backend.auth.emit(makeSession('user-2', 'other@example.com')))
+
+    // A fresh dialog for the new user: no summary of the old one's batch.
+    expect(
+      await screen.findByRole('button', { name: 'Seleccionar archivo' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Importación completada' })
+    ).toBeNull()
   })
 
   it('shows supported file types on import view', async () => {
@@ -446,7 +515,9 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', { name: 'Importar transacciones' })
     ).toBeInTheDocument()
-    expect(screen.getByText('Arrastrá tu archivo CSV aquí')).toBeInTheDocument()
+    expect(
+      screen.getByText('Arrastrá tus archivos CSV aquí')
+    ).toBeInTheDocument()
   })
 
   it('applies dark theme when user preferences return dark', async () => {

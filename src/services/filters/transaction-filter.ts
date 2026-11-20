@@ -1,6 +1,7 @@
 import type { HouseholdRules, Transaction } from '../../models'
 import { rowHouseholdView } from '../household/household'
 import { normalizeCategoryId } from '../categories/category-aliases'
+import { needsCategoryReview } from '../../utils/transaction-display'
 import { countsAsRow, countsTowardTotals } from '../spending/spending-rules'
 import {
   DIACRITICS,
@@ -140,6 +141,7 @@ export function filterTransactions(
         filters.household
     )
       return false
+    if (filters.review && !needsCategoryReview(transaction)) return false
     if (min !== null && Math.abs(transaction.amount) < min) return false
     if (max !== null && Math.abs(transaction.amount) > max) return false
 

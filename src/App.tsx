@@ -601,10 +601,13 @@ function App({ auth, createRepository }: AppProps) {
         <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[680px]! overflow-x-hidden overflow-y-auto rounded-[var(--radius-lg)]!">
           <DialogTitle className="sr-only">Importar archivo CSV</DialogTitle>
           <DialogDescription className="sr-only">
-            Arrastrá o seleccioná un archivo CSV de Santander Uruguay para
-            importar tus movimientos.
+            Arrastrá o seleccioná uno o varios archivos CSV de Santander Uruguay
+            para importar tus movimientos.
           </DialogDescription>
+          {/* One per user: a user change under the dialog cancels its batch. */}
           <ImportCSV
+            key={userId}
+            transactions={transactions}
             onViewTransactions={(filter) => {
               setImportOpen(false)
               navigateToTransactions(filter)
