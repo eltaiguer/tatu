@@ -215,3 +215,15 @@ describe('categorySplitLine', () => {
     )
   })
 })
+
+describe('findCategorySplits — credits', () => {
+  it('ignores credits: a refund in another category flags no purchase', () => {
+    expect(
+      findCategorySplits([
+        tx('a', 'Devoto', 'groceries'),
+        tx('b', 'Devoto', 'groceries'),
+        tx('c', 'Devoto', 'income', { type: 'credit' }),
+      ]).size
+    ).toBe(0)
+  })
+})

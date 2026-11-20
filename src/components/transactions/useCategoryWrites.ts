@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { toast, type ExternalToast } from 'sonner'
+import { Category, isSplitParentTx } from '../../models'
 import type { Transaction } from '../../models'
 import { normalizeCategoryId } from '../../services/categories/category-aliases'
 import { resolveCategory } from '../../services/categories/category-registry'
@@ -306,20 +307,31 @@ export function useCategoryWrites({
     // The store's rows: the props have not re-rendered after the await.
     const rows = transactionStore.getState().transactions
     const row = rows.find((tx) => tx.id === id)
-    if (!row || row.splitParentId) return false
-    const target = normalizeCategoryId(category)
-    const disagrees = findSimilarTransactions(rows, row).some(
+    if (!row || row.splitParentId || isSplitParentTx(row)) return false
+    // The write stamps every similar row: never a transfer (its pairing would
+    // stop re-marking it) or a split parent.
+    const similar = findSimilarTransactions(rows, row)
+    if (
+      similar.some(
+        (other) =>
+          other.isSplitParent ||
+          isTransferCategory(normalizeCategoryId(other.category))
+      )
+    ) {
+      return false
+    }
+    // The ≠'s own rule, plus rows left Sin categoría (fix one, the rest stay
+    // wrong).
+    const split = findCategorySplits(rows).get(id)
+    const uncategorized = similar.some(
       (other) =>
         other.id !== id &&
-        !other.isSplitParent &&
-        !isTransferCategory(normalizeCategoryId(other.category)) &&
-        normalizeCategoryId(other.category) !== target
+        normalizeCategoryId(other.category) === Category.Uncategorized
     )
-    if (!disagrees) return false
+    if (!split && !uncategorized) return false
     // The dialog's save is the newest write of the row.
     const seq = start(id)
     const others = countSimilarEditReach(rows, row, false) - 1
-    const split = findCategorySplits(rows).get(id)
     const offer = toast.success(message, {
       description: split
         ? categorySplitLine(split, transactionLabel(row))

@@ -32,6 +32,7 @@ function baseProps(overrides: Partial<DialogProps> = {}): DialogProps {
     transaction,
     // Fake reach: 4 similar rows, 2 once the name changes.
     countSimilar: (_transaction, renamed) => (renamed ? 2 : 4),
+    defaultToAll: () => true,
     countHouseholdSimilar: () => 3,
     knownTags: ['super', 'viaje', 'trabajo'],
     isSaving: false,
@@ -251,16 +252,17 @@ describe('EditTransactionDialog', () => {
   it('tells how many transactions the similar scope reaches as the name changes', () => {
     render(<EditTransactionDialog {...baseProps()} />)
 
+    // The row's own name, untouched, is not a rename.
     expect(
-      screen.getByLabelText(/se aplica a 2 transacciones/)
+      screen.getByLabelText(/se aplica a 4 transacciones/)
     ).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
-      target: { value: 'POS COMPRA DISCO 123' },
+      target: { value: 'Disco Pocitos' },
     })
 
     expect(
-      screen.getByLabelText(/se aplica a 4 transacciones/)
+      screen.getByLabelText(/se aplica a 2 transacciones/)
     ).toBeInTheDocument()
   })
 
@@ -270,7 +272,12 @@ describe('EditTransactionDialog', () => {
     )
     render(<EditTransactionDialog {...baseProps({ countSimilar })} />)
 
-    // "Disco" differs from the raw "POS COMPRA DISCO 123".
+    // "Disco" is the row's own name, as opened: not a rename.
+    expect(countSimilar).toHaveBeenLastCalledWith(transaction, false)
+
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: 'Disco Pocitos' },
+    })
     expect(countSimilar).toHaveBeenLastCalledWith(transaction, true)
 
     fireEvent.change(screen.getByLabelText('Descripción edición'), {
@@ -1089,8 +1096,7 @@ describe('EditTransactionDialog — default scope (#281)', () => {
   const restaurants = resolveCategory('restaurants').label
   const groceries = resolveCategory('groceries').label
   const transport = resolveCategory('transport').label
-  // The fixture's visible name differs from the raw one: the reach is 2.
-  const all = /^Todas las similares · se aplica a 2 transacciones/
+  const all = /^Todas las similares · se aplica a 4 transacciones/
   const pick = (label: string) => {
     fireEvent.click(screen.getByLabelText('Categoría dropdown'))
     fireEvent.click(screen.getByRole('button', { name: label }))
@@ -1117,7 +1123,7 @@ describe('EditTransactionDialog — default scope (#281)', () => {
   })
 
   it('keeps Solo esta when the merchant has no other rows', () => {
-    const props = baseProps({ countSimilar: () => 1 })
+    const props = baseProps({ defaultToAll: () => false })
     render(<EditTransactionDialog {...props} />)
 
     pick(restaurants)

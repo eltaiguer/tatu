@@ -224,7 +224,7 @@ describe('merchant split across categories (#281)', () => {
   })
 
   it('the default Todas save leaves no ≠ and no offer', async () => {
-    seed(trio())
+    seed(trio({ categoryConfidence: 0.9 }))
 
     await openEdit()
     await pickInDialog(restaurants)
@@ -327,5 +327,89 @@ describe('merchant split across categories (#281)', () => {
     await pick(NAME, restaurants)
 
     await waitFor(() => expect(hints().length).toBeGreaterThan(0))
+  })
+
+  it('keeps the rows’ own names when only the category changes (Todas)', async () => {
+    seed(
+      ['d1', 'd2', 'd3'].map((id) =>
+        tx(id, {
+          description: NAME,
+          displayDescription: `Nombre ${id}`,
+          categoryConfidence: 0.9,
+        })
+      )
+    )
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole('button', { name: 'Editar Nombre d1' })[0]
+      )
+    })
+    await pickInDialog(restaurants)
+    await saveDialog()
+
+    await waitFor(() => expect(repo.row('d3')?.category).toBe('restaurants'))
+    for (const id of ['d1', 'd2', 'd3']) {
+      expect(repo.row(id)?.displayDescription).toBe(`Nombre ${id}`)
+    }
+  })
+
+  it('does not default to Todas over a hand-set different category', async () => {
+    seed([
+      tx('d1', { description: NAME, categoryConfidence: 0.9 }),
+      tx('d2', { description: NAME, category: 'transport' }),
+      tx('d3', { description: NAME, categoryConfidence: 0.9 }),
+    ])
+
+    await openEdit()
+    await pickInDialog(restaurants)
+    await saveDialog()
+
+    await visible(screen.findByText('Cambios guardados'))
+    expect(repo.row('d3')?.category).toBe('groceries')
+  })
+
+  it('offers nothing when a similar row is a transfer', async () => {
+    seed([
+      tx('d1', { description: NAME }),
+      tx('d2', { description: NAME }),
+      tx('d3', { description: NAME, category: 'internal_transfer' }),
+    ])
+
+    await editFirstSolo(restaurants)
+
+    await visible(screen.findByText('Cambios guardados'))
+    expect(
+      screen.queryByRole('button', { name: /^Aplicar a/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers nothing when a similar row is a split parent', async () => {
+    seed([
+      tx('d1', { description: NAME }),
+      tx('d2', { description: NAME }),
+      tx('p', { description: NAME, isSplitParent: true }),
+    ])
+
+    await editFirstSolo(restaurants)
+
+    await visible(screen.findByText('Cambios guardados'))
+    expect(
+      screen.queryByRole('button', { name: /^Aplicar a/ })
+    ).not.toBeInTheDocument()
+  })
+
+  it('offers nothing after future_matching_only', async () => {
+    seed(trio())
+
+    await openEdit()
+    await pickInDialog(restaurants)
+    scope('Esta y las que importes en el futuro')
+    await saveDialog()
+
+    await visible(screen.findByText('Cambios guardados'))
+    expect(
+      screen.queryByRole('button', { name: /^Aplicar a/ })
+    ).not.toBeInTheDocument()
   })
 })

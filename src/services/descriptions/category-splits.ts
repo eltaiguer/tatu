@@ -21,7 +21,8 @@ export interface CategorySplit {
 }
 
 // Every row whose similar rows are in more than one category, by row id.
-// Left out (neither counted nor given an entry): split parents and parts,
+// Left out (neither counted nor given an entry): credits (a refund in Ingresos
+// must not flag every purchase), split parents and parts,
 // Sin categoría rows, and transfer rows (their category is set per row by
 // the pairing in inferInternalTransfers, not per merchant).
 export function findCategorySplits(
@@ -29,7 +30,7 @@ export function findCategorySplits(
 ): ReadonlyMap<string, CategorySplit> {
   const groups = new Map<string, Array<{ id: string; category: string }>>()
   for (const tx of all) {
-    if (!countsAsRow(tx) || tx.splitParentId) continue
+    if (!countsAsRow(tx) || tx.splitParentId || tx.type !== 'debit') continue
     const key = buildDescriptionOverrideKey(tx.description)
     if (key === null) continue
     const category = normalizeCategoryId(tx.category)

@@ -61,6 +61,9 @@ interface EditTransactionDialogProps {
   // (countSimilarEditReach), given whether the draft renames it. Takes the
   // row so the count holds while the dialog animates closed.
   countSimilar: (transaction: Transaction, renamed: boolean) => number
+  // Whether a change to `category` opens on "Todas las similares" (#281; the
+  // conservative rule in services/descriptions/default-scope.ts).
+  defaultToAll: (transaction: Transaction, category: string) => boolean
   // Tags already in use, offered as suggestions.
   knownTags: string[]
   isSaving: boolean
@@ -131,6 +134,7 @@ export function EditTransactionDialog({
 function EditTransactionForm({
   transaction,
   countSimilar,
+  defaultToAll,
   countHouseholdSimilar,
   knownTags,
   isSaving,
@@ -164,8 +168,11 @@ function EditTransactionForm({
 
   // "Renamed" exactly as the save decides it, so the number shown is the
   // number of rows the save will touch.
+  const [openedName] = useState(() => getDisplayDescription(transaction))
   const name = description.trim()
-  const renamed = !!name && name !== transaction.description
+  // An untouched name is not a rename, even when the row has its own.
+  const renamed =
+    !!name && name !== transaction.description && name !== openedName
   const similarCount = useMemo(
     () => countSimilar(transaction, renamed),
     [countSimilar, transaction, renamed]
@@ -184,7 +191,7 @@ function EditTransactionForm({
     (categoryChanged &&
     !isSplitChildTx(transaction) &&
     !isSplitParentTx(transaction) &&
-    similarCount > 1
+    defaultToAll(transaction, category)
       ? 'matching_past_and_future'
       : 'single')
 
