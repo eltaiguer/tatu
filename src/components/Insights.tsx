@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { PageHeader } from './ui/page-header'
 import {
   Sparkles,
@@ -10,17 +10,24 @@ import {
   RefreshCw,
   Upload,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Card } from './ui/card'
 import { Button } from './ui/button'
-import { CategoryBadge } from './CategoryBadge'
+import { InsightCard } from './insights/InsightCard'
+import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { HouseholdModeToggle } from './dashboard/HouseholdModeToggle'
 import { NoHouseholdState } from './dashboard/EmptyStates'
-import { formatCurrency } from '../utils/formatting'
 import { todayAsUtcDate, toMonthKey } from '../utils/date-utils'
 import type { Currency, Transaction, TransactionsFilter } from '../models'
+import type { TransactionsProps } from './transactions/transactions-props'
 import type { Repository } from '../services/repository/repository'
 import type { ClaudeClient } from '../services/ai/claude-client'
 import { householdExpenses } from '../services/household/household'
+import { householdMarkedToast } from '../services/household/household-copy'
+import {
+  buildInsightActionIndex,
+  insightActions,
+} from '../services/insights/insight-actions'
 import { useHouseholdRules } from '../hooks/useHouseholdRules'
 import {
   buildInsightInput,
@@ -50,6 +57,8 @@ interface InsightsProps {
   householdMode?: boolean
   onHouseholdModeChange?: (householdMode: boolean) => void
   onNavigateToCategories?: () => void
+  /** Recurring cards' "Marcar como hogar" (Todo): the merchant's household rule. */
+  onApplyHouseholdToSimilar?: TransactionsProps['onApplyHouseholdToSimilar']
   /** Tests hand in a fake; the app builds the real one from the key. */
   claudeClient?: ClaudeClient
 }
@@ -77,11 +86,6 @@ const SEVERITY_RANK: Record<InsightSeverity, number> = {
   high: 0,
   medium: 1,
   low: 2,
-}
-const SEVERITY_COLOR: Record<InsightSeverity, string> = {
-  high: 'var(--neg)',
-  medium: 'var(--accent)',
-  low: 'var(--text-faint)',
 }
 
 function groupAndSortInsights(
@@ -115,6 +119,7 @@ export function Insights({
   householdMode = false,
   onHouseholdModeChange,
   onNavigateToCategories,
+  onApplyHouseholdToSimilar,
   claudeClient,
 }: InsightsProps) {
   // Todo and Hogar are two analyses with their own cache row and their own
@@ -186,6 +191,46 @@ export function Insights({
     () => groupAndSortInsights(cached?.result.insights ?? []),
     [cached]
   )
+
+  const actionIndex = useMemo(
+    () =>
+      buildInsightActionIndex({
+        rows: householdMode ? householdRows : transactions,
+        all: transactions,
+        householdMode,
+        householdRules,
+        homeCurrency,
+        fxRate,
+      }),
+    [
+      householdMode,
+      householdRows,
+      transactions,
+      householdRules,
+      homeCurrency,
+      fxRate,
+    ]
+  )
+
+  // The card whose "Marcar como hogar" write is in flight.
+  const [markingKey, setMarkingKey] = useState<string | null>(null)
+  const { reportError } = useMutationFeedback({})
+  async function markHousehold(
+    key: string,
+    insight: Insight,
+    transactionId: string
+  ) {
+    if (!onApplyHouseholdToSimilar) return
+    setMarkingKey(key)
+    try {
+      const { affected } = await onApplyHouseholdToSimilar(transactionId, true)
+      toast.success(householdMarkedToast(insight.merchant ?? '', affected))
+    } catch (markError) {
+      reportError(markError, 'No se pudo marcar como hogar')
+    } finally {
+      setMarkingKey(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-[24px]">
@@ -300,7 +345,7 @@ export function Insights({
               })}
             </p>
             <Button
-              variant="outline"
+              variant={cached.isStale ? 'default' : 'outline'}
               size="sm"
               onClick={() => void handleGenerate()}
               disabled={generating}
@@ -316,15 +361,7 @@ export function Insights({
                 {householdMode
                   ? 'Desde la última vez que generaste los insights del hogar cambiaron tus gastos del hogar o se completó un mes.'
                   : 'Desde la última vez que generaste insights cambiaron tus transacciones o se completó un mes.'}{' '}
-                Los que ves abajo pueden estar desactualizados —{' '}
-                <button
-                  onClick={() => void handleGenerate()}
-                  disabled={generating}
-                  className="cursor-pointer border-none bg-transparent p-0 font-semibold text-[var(--brand-text)] underline"
-                >
-                  regenerar ahora
-                </button>
-                .
+                Los insights pueden estar desactualizados.
               </p>
             </Card>
           )}
@@ -351,61 +388,33 @@ export function Insights({
                   {meta.label}
                 </h3>
                 <div className="flex flex-col gap-[10px]">
-                  {group.items.map((insight, i) => (
-                    <Card
-                      key={`${group.type}-${i}`}
-                      className="p-4"
-                      style={{
-                        borderLeft: `3px solid ${SEVERITY_COLOR[insight.severity]}`,
-                      }}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-[12px]">
-                        <div className="min-w-[200px] flex-1">
-                          <p className="mx-0 mt-0 mb-[4px] text-[14px] font-semibold">
-                            {insight.title}
-                          </p>
-                          <p className="m-0 text-[13px] text-muted-foreground">
-                            {insight.narrative}
-                          </p>
-                          {insight.category && (
-                            <div className="mt-[8px]">
-                              <CategoryBadge
-                                categoryId={insight.category}
-                                size="sm"
-                              />
-                            </div>
-                          )}
-                        </div>
-                        <div className="shrink-0 text-right">
-                          {typeof insight.amount === 'number' && (
-                            <p className="m-0 font-mono text-[16px] font-semibold">
-                              {insight.amount < 0 ? '−' : ''}
-                              {formatCurrency(
-                                Math.abs(insight.amount),
-                                insight.currency
-                              )}
-                            </p>
-                          )}
-                          {insight.category && (
-                            <button
-                              onClick={() =>
-                                onNavigateToTransactions({
-                                  category: insight.category,
-                                  // Inside Hogar the drill stays in the house.
-                                  ...(householdMode && {
-                                    household: 'household' as const,
-                                  }),
-                                })
-                              }
-                              className="mt-[6px] cursor-pointer border-none bg-transparent p-0 text-[12px] font-semibold text-[var(--brand-text)]"
-                            >
-                              Ver transacciones →
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+                  {group.items.map((insight, i) => {
+                    const key = `${group.type}-${i}`
+                    const actions = insightActions(insight, actionIndex)
+                    const offer =
+                      actions.household?.state === 'offer'
+                        ? actions.household
+                        : null
+                    return (
+                      <InsightCard
+                        key={key}
+                        insight={insight}
+                        actions={actions}
+                        onDrill={onNavigateToTransactions}
+                        onMarkHousehold={
+                          offer && onApplyHouseholdToSimilar
+                            ? () =>
+                                void markHousehold(
+                                  key,
+                                  insight,
+                                  offer.transactionId
+                                )
+                            : undefined
+                        }
+                        marking={markingKey === key}
+                      />
+                    )
+                  })}
                 </div>
               </div>
             )

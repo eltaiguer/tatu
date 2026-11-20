@@ -546,6 +546,7 @@ function App({ auth, createRepository }: AppProps) {
                     householdMode={householdMode}
                     onHouseholdModeChange={handleHouseholdModeChange}
                     onNavigateToCategories={() => go('categories')}
+                    onApplyHouseholdToSimilar={handleApplyHouseholdToSimilar}
                   />
                 )}
                 {currentView === 'categories' && (

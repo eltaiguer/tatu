@@ -20,6 +20,8 @@ import {
 import { listCustomCategories } from './services/categories/category-store'
 import { makeSession } from './services/auth/in-memory-auth'
 import { createFakeBackend, type FakeBackend } from './test/fake-backend'
+import { merchantLabelFor } from './services/merchants/merchant-key'
+import { merchantOverrideKey } from './services/categorizer/category-overrides'
 
 // The backend: user-1 is signed in, with nothing stored until a test seeds
 // it. A fresh one per test.
@@ -1145,6 +1147,56 @@ describe('App', () => {
           await new Promise((r) => setTimeout(r, 50))
         })
         expect(currentUrl()).toBe('/insights')
+      })
+
+      it('marks a recurring merchant as household from its Insights card', async () => {
+        const rows = [
+          tx('nf1', '2026-01-05T12:00:00.000Z', 'NETFLIX.COM', 'restaurants'),
+          tx('nf2', '2026-02-05T12:00:00.000Z', 'NETFLIX.COM', 'restaurants'),
+          tx('nf3', '2026-03-05T12:00:00.000Z', 'NETFLIX.COM', 'restaurants'),
+        ]
+        seed({
+          transactions: rows,
+          preferences: {
+            ...DEFAULT_PREFERENCES,
+            aiEnabled: true,
+            claudeApiKey: 'sk-ant-test',
+          },
+        })
+        backend.repo().insights = {
+          inputHash: 'any-hash',
+          model: 'claude-opus-4-8',
+          generatedAt: '2026-03-20T10:00:00.000Z',
+          insights: {
+            insights: [
+              {
+                type: 'recurring',
+                title: 'Netflix cada mes',
+                narrative: 'N',
+                currency: 'USD',
+                merchant: merchantLabelFor(
+                  rows as unknown as Parameters<typeof merchantLabelFor>[0]
+                ),
+                severity: 'medium',
+              },
+            ],
+          },
+        }
+        renderApp('/insights')
+
+        fireEvent.click(
+          await screen.findByRole('button', { name: /^Marcar como hogar/ })
+        )
+
+        await waitFor(() =>
+          expect(
+            backend
+              .repo()
+              .householdRules.get(merchantOverrideKey('NETFLIX.COM') ?? '')
+              ?.isHousehold
+          ).toBe(true)
+        )
+        expect(await screen.findByText('Hogar: Sí')).toBeInTheDocument()
       })
 
       it('the sidebar’s Insights opens Todo', async () => {

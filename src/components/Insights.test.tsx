@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { Toaster } from './ui/sonner'
+import {
+  merchantKeyOf,
+  merchantLabelFor,
+} from '../services/merchants/merchant-key'
 import { Insights } from './Insights'
 import type { Transaction } from '../models'
 import { Category } from '../models'
@@ -344,5 +349,169 @@ describe('Insights', () => {
     expect(screen.queryByText(failure.message)).not.toBeInTheDocument()
     expect(reporting.captureError).toHaveBeenCalledWith(failure, 'insights')
     expect(errorSpy).toHaveBeenCalledWith(failure)
+  })
+  describe('actionable cards (#286)', () => {
+    const netflixRows = [
+      makeTransaction('n1', {
+        description: 'NETFLIX.COM',
+        date: new Date('2026-04-05T00:00:00.000Z'),
+      }),
+      makeTransaction('n2', {
+        description: 'NETFLIX.COM',
+        date: new Date('2026-05-05T00:00:00.000Z'),
+      }),
+      makeTransaction('n3', {
+        description: 'NETFLIX.COM',
+        date: new Date('2026-06-05T00:00:00.000Z'),
+      }),
+    ]
+    const netflixLabel = merchantLabelFor(netflixRows)
+
+    function seed(
+      insights: InsightsResult['insights'],
+      rows: Transaction[],
+      slot: 'insights' | 'householdInsights' = 'insights'
+    ) {
+      repo[slot] = {
+        inputHash: 'any-hash',
+        model: 'claude-opus-4-8',
+        insights: { insights },
+        generatedAt: '2026-06-20T10:00:00.000Z',
+      }
+      return rows
+    }
+
+    const recurringCard = {
+      type: 'recurring' as const,
+      title: 'Netflix cada mes',
+      narrative: 'N',
+      currency: 'USD' as const,
+      merchant: netflixLabel,
+      severity: 'medium' as const,
+    }
+
+    it('links a merchant-only insight by its exact merchant key', async () => {
+      const rows = seed(
+        [{ ...recurringCard, type: 'bleeding_money', title: 'Gasto fijo' }],
+        netflixRows
+      )
+      const onNavigateToTransactions = vi.fn()
+      renderInsights({ transactions: rows, onNavigateToTransactions })
+
+      fireEvent.click(await screen.findByText('Ver transacciones →'))
+
+      expect(onNavigateToTransactions).toHaveBeenCalledWith({
+        merchant: merchantKeyOf(netflixRows[0]),
+        type: 'debit',
+      })
+    })
+
+    it('offers "Revisar N" on a Sin categoría insight', async () => {
+      const rows = [
+        makeTransaction('u1', { category: Category.Uncategorized }),
+        makeTransaction('u2', { category: Category.Uncategorized }),
+        makeTransaction('r1'),
+      ]
+      seed(
+        [
+          {
+            type: 'bleeding_money',
+            title: 'Sin categoría pesa',
+            narrative: 'N',
+            currency: 'USD',
+            category: Category.Uncategorized,
+            severity: 'high',
+          },
+        ],
+        rows
+      )
+      const onNavigateToTransactions = vi.fn()
+      renderInsights({ transactions: rows, onNavigateToTransactions })
+
+      fireEvent.click(await screen.findByText('Revisar 2 →'))
+
+      expect(onNavigateToTransactions).toHaveBeenCalledWith({
+        categories: [Category.Uncategorized],
+        type: 'debit',
+      })
+    })
+
+    it('marks a recurring merchant as household from its card', async () => {
+      seed([recurringCard], netflixRows)
+      const onApplyHouseholdToSimilar = vi
+        .fn()
+        .mockResolvedValue({ affected: 3 })
+      render(<Toaster />)
+      renderInsights({
+        transactions: netflixRows,
+        onApplyHouseholdToSimilar,
+      })
+
+      expect(await screen.findByText('Ver cargos →')).toBeInTheDocument()
+      fireEvent.click(
+        screen.getByRole('button', { name: /^Marcar como hogar/ })
+      )
+
+      expect(onApplyHouseholdToSimilar).toHaveBeenCalledWith('n3', true)
+      expect(
+        await screen.findByText(
+          `Hogar: Sí en 3 transacciones de ${netflixLabel}`
+        )
+      ).toBeInTheDocument()
+    })
+
+    it('offers no household mark in Hogar mode', async () => {
+      const rows = netflixRows.map((row) => ({
+        ...row,
+        category: Category.Groceries,
+      }))
+      seed([recurringCard], rows, 'householdInsights')
+      renderInsights({
+        transactions: rows,
+        householdMode: true,
+        onApplyHouseholdToSimilar: vi.fn(),
+      })
+
+      expect(await screen.findByText('Netflix cada mes')).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: /^Marcar como hogar/ })
+      ).not.toBeInTheDocument()
+    })
+
+    it('reports a failed household mark', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      seed([recurringCard], netflixRows)
+      render(<Toaster />)
+      renderInsights({
+        transactions: netflixRows,
+        onApplyHouseholdToSimilar: vi.fn().mockRejectedValue(new Error('boom')),
+      })
+
+      fireEvent.click(
+        await screen.findByRole('button', { name: /^Marcar como hogar/ })
+      )
+
+      expect(
+        await screen.findByText('No se pudo marcar como hogar')
+      ).toBeInTheDocument()
+      expect(errorSpy).toHaveBeenCalled()
+    })
+
+    it('keeps one Regenerar control while stale, with no link in the banner', async () => {
+      cacheInsights({ stale: true })
+      renderInsights()
+
+      expect(
+        await screen.findByText('Los insights pueden estar desactualizados.', {
+          exact: false,
+        })
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: /regenerar ahora/i })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getAllByRole('button', { name: /regenerar/i })
+      ).toHaveLength(1)
+    })
   })
 })
