@@ -2,7 +2,7 @@ import type { HouseholdRules, Transaction } from '../../models'
 import { rowHouseholdView } from '../household/household'
 import { normalizeCategoryId } from '../categories/category-aliases'
 import { countsAsRow, countsTowardTotals } from '../spending/spending-rules'
-import { getDisplayDescription } from '../../utils/transaction-display'
+import { transactionLabel } from '../merchants/merchant-key'
 import { merchantKeyOf } from '../merchants/merchant-key'
 import { newestDate, toDateKey, todayAsUtcDate } from '../../utils/date-utils'
 import type { UrlFilterState, UrlPeriod } from './url-filters'
@@ -133,7 +133,7 @@ export function filterTransactions(
     if (!query) return true
 
     const searchable =
-      `${getDisplayDescription(transaction)} ${transaction.description} ${(transaction.tags ?? []).join(' ')}`.toLowerCase()
+      `${transactionLabel(transaction)} ${transaction.description} ${(transaction.tags ?? []).join(' ')}`.toLowerCase()
     return searchable.includes(query)
   })
 }
@@ -151,10 +151,7 @@ export function sortTransactions(
     if (field === 'amount')
       return (Math.abs(a.amount) - Math.abs(b.amount)) * sign
     if (field === 'description') {
-      return (
-        getDisplayDescription(a).localeCompare(getDisplayDescription(b), 'es') *
-        sign
-      )
+      return transactionLabel(a).localeCompare(transactionLabel(b), 'es') * sign
     }
     return (a.category ?? '').localeCompare(b.category ?? '', 'es') * sign
   })

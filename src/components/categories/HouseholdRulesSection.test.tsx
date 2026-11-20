@@ -102,6 +102,23 @@ describe('HouseholdRulesSection', () => {
     expect(within(region).getByText('2 transacciones')).toBeInTheDocument()
   })
 
+  it('shows a bank rule by its clean group label, the statement text as its title (#274)', () => {
+    const raw =
+      'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+    seed([
+      rule(DEVOTO_KEY, '2026-03-01T10:00:00.000Z', { merchantOriginal: raw }),
+    ])
+    renderSection()
+
+    const name = screen.getByText('Tintoreria Martinizi · Tarjeta de débito')
+    expect(name).toHaveAttribute('title', raw)
+    expect(
+      screen.getByRole('button', {
+        name: 'Eliminar regla del hogar Tintoreria Martinizi · Tarjeta de débito',
+      })
+    ).toBeInTheDocument()
+  })
+
   it('says "Hogar: No" for a rule that says no, and "1 transacción" in the singular', () => {
     seed([rule(DEVOTO_KEY, '2026-03-01T10:00:00.000Z', { isHousehold: false })])
     renderSection([makeTx({ id: 'a' })])

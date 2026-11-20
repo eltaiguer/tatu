@@ -523,6 +523,33 @@ describe('EditTransactionDialog — Hogar (#251)', () => {
       expect(within(group()).getByText(/^Hogar/)).not.toHaveTextContent('·')
     })
 
+    it('names an un-renamed bank row by its clean label, and keeps the statement text in the name input (#274)', () => {
+      const raw =
+        'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+      const onSave = vi.fn()
+      render(
+        <EditTransactionDialog
+          {...baseProps({
+            transaction: {
+              ...transaction,
+              description: raw,
+              displayDescription: undefined,
+            },
+            onSave,
+          })}
+        />
+      )
+
+      expect(
+        screen.getByRole('checkbox', {
+          name: 'Recordar para todas las de Tintoreria Martinizi',
+        })
+      ).toBeInTheDocument()
+      // Display only: a save must not turn the label into a rename.
+      expect(screen.getByLabelText('Descripción edición')).toHaveValue(raw)
+      expect(screen.getByText(`Original: ${raw}`)).toBeInTheDocument()
+    })
+
     it('says "solo esta por ahora" when the merchant has no other row', () => {
       render(
         <EditTransactionDialog

@@ -5,6 +5,7 @@ import { Section } from '../ui/section'
 import type { Transaction } from '../../models'
 import { useHouseholdRuleRecords } from '../../hooks/useHouseholdRules'
 import { householdValueLabel } from '../../services/household/household-copy'
+import { statementMerchantLabel } from '../../services/merchants/merchant-key'
 import { ruleReachCounts } from '../../services/household/household'
 import {
   deleteHouseholdRuleWithSync,
@@ -108,7 +109,9 @@ export function HouseholdRulesSection({
         {records.length > 0 ? (
           <ul className="m-0 flex list-none flex-col gap-[6px] p-0">
             {records.map((rule) => {
-              const name = rule.merchantOriginal ?? rule.merchantNormalized
+              const name = rule.merchantOriginal
+                ? statementMerchantLabel(rule.merchantOriginal)
+                : rule.merchantNormalized
               const count = reached.get(rule.merchantNormalized) ?? 0
               return (
                 <li
@@ -117,7 +120,7 @@ export function HouseholdRulesSection({
                 >
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-[10px] gap-y-[2px]">
                     <span
-                      title={name}
+                      title={rule.merchantOriginal ?? name}
                       className="min-w-0 max-w-full truncate font-mono text-[12px]"
                     >
                       {name}

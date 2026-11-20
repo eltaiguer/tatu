@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { Dashboard } from './Dashboard'
 import type { Transaction } from '../models'
 import { Category } from '../models'
@@ -104,6 +110,36 @@ describe('Dashboard', () => {
     ).not.toBeInTheDocument()
 
     vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('names bank rows by payee: Movimientos recientes plain, Mayores comercios with the debit-card suffix (#274)', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-15T12:00:00.000Z'))
+    const tx = makeTransaction({
+      id: 'bank-1',
+      description:
+        'COMPRA CON TARJETA DEBITO PANADERIA MARACANA, MONTEVIDEO TARJ: ############9172',
+      amount: 500,
+      currency: 'UYU',
+      type: 'debit',
+      date: new Date('2026-01-10T00:00:00.000Z'),
+    })
+
+    render(<Dashboard transactions={[tx]} />)
+
+    const recent = screen.getByText('Movimientos recientes').parentElement
+      ?.parentElement
+    expect(
+      within(recent as HTMLElement).getByText('Panaderia Maracana')
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByText('Panaderia Maracana · Tarjeta de débito').length
+    ).toBeGreaterThan(0)
+    expect(
+      screen.queryByText(/COMPRA CON TARJETA DEBITO/)
+    ).not.toBeInTheDocument()
+
     vi.useRealTimers()
   })
 

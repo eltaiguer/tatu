@@ -18,6 +18,7 @@ import {
   needsCategoryReview,
 } from '../../utils/transaction-display'
 import { formatCurrency, formatDate } from '../../utils/formatting'
+import { transactionLabel } from '../../services/merchants/merchant-key'
 import { convert } from '../../services/currency/convert'
 import { countsTowardTotals } from '../../services/spending/spending-rules'
 import {
@@ -60,8 +61,11 @@ export function TransactionRow({
   onCategorize,
 }: TransactionRowProps) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const displayDescription = getDisplayDescription(transaction)
-  const hasFriendlyOverride = displayDescription !== transaction.description
+  const displayDescription = transactionLabel(transaction)
+  // Only a rename earns the second line: an auto-cleaned bank label keeps the
+  // statement text in its title instead.
+  const hasFriendlyOverride =
+    getDisplayDescription(transaction) !== transaction.description
   const category = resolveCategory(transaction.category)
   const isIgnored = category.isIgnored
   const showIgnoredFlag = needsIgnoredFlag(category)
@@ -137,7 +141,14 @@ export function TransactionRow({
           </IconTile>
           <div className="min-w-0">
             <div className="flex items-center gap-[7px]">
-              <div className="font-medium truncate leading-snug max-w-[220px]">
+              <div
+                className="font-medium truncate leading-snug max-w-[220px]"
+                title={
+                  displayDescription !== transaction.description
+                    ? transaction.description
+                    : undefined
+                }
+              >
                 {displayDescription}
               </div>
               {showIgnoredFlag && (
