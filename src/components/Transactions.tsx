@@ -42,6 +42,8 @@ import { useMutationFeedback } from './transactions/useMutationFeedback'
 import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
 import { useHouseholdWrites } from './transactions/useHouseholdWrites'
+import { useCategoryWrites } from './transactions/useCategoryWrites'
+import { usePendingRows } from './transactions/usePendingRows'
 import {
   currentHouseholdRules,
   rowsSharingMerchantRule,
@@ -59,6 +61,7 @@ export function Transactions({
   homeCurrency = 'USD',
   fxRate = 40.5,
   onUpdateTransaction,
+  onRestoreCategories,
   onDeleteTransaction,
   onAutoCategorizeTransactions,
   onBulkCategorize,
@@ -146,19 +149,7 @@ export function Transactions({
   const newestForNav = newestRowDate ?? todayAsUtcDate()
 
   /* ---- Edit state ---- */
-  // Rows with a mutation in flight. A set, not a single id, so two
-  // overlapping deletes don't re-enable each other's buttons.
-  const [pendingTransactionIds, setPendingTransactionIds] = useState<
-    ReadonlySet<string>
-  >(() => new Set())
-  function setPending(transactionId: string, pending: boolean) {
-    setPendingTransactionIds((current) => {
-      const next = new Set(current)
-      if (pending) next.add(transactionId)
-      else next.delete(transactionId)
-      return next
-    })
-  }
+  const { pendingTransactionIds, setPending } = usePendingRows()
 
   const {
     reportError,
@@ -221,6 +212,14 @@ export function Transactions({
       setPending,
       reportError,
     })
+
+  const { onCategorize } = useCategoryWrites({
+    transactions,
+    onUpdateTransaction,
+    onRestoreCategories,
+    setPending,
+    reportError,
+  })
 
   const [editingTransaction, setEditingTransaction] =
     useState<Transaction | null>(null)
@@ -526,6 +525,7 @@ export function Transactions({
               }
             : undefined
         }
+        onCategorize={onCategorize}
         onToggleHousehold={
           onSetHousehold
             ? (transaction) => {

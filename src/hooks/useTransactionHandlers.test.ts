@@ -115,6 +115,9 @@ describe('useTransactionHandlers — one contract without a repository', () => {
       h.handleSplitTransaction('a', []),
       h.handleUnsplitTransaction('a'),
       h.handleBulkCategorizeTransactions(['a'], 'food'),
+      h.handleRestoreCategories([
+        { id: 'a', category: 'food', categoryConfidence: 0.4 },
+      ]),
       h.handleBulkTagTransactions(['a'], 'x'),
       h.handleApplyHouseholdToSimilar('a', true),
       h.handleForgetHouseholdRule('a', true),
@@ -214,6 +217,20 @@ describe('useTransactionHandlers — the view error', () => {
     [
       'handleBulkCategorizeTransactions',
       { write: (h) => h.handleBulkCategorizeTransactions(['a'], 'food') },
+    ],
+    [
+      'handleRestoreCategories',
+      {
+        prepare: (h) =>
+          h.handleUpdateTransaction('a', {
+            category: 'restaurants',
+            applyScope: 'single',
+          }),
+        write: (h) =>
+          h.handleRestoreCategories([
+            { id: 'a', category: 'food', categoryConfidence: 0.4 },
+          ]),
+      },
     ],
     [
       'handleBulkTagTransactions',

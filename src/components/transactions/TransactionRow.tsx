@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { Scissors, Slash, Pencil, Trash2, Undo2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
 import { IconTile } from '../ui/icon-tile'
 import { CategoryBadge } from '../CategoryBadge'
 import { HouseToggle } from './HouseToggle'
+import { RowCategoryPicker } from './RowCategoryPicker'
+import { isCategorizeShortcut } from './category-shortcut'
 import { Category, isSplitParentTx, isSplitChildTx } from '../../models'
 import type { Currency, Transaction } from '../../models'
 import {
@@ -36,6 +39,8 @@ export interface TransactionRowProps {
   onSplit?: (transaction: Transaction) => void
   onUnsplit?: (transaction: Transaction) => void
   onToggleHousehold?: (transaction: Transaction) => void
+  // Picks a category from the badge (#279); without it the badge is plain.
+  onCategorize?: (transaction: Transaction, categoryId: string) => void
 }
 
 // One transaction as a desktop table row.
@@ -52,7 +57,9 @@ export function TransactionRow({
   onSplit,
   onUnsplit,
   onToggleHousehold,
+  onCategorize,
 }: TransactionRowProps) {
+  const [pickerOpen, setPickerOpen] = useState(false)
   const displayDescription = getDisplayDescription(transaction)
   const hasFriendlyOverride = displayDescription !== transaction.description
   const category = resolveCategory(transaction.category)
@@ -75,6 +82,20 @@ export function TransactionRow({
 
   return (
     <tr
+      onKeyDown={(e) => {
+        if (
+          !onCategorize ||
+          pickerOpen ||
+          isSplitParent ||
+          pendingTransactionIds.has(transaction.id)
+        ) {
+          return
+        }
+        if (isCategorizeShortcut(e)) {
+          e.preventDefault()
+          setPickerOpen(true)
+        }
+      }}
       // Ignored and split-parent rows read as secondary through
       // muted text, not opacity, so their pills keep AA contrast.
       className={`group border-b border-border hover:bg-muted/30 transition-colors${
@@ -154,10 +175,22 @@ export function TransactionRow({
       </td>
       <td className="px-3.5 py-1.5">
         <div className="flex items-center gap-1.5">
-          <CategoryBadge
-            categoryId={transaction.category || Category.Uncategorized}
-            size="sm"
-          />
+          {onCategorize && !isSplitParent ? (
+            <RowCategoryPicker
+              transaction={transaction}
+              description={displayDescription}
+              variant="popover"
+              open={pickerOpen}
+              onOpenChange={setPickerOpen}
+              pending={pendingTransactionIds.has(transaction.id)}
+              onPick={(id) => onCategorize(transaction, id)}
+            />
+          ) : (
+            <CategoryBadge
+              categoryId={transaction.category || Category.Uncategorized}
+              size="sm"
+            />
+          )}
           {needsCategoryReview(transaction) && <ReviewMarker />}
           {onToggleHousehold && (
             <HouseToggle
