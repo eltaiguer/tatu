@@ -233,7 +233,7 @@ describe('App', () => {
     await waitFor(() => expect(opener).toHaveFocus())
   })
 
-  it('opens what the import leaves to review from "Revisar N" on the summary (#275)', async () => {
+  it('opens the review mode on what the import leaves to review from "Revisar N" on the summary (#275, #305)', async () => {
     const user = userEvent.setup()
     renderApp()
     await user.click(await screen.findByRole('button', { name: 'Importar' }))
@@ -257,21 +257,27 @@ describe('App', () => {
     )
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    const reviewUrl =
+      '/transacciones?cuenta=bank_account&moneda=UYU&revisar=si&modo=revisar&desde=2025-11-24&hasta=2025-11-27'
+    await waitFor(() => expect(currentUrl()).toBe(reviewUrl))
+    // N on the button == M of the queue.
+    expect(await screen.findByText('1 de 1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /ZQXW/i })).toBeVisible()
+    // The dialog's return-focus must not take focus off the review card.
     await waitFor(() =>
-      expect(currentUrl()).toBe(
-        '/transacciones?cuenta=bank_account&moneda=UYU&revisar=si&desde=2025-11-24&hasta=2025-11-27'
-      )
+      expect(
+        screen.getByRole('textbox', { name: 'Buscar categoría' })
+      ).toHaveFocus()
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Salir' }))
+    await waitFor(() =>
+      expect(currentUrl()).toBe(reviewUrl.replace('&modo=revisar', ''))
     )
     expect(
       screen.getByRole('button', { name: 'Quitar filtro A revisar' })
     ).toBeInTheDocument()
-    // The table lists the N rows the button promised, each with the marker.
-    // (A split part listed under its parent can add the parent's row to the
-    // count; a fresh import has no splits.)
     expect(await screen.findByText('Mostrando 1-1 de 1')).toBeInTheDocument()
-    expect(
-      screen.getAllByText(/categoría sin asignar o asignada/).length
-    ).toBeGreaterThan(0)
   })
 
   it('starts the import dialog over when another user signs in under it (#275)', async () => {

@@ -42,6 +42,7 @@ describe('reviewLink', () => {
       ])
     ).toEqual({
       review: true,
+      reviewMode: true,
       accountType: 'credit_card',
       period: { mode: 'range', from: '2025-01-02', to: '2025-12-04' },
     })
@@ -58,6 +59,7 @@ describe('reviewLink', () => {
       ])
     ).toEqual({
       review: true,
+      reviewMode: true,
       accountType: 'bank_account',
       currency: 'USD',
       period,
@@ -86,6 +88,7 @@ describe('reviewLink', () => {
       ])
     ).toEqual({
       review: true,
+      reviewMode: true,
       accountType: 'bank_account',
       period: { mode: 'range', from: '2025-11-03', to: '2025-11-30' },
     })
@@ -105,6 +108,7 @@ describe('reviewLink', () => {
       ])
     ).toEqual({
       review: true,
+      reviewMode: true,
       period: { mode: 'range', from: '2025-03-17', to: '2025-12-04' },
     })
   })
@@ -134,6 +138,13 @@ describe('countReviewRows', () => {
 
   it('counts only the given ids', () => {
     expect(countReviewRows(rows, { review: true }, new Set(['a', 'c']))).toBe(1)
+  })
+
+  it('counts a review-mode link the same as the table link', () => {
+    const period = { mode: 'range', from: '2025-01-01', to: '2025-12-31' }
+    expect(
+      countReviewRows(rows, { review: true, reviewMode: true, period })
+    ).toBe(countReviewRows(rows, { review: true, period }))
   })
 
   it('equals what the link opens', () => {
