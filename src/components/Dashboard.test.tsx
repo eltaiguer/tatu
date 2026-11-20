@@ -1014,6 +1014,26 @@ describe('Dashboard', () => {
       ).toBeTruthy()
     })
 
+    it('puts the rate line before the comparisons hint (#276)', () => {
+      setup([
+        ...edgeRows('c', ['2026-08', '2026-09'], card),
+        makeTransaction({
+          id: 'spend',
+          date: new Date('2026-09-10T12:00:00.000Z'),
+          amount: 100,
+          currency: 'USD',
+          source: 'credit_card',
+          category: Category.Restaurants,
+        }),
+      ])
+
+      const rate = screen.getByText('Tipo de cambio:')
+      const hint = screen.getByText(/Comparaciones mes a mes/)
+      expect(
+        rate.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
+    })
+
     it('names the missing account and opens the import', () => {
       const onImport = vi.fn()
       setup(missingAugust, onImport)
@@ -1179,5 +1199,118 @@ describe('Dashboard', () => {
     expect(
       container.querySelector('.recharts-pie')?.closest('[tabindex="0"]')
     ).toBeNull()
+  })
+})
+
+describe('the rate and home currency under the hero (#276)', () => {
+  const RATE = '1 US$ = $U 40,50 (manual) · cambiar'
+
+  function renderWithSetters() {
+    const onSetFxRate = vi.fn()
+    const onSetHomeCurrency = vi.fn()
+    render(
+      <Dashboard
+        transactions={[makeTransaction()]}
+        homeCurrency="USD"
+        fxRate={40.5}
+        onSetFxRate={onSetFxRate}
+        onSetHomeCurrency={onSetHomeCurrency}
+        onHouseholdModeChange={vi.fn()}
+      />
+    )
+    return { onSetFxRate, onSetHomeCurrency }
+  }
+
+  it('the header holds only the Todo / Hogar mode', () => {
+    renderWithSetters()
+
+    const header = screen.getByRole('heading', { level: 1 }).closest('header')!
+    expect(
+      within(header).getByRole('radiogroup', { name: 'Ver gastos' })
+    ).toBeInTheDocument()
+    expect(
+      within(header).queryByRole('radiogroup', { name: 'Moneda principal' })
+    ).toBeNull()
+    expect(within(header).queryByText(/1 US\$ =/)).toBeNull()
+  })
+
+  it('the rate line follows the hero heading, outside it', () => {
+    renderWithSetters()
+
+    const hero = screen.getByRole('heading', { name: /Gastaste/ })
+    const rate = screen.getByRole('button', { name: RATE })
+    const currency = screen.getByRole('radiogroup', {
+      name: 'Moneda principal',
+    })
+    for (const el of [rate, currency]) {
+      expect(
+        hero.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
+      expect(hero.contains(el)).toBe(false)
+    }
+    expect(screen.getByText('Tipo de cambio:')).toBeInTheDocument()
+  })
+
+  it('cambiar edits the rate', () => {
+    const { onSetFxRate } = renderWithSetters()
+
+    fireEvent.click(screen.getByRole('button', { name: RATE }))
+    const input = screen.getByRole('textbox', { name: 'Tipo de cambio' })
+    fireEvent.change(input, { target: { value: '41,5' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onSetFxRate).toHaveBeenCalledWith(41.5)
+  })
+
+  it('the currency switch sets the home currency', () => {
+    const { onSetHomeCurrency } = renderWithSetters()
+
+    fireEvent.click(
+      within(
+        screen.getByRole('radiogroup', { name: 'Moneda principal' })
+      ).getByRole('radio', { name: '$U' })
+    )
+
+    expect(onSetHomeCurrency).toHaveBeenCalledWith('UYU')
+  })
+
+  it('draws no empty actions box without a mode handler', () => {
+    render(
+      <Dashboard
+        transactions={[makeTransaction()]}
+        homeCurrency="USD"
+        fxRate={40.5}
+      />
+    )
+
+    const header = screen.getByRole('heading', { level: 1 }).closest('header')!
+    expect(header.children).toHaveLength(1)
+  })
+
+  it('drops the old "Combina…" sentence', () => {
+    renderWithSetters()
+
+    expect(screen.queryByText(/Combina tus movimientos/)).toBeNull()
+  })
+
+  it('is read-only without setters', () => {
+    render(
+      <Dashboard
+        transactions={[makeTransaction()]}
+        homeCurrency="USD"
+        fxRate={40.5}
+      />
+    )
+
+    expect(
+      screen.getByText(
+        (_, el) => el?.textContent === '1 US$ = $U 40,50 (manual)',
+        { selector: 'span' }
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /cambiar/ })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Moneda principal' })).toBe(
+      null
+    )
   })
 })
