@@ -143,3 +143,52 @@ describe('monthChipLabel', () => {
     )
   })
 })
+
+describe('MonthNav year arrows', () => {
+  const YEARS = new Map([
+    ['2023-05', 2],
+    ['2026-02', 4],
+  ])
+  const FEB_2026: UrlPeriod = { mode: 'month', y: 2026, m: 1 }
+  const props = {
+    newest: new Date('2026-02-20T00:00:00.000Z'),
+    monthCounts: YEARS,
+    completeMonthKeys: new Set<string>(),
+  }
+  const prev = () =>
+    screen.getByRole('button', { name: 'Año anterior' }) as HTMLButtonElement
+  const next = () =>
+    screen.getByRole('button', { name: 'Año siguiente' }) as HTMLButtonElement
+
+  it('skips empty years in both directions', () => {
+    renderNav({ ...props, period: FEB_2026 })
+    open('Febrero 2026')
+    expect(screen.getByText('2026')).toBeTruthy()
+    fireEvent.click(prev())
+    expect(screen.getByText('2023')).toBeTruthy()
+    expect(prev().disabled).toBe(true)
+    fireEvent.click(next())
+    expect(screen.getByText('2026')).toBeTruthy()
+    expect(next().disabled).toBe(true)
+  })
+
+  it('measures from the grid year when it opens on an empty year', () => {
+    renderNav({ ...props, period: { mode: 'month', y: 2024, m: 5 } })
+    open('Junio 2024')
+    expect(screen.getByText('2024')).toBeTruthy()
+    fireEvent.click(prev())
+    expect(screen.getByText('2023')).toBeTruthy()
+    // Close and reopen: opening resets the grid to the period's year.
+    fireEvent.click(screen.getByRole('button', { name: 'Junio 2024' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Junio 2024' }))
+    fireEvent.click(next())
+    expect(screen.getByText('2026')).toBeTruthy()
+  })
+
+  it('disables both arrows without rows', () => {
+    renderNav({ ...props, period: FEB_2026, monthCounts: new Map() })
+    open('Febrero 2026')
+    expect(prev().disabled).toBe(true)
+    expect(next().disabled).toBe(true)
+  })
+})

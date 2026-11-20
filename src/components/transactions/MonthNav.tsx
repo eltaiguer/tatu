@@ -75,6 +75,13 @@ export function MonthNav({
     setPeriod({ mode: 'month', y: d.getUTCFullYear(), m: d.getUTCMonth() })
   }
 
+  // Years that have rows: the year arrows jump between them.
+  const dataYears = Array.from(monthCounts)
+    .filter(([, count]) => count > 0)
+    .map(([key]) => Number(key.slice(0, 4)))
+  const prevYear = Math.max(...dataYears.filter((y) => y < gridYear), -Infinity)
+  const nextYear = Math.min(...dataYears.filter((y) => y > gridYear), Infinity)
+
   const isMonthMode = period.mode === 'month'
   const nextDisabled =
     isMonthMode && period.y === newestY && period.m >= newestM
@@ -192,7 +199,9 @@ export function MonthNav({
               variant="ghost"
               size="sm"
               className="h-[28px] w-[28px] p-0!"
-              onClick={() => setGridYear((y) => y - 1)}
+              aria-label="Año anterior"
+              disabled={prevYear === -Infinity}
+              onClick={() => setGridYear(prevYear)}
             >
               <ChevronLeft size={15} />
             </Button>
@@ -203,8 +212,9 @@ export function MonthNav({
               variant="ghost"
               size="sm"
               className="h-[28px] w-[28px] p-0!"
-              disabled={gridYear >= newestY}
-              onClick={() => setGridYear((y) => y + 1)}
+              aria-label="Año siguiente"
+              disabled={gridYear >= newestY || nextYear === Infinity}
+              onClick={() => setGridYear(nextYear)}
             >
               <ChevronRight size={15} />
             </Button>
