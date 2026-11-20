@@ -23,6 +23,7 @@ describe('url filters', () => {
       max: '5000',
       showIgnored: true,
       household: 'household',
+      review: true,
       period: { mode: 'month', y: 2026, m: 2 },
     }
 
@@ -97,6 +98,42 @@ describe('url filters', () => {
 function filters(overrides: Partial<UrlFilterState> = {}): UrlFilterState {
   return { ...DEFAULT_URL_FILTERS, ...overrides }
 }
+
+describe('url filters — A revisar', () => {
+  it('reads ?revisar=si, anything else is off', () => {
+    expect(parseFilterParams('revisar=si').review).toBe(true)
+    expect(parseFilterParams('revisar=1').review).toBe(false)
+    expect(parseFilterParams('').review).toBe(false)
+  })
+
+  it('writes it back and leaves the default out', () => {
+    expect(
+      serializeFilterParams({ ...DEFAULT_URL_FILTERS, review: true })
+    ).toBe('revisar=si')
+    expect(
+      serializeFilterParams({ ...DEFAULT_URL_FILTERS, review: false })
+    ).toBe('')
+    expect(
+      serializeFilterParams(parseFilterParams('revisar=si&tipo=credit'))
+    ).toBe('tipo=credit&revisar=si')
+  })
+
+  it('counts as an active filter', () => {
+    expect(hasActiveFilters({ ...DEFAULT_URL_FILTERS, review: true })).toBe(
+      true
+    )
+  })
+
+  it('builds a link with the period after the token', () => {
+    expect(
+      filterToSearch({
+        review: true,
+        period: { mode: 'range', from: '2025-03-01', to: '2025-12-31' },
+      })
+    ).toBe('revisar=si&desde=2025-03-01&hasta=2025-12-31')
+    expect(filterToSearch({ review: true })).toBe('revisar=si&periodo=todo')
+  })
+})
 
 describe('url filters — Hogar', () => {
   it('reads ?hogar=si, anything else is all', () => {

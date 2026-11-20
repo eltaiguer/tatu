@@ -26,6 +26,9 @@ export interface UrlFilterState {
   // Hogar: only counted expenses that are household
   // (services/household/household.ts decides which).
   household: HouseholdFilter
+  // A revisar: only rows `needsCategoryReview` flags (uncategorized or
+  // low-confidence). Independent of the others: it ANDs with every filter.
+  review: boolean
   // Undefined when the URL doesn't say; the view picks its default.
   period?: UrlPeriod
 }
@@ -41,6 +44,7 @@ export const DEFAULT_URL_FILTERS: UrlFilterState = {
   max: '',
   showIgnored: false,
   household: 'all',
+  review: false,
 }
 
 // Whether the view is "filtrado" — and whether a link filters at all: every
@@ -57,7 +61,8 @@ export function hasActiveFilters(filters: UrlFilterState): boolean {
     filters.type !== 'all' ||
     filters.min !== '' ||
     filters.max !== '' ||
-    filters.household !== 'all'
+    filters.household !== 'all' ||
+    filters.review
   )
 }
 
@@ -98,6 +103,10 @@ function parsePeriod(params: URLSearchParams): UrlPeriod | undefined {
 const HOUSEHOLD_PARAM = 'hogar'
 const HOUSEHOLD_YES = 'si'
 
+// A revisar (`?revisar=si`): the rows `needsCategoryReview` flags.
+const REVIEW_PARAM = 'revisar'
+const REVIEW_YES = 'si'
+
 export function householdModeFromSearch(search: string): boolean {
   return new URLSearchParams(search).get(HOUSEHOLD_PARAM) === HOUSEHOLD_YES
 }
@@ -130,6 +139,7 @@ export function parseFilterParams(search: string): UrlFilterState {
     min: isNumeric(min) ? min : '',
     max: isNumeric(max) ? max : '',
     showIgnored: params.get('ignoradas') === '1',
+    review: params.get(REVIEW_PARAM) === REVIEW_YES,
     // Income has no household answer, so that mix would list nothing: the
     // income type wins and hogar is dropped.
     household:
@@ -155,6 +165,7 @@ export function serializeFilterParams(state: UrlFilterState): string {
     if (state.household === 'household')
       params.set(HOUSEHOLD_PARAM, HOUSEHOLD_YES)
   }
+  if (state.review) params.set(REVIEW_PARAM, REVIEW_YES)
   const period = state.period
   if (period?.mode === 'all') params.set('periodo', 'todo')
   if (period?.mode === 'month') {
@@ -187,6 +198,7 @@ export function filterToSearch(filter: TransactionsFilter): string {
     currency: filter.currency ?? 'all',
     type: filter.type ?? 'all',
     household: filter.household ?? 'all',
+    review: filter.review === true,
     min: filter.min === undefined ? '' : String(filter.min),
     max: filter.max === undefined ? '' : String(filter.max),
   }

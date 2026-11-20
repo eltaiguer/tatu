@@ -726,3 +726,40 @@ describe('monthRowCounts', () => {
     ).toEqual(new Map([['2025-11', 1]]))
   })
 })
+
+describe('filterTransactions — A revisar', () => {
+  it('keeps what needs a category review and drops the rest', () => {
+    const rows = [
+      tx('none', { category: undefined }),
+      tx('uncat', { category: 'uncategorized' }),
+      tx('low', { categoryConfidence: 0.4 }),
+      tx('high', { categoryConfidence: 0.9 }),
+      tx('user', { categoryConfidence: 1 }),
+      tx('parent', { category: undefined, isSplitParent: true }),
+      tx('ignored', {
+        category: 'internal_transfer',
+        categoryConfidence: 0.4,
+      }),
+    ]
+    expect(ids(filterTransactions(rows, filters({ review: true })))).toEqual([
+      'none',
+      'uncat',
+      'low',
+    ])
+    expect(
+      ids(
+        filterTransactions(rows, filters({ review: true, showIgnored: true }))
+      )
+    ).toContain('ignored')
+  })
+
+  it('ANDs with the other filters', () => {
+    const rows = [
+      tx('a', { category: 'uncategorized', currency: 'USD' }),
+      tx('b', { category: 'uncategorized', currency: 'UYU' }),
+    ]
+    expect(
+      ids(filterTransactions(rows, filters({ review: true, currency: 'UYU' })))
+    ).toEqual(['b'])
+  })
+})
