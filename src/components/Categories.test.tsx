@@ -594,7 +594,9 @@ describe('Categories', () => {
         await screen.findByText(/No se pudo crear la regla/)
       ).toBeInTheDocument()
       expect(patternInput()).toHaveValue('farmashop')
-      expect(logged).toHaveBeenCalled()
+      expect(logged).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'timeout' })
+      )
     })
 
     it('reopens the form with the rule\'s values from "Editar"', () => {
@@ -738,7 +740,9 @@ describe('Categories', () => {
       expect(
         await screen.findByText(/No se pudo aplicar la regla/)
       ).toBeInTheDocument()
-      expect(logged).toHaveBeenCalled()
+      expect(logged).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'boom' })
+      )
     })
 
     it('says nothing changed when the apply found no rows to change', async () => {
@@ -852,6 +856,26 @@ describe('Categories', () => {
         expect(patternInput()).toHaveValue('farmashop')
       })
 
+      it("doesn't close a form opened after a save that finishes late", async () => {
+        uber()
+        const gate = repo.hold('upsertCustomPattern')
+        renderWithToasts({ transactions: [] })
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Editar regla uber' })
+        )
+        save()
+        fireEvent.click(
+          within(rulesRegion()).getByRole('button', { name: 'Cancelar' })
+        )
+        openRuleForm()
+        fireEvent.change(patternInput(), { target: { value: 'farmashop' } })
+
+        gate.release()
+        expect(await screen.findByText('Regla guardada')).toBeInTheDocument()
+
+        expect(patternInput()).toHaveValue('farmashop')
+      })
+
       it('says no row changed when the form apply finds nothing to change', async () => {
         renderWithToasts({
           transactions: [],
@@ -948,7 +972,9 @@ describe('Categories', () => {
         ).toBeInTheDocument()
         expect(patternInput()).toBeInTheDocument()
         expect(listCustomPatterns()).toEqual([rule])
-        expect(logged).toHaveBeenCalled()
+        expect(logged).toHaveBeenCalledWith(
+          expect.objectContaining({ message: 'timeout' })
+        )
       })
     })
 
