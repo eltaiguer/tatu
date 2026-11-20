@@ -93,4 +93,22 @@ describe('CategoryPicker', () => {
 
     expect(screen.getByText('Ninguna categoría coincide')).toBeVisible()
   })
+
+  it('picks nothing on Enter while the search is empty', async () => {
+    const onPick = vi.fn()
+    render(<CategoryPicker onPick={onPick} />)
+
+    await userEvent.click(screen.getByLabelText('Buscar categoría'))
+    await userEvent.keyboard('{Enter}')
+
+    expect(onPick).not.toHaveBeenCalled()
+  })
+
+  it('marks the current category of a legacy row (an alias of its id)', () => {
+    render(<CategoryPicker value="food" onPick={vi.fn()} />)
+
+    expect(
+      screen.getByRole('button', { name: 'Alimentación' })
+    ).toHaveAttribute('aria-current', 'true')
+  })
 })

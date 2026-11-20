@@ -100,7 +100,7 @@ export function RowCategoryPicker({
           <SheetTitle>Elegir categoría</SheetTitle>
           <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
-        <div className="overflow-y-auto">
+        <div className="overflow-y-auto px-2">
           <CategoryPicker
             value={transaction.category}
             onPick={pickAndClose}

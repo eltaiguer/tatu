@@ -573,7 +573,7 @@ async function writeOverrides(
         setDescriptionOverride({
           description,
           friendlyDescription: previousDesc.friendlyDescription,
-          category: intent.category ?? undefined,
+          category: intent.category ?? previousDesc.category,
         })
       }
     } else {
@@ -594,7 +594,7 @@ async function writeOverrides(
         descriptionNormalized: descKey,
         descriptionOriginal: description,
         friendlyDescription: previousDesc!.friendlyDescription,
-        category: intent.category ?? undefined,
+        category: intent.category ?? previousDesc!.category,
       })
     } else {
       await repo.deleteDescriptionOverride(descKey)

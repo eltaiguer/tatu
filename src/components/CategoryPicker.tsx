@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { Category } from '../models'
+import { normalizeCategoryId } from '../services/categories/category-aliases'
 import { CategoryBadge } from './CategoryBadge'
 import { Input } from './ui/input'
 import { focusFirstOption, handleOptionListKeyDown } from './ui/option-list'
@@ -48,7 +49,8 @@ export function CategoryPicker({ value, onPick, touch }: CategoryPickerProps) {
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
             event.preventDefault()
-            if (matches[0]) onPick(matches[0])
+            // An empty search is not a choice: no first-in-the-list pick.
+            if (query.trim() && matches[0]) onPick(matches[0])
           } else if (event.key === 'ArrowDown') {
             event.preventDefault()
             focusFirstOption(listRef.current)
@@ -68,7 +70,7 @@ export function CategoryPicker({ value, onPick, touch }: CategoryPickerProps) {
           </p>
         ) : (
           matches.map((id) => {
-            const current = id === value
+            const current = id === normalizeCategoryId(value)
             return (
               <button
                 key={id}

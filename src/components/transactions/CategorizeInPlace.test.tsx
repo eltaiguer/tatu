@@ -11,7 +11,7 @@ import { useStore } from 'zustand'
 import userEvent from '@testing-library/user-event'
 import { Toaster } from 'sonner'
 import { Transactions } from '../Transactions'
-import type { Transaction } from '../../models'
+import { Category, type Transaction } from '../../models'
 import {
   editTransaction,
   restoreCategories,
@@ -462,9 +462,193 @@ describe('categorize in place (#279)', () => {
     seed([tx('a', { description: 'Tienda', category: 'restaurants' })])
 
     await pick('Tienda', 'Restaurantes')
+    // Let a (wrongly) started write and its toast land before looking.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
 
     expect(screen.queryByText('Cambios guardados')).not.toBeInTheDocument()
     expect(repo.requests.update ?? 0).toBe(0)
+  })
+
+  it('writes the same category when the row is below confidence 1 (a confirmation)', async () => {
+    seed([tx('a', { description: 'Tienda', categoryConfidence: 0.4 })])
+
+    await pick('Tienda', 'Alimentación')
+
+    await waitFor(() => expect(stored('a')?.categoryConfidence).toBe(1))
+    expect(repo.row('a')).toMatchObject({
+      category: 'groceries',
+      categoryConfidence: 1,
+    })
+    expect(screen.queryAllByText('Revisar')).toHaveLength(0)
+  })
+
+  describe('while a write of the row is in flight', () => {
+    const noPicker = async (description: string) => {
+      screen
+        .getAllByRole('checkbox', { name: `Seleccionar ${description}` })[0]
+        .focus()
+      await userEvent.keyboard('c')
+      await userEvent.click(badge(description))
+      expect(
+        screen.queryByRole('dialog', { name: 'Elegir categoría' })
+      ).not.toBeInTheDocument()
+    }
+
+    it('a pick locks the badge and c', async () => {
+      seed([tx('a', { description: 'Tienda' })])
+      const gate = repo.hold('update')
+
+      await pick('Tienda', 'Restaurantes')
+      await waitFor(() =>
+        expect(badge('Tienda')).toHaveAttribute('aria-disabled', 'true')
+      )
+      await noPicker('Tienda')
+
+      await act(async () => gate.release())
+      await waitFor(() =>
+        expect(badge('Tienda')).not.toHaveAttribute('aria-disabled')
+      )
+    })
+
+    it('"Aplicar" locks it too, so a newer pick cannot be overwritten', async () => {
+      seed(devotos())
+      await pick(DEVOTO(11), 'Restaurantes')
+      const apply = await screen.findByRole('button', {
+        name: 'Aplicar a las 2 similares',
+      })
+      const gate = repo.hold('update')
+
+      fireEvent.click(apply)
+      await waitFor(() =>
+        expect(badge(DEVOTO(11))).toHaveAttribute('aria-disabled', 'true')
+      )
+      await noPicker(DEVOTO(11))
+
+      await act(async () => gate.release())
+      expect(
+        await screen.findByText('Se aplicó a 2 transacciones')
+      ).toBeVisible()
+      await waitFor(() =>
+        expect(badge(DEVOTO(11))).not.toHaveAttribute('aria-disabled')
+      )
+    })
+  })
+
+  it('counts the rows that exist when "Aplicar" is clicked', async () => {
+    seed(devotos())
+    await pick(DEVOTO(11), 'Restaurantes')
+    const apply = await screen.findByRole('button', {
+      name: 'Aplicar a las 2 similares',
+    })
+    const extra = tx('d4', { description: DEVOTO(14) })
+    await act(async () => {
+      await repo.insertTransactions([extra])
+      transactionStore
+        .getState()
+        .setTransactions([...transactionStore.getState().transactions, extra])
+    })
+
+    fireEvent.click(apply)
+
+    expect(await screen.findByText('Se aplicó a 3 transacciones')).toBeVisible()
+  })
+
+  describe('an old "Aplicar"', () => {
+    it('does nothing once the row changed, and says so', async () => {
+      seed(devotos())
+      await pick(DEVOTO(11), 'Restaurantes')
+      const apply = await screen.findByRole('button', {
+        name: 'Aplicar a las 2 similares',
+      })
+      await act(async () => {
+        await editTransaction(repo, 'd1', {
+          category: 'transport',
+          applyScope: 'single',
+        })
+      })
+
+      fireEvent.click(apply)
+
+      expect(
+        await screen.findByText(
+          'Mientras tanto cambió la categoría de esta transacción; no se aplicó a las similares.'
+        )
+      ).toBeVisible()
+      expect(stored('d2')?.category).toBe('groceries')
+      expect(repo.categoryOverrides.size).toBe(0)
+    })
+
+    it('refuses a Reintentar after the row changed', async () => {
+      seed(devotos())
+      await pick(DEVOTO(11), 'Restaurantes')
+      const apply = await screen.findByRole('button', {
+        name: 'Aplicar a las 2 similares',
+      })
+      repo.failOn('update', { error: new Error('timeout'), times: 1 })
+      fireEvent.click(apply)
+      const retry = await screen.findByRole('button', { name: 'Reintentar' })
+      await act(async () => {
+        await editTransaction(repo, 'd1', {
+          category: 'transport',
+          applyScope: 'single',
+        })
+      })
+
+      fireEvent.click(retry)
+
+      expect(
+        await screen.findByText(
+          'Mientras tanto cambió la categoría de esta transacción; no se aplicó a las similares.'
+        )
+      ).toBeVisible()
+      expect(stored('d1')?.category).toBe('transport')
+    })
+  })
+
+  describe('ignored and transfer rows', () => {
+    it('get a working button: a pick sticks', async () => {
+      seed(
+        [
+          tx('out', {
+            description: 'Giro',
+            category: Category.InternalTransfer,
+            categoryConfidence: 0.9,
+          }),
+          tx('in', {
+            description: 'Giro in',
+            type: 'credit',
+            category: Category.InternalTransfer,
+            categoryConfidence: 0.9,
+          }),
+        ],
+        { filters: { showIgnored: true } }
+      )
+
+      await pick('Giro', 'Restaurantes')
+
+      await waitFor(() => expect(stored('out')?.category).toBe('restaurants'))
+      expect(repo.row('out')).toMatchObject({
+        category: 'restaurants',
+        categoryConfidence: 1,
+      })
+    })
+  })
+
+  it('Escape after opening with the mouse returns focus to the badge', async () => {
+    seed([tx('a', { description: 'Tienda' })])
+
+    await userEvent.click(badge('Tienda'))
+    await screen.findByRole('dialog', { name: 'Elegir categoría' })
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Elegir categoría' })
+      ).not.toBeInTheDocument()
+    )
+    expect(badge('Tienda')).toHaveFocus()
   })
 
   it('has no picker without a way to write', () => {

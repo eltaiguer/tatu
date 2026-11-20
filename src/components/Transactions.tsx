@@ -43,6 +43,7 @@ import { useRowSelection } from './transactions/useRowSelection'
 import { useBulkActions } from './transactions/useBulkActions'
 import { useHouseholdWrites } from './transactions/useHouseholdWrites'
 import { useCategoryWrites } from './transactions/useCategoryWrites'
+import { usePendingRows } from './transactions/usePendingRows'
 import {
   currentHouseholdRules,
   rowsSharingMerchantRule,
@@ -148,19 +149,7 @@ export function Transactions({
   const newestForNav = newestRowDate ?? todayAsUtcDate()
 
   /* ---- Edit state ---- */
-  // Rows with a mutation in flight. A set, not a single id, so two
-  // overlapping deletes don't re-enable each other's buttons.
-  const [pendingTransactionIds, setPendingTransactionIds] = useState<
-    ReadonlySet<string>
-  >(() => new Set())
-  function setPending(transactionId: string, pending: boolean) {
-    setPendingTransactionIds((current) => {
-      const next = new Set(current)
-      if (pending) next.add(transactionId)
-      else next.delete(transactionId)
-      return next
-    })
-  }
+  const { pendingTransactionIds, setPending } = usePendingRows()
 
   const {
     reportError,
@@ -224,7 +213,7 @@ export function Transactions({
       reportError,
     })
 
-  const { handlePickCategory } = useCategoryWrites({
+  const { onCategorize } = useCategoryWrites({
     transactions,
     onUpdateTransaction,
     onRestoreCategories,
@@ -536,13 +525,7 @@ export function Transactions({
               }
             : undefined
         }
-        onCategorize={
-          onUpdateTransaction
-            ? (transaction, categoryId) => {
-                void handlePickCategory(transaction, categoryId)
-              }
-            : undefined
-        }
+        onCategorize={onCategorize}
         onToggleHousehold={
           onSetHousehold
             ? (transaction) => {

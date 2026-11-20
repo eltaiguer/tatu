@@ -124,16 +124,11 @@ export function useCategoryWrites({
     try {
       await onUpdateTransaction(id, { category, applyScope: 'single' })
     } catch (error) {
-      reportError(
-        guarded(error, id, seq, category, STALE_APPLY),
-        'No se pudo cambiar la categoría',
-        '',
-        () => {
-          if (writes.current.get(id) === seq && matches(previous, rowOf(id))) {
-            void handlePickCategory(transaction, category)
-          }
+      reportError(error, 'No se pudo cambiar la categoría', '', () => {
+        if (writes.current.get(id) === seq && matches(previous, rowOf(id))) {
+          void handlePickCategory(transaction, category)
         }
-      )
+      })
       return
     } finally {
       setPending(id, false)
@@ -148,6 +143,16 @@ export function useCategoryWrites({
     const offer = toast('Cambios guardados', {
       description: `${resolveCategory(category).label} en esta transacción`,
       duration: 8000,
+      // Two buttons squeeze the text into a narrow column: let them wrap
+      // under it (sonner's own rules are unlayered, hence the `!`).
+      ...(others >= 1 &&
+        onRestoreCategories && {
+          classNames: {
+            toast: 'flex-wrap!',
+            content: 'basis-full',
+            cancelButton: 'ml-0!',
+          },
+        }),
       ...(others >= 1 && {
         action: {
           label:
@@ -182,15 +187,22 @@ export function useCategoryWrites({
   async function applyToSimilar(id: string, category: string, others: number) {
     if (!onUpdateTransaction) return
     const seq = start(id)
+    // Locked like a pick: a newer pick of the row must not be overwritten
+    // by this write landing after it.
+    setPending(id, true)
     try {
-      await onUpdateTransaction(id, {
+      const { affected } = await onUpdateTransaction(id, {
         category,
         applyScope: 'matching_past_and_future',
       })
+      // The rows written now, not the ones counted when the toast was shown.
+      const reached = affected - 1
       toast.success(
-        others === 1
-          ? 'Se aplicó a la otra similar'
-          : `Se aplicó a ${others} transacciones`
+        reached < 1
+          ? 'Cambios guardados'
+          : reached === 1
+            ? 'Se aplicó a la otra similar'
+            : `Se aplicó a ${reached} transacciones`
       )
     } catch (error) {
       reportError(
@@ -203,6 +215,8 @@ export function useCategoryWrites({
           else toast(STALE_APPLY)
         }
       )
+    } finally {
+      setPending(id, false)
     }
   }
 
@@ -224,5 +238,13 @@ export function useCategoryWrites({
     }
   }
 
-  return { handlePickCategory }
+  // What the table's badges call; without a way to write there is none, and
+  // the badge stays plain.
+  const onCategorize = onUpdateTransaction
+    ? (transaction: Transaction, categoryId: string) => {
+        void handlePickCategory(transaction, categoryId)
+      }
+    : undefined
+
+  return { onCategorize }
 }
