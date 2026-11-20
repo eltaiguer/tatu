@@ -736,8 +736,8 @@ describe('recurring cadence across stored date shapes', () => {
 })
 
 describe('buildInsightInput — category changes (#239)', () => {
-  // A USD and a UYU account, both covering January to April 2026 end to end, each with rows every
-  // month.
+  // A USD and a UYU account, both covering January to April 2026 end to
+  // end, each with rows every month.
   // April is the latest complete month; January to March are its baseline.
   const usd = (
     id: string,

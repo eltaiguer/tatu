@@ -13,7 +13,11 @@ import { countsAsRow } from '../spending/spending-rules'
 // month's 1st, so it is not "waiting to be imported" and doesn't constrain
 // it. That holds mid-history too, so a long quiet spell doesn't stall the
 // comparisons. A month no account covers is never complete, and neither is
-// the current month or anything later.
+// the current month or anything later. Known limits: a skipped card cycle
+// that straddles two months still has rows in both and isn't detected, and
+// neither is an account back from dormancy whose first row that month is on
+// the 20th: the by-the-3rd test only reads the account's very first row, so
+// that month counts as covered.
 //
 // `currentMonth` is passed in ('YYYY-MM') so callers choose the clock:
 // Resumen and Insights both pass today's month.
@@ -45,7 +49,8 @@ const pad = (n: number) => String(n).padStart(2, '0')
 // One month's coverage: which accounts span it and which don't.
 export interface MonthCoverage {
   month: string // 'YYYY-MM'
-  complete: boolean // missing is empty AND some account covers it AND month < currentMonth
+  // missing is empty AND some account covers it AND month < currentMonth
+  complete: boolean
   covered: FileType[] // accounts whose data spans the month (account order)
   missing: FileType[] // active accounts that don't (dormant ones are in neither)
   // The missing accounts with no row at all that month: before the

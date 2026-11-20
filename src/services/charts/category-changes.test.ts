@@ -216,8 +216,9 @@ describe('categoryChanges', () => {
 
   it('leaves a month whose statement was skipped incomplete (#293)', () => {
     // Card statements for Jun, Jul and Sep imported; August skipped. August
-    // has no rows and Jul 28 is within 45 days, so it is missing. The user
-    // has a single account, so nobody covers August and no gap is named.
+    // has no rows and Jul 28 is within 45 days, so it is missing. Nobody
+    // covers August, but it lies between the first and last month with data,
+    // so the gap names the card.
     const txs = fullMonths(['2026-06', '2026-07', '2026-09'], (m) => [
       tx(`${m}-10`, 'restaurants', 300),
     ])
@@ -226,6 +227,28 @@ describe('categoryChanges', () => {
       kind: 'insufficient',
       reference: '2026-09',
       completeInARow: 1,
+      gap: { month: '2026-08', accounts: ['credit_card'] },
+    })
+  })
+
+  it('names the only account when its statement was skipped mid-history (#293)', () => {
+    const txs = fullMonths(['2026-06', '2026-07', '2026-09'], () => [])
+
+    expect(categoryChanges(txs, 'USD', 40, NOW)).toEqual({
+      kind: 'insufficient',
+      reference: '2026-09',
+      completeInARow: 1,
+      gap: { month: '2026-08', accounts: ['credit_card'] },
+    })
+  })
+
+  it('does not name the months after the last data as a gap (#293)', () => {
+    const txs = fullMonths(['2026-08', '2026-09'], () => [])
+
+    expect(categoryChanges(txs, 'USD', 40, NOW)).toEqual({
+      kind: 'insufficient',
+      reference: '2026-09',
+      completeInARow: 2,
     })
   })
 
