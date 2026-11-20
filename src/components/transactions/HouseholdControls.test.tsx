@@ -1218,8 +1218,12 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     expect(repo.householdRules.size).toBe(1)
     expect(repo.row(D1)?.household).toBe(true)
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // Find the button before act(): a findBy inside act() turns the act
+    // environment off while act's scope is open, so any update in that window
+    // logs "not configured to support act(...)" (#300).
+    const retry = await screen.findByRole('button', { name: 'Reintentar' })
     await act(async () => {
-      fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+      fireEvent.click(retry)
     })
     await waitFor(() => expect(repo.householdRules.size).toBe(0))
     expect(repo.row(D1)?.household).toBe(true)
@@ -1245,8 +1249,9 @@ describe('household rule from the edit dialog (#251, #263)', () => {
     ).toBeVisible()
     expect(repo.householdRules.size).toBe(1)
     expect(on('Devoto centro')).toBe(true)
+    const retry = await screen.findByRole('button', { name: 'Reintentar' })
     await act(async () => {
-      fireEvent.click(await screen.findByRole('button', { name: 'Reintentar' }))
+      fireEvent.click(retry)
     })
     await waitFor(() => expect(repo.householdRules.size).toBe(0))
   })
