@@ -58,6 +58,11 @@ export function MonthHero({
   // The share button unmounts when it switches the mode; focus goes to the
   // hero, which says what the page now shows.
   const heroRef = useRef<HTMLHeadingElement>(null)
+  // Under the Ingresos figure, only when some of it is still Sin categoría.
+  const uncategorizedIncome =
+    monthSummary.uncategorizedIncome > 0
+      ? formatCurrency(monthSummary.uncategorizedIncome, homeCurrency)
+      : null
 
   return (
     <div className="space-y-5">
@@ -128,13 +133,26 @@ export function MonthHero({
         <div className="grid max-w-[720px] grid-cols-1 gap-2 sm:grid-cols-3">
           <DrillTarget
             onOpen={openSummaryMonth && (() => openSummaryMonth('credit'))}
-            label="Ver los ingresos del mes"
+            label={
+              uncategorizedIncome
+                ? `Ver los ingresos del mes, incluye ${uncategorizedIncome} sin categoría`
+                : 'Ver los ingresos del mes'
+            }
             className="px-3 py-2"
           >
             <div className="text-label text-muted-foreground">Ingresos</div>
             <div className="font-mono text-subhead text-[var(--pos)] tabular-nums">
               {formatCurrency(monthSummary.income, homeCurrency)}
             </div>
+            {uncategorizedIncome && (
+              <div className="text-caption text-[var(--text-faint)]">
+                incluye{' '}
+                <span className="font-mono tabular-nums">
+                  {uncategorizedIncome}
+                </span>{' '}
+                sin categoría
+              </div>
+            )}
           </DrillTarget>
           <DrillTarget
             onOpen={openSummaryMonth && (() => openSummaryMonth('debit'))}

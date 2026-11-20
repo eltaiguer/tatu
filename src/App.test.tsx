@@ -1552,7 +1552,7 @@ describe('App', () => {
 
   describe('review mode', () => {
     const REVIEW_URL =
-      '/transacciones?categoria=uncategorized&tipo=debit&revisar=si&modo=revisar&periodo=todo'
+      '/transacciones?categoria=uncategorized&revisar=si&modo=revisar&periodo=todo'
     const seedReview = () =>
       seed({
         transactions: [
@@ -1560,6 +1560,12 @@ describe('App', () => {
           {
             ...tx('b', '2026-03-11T12:00:00.000Z', 'Kiosco Dos', ''),
             amount: 300,
+          },
+          // A plain description: a transfer keyword would recategorize it.
+          {
+            ...tx('r', '2026-03-13T12:00:00.000Z', 'Reintegro Kiosco', ''),
+            amount: 200,
+            type: 'credit' as const,
           },
           tx('c', '2026-03-12T12:00:00.000Z', 'Devoto', 'groceries'),
         ],
@@ -1569,21 +1575,48 @@ describe('App', () => {
       seedReview()
       renderApp('/')
 
-      fireEvent.click(
-        await screen.findByRole('button', {
-          name: 'Ver los gastos sin categoría',
-        })
-      )
+      const nudge = await screen.findByRole('button', {
+        name: 'Ver los movimientos sin categoría',
+      })
+      // The nudge's count is the queue's size: 2 expenses + 1 credit.
+      expect(nudge).toHaveTextContent('2 gastos y 1 ingreso')
+      fireEvent.click(nudge)
 
       await waitFor(() => expect(currentUrl()).toBe(REVIEW_URL))
-      expect(await screen.findByText('1 de 2')).toBeInTheDocument()
+      expect(await screen.findByText('1 de 3')).toBeInTheDocument()
       expect(screen.getByRole('heading', { name: 'Kiosco Dos' })).toBeVisible()
       expect(
         screen.getByRole('textbox', { name: 'Buscar categoría' })
       ).toHaveFocus()
 
       fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
-      expect(await screen.findByText('2 de 2')).toBeInTheDocument()
+      expect(await screen.findByText('2 de 3')).toBeInTheDocument()
+    })
+
+    it('shows the same figures in the list as the nudge after leaving the review', async () => {
+      const user = userEvent.setup()
+      seedReview()
+      renderApp('/')
+
+      const nudge = await screen.findByRole('button', {
+        name: 'Ver los movimientos sin categoría',
+      })
+      // 400 UYU of uncategorized expenses (100 + 300) in the home currency.
+      const amount = within(nudge).getByText(/\$U|US\$/).textContent
+      await user.click(nudge)
+      await screen.findByText('1 de 3')
+      await user.click(screen.getByRole('button', { name: 'Salir' }))
+
+      const totals = await screen.findByRole('group', {
+        name: 'Totales del período',
+      })
+      expect(
+        within(totals).getByText('Gastos').parentElement?.parentElement
+      ).toHaveTextContent(amount as string)
+      // The credit: 200 UYU at the default 40,5.
+      expect(
+        within(totals).getByText('Ingresos').parentElement?.parentElement
+      ).toHaveTextContent('US$ 4,94')
     })
 
     it('keeps the Hogar cut in the queue (#305)', async () => {
@@ -1610,15 +1643,17 @@ describe('App', () => {
       seedReview()
       renderApp(REVIEW_URL)
 
-      expect(await screen.findByText('1 de 2')).toBeInTheDocument()
+      expect(await screen.findByText('1 de 3')).toBeInTheDocument()
     })
 
     it('goes to Resumen from the done state', async () => {
       seedReview()
       renderApp(REVIEW_URL)
-      await screen.findByText('1 de 2')
+      await screen.findByText('1 de 3')
       fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
-      await screen.findByText('2 de 2')
+      await screen.findByText('2 de 3')
+      fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
+      await screen.findByText('3 de 3')
       fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
 
       fireEvent.click(
