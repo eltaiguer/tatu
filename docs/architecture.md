@@ -334,7 +334,7 @@ flowchart TD
 
 `writeOverrides` saves a description override (friendly name plus category)
 when the name changed and clears it when a name equal to the original was
-given. An edit without `displayDescription` leaves names alone (#279): no
+given ("original" is the raw text or its clean label, `isOriginalName`). An edit without `displayDescription` leaves names alone (#279): no
 per-row name patch, no description override created, and an existing one is
 re-saved with its name kept and the new category, because its category outranks
 the merchant override in `categorizeTransaction`. It then saves a merchant
@@ -804,9 +804,13 @@ all group the same rows. Never group by `description` or `getDisplayDescription`
   one are two keys and two labels must never read the same (Mayores comercios
   would show twins, Insights would drop an ambiguous merchant). Search matches
   the label and the raw text; sorting by description orders by the label. The
-  edit dialog's "Descripción visible" keeps the raw text (or the rename) and
-  its "Original:" line: `getDisplayDescription` still feeds writes, because a
-  name different from the raw description is saved as a rename. CSV/PDF export,
+  edit dialog's "Descripción visible" opens with `transactionLabel` and keeps
+  its "Original:" line. `Transactions.tsx` sends `displayDescription` only when
+  the field differs from that label; a name equal to the raw text or its clean
+  label is the original (`isOriginalName`): under Todas it clears every similar
+  row's name and the merchant-wide one, never stores a rename (the draft's
+  `nameTouched` is decided once, in the dialog; Solo esta on a row a live
+  override names stores the typed text, or the override would keep showing). CSV/PDF export,
   `DuplicatesReview` and `SplitTransactionDialog` keep the raw text.
 - `npx vite-node scripts/merchant-groups.ts [paths…]` prints, for Santander
   CSVs or Tatu's own CSV export, every key that merges several variants.

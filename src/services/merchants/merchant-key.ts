@@ -336,9 +336,22 @@ export function statementMerchantLabel(description: string): string {
     : `${label}${DEBIT_GROUP_SUFFIX}`
 }
 
+// THE "is this typed name the original" rule of the edit write (#296), also
+// read by reachesNamedParts for the dialog's N: the statement text or its clean label puts a name back to
+// the original instead of storing a rename. Exact match, both sides trimmed
+// (the caller trims `name`; a card row's label is its untrimmed raw text); a
+// case or accent variant is a real rename.
+export function isOriginalName(name: string, description: string): boolean {
+  return (
+    name === description.trim() || name === statementLabel(description).trim()
+  )
+}
+
 // The user's name for a row, or null: a "rename" equal to the raw description
-// is none (the AI stores `name || description`; editTransaction's `renamed`
-// is the same rule), so it must not hide the clean label.
+// is none (the AI stores `name || description`), so it must not hide the clean
+// label. Not editTransaction's rule: the write (isOriginalName) also treats the
+// clean label as the original, while a stored name equal to the label still
+// keys on the name here (existing data; changing it would move merchant keys).
 function renameOf(transaction: Transaction): string | null {
   const rename = getUserRename(transaction)
   return rename !== null && rename !== transaction.description.trim()

@@ -17,7 +17,7 @@ import { Category, isSplitChildTx, isSplitParentTx } from '../models'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
 import type { Currency, Transaction } from '../models'
 import { formatCurrency, formatDate } from '../utils/formatting'
-import { getDisplayDescription } from '../utils/transaction-display'
+import { transactionLabel } from '../services/merchants/merchant-key'
 import {
   buildCategorySuggestions,
   buildTagSuggestions,
@@ -38,11 +38,16 @@ export type ApplyScope =
   | 'matching_past_and_future'
   | 'future_matching_only'
 
-// What the user saved. `description` is trimmed and never empty;
+// What the user saved. `description` is the name field, trimmed, never empty;
+// when untouched it is the row's label (`transactionLabel`), which the caller
+// must not store as a rename.
 // `category` is null for "sin categoría", which clears it (on the server
 // too, #119).
 export interface EditTransactionDraft {
   description: string
+  // Whether the name differs from the label the field opened with. When false,
+  // the caller sends no name at all.
+  nameTouched: boolean
   category: string | null
   tags: string[]
   // What the name and category reach. The Hogar choice has no scope: its box
@@ -58,9 +63,10 @@ interface EditTransactionDialogProps {
   // fresh draft.
   transaction: Transaction | null
   // Rows an apply-to-similar edit of `transaction` would visibly change
-  // (countSimilarEditReach), given whether the draft renames it. Takes the
-  // row so the count holds while the dialog animates closed.
-  countSimilar: (transaction: Transaction, renamed: boolean) => number
+  // (countSimilarEditReach + reachesNamedParts, the rule editTransaction's
+  // returned count shares), given the name the draft gives (null: untouched).
+  // Takes the row so the count holds while the dialog animates closed.
+  countSimilar: (transaction: Transaction, name: string | null) => number
   // Whether a change to `category` opens on "Todas las similares" (#281; the
   // conservative rule in services/descriptions/default-scope.ts).
   defaultToAll: (transaction: Transaction, category: string) => boolean
@@ -146,9 +152,9 @@ function EditTransactionForm({
 }: Omit<EditTransactionDialogProps, 'transaction'> & {
   transaction: Transaction
 }) {
-  const [description, setDescription] = useState(() =>
-    getDisplayDescription(transaction)
-  )
+  // What the row shows (#296): the field opens with the row's label.
+  const [openedName] = useState(() => transactionLabel(transaction))
+  const [description, setDescription] = useState(openedName)
   const [category, setCategory] = useState(transaction.category ?? '')
   const [tags, setTags] = useState<string[]>(transaction.tags ?? [])
   // null until the user touches the radio: then the default follows the form.
@@ -166,16 +172,15 @@ function EditTransactionForm({
   const [categoryQuery, setCategoryQuery] = useState('')
   const [tagQuery, setTagQuery] = useState('')
 
-  // "Renamed" exactly as the save decides it, so the number shown is the
-  // number of rows the save will touch.
-  const [openedName] = useState(() => getDisplayDescription(transaction))
+  // The number shown is the number of rows the save will touch: the same
+  // predicate as the write's returned count.
   const name = description.trim()
-  // An untouched name is not a rename, even when the row has its own.
-  const renamed =
-    !!name && name !== transaction.description && name !== openedName
+  // An untouched name (even the row's own) gives no name at all. Decided once:
+  // the count and the draft's `nameTouched` share it.
+  const nameTouched = name !== openedName.trim()
   const similarCount = useMemo(
-    () => countSimilar(transaction, renamed),
-    [countSimilar, transaction, renamed]
+    () => countSimilar(transaction, nameTouched ? name : null),
+    [countSimilar, transaction, nameTouched, name]
   )
 
   // A changed category favours the whole merchant (#281). Derived, not
@@ -248,6 +253,7 @@ function EditTransactionForm({
     setError('')
     onSave({
       description: trimmed,
+      nameTouched,
       category: category.trim() || null,
       tags,
       applyScope,

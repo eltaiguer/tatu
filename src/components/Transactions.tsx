@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast, type ExternalToast } from 'sonner'
 import { requireRepository } from '../services/repository/repository'
 import { defaultsToAllSimilar } from '../services/descriptions/default-scope'
-import { countSimilarEditReach } from '../services/descriptions/similar-transactions'
+import {
+  countSimilarEditReach,
+  reachesNamedParts,
+} from '../services/descriptions/similar-transactions'
 import { DEFAULT_CATEGORY_COLOR } from '../models'
 import type { Transaction } from '../models'
 import { useTransactionFiltering } from '../hooks/useTransactionFiltering'
@@ -40,7 +43,6 @@ import { useCategoryWrites } from './transactions/useCategoryWrites'
 import { usePendingRows } from './transactions/usePendingRows'
 import { rowsSharingMerchantRule } from '../services/household/household'
 import type { TransactionsProps } from './transactions/transactions-props'
-import { getDisplayDescription } from '../utils/transaction-display'
 import { transactionLabel } from '../services/merchants/merchant-key'
 
 const sameTags = (a: string[], b: string[]) =>
@@ -236,8 +238,12 @@ export function Transactions({
   // Same matching the apply-to-similar write uses, so the number the
   // dialog shows is the number of rows the save will touch.
   const countSimilar = useCallback(
-    (transaction: Transaction, renamed: boolean) =>
-      countSimilarEditReach(transactions, transaction, renamed),
+    (transaction: Transaction, name: string | null) =>
+      countSimilarEditReach(
+        transactions,
+        transaction,
+        reachesNamedParts(transaction, name)
+      ),
     [transactions]
   )
 
@@ -278,7 +284,8 @@ export function Transactions({
     // must not re-write the category as the user's own (confidence 1): nothing
     // about name, category or tags changed (a name/category scope still runs).
     const householdChanged = canSaveHousehold(draft.household)
-    const nameKept = draft.description === getDisplayDescription(editing)
+    // The dialog decided it once (against the label it opened with).
+    const nameKept = !draft.nameTouched
     const unchanged =
       nameKept &&
       draft.category === ((editing.category ?? '').trim() || null) &&

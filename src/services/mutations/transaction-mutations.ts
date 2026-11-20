@@ -33,6 +33,7 @@ import { captureError } from '../monitoring/error-reporting'
 import {
   countSimilarEditReach,
   findSimilarTransactions,
+  reachesNamedParts,
 } from '../descriptions/similar-transactions'
 import { buildDescriptionOverrideKey } from '../descriptions/normalization'
 import { normalizeCategoryId } from '../categories/category-aliases'
@@ -78,6 +79,7 @@ import { analyzeTemporalPatterns } from '../categorizer/temporal-patterns'
 import type { CustomPattern } from '../categorizer/custom-patterns'
 import { applyAiEnrichment, enrichTransactionsWithAi, getAiConfig } from '../ai'
 import { buildCorrectionContext } from '../ai/correction-context'
+import { isOriginalName } from '../merchants/merchant-key'
 import {
   NeedsConfirmationError,
   PartialWriteError,
@@ -696,10 +698,21 @@ export async function editTransaction(
   const name = edit.displayDescription?.trim()
   // An absent name leaves names alone, like an absent category or tags.
   const nameGiven = edit.displayDescription !== undefined
-  const renamed = !!name && name !== current.description
+  const renamed = !!name && !isOriginalName(name, current.description)
   const category =
     edit.category === undefined ? undefined : edit.category?.trim() || null
   const tags = edit.tags
+  // Solo esta on a row a live description override names: the original name
+  // typed there is stored as the row's own, or the override would keep
+  // showing. Without an override it is "back to the original" (no own name).
+  const keepsTypedName =
+    renamed ||
+    (!!name &&
+      edit.applyScope === 'single' &&
+      getDescriptionOverride(current.description) !== null)
+
+  // Read before writeOverrides deletes the override it depends on.
+  const reachesParts = reachesNamedParts(current, name ?? null)
 
   if (edit.applyScope === 'matching_past_and_future') {
     // When the user renamed, the merchant-keyed description override becomes
@@ -718,11 +731,9 @@ export async function editTransaction(
     for (const tx of matching) {
       const patch: TransactionPatch = {
         ...(category && { category, categoryConfidence: 1 }),
-        // A rename clears every per-row name; a name put back to the original
-        // clears the edited row's own.
-        ...((renamed || (nameGiven && tx.id === transactionId)) && {
-          displayDescription: null,
-        }),
+        // A name given (a rename, or put back to the original) clears every
+        // per-row name: the merchant-wide one is the only source.
+        ...(nameGiven && { displayDescription: null }),
         ...(tx.id === transactionId && tags !== undefined && { tags }),
       }
       if (!isEmptyPatch(patch)) changes.set(tx.id, patch)
@@ -736,7 +747,7 @@ export async function editTransaction(
         alwaysPartial: true,
       })
     }
-    return { affected: countSimilarEditReach(all, current, renamed) }
+    return { affected: countSimilarEditReach(all, current, reachesParts) }
   }
 
   if (edit.applyScope === 'future_matching_only') {
@@ -752,7 +763,9 @@ export async function editTransaction(
   // original was given, untouched when none was), its category (set, or
   // cleared for "Sin categoría", with its confidence) and its tags.
   const patch: TransactionPatch = {
-    ...(nameGiven && { displayDescription: renamed ? name : null }),
+    ...(nameGiven && {
+      displayDescription: keepsTypedName ? name : null,
+    }),
     ...(category && { category, categoryConfidence: 1 }),
     ...(category === null && { category: null, categoryConfidence: null }),
     ...(tags !== undefined && { tags }),

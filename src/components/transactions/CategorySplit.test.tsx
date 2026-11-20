@@ -17,6 +17,7 @@ import {
   editTransaction,
   restoreCategories,
 } from '../../services/mutations/transaction-mutations'
+import { buildDescriptionOverrideKey } from '../../services/descriptions/normalization'
 import { replaceDescriptionOverrides } from '../../services/descriptions/description-overrides'
 import { replaceMerchantCategoryOverrides } from '../../services/categorizer/category-overrides'
 import {
@@ -27,6 +28,10 @@ import {
   DEFAULT_URL_FILTERS,
   type UrlFilterState,
 } from '../../services/filters/url-filters'
+import {
+  merchantKeyOf,
+  rawMerchantKey,
+} from '../../services/merchants/merchant-key'
 import { transactionStore } from '../../stores/transaction-store'
 import { workspaceStore } from '../../stores/workspace-state'
 import { replaceCustomCategories } from '../../services/categories/category-store'
@@ -454,5 +459,142 @@ describe('merchant split across categories (#281)', () => {
     expect(
       screen.queryByRole('button', { name: /^Aplicar a/ })
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('the name field opens with the row label (#296)', () => {
+  const RAW =
+    'COMPRA CON TARJETA DEBITO TINTORERIA MARTINIZI, MONTEVIDEO TARJ: ############9172'
+  const LABEL = 'Tintoreria Martinizi'
+  const bankTrio = () =>
+    ['d1', 'd2', 'd3'].map((id) =>
+      tx(id, { description: RAW, categoryConfidence: 0.9 })
+    )
+  async function openLabelled(name: string) {
+    await act(async () => {
+      fireEvent.click(
+        screen.getAllByRole('button', { name: `Editar ${name}` })[0]
+      )
+    })
+  }
+
+  it('saving only a category (Solo esta) stores no rename and keeps the merchant key', async () => {
+    seed(bankTrio())
+
+    await openLabelled(LABEL)
+    expect(screen.getByLabelText('Descripción edición')).toHaveValue(LABEL)
+    await pickInDialog(restaurants)
+    scope('Solo esta transacción')
+    await saveDialog()
+
+    await waitFor(() => expect(repo.row('d1')?.category).toBe('restaurants'))
+    expect(repo.row('d1')?.displayDescription).toBeUndefined()
+    expect(repo.descriptionOverrides.size).toBe(0)
+    const stored = transactionStore
+      .getState()
+      .transactions.find((t) => t.id === 'd1')!
+    expect(stored.displayDescription).toBeUndefined()
+    expect(merchantKeyOf(stored)).toBe(rawMerchantKey(RAW))
+  })
+
+  it('saving only a category under the default scope renames nobody', async () => {
+    seed(bankTrio())
+
+    await openLabelled(LABEL)
+    expect(screen.getByLabelText('Descripción edición')).toHaveValue(LABEL)
+    await pickInDialog(restaurants)
+    expect(
+      within(
+        screen.getByRole('group', { name: 'Aplicar nombre y categoría a' })
+      ).getByLabelText(/^Todas las similares/)
+    ).toBeChecked()
+    await saveDialog()
+
+    await waitFor(() => expect(repo.row('d3')?.category).toBe('restaurants'))
+    for (const id of ['d1', 'd2', 'd3']) {
+      expect(repo.row(id)?.category).toBe('restaurants')
+      expect(repo.row(id)?.displayDescription).toBeUndefined()
+    }
+    expect(repo.descriptionOverrides.size).toBe(0)
+  })
+
+  it('typing the statement text back clears the row’s own name under Todas', async () => {
+    seed([
+      tx('d1', {
+        description: RAW,
+        displayDescription: 'Foo',
+        categoryConfidence: 0.9,
+      }),
+      tx('d2', { description: RAW, categoryConfidence: 0.9 }),
+    ])
+
+    await openLabelled('Foo')
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: RAW },
+    })
+    await pickInDialog(restaurants)
+    await saveDialog()
+
+    await waitFor(() => expect(repo.row('d2')?.category).toBe('restaurants'))
+    expect(repo.row('d1')?.displayDescription).toBeUndefined()
+  })
+
+  it('typing the statement text back clears the row’s own name under Solo esta', async () => {
+    seed([
+      tx('d1', {
+        description: RAW,
+        displayDescription: 'Foo',
+        categoryConfidence: 0.9,
+      }),
+      tx('d2', {
+        description: RAW,
+        displayDescription: 'Bar',
+        categoryConfidence: 0.9,
+      }),
+    ])
+
+    await openLabelled('Foo')
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: RAW },
+    })
+    await pickInDialog(restaurants)
+    scope('Solo esta transacción')
+    await saveDialog()
+
+    await waitFor(() => expect(repo.row('d1')?.category).toBe('restaurants'))
+    expect(repo.row('d1')?.displayDescription).toBeUndefined()
+    expect(repo.row('d2')?.displayDescription).toBe('Bar')
+  })
+
+  it('the original name over a live override: the dialog’s N, the toast and the write count the named parts', async () => {
+    replaceDescriptionOverrides({
+      [buildDescriptionOverrideKey(RAW)!]: {
+        descriptionOriginal: RAW,
+        friendlyDescription: 'Lavadero',
+        updatedAt: '',
+      },
+    })
+    seed([
+      tx('d1', { description: RAW, categoryConfidence: 0.9 }),
+      tx('d2', { description: RAW, categoryConfidence: 0.9 }),
+      tx('part', {
+        description: RAW,
+        splitParentId: 'd1',
+        categoryConfidence: 0.9,
+      }),
+    ])
+
+    await openLabelled('Lavadero')
+    fireEvent.change(screen.getByLabelText('Descripción edición'), {
+      target: { value: LABEL },
+    })
+    await pickInDialog(restaurants)
+    scope(/^Todas las similares/)
+    expect(
+      screen.getByLabelText(/se aplica a 3 transacciones/)
+    ).toBeInTheDocument()
+    await saveDialog()
+
+    await visible(screen.findByText(/3 transacciones/))
   })
 })
