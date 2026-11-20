@@ -549,8 +549,10 @@ advance it without a second source of truth. Picks go through
 toast): an inline strip offers "Aplicar a las N similares" and "Deshacer"
 (the same guarded actions as the toast), and the card is busy while a write of
 the row is in flight. Escape / "Salir" return to the A revisar table.
-Entries: Resumen's "Sin categoría" nudge, Categorías' "Revisar N", the import
-summary's "Revisar N movimientos", Insights' Sin categoría "Revisar N →" (in
+Entries: Resumen's "Sin categoría" nudge (uncategorized expenses and
+income, no type, so its "N gastos y M ingresos" is the queue's size),
+Categorías' "Revisar N", the import
+summary's "Revisar N movimientos", Insights' Sin categoría "Revisar N →" (expenses only; in
 Hogar mode the household cut carries into the queue) and the table's "Revisar
 uno por uno" button. A reload restarts at "1 de M" over what
 is left.
@@ -600,15 +602,15 @@ All conversion happens in the browser, at render or aggregation time, with
 `rate` means 1 USD = `rate` UYU. Stored amounts are always native: positive
 `amount` plus `currency`. Nothing converted is persisted.
 
-| Caller                                                                                                                                                                                  | What it converts                                                                                                    |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `buildCurrencySplit`, `spendByAccount`, `buildMerchantSpendingConverted`) | Resumen totals, charts, account cards and "Mayores comercios" (also Insights' `topMerchants`), in the home currency |
-| `category-changes.ts` (`categoryChanges`)                                                                                                                                               | "Qué cambió" month comparisons (also Insights' `categoryChanges`) and its US$ 10 noise floor                        |
-| `insight-data.ts` (`buildInsightInput`)                                                                                                                                                 | Every number handed to the Insights model, rounded to cents (`scope: 'hogar'` = household rows only, no income)     |
-| `Dashboard.tsx`                                                                                                                                                                         | Recent rows                                                                                                         |
-| `Transactions.tsx`                                                                                                                                                                      | Filtered-set totals                                                                                                 |
-| `TransactionTable.tsx`                                                                                                                                                                  | The faint `≈` converted amount next to a native one                                                                 |
-| `review-queue.ts` (`toHome`)                                                                                                                                                            | The review mode's queue order, its done total and the card's `≈` line                                               |
+| Caller                                                                                                                                                                                                         | What it converts                                                                                                    |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `chart-data.ts` (`buildCategorySpendingConverted`, `buildMonthlyTrendsConverted`, `buildCurrentMonthSummary`, `uncategorizedIncome`, `buildCurrencySplit`, `spendByAccount`, `buildMerchantSpendingConverted`) | Resumen totals, charts, account cards and "Mayores comercios" (also Insights' `topMerchants`), in the home currency |
+| `category-changes.ts` (`categoryChanges`)                                                                                                                                                                      | "Qué cambió" month comparisons (also Insights' `categoryChanges`) and its US$ 10 noise floor                        |
+| `insight-data.ts` (`buildInsightInput`)                                                                                                                                                                        | Every number handed to the Insights model, rounded to cents (`scope: 'hogar'` = household rows only, no income)     |
+| `Dashboard.tsx`                                                                                                                                                                                                | Recent rows                                                                                                         |
+| `Transactions.tsx`                                                                                                                                                                                             | Filtered-set totals                                                                                                 |
+| `TransactionTable.tsx`                                                                                                                                                                                         | The faint `≈` converted amount next to a native one                                                                 |
+| `review-queue.ts` (`toHome`)                                                                                                                                                                                   | The review mode's queue order, its done total and the card's `≈` line                                               |
 
 The home currency (`preferredCurrency` from `useUserWorkspace`, passed down as
 `homeCurrency`) and `fxRate` (default 40.5) come from `user_preferences`.
