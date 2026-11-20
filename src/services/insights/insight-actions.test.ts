@@ -206,7 +206,7 @@ describe('insightActions: the drill', () => {
       ]
       expect(actionsFor(card, rows).drill).toEqual({
         label: 'Revisar 2 →',
-        filter: { categories: [unc], type: 'debit' },
+        filter: { categories: [unc], type: 'debit', reviewMode: true },
       })
     })
 
@@ -220,7 +220,12 @@ describe('insightActions: the drill', () => {
         actionsFor(card, [rows[0]], { all: rows, householdMode: true }).drill
       ).toEqual({
         label: 'Revisar 1 →',
-        filter: { categories: [unc], type: 'debit', household: 'household' },
+        filter: {
+          categories: [unc],
+          type: 'debit',
+          reviewMode: true,
+          household: 'household',
+        },
       })
     })
 

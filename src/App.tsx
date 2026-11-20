@@ -94,6 +94,9 @@ function App({ auth, createRepository }: AppProps) {
   // links all work).
   const currentView = viewFromPath(location.pathname)
   const [importOpen, setImportOpen] = useState(false)
+  // The summary closed into the review mode: its card owns focus, not the
+  // opener the dialog would return it to (#305).
+  const importOpensReview = useRef(false)
   // Back-to-sign-in is ending the session in the background.
   const [leaving, setLeaving] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -102,14 +105,16 @@ function App({ auth, createRepository }: AppProps) {
   // stack duplicate history entries: a re-select replaces the entry. It keeps
   // the view's query where that holds filters (`keepsQueryOnReselect`), and
   // otherwise drops it (Resumen's Hogar mode goes back to Todo).
-  function go(view: View, search = '') {
+  // `push` forces a PUSH even from the same view, so Transacciones remounts
+  // and re-reads the link (the import dialog's, opened from Transacciones).
+  function go(view: View, search = '', push = false) {
     const reselect = view === currentView
     const sameQuery = search
       ? `?${search}` === location.search
       : keepsQueryOnReselect(view) || !location.search
     if (reselect && sameQuery) return
     navigate(pathForView(view) + (search ? `?${search}` : ''), {
-      replace: reselect,
+      replace: reselect && !push,
     })
   }
 
@@ -291,9 +296,10 @@ function App({ auth, createRepository }: AppProps) {
   }
 
   function navigateToTransactions(
-    filter: import('./models').TransactionsFilter
+    filter: import('./models').TransactionsFilter,
+    push = false
   ) {
-    go('transactions', filterToSearch(filter))
+    go('transactions', filterToSearch(filter), push)
   }
 
   const {
@@ -599,7 +605,14 @@ function App({ auth, createRepository }: AppProps) {
           if (!open) setImportOpen(false)
         }}
       >
-        <DialogContent className="max-h-[calc(100dvh-2rem)] max-w-[680px]! overflow-x-hidden overflow-y-auto rounded-[var(--radius-lg)]!">
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] max-w-[680px]! overflow-x-hidden overflow-y-auto rounded-[var(--radius-lg)]!"
+          onCloseAutoFocus={(event) => {
+            if (!importOpensReview.current) return
+            importOpensReview.current = false
+            event.preventDefault()
+          }}
+        >
           <DialogTitle className="sr-only">Importar archivo CSV</DialogTitle>
           <DialogDescription className="sr-only">
             Arrastrá o seleccioná uno o varios archivos CSV de Santander Uruguay
@@ -610,8 +623,9 @@ function App({ auth, createRepository }: AppProps) {
             key={userId}
             transactions={transactions}
             onViewTransactions={(filter) => {
+              importOpensReview.current = Boolean(filter.reviewMode)
               setImportOpen(false)
-              navigateToTransactions(filter)
+              navigateToTransactions(filter, true)
             }}
             onTransactionsImported={handleTransactionsImported}
           />

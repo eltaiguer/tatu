@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Transaction } from '../../models'
+import type { Transaction, TransactionsFilter } from '../../models'
 import { filterToSearch } from '../filters/url-filters'
 import { parseFilterParams } from '../filters/url-filters'
 import { filterTransactions } from '../filters/transaction-filter'
@@ -42,6 +42,7 @@ describe('reviewLink', () => {
       ])
     ).toEqual({
       review: true,
+      reviewMode: true,
       accountType: 'credit_card',
       period: { mode: 'range', from: '2025-01-02', to: '2025-12-04' },
     })
@@ -58,6 +59,7 @@ describe('reviewLink', () => {
       ])
     ).toEqual({
       review: true,
+      reviewMode: true,
       accountType: 'bank_account',
       currency: 'USD',
       period,
@@ -86,6 +88,7 @@ describe('reviewLink', () => {
       ])
     ).toEqual({
       review: true,
+      reviewMode: true,
       accountType: 'bank_account',
       period: { mode: 'range', from: '2025-11-03', to: '2025-11-30' },
     })
@@ -105,6 +108,7 @@ describe('reviewLink', () => {
       ])
     ).toEqual({
       review: true,
+      reviewMode: true,
       period: { mode: 'range', from: '2025-03-17', to: '2025-12-04' },
     })
   })
@@ -132,8 +136,34 @@ describe('countReviewRows', () => {
     ).toBe(2)
   })
 
+  it('leaves out rows in ignored categories, as the queue does', () => {
+    const withIgnored = [
+      ...rows,
+      tx('f', { category: 'internal_transfer', categoryConfidence: 0.2 }),
+    ]
+    const link: TransactionsFilter = { review: true, reviewMode: true }
+    const queue = filterTransactions(
+      withIgnored,
+      parseFilterParams(filterToSearch(link)),
+      { householdRules: currentHouseholdRules() }
+    )
+    expect(countReviewRows(withIgnored, link)).toBe(queue.length)
+    expect(countReviewRows(withIgnored, link)).toBe(3)
+  })
+
   it('counts only the given ids', () => {
     expect(countReviewRows(rows, { review: true }, new Set(['a', 'c']))).toBe(1)
+  })
+
+  it('counts a review-mode link the same as the table link', () => {
+    const period = {
+      mode: 'range' as const,
+      from: '2025-01-01',
+      to: '2025-12-31',
+    }
+    expect(
+      countReviewRows(rows, { review: true, reviewMode: true, period })
+    ).toBe(countReviewRows(rows, { review: true, period }))
   })
 
   it('equals what the link opens', () => {

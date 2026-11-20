@@ -233,10 +233,19 @@ describe('App', () => {
     await waitFor(() => expect(opener).toHaveFocus())
   })
 
-  it('opens what the import leaves to review from "Revisar N" on the summary (#275)', async () => {
+  it('opens the review mode on what the import leaves to review from "Revisar N" on the summary (#275, #305)', async () => {
     const user = userEvent.setup()
-    renderApp()
-    await user.click(await screen.findByRole('button', { name: 'Importar' }))
+    // The Transacciones chunk is already loaded, as after any visit to it:
+    // the review mode then mounts before Radix's onCloseAutoFocus runs.
+    seed({
+      transactions: [
+        tx('seed', '2026-03-10T12:00:00.000Z', 'Devoto', 'groceries'),
+      ],
+    })
+    renderApp('/transacciones')
+    await screen.findByText(/Mostrando/)
+    await user.click(screen.getByRole('button', { name: 'Resumen' }))
+    await user.click(await screen.findByRole('button', { name: /^Importar$/ }))
 
     await user.upload(
       screen.getByLabelText('Seleccionar archivo'),
@@ -257,21 +266,85 @@ describe('App', () => {
     )
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    const reviewUrl =
+      '/transacciones?cuenta=bank_account&moneda=UYU&revisar=si&modo=revisar&desde=2025-11-24&hasta=2025-11-27'
+    await waitFor(() => expect(currentUrl()).toBe(reviewUrl))
+    // N on the button == M of the queue.
+    expect(await screen.findByText('1 de 1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /ZQXW/i })).toBeVisible()
+    // The dialog's return-focus must not take focus off the review card.
     await waitFor(() =>
-      expect(currentUrl()).toBe(
-        '/transacciones?cuenta=bank_account&moneda=UYU&revisar=si&desde=2025-11-24&hasta=2025-11-27'
-      )
+      expect(
+        screen.getByRole('textbox', { name: 'Buscar categoría' })
+      ).toHaveFocus()
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Salir' }))
+    await waitFor(() =>
+      expect(currentUrl()).toBe(reviewUrl.replace('&modo=revisar', ''))
     )
     expect(
       screen.getByRole('button', { name: 'Quitar filtro A revisar' })
     ).toBeInTheDocument()
-    // The table lists the N rows the button promised, each with the marker.
-    // (A split part listed under its parent can add the parent's row to the
-    // count; a fresh import has no splits.)
     expect(await screen.findByText('Mostrando 1-1 de 1')).toBeInTheDocument()
     expect(
       screen.getAllByText(/categoría sin asignar o asignada/).length
     ).toBeGreaterThan(0)
+  })
+
+  describe('import dialog opened from Transacciones (#305)', () => {
+    async function importFromTransacciones(
+      user: ReturnType<typeof userEvent.setup>
+    ) {
+      seed({
+        transactions: [
+          tx('seed', '2026-03-10T12:00:00.000Z', 'Devoto', 'groceries'),
+        ],
+      })
+      renderApp('/transacciones')
+      await screen.findByText(/Mostrando/)
+      await user.click(screen.getByRole('button', { name: /^Importar$/ }))
+      await user.upload(
+        screen.getByLabelText('Seleccionar archivo'),
+        new File([UYU_WITH_UNKNOWN_MERCHANT_CSV], 'UYUmovements.csv', {
+          type: 'text/csv',
+        })
+      )
+      await screen.findByRole('heading', { name: 'Importación completada' })
+    }
+
+    it('"Revisar N" opens the review mode over the filters it links', async () => {
+      const user = userEvent.setup()
+      await importFromTransacciones(user)
+      await user.click(
+        screen.getByRole('button', { name: 'Revisar 1 movimiento' })
+      )
+
+      await waitFor(() =>
+        expect(currentUrl()).toBe(
+          '/transacciones?cuenta=bank_account&moneda=UYU&revisar=si&modo=revisar&desde=2025-11-24&hasta=2025-11-27'
+        )
+      )
+      expect(await screen.findByText('1 de 1')).toBeInTheDocument()
+      await waitFor(() =>
+        expect(
+          screen.getByRole('textbox', { name: 'Buscar categoría' })
+        ).toHaveFocus()
+      )
+    })
+
+    it('"Ver transacciones" lands on the new month', async () => {
+      const user = userEvent.setup()
+      await importFromTransacciones(user)
+      await user.click(
+        screen.getByRole('button', { name: 'Ver transacciones' })
+      )
+
+      await waitFor(() =>
+        expect(currentUrl()).toBe('/transacciones?periodo=2025-11')
+      )
+      expect((await screen.findAllByText(/ZQXW/i)).length).toBeGreaterThan(0)
+    })
   })
 
   it('starts the import dialog over when another user signs in under it (#275)', async () => {
@@ -1511,6 +1584,26 @@ describe('App', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /Alimentación/ }))
       expect(await screen.findByText('2 de 2')).toBeInTheDocument()
+    })
+
+    it('keeps the Hogar cut in the queue (#305)', async () => {
+      seed({
+        transactions: [
+          {
+            ...tx('h', '2026-03-10T12:00:00.000Z', 'Kiosco Hogar', ''),
+            household: true,
+          },
+          tx('n', '2026-03-11T12:00:00.000Z', 'Kiosco Otro', ''),
+        ],
+      })
+      renderApp(
+        '/transacciones?categoria=uncategorized&tipo=debit&hogar=si&revisar=si&modo=revisar&periodo=todo'
+      )
+
+      expect(await screen.findByText('1 de 1')).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: 'Kiosco Hogar' })
+      ).toBeVisible()
     })
 
     it('shows the panel again on a reload', async () => {

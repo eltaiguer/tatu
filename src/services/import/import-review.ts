@@ -14,7 +14,8 @@ export interface ReviewedFile {
 /**
  * The "Revisar N" link of an import: the rows to review across the files'
  * dates, on the files' account when they all share one (a card file does not
- * pull in older bank rows). Null without files.
+ * pull in older bank rows). It opens the review mode, one row at a time
+ * (#305). Null without files.
  */
 export function reviewLink(files: ReviewedFile[]): TransactionsFilter | null {
   if (files.length === 0) return null
@@ -40,7 +41,12 @@ export function reviewLink(files: ReviewedFile[]): TransactionsFilter | null {
   } else if ([...types].every(isBank)) {
     account = { accountType: 'bank_account' }
   }
-  return { review: true, ...account, period: { mode: 'range', from, to } }
+  return {
+    review: true,
+    reviewMode: true,
+    ...account,
+    period: { mode: 'range', from, to },
+  }
 }
 
 /**

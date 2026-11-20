@@ -1070,6 +1070,7 @@ describe('ImportCSV', () => {
       )
       expect(onViewTransactions).toHaveBeenCalledWith({
         review: true,
+        reviewMode: true,
         accountType: 'bank_account',
         currency: 'UYU',
         period: { mode: 'range', ...RANGE },
@@ -1520,6 +1521,7 @@ describe('ImportCSV', () => {
       )
       expect(onViewTransactions).toHaveBeenCalledWith({
         review: true,
+        reviewMode: true,
         accountType: 'bank_account',
         currency: 'USD',
         period: { mode: 'range', from: '2025-03-04', to: '2025-12-20' },
@@ -1993,6 +1995,7 @@ describe('ImportCSV', () => {
       )
       expect(onViewTransactions).toHaveBeenCalledWith({
         review: true,
+        reviewMode: true,
         accountType: 'credit_card',
         period: { mode: 'range', from: '2025-03-17', to: '2025-12-04' },
       })
@@ -2049,6 +2052,7 @@ describe('ImportCSV', () => {
       const link = onViewTransactions.mock.calls[0][0]
       expect(link).toEqual({
         review: true,
+        reviewMode: true,
         period: { mode: 'range', from: '2025-03-17', to: '2025-12-04' },
       })
       expect(countReviewRows(rows, link)).toBe(7)

@@ -116,7 +116,13 @@ function drillFor(
   ) {
     return {
       label: `Revisar ${index.uncategorizedCount} →`,
-      filter: { categories: [Category.Uncategorized], type: 'debit', ...house },
+      // The review mode, like Resumen's nudge (#305).
+      filter: {
+        categories: [Category.Uncategorized],
+        type: 'debit',
+        reviewMode: true,
+        ...house,
+      },
     }
   }
 
