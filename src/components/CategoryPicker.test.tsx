@@ -145,6 +145,26 @@ describe('CategoryPicker suggested', () => {
     expect(onPick).toHaveBeenCalledWith('entertainment')
   })
 
+  it('tells a screen reader what Enter picks', () => {
+    const { rerender } = render(
+      <CategoryPicker suggested="entertainment" onPick={vi.fn()} />
+    )
+    expect(
+      screen.getByLabelText('Buscar categoría')
+    ).not.toHaveAccessibleDescription(/Enter elige/)
+
+    rerender(
+      <CategoryPicker
+        suggested="entertainment"
+        enterPicksSuggested
+        onPick={vi.fn()}
+      />
+    )
+    expect(
+      screen.getByLabelText('Buscar categoría')
+    ).toHaveAccessibleDescription('Enter elige la sugerida: Entretenimiento')
+  })
+
   it('does not reorder while searching', async () => {
     render(<CategoryPicker suggested="entertainment" onPick={vi.fn()} />)
     await userEvent.type(screen.getByLabelText('Buscar categoría'), 'res')

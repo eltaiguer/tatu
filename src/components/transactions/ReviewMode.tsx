@@ -83,6 +83,9 @@ export function ReviewMode({
   const [lastPick, setLastPick] = useState<LastPick | null>(null)
   const [focusTick, setFocusTick] = useState(0)
   const workingRef = useRef(false)
+  // The newest pick started: an older Reintentar landing late must not
+  // replace its strip.
+  const pickSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const titleRef = useRef<HTMLHeadingElement>(null)
 
@@ -136,10 +139,13 @@ export function ReviewMode({
     workingRef.current = true
     setWorking(true)
     setLastPick(null)
+    const mine = ++pickSeq.current
     try {
-      await writes.pickForReview(current, category, (result) =>
-        setLastPick({ ...result, row: current, category })
-      )
+      await writes.pickForReview(current, category, (result) => {
+        if (mine === pickSeq.current) {
+          setLastPick({ ...result, row: current, category })
+        }
+      })
     } finally {
       workingRef.current = false
       setWorking(false)
@@ -321,7 +327,7 @@ export function ReviewMode({
               />
             </div>
             <p className="hidden text-xs text-muted-foreground md:block">
-              Enter elige · S salta · Esc sale
+              Enter elige · Esc sale
             </p>
           </>
         ) : (

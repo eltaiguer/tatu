@@ -190,7 +190,7 @@ describe('ReviewMode', () => {
     expect(lastSearch()).toContain('modo=revisar')
   })
 
-  it('focuses the suggestion of a low-confidence row and Enter picks it', async () => {
+  it('keeps the search focused on a suggested row, and Enter picks the suggestion', async () => {
     seed([
       tx('low', {
         description: 'BETA TIENDA',
@@ -383,6 +383,26 @@ describe('ReviewMode', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Alimentación en ALFA SERVICIOS'
     )
+  })
+
+  it('keeps the newer pick’s strip when an older Reintentar lands late', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    seed(basicRows())
+    repo.failOn('update', { error: new Error('timeout'), times: 1 })
+    await userEvent.click(option(/Alimentación/))
+    const retry = await screen.findByRole('button', { name: 'Reintentar' })
+    expect(error).toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Saltar' }))
+    await userEvent.click(option(/Alimentación/))
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('en BETA TIENDA')
+    )
+
+    fireEvent.click(retry)
+    await waitFor(() => expect(stored('uyu')?.categoryConfidence).toBe(1))
+
+    expect(screen.getByRole('status')).toHaveTextContent('en BETA TIENDA')
   })
 
   it('keeps the total while the filtered rows shrink', async () => {

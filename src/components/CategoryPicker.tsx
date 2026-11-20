@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { Category } from '../models'
 import { normalizeCategoryId } from '../services/categories/category-aliases'
+import { resolveCategory } from '../services/categories/category-registry'
 import { CategoryBadge } from './CategoryBadge'
 import { Input } from './ui/input'
 import { focusFirstOption, handleOptionListKeyDown } from './ui/option-list'
@@ -38,6 +39,7 @@ export function CategoryPicker({
 }: CategoryPickerProps) {
   const [query, setQuery] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
+  const hintId = useId()
   const suggestedId = suggested ? normalizeCategoryId(suggested) : null
   const matches = useMemo(() => {
     const found = filterCategorySuggestions(
@@ -52,9 +54,16 @@ export function CategoryPicker({
       : found
   }, [value, suggested, suggestedId, query])
 
+  const announce = enterPicksSuggested && suggestedId
   return (
     <div className="p-2 space-y-2">
+      {announce && (
+        <span id={hintId} className="sr-only">
+          Enter elige la sugerida: {resolveCategory(suggestedId).label}
+        </span>
+      )}
       <Input
+        aria-describedby={announce ? hintId : undefined}
         aria-label="Buscar categoría"
         placeholder="Buscar categoría…"
         value={query}
@@ -99,7 +108,7 @@ export function CategoryPicker({
                 className={cn(
                   'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent',
                   touch && 'min-h-11',
-                  id === suggestedId && 'bg-accent ring-1 ring-ring/60'
+                  id === suggestedId && 'border-l-2 border-primary pl-1.5'
                 )}
                 onClick={() => onPick(id)}
               >
