@@ -58,7 +58,7 @@ describe('Transactions dialogs return focus on close', () => {
 
   it('returns focus to Etiquetas', async () => {
     const user = userEvent.setup()
-    render(<Transactions transactions={TRANSACTIONS} />)
+    render(<Transactions transactions={TRANSACTIONS} onBulkTag={vi.fn()} />)
     await user.click(
       screen.getAllByRole('checkbox', { name: 'Seleccionar comercio 0' })[0]
     )

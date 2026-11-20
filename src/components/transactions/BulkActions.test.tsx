@@ -16,6 +16,7 @@ import {
   autoCategorize,
   bulkCategorize,
   bulkTag,
+  deleteTransactions,
   editTransaction,
   restoreCategories,
   setHousehold,
@@ -509,6 +510,246 @@ describe('selection bar (#282)', () => {
       ).toBeDisabled()
       await act(async () => gate.release())
       await visible(screen.findByText('1 transacción categorizada'))
+    })
+  })
+
+  describe('review round 1', () => {
+    const rowBadge = (description: string) =>
+      screen.getAllByRole('button', {
+        name: (name) => name.startsWith(`Categoría de ${description}:`),
+      })[0]
+
+    async function pickInRow(description: string, label: string) {
+      await userEvent.click(rowBadge(description))
+      await userEvent.click(
+        within(
+          await screen.findByRole('dialog', { name: 'Elegir categoría' })
+        ).getByRole('button', { name: label })
+      )
+    }
+
+    const noMatchRow = () =>
+      tx('Comercio Inventado XYZ', {
+        type: 'credit',
+        category: undefined,
+        categoryConfidence: undefined,
+      })
+
+    async function noContarAll(ids: string[]) {
+      await select(...ids)
+      await userEvent.click(barButton('No contar'))
+      await visible(
+        screen.findByText(
+          `${ids.length} transacciones no cuentan en los totales`
+        )
+      )
+    }
+
+    it('Categorizar a mano does nothing while another write runs', async () => {
+      seed([noMatchRow()])
+      await select('Comercio Inventado XYZ')
+      const dialog = await openPicker()
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: /Volver a sugerir/ })
+      )
+      await visible(screen.findByText('Sin coincidencias'))
+      const gate = repo.hold('update')
+      await userEvent.click(barButton('No contar'))
+      await waitFor(() => expect(barButton('No contar')).toBeDisabled())
+
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Categorizar a mano' })
+      )
+
+      expect(
+        screen.queryByRole('dialog', { name: 'Elegir categoría' })
+      ).toBeNull()
+      await act(async () => gate.release())
+      await visible(screen.findByText('1 transacción no cuenta en los totales'))
+      expect(repo.requests.update).toBe(1)
+    })
+
+    it('locks the selected rows’ pickers while the bulk write runs', async () => {
+      seed([tx('a'), tx('b')])
+      await select('a', 'b')
+      const dialog = await openPicker()
+      const gate = repo.hold('update')
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Entretenimiento' })
+      )
+
+      await waitFor(() =>
+        expect(rowBadge('a')).toHaveAttribute('aria-disabled', 'true')
+      )
+      await userEvent.click(rowBadge('a'))
+      expect(
+        screen.queryByRole('dialog', { name: 'Elegir categoría' })
+      ).toBeNull()
+
+      await act(async () => gate.release())
+      await visible(screen.findByText('2 transacciones categorizadas'))
+      await waitFor(() =>
+        expect(rowBadge('a')).not.toHaveAttribute('aria-disabled')
+      )
+    })
+
+    it('Deshacer leaves a row alone that was picked away and back', async () => {
+      seed([tx('a'), tx('b')])
+      await select('a', 'b')
+      const dialog = await openPicker()
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Entretenimiento' })
+      )
+      const bulk = (
+        await visible(screen.findByText('2 transacciones categorizadas'))
+      ).closest('[data-sonner-toast]') as HTMLElement
+      await pickInRow('a', 'Restaurantes')
+      await waitFor(() => expect(stored('a')?.category).toBe('restaurants'))
+      await pickInRow('a', 'Entretenimiento')
+      await waitFor(() => expect(stored('a')?.category).toBe('entertainment'))
+
+      fireEvent.click(within(bulk).getByRole('button', { name: 'Deshacer' }))
+
+      await visible(screen.findByText('Se deshizo el cambio'))
+      expect(stored('b')?.category).toBe('groceries')
+      expect(stored('a')?.category).toBe('entertainment')
+      expect(
+        screen.getByText('1 cambió mientras tanto y quedó como está')
+      ).toBeInTheDocument()
+    })
+
+    it('withdraws the bulk toast when the view goes away', async () => {
+      const { unmount } = seed([tx('a'), tx('b')])
+      await select('a', 'b')
+      const dialog = await openPicker()
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Entretenimiento' })
+      )
+      await visible(screen.findByText('2 transacciones categorizadas'))
+
+      unmount()
+
+      await waitFor(() =>
+        expect(screen.queryByText('2 transacciones categorizadas')).toBeNull()
+      )
+    })
+
+    it('a row deleted mid-write is not offered, and one deleted before Reintentar is skipped', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      seed([
+        tx('a', { category: 'groceries', categoryConfidence: 0.8 }),
+        tx('b', { category: 'restaurants', categoryConfidence: 0.6 }),
+        tx('c', { category: 'shopping', categoryConfidence: 0.7 }),
+      ])
+      await noContarAll(['a', 'b', 'c'])
+      for (const failing of ['b', 'c']) {
+        repo.failOn('update', {
+          when: (ids) => ids.includes(failing),
+          times: 1,
+          error: new Error('timeout'),
+        })
+      }
+
+      await deshacer()
+
+      await visible(screen.findByText('Se actualizaron 1 de 3 — reintentar'))
+      await act(async () => {
+        await deleteTransactions(repo, ['b'])
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+      await visible(screen.findByText('Cambios guardados'))
+      expect(stored('c')).toMatchObject({
+        category: 'shopping',
+        categoryConfidence: 0.7,
+      })
+    })
+
+    it('a guarded Reintentar refuses to overwrite a row re-categorized meanwhile', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      seed([
+        tx('a', { category: 'groceries', categoryConfidence: 0.8 }),
+        tx('b', { category: 'restaurants', categoryConfidence: 0.6 }),
+      ])
+      await noContarAll(['a', 'b'])
+      repo.failOn('update', {
+        when: (ids) => ids.includes('b'),
+        times: 1,
+        error: new Error('timeout'),
+      })
+      await deshacer()
+      await visible(screen.findByText('Se actualizaron 1 de 2 — reintentar'))
+      await act(async () => {
+        await editTransaction(repo, 'b', {
+          category: 'groceries',
+          applyScope: 'single',
+        })
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }))
+
+      await visible(
+        screen.findByText(
+          'Mientras tanto cambiaron estas transacciones; no se deshizo.'
+        )
+      )
+      expect(stored('b')?.category).toBe('groceries')
+      expect(repo.row('b')?.category).toBe('groceries')
+    })
+
+    it('Deshacer stays silent after another account signed in', async () => {
+      seed([tx('a'), tx('b')])
+      await noContarAll(['a', 'b'])
+      const updates = repo.requests.update
+
+      act(() => {
+        workspaceStore.setState({ userId: 'someone-else' })
+      })
+      await deshacer()
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      expect(screen.queryByText('Se deshizo el cambio')).toBeNull()
+      expect(screen.queryByText(/Mientras tanto/)).toBeNull()
+      expect(repo.requests.update).toBe(updates)
+      expect(repo.row('a')?.category).toBe('ignored')
+    })
+
+    it('a bulk write withdraws an in-place toast’s Deshacer first', async () => {
+      seed([tx('a'), tx('b')])
+      await pickInRow('a', 'Restaurantes')
+      await visible(screen.findByText('Restaurantes en esta transacción'))
+      const gate = repo.hold('update')
+
+      await select('a')
+      await userEvent.click(barButton('No contar'))
+
+      await waitFor(() =>
+        expect(
+          screen.queryByText('Restaurantes en esta transacción')
+        ).toBeNull()
+      )
+      await act(async () => gate.release())
+    })
+
+    it('hides Etiquetas and Volver a sugerir when the view cannot do them', async () => {
+      repo = createInMemoryRepository({ transactions: [tx('a')] })
+      transactionStore.getState().setTransactions([tx('a')])
+      workspaceStore.setState({ userId: repo.userId, status: 'ready' })
+      render(
+        <Transactions
+          transactions={[tx('a')]}
+          initialFilters={{ ...DEFAULT_URL_FILTERS, period: { mode: 'all' } }}
+        />
+      )
+      await select('a')
+
+      expect(
+        within(group()).queryByRole('button', { name: 'Etiquetas' })
+      ).toBeNull()
+      const dialog = await openPicker()
+      expect(
+        within(dialog).queryByRole('button', { name: /Volver a sugerir/ })
+      ).toBeNull()
     })
   })
 })

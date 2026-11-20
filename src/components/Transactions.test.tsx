@@ -1438,7 +1438,12 @@ describe('Transactions', () => {
   // this pins the responsive classes; the PR carries the Playwright check.
   describe('selection bar layout (#194)', () => {
     function selectOne() {
-      render(<Transactions transactions={[makeTransaction(1, 'Devoto')]} />)
+      render(
+        <Transactions
+          transactions={[makeTransaction(1, 'Devoto')]}
+          onBulkTag={vi.fn()}
+        />
+      )
       fireEvent.click(
         screen.getAllByRole('checkbox', { name: 'Seleccionar Devoto' })[0]
       )

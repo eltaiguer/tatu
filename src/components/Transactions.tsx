@@ -204,7 +204,8 @@ export function Transactions({
     onSetHousehold,
     onReload,
     onRestoreCategories,
-    supersede: categoryWrites.supersede,
+    rowWrites: categoryWrites.rowWrites,
+    setPending,
     reportError,
     reportDeleted,
     deleteWithConfirmation,
@@ -457,10 +458,14 @@ export function Transactions({
                 }
               : undefined
           }
-          onTags={() => setTagsOpen(true)}
-          onSuggest={() => {
-            void handleSuggestSelected()
-          }}
+          onTags={onBulkTag ? () => setTagsOpen(true) : undefined}
+          onSuggest={
+            onAutoCategorizeTransactions
+              ? () => {
+                  void handleSuggestSelected()
+                }
+              : undefined
+          }
           onIgnore={() => {
             void handleBulkIgnore()
           }}
@@ -469,7 +474,7 @@ export function Transactions({
           }}
           isAutoCategorizing={isAutoCategorizing}
           isBusy={isBusy}
-          categorizeOpen={categorizeOpen && hasSelection}
+          categorizeOpen={categorizeOpen && hasSelection && !isBusy}
           onCategorizeOpenChange={setCategorizeOpen}
         />
       )}

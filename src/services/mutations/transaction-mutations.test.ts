@@ -2199,7 +2199,7 @@ function storedAll() {
   return transactionStore.getState().transactions
 }
 
-describe('transaction-mutations — Auto-categorizar pool and write rule (audit)', () => {
+describe('transaction-mutations — Volver a sugerir (autoCategorize) pool and write rule (audit)', () => {
   // Amounts between 3001 and 15000 UYU get no amount heuristic, so only the
   // sources under test can categorize these rows.
   const quiet = { amount: 5000, currency: 'UYU' as const }
@@ -2301,7 +2301,7 @@ describe('transaction-mutations — Auto-categorizar pool and write rule (audit)
   })
 })
 
-describe('transaction-mutations — override names in the Auto-categorizar pool (review of #222)', () => {
+describe('transaction-mutations — override names in the Volver a sugerir (autoCategorize) pool (review of #222)', () => {
   it('uses the override description, not its key, as the merchant name', async () => {
     // An all-digits description keys as "raw:12345678"; "raw" must not
     // become a token that matches unrelated rows.
@@ -2328,7 +2328,7 @@ describe('transaction-mutations — override names in the Auto-categorizar pool 
   })
 })
 
-describe('transaction-mutations — Auto-categorizar, review of #221', () => {
+describe('transaction-mutations — Volver a sugerir (autoCategorize), review of #221', () => {
   const quiet = { amount: 5000, currency: 'UYU' as const }
 
   it('applies a changed rule to rows categorized at the same confidence', async () => {

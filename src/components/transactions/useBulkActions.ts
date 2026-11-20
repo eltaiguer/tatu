@@ -45,6 +45,11 @@ function snapshot(ids: string[]): CategorySnapshot[] {
     }))
 }
 
+// What a bulk categorize left on a row it wrote: that category at confidence 1.
+const wroteCategory = (category: string) => (after: CategorySnapshot) =>
+  normalizeCategoryId(after.category) === normalizeCategoryId(category) &&
+  after.categoryConfidence === 1
+
 const same = (a: CategorySnapshot, b?: CategorySnapshot) =>
   !!b &&
   normalizeCategoryId(a.category) === normalizeCategoryId(b.category) &&
@@ -66,7 +71,8 @@ export function useBulkActions({
   onSetHousehold,
   onReload,
   onRestoreCategories,
-  supersede,
+  rowWrites,
+  setPending,
   reportError,
   reportDeleted,
   deleteWithConfirmation,
@@ -97,8 +103,16 @@ export function useBulkActions({
   onRestoreCategories?: (
     rows: CategorySnapshot[]
   ) => Promise<{ restored: number }>
-  // Withdraws a row's older in-place toast (useCategoryWrites).
-  supersede?: (transactionId: string) => void
+  // The per-row write counters of useCategoryWrites: a bulk write is the
+  // newest write of every selected row, and its Deshacer leaves alone any row
+  // written since.
+  rowWrites?: {
+    start: (transactionId: string) => number
+    isLatest: (transactionId: string, seq: number) => boolean
+    track: (toastId: string | number) => void
+  }
+  // Locks a row's pickers while a write of it is in flight (usePendingRows).
+  setPending?: (transactionId: string, pending: boolean) => void
 } & Pick<
   MutationFeedback,
   'reportError' | 'reportDeleted' | 'deleteWithConfirmation'
@@ -110,6 +124,11 @@ export function useBulkActions({
   const [categorizeOpen, setCategorizeOpen] = useState(false)
 
   const isBusy = isAutoCategorizing || isBulkOperating
+  // Set synchronously: a second click (or the "Categorizar a mano" toast)
+  // never starts a write while another category write runs.
+  const working = useRef(false)
+  const busyRef = useRef(false)
+  busyRef.current = isBusy
   const selectionRef = useRef(selectedTransactionIds)
   selectionRef.current = selectedTransactionIds
 
@@ -131,23 +150,40 @@ export function useBulkActions({
     show: (
       count: number,
       action: { label: string; onClick: () => void } | undefined
-    ) => void
+    ) => string | number | undefined,
+    // What the write left on a row it wrote (a hand pick since is not it).
+    wrote?: (after: CategorySnapshot) => boolean
   ) {
-    for (const id of ids) supersede?.(id)
+    // This write is the newest of every selected row: an older toast's
+    // Deshacer is withdrawn, and a row written since is not ours to undo.
+    const seqs = new Map(ids.map((id) => [id, rowWrites?.start(id) ?? 0]))
+    const latest = (id: string) =>
+      rowWrites ? rowWrites.isLatest(id, seqs.get(id) ?? 0) : true
     const before = snapshot(ids)
     const owner = workspaceStore.getState().userId
+    for (const id of ids) setPending?.(id, true)
     let count: number
     try {
       count = await write()
     } catch (error) {
       reportError(error, fallback)
       return
+    } finally {
+      for (const id of ids) setPending?.(id, false)
     }
     // Another user signed in meanwhile: this selection is not theirs.
     if (owner && !isWorkspaceOwner(owner)) return
     const afterById = new Map(snapshot(ids).map((row) => [row.id, row]))
-    const written = before.filter((row) => !same(row, afterById.get(row.id)))
-    show(
+    const written = before.filter((row) => {
+      const after = afterById.get(row.id)
+      return (
+        !!after &&
+        !same(row, after) &&
+        latest(row.id) &&
+        (!wrote || wrote(after))
+      )
+    })
+    const toastId = show(
       count,
       written.length > 0 && onRestoreCategories
         ? {
@@ -157,30 +193,39 @@ export function useBulkActions({
                 onRestoreCategories,
                 owner,
                 written,
-                afterById
+                afterById,
+                latest
               ),
           }
         : undefined
     )
+    if (toastId !== undefined && written.length > 0) rowWrites?.track(toastId)
   }
 
   async function undoCategoryWrite(
     restore: (rows: CategorySnapshot[]) => Promise<{ restored: number }>,
     owner: string | null | undefined,
     written: CategorySnapshot[],
-    afterById: Map<string, CategorySnapshot>
+    afterById: Map<string, CategorySnapshot>,
+    latest: (id: string) => boolean
   ) {
     if (owner && !isWorkspaceOwner(owner)) return
     const nowById = new Map(
       snapshot(written.map((r) => r.id)).map((r) => [r.id, r])
     )
-    const restorable = written.filter((row) =>
-      same(afterById.get(row.id) as CategorySnapshot, nowById.get(row.id))
+    // A row deleted since is gone, not "changed".
+    const present = written.filter((row) => nowById.has(row.id))
+    const restorable = present.filter(
+      (row) =>
+        latest(row.id) &&
+        same(afterById.get(row.id) as CategorySnapshot, nowById.get(row.id))
     )
     if (restorable.length === 0) {
       toast(STALE_RESTORE)
       return
     }
+    // The restore is a write of these rows.
+    for (const row of restorable) rowWrites?.start(row.id)
     try {
       await restore(restorable)
     } catch (error) {
@@ -190,7 +235,7 @@ export function useBulkActions({
       )
       return
     }
-    const skipped = written.length - restorable.length
+    const skipped = present.length - restorable.length
     toast.success('Se deshizo el cambio', {
       description:
         skipped === 0
@@ -221,7 +266,9 @@ export function useBulkActions({
         )
         const holds = restorable.every((row) => {
           const now = nowById.get(row.id)
+          // A row deleted since has nothing to overwrite.
           return (
+            !now ||
             same(row, now) ||
             same(afterById.get(row.id) as CategorySnapshot, now)
           )
@@ -240,11 +287,12 @@ export function useBulkActions({
     if (
       !onAutoCategorizeTransactions ||
       selectedTransactionIds.length === 0 ||
-      isAutoCategorizing
+      working.current
     ) {
       return
     }
     const ids = selectedTransactionIds
+    working.current = true
     setIsAutoCategorizing(true)
     try {
       await runCategoryWrite(
@@ -255,22 +303,28 @@ export function useBulkActions({
           if (categorized === 0) {
             // Nothing changed: the selection stays, and the picker is one
             // click away for doing it by hand.
-            toast('Sin coincidencias', {
+            return toast('Sin coincidencias', {
               description:
                 'Tus reglas y los comercios que ya categorizaste no sugieren otra categoría para la selección.',
               duration: 8000,
               action: {
                 label: 'Categorizar a mano',
                 onClick: () => {
-                  if (selectionRef.current.length > 0) setCategorizeOpen(true)
+                  // Never over a write in flight: a pick would race it.
+                  if (
+                    selectionRef.current.length > 0 &&
+                    !working.current &&
+                    !busyRef.current
+                  ) {
+                    setCategorizeOpen(true)
+                  }
                 },
               },
             })
-            return
           }
           clearSelection()
           const rest = ids.length - categorized
-          toast.success(txDone(categorized, 'categorizad'), {
+          return toast.success(txDone(categorized, 'categorizad'), {
             description: rest > 0 ? `${rest} sin cambios` : undefined,
             duration: 8000,
             action,
@@ -278,6 +332,7 @@ export function useBulkActions({
         }
       )
     } finally {
+      working.current = false
       setIsAutoCategorizing(false)
     }
   }
@@ -286,10 +341,11 @@ export function useBulkActions({
     if (
       !onBulkCategorize ||
       selectedTransactionIds.length === 0 ||
-      isBulkOperating
+      working.current
     ) {
       return
     }
+    working.current = true
     setIsBulkOperating(true)
     try {
       await runCategoryWrite(
@@ -299,14 +355,16 @@ export function useBulkActions({
         'No se pudieron categorizar las transacciones',
         (updated, action) => {
           clearSelection()
-          toast.success(txDone(updated, 'categorizad'), {
+          return toast.success(txDone(updated, 'categorizad'), {
             description: resolveCategory(category).label,
             duration: 8000,
             action,
           })
-        }
+        },
+        wroteCategory(category)
       )
     } finally {
+      working.current = false
       setIsBulkOperating(false)
     }
   }
@@ -368,9 +426,10 @@ export function useBulkActions({
     if (
       !onBulkCategorize ||
       selectedTransactionIds.length === 0 ||
-      isBulkOperating
+      working.current
     )
       return
+    working.current = true
     setIsBulkOperating(true)
     try {
       await runCategoryWrite(
@@ -380,15 +439,17 @@ export function useBulkActions({
         'No se pudieron dejar las transacciones fuera de los totales',
         (updated, action) => {
           clearSelection()
-          toast.success(
+          return toast.success(
             updated === 1
               ? '1 transacción no cuenta en los totales'
               : `${updated} transacciones no cuentan en los totales`,
             { duration: 8000, action }
           )
-        }
+        },
+        wroteCategory('ignored')
       )
     } finally {
+      working.current = false
       setIsBulkOperating(false)
     }
   }

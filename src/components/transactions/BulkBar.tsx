@@ -37,7 +37,8 @@ export function BulkBar({
   onCategorize: (category: string) => void
   // Absent when the view cannot save the household choice.
   onHousehold?: (household: boolean | null) => void
-  onTags: () => void
+  // Absent when the view cannot tag.
+  onTags?: () => void
   onSuggest?: () => void
   onIgnore: () => void
   onDelete: () => void
@@ -67,23 +68,26 @@ export function BulkBar({
       className="fixed inset-x-4 bottom-4 z-40 [animation:fadeUp_0.2s_both] md:inset-x-auto md:bottom-[26px] md:left-[calc(50%+var(--sidebar-w,252px)/2)] md:[transform:translateX(-50%)]"
     >
       <div className="flex items-center gap-[10px] rounded-[999px] border border-[var(--border)] bg-[var(--surface)] py-[10px] pr-[12px] pl-[16px] shadow-[var(--shadow-lg)] max-md:flex-wrap max-md:rounded-[16px]">
-        <span
-          role="status"
-          aria-live="polite"
-          className="text-[14px] font-semibold whitespace-nowrap"
-        >
-          {count} seleccionada{count !== 1 ? 's' : ''}
-        </span>
-
-        {count < total && (
-          <button
-            onClick={onSelectAll}
-            disabled={isBusy}
-            className="cursor-pointer border-none bg-transparent bg-none p-0 text-[13px] whitespace-nowrap text-[var(--brand)]"
+        {/* Below md the count and "select all" share the first row with × */}
+        <div className="flex min-w-0 items-center gap-[10px] max-md:flex-1 max-md:flex-wrap max-md:gap-y-[2px]">
+          <span
+            role="status"
+            aria-live="polite"
+            className="text-[14px] font-semibold whitespace-nowrap"
           >
-            Seleccionar las {total} transacciones
-          </button>
-        )}
+            {count} seleccionada{count !== 1 ? 's' : ''}
+          </span>
+
+          {count < total && (
+            <button
+              onClick={onSelectAll}
+              disabled={isBusy}
+              className="cursor-pointer border-none bg-transparent bg-none p-0 text-[13px] whitespace-nowrap text-[var(--brand)]"
+            >
+              Seleccionar las {total} transacciones
+            </button>
+          )}
+        </div>
 
         <span className="h-[22px] w-[1px] bg-[var(--border)] max-md:hidden" />
 
@@ -224,14 +228,16 @@ export function BulkBar({
             No contar
           </button>
 
-          <button
-            onClick={onTags}
-            disabled={isBusy}
-            className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
-          >
-            <Tag size={13} />
-            Etiquetas
-          </button>
+          {onTags && (
+            <button
+              onClick={onTags}
+              disabled={isBusy}
+              className="inline-flex h-[32px] cursor-pointer items-center gap-[5px] rounded-[8px] border border-[var(--border)] bg-transparent px-[10px] py-0 [font:inherit] text-[13px]! whitespace-nowrap"
+            >
+              <Tag size={13} />
+              Etiquetas
+            </button>
+          )}
 
           <button
             onClick={onDelete}

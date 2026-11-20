@@ -1,5 +1,5 @@
 // Category and tag suggestions for the edit pickers (EditTransactionDialog,
-// BulkEditDialog). The filters are pure; building the category list reads
+// BulkTagsDialog). The filters are pure; building the category list reads
 // the custom-category registry.
 import { Category } from '../../models'
 import { listCustomCategories } from '../categories/category-store'
