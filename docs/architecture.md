@@ -311,7 +311,11 @@ flowchart TD
 ```
 
 `writeOverrides` saves a description override (friendly name plus category)
-when the name changed and clears it otherwise. It then saves a merchant
+when the name changed and clears it when a name equal to the original was
+given. An edit without `displayDescription` leaves names alone (#279): no
+per-row name patch, no description override created, and an existing one is
+re-saved with its name kept and the new category, because its category outranks
+the merchant override in `categorizeTransaction`. It then saves a merchant
 override for the category, or clears it when no category was chosen. `single`
 writes no overrides, so future imports are not affected.
 
@@ -332,6 +336,18 @@ the similar rows' categories alone.
 
 Rows given a category by hand get confidence 1, so `inferInternalTransfers`
 never reclassifies them afterwards.
+
+**Inline pick (#279).** The category badge of a Transacciones row or card is a
+button that opens a searchable picker (`CategoryPicker`; a popover on the
+desktop row, a bottom sheet on the card; the `c` key on a focused row opens it).
+A pick calls `editTransaction` with `single` and only `category` (no name, so
+names are untouched). The toast after it offers "Aplicar a las N similares",
+which calls it again with `matching_past_and_future` (N comes from
+`findSimilarTransactions` over all the user's rows, the same rule the write
+uses), and "Deshacer", which calls `restoreCategories`: the row's category and
+confidence put back exactly from a snapshot, writing no overrides. One counter
+per row (`useCategoryWrites`) withdraws an old toast when the row is written
+again. There is no Deshacer after "Aplicar".
 
 ## Categorizer precedence
 
