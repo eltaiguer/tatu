@@ -25,7 +25,7 @@ interface MonthHeroProps {
   // the sentence that switches Resumen to Hogar mode; hidden at zero.
   householdExpense?: number
   onShowHousehold?: () => void
-  // Quiet lines under the caption (comparisons hint; #276 adds the rate).
+  // Quiet lines under the caption: the rate line, then the comparisons hint.
   notes?: ReactNode
 }
 
@@ -103,11 +103,12 @@ export function MonthHero({
             </span>
           </button>
         )}
-        <p className="mt-1.5 mb-0 text-small text-[var(--text-faint)]">
-          {!monthSummary.isCurrentMonth &&
-            'Último mes con movimientos · importá tu extracto más reciente para ver este mes. '}
-          Combina tus movimientos en US$ y $U usando el tipo de cambio.
-        </p>
+        {!monthSummary.isCurrentMonth && (
+          <p className="mt-1.5 mb-0 text-small text-[var(--text-faint)]">
+            Último mes con movimientos · importá tu extracto más reciente para
+            ver este mes.
+          </p>
+        )}
         {notes && <div className="mt-1.5 flex flex-col gap-0.5">{notes}</div>}
       </div>
       {householdMode ? (

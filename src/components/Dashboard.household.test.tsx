@@ -108,6 +108,16 @@ describe('Dashboard: Todo / Hogar mode', () => {
     vi.useRealTimers()
   })
 
+  it('Hogar mode shows the same rate line under its hero (#276)', () => {
+    render(<Harness transactions={marchRows()} initialHousehold />)
+
+    const hero = screen.getByRole('heading', { name: /Gastos del hogar/ })
+    const rate = screen.getByText('1 US$ = $U 40,00 (manual)')
+    expect(
+      hero.compareDocumentPosition(rate) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
   it('shows the same comparisons hint in both modes, from every row', () => {
     // Household rows alone (card groceries Aug–Oct) would compare; the USD
     // account has no August row, so every row says Aug is missing it.
@@ -408,6 +418,14 @@ describe('Dashboard: Todo / Hogar mode', () => {
       expect(screen.queryByText('Gasto por categoría')).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: /Categorías/ }))
       expect(goCategories).toHaveBeenCalled()
+    })
+
+    it('keeps the mode toggle in the header and shows no rate line (#276)', () => {
+      render(<Harness transactions={rows()} initialHousehold />)
+      expect(
+        screen.getByRole('radiogroup', { name: 'Ver gastos' })
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/1 US\$ =/)).toBeNull()
     })
 
     it('keeps the toggle so you can go back to Todo', () => {

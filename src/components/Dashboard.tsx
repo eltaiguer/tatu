@@ -24,8 +24,6 @@ import { countsTowardTotals } from '../services/spending/spending-rules'
 import { householdExpenses } from '../services/household/household'
 import { useHouseholdRules } from '../hooks/useHouseholdRules'
 import { CategoryChangesCard } from './CategoryChangesCard'
-import { FxChip } from './FxChip'
-import { CurrencyToggle } from './CurrencyToggle'
 import { AccountCards } from './dashboard/AccountCards'
 import { CategorySpendCard } from './dashboard/CategorySpendCard'
 import { CurrencySplitCard } from './dashboard/CurrencySplitCard'
@@ -36,6 +34,7 @@ import {
 } from './dashboard/EmptyStates'
 import { HouseholdModeToggle } from './dashboard/HouseholdModeToggle'
 import { ComparisonHint } from './dashboard/ComparisonHint'
+import { FxLine } from './dashboard/FxLine'
 import { MonthHero } from './dashboard/MonthHero'
 import { MonthlySpendChart } from './dashboard/MonthlySpendChart'
 import { RecentTransactionsCard } from './dashboard/RecentTransactionsCard'
@@ -325,11 +324,6 @@ export function Dashboard({
                   onChange={onHouseholdModeChange}
                 />
               )}
-              <FxChip fxRate={fxRate} onSetFxRate={onSetFxRate} />
-              <CurrencyToggle
-                value={homeCurrency}
-                onChange={(c) => onSetHomeCurrency?.(c)}
-              />
             </>
           )
         }
@@ -379,13 +373,21 @@ export function Dashboard({
             }
             onNavigateToTransactions={openTransactions}
             notes={
-              changes.kind === 'insufficient' && (
-                <ComparisonHint
-                  completeInARow={changes.completeInARow}
-                  gap={changes.gap}
-                  onImport={onNavigateToImport}
+              <>
+                <FxLine
+                  fxRate={fxRate}
+                  homeCurrency={homeCurrency}
+                  onSetFxRate={onSetFxRate}
+                  onSetHomeCurrency={onSetHomeCurrency}
                 />
-              )
+                {changes.kind === 'insufficient' && (
+                  <ComparisonHint
+                    completeInARow={changes.completeInARow}
+                    gap={changes.gap}
+                    onImport={onNavigateToImport}
+                  />
+                )}
+              </>
             }
           />
 
