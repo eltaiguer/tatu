@@ -519,6 +519,7 @@ function App({ auth, createRepository }: AppProps) {
                     onDeleteTransaction={handleDeleteTransaction}
                     onRestoreTransactions={handleRestoreTransactions}
                     onReload={refetch}
+                    onGoToOverview={() => go('overview')}
                     onAutoCategorizeTransactions={
                       handleAutoCategorizeTransactions
                     }

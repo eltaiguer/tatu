@@ -282,7 +282,11 @@ export function Dashboard({
       total={uncategorizedSpend.total}
       count={uncategorizedSpend.count}
       homeCurrency={homeCurrency}
-      filter={{ categories: [Category.Uncategorized], type: 'debit' }}
+      filter={{
+        categories: [Category.Uncategorized],
+        type: 'debit',
+        reviewMode: true,
+      }}
       label="Ver los gastos sin categoría"
       cta="Categorizalos →"
       onNavigateToTransactions={onNavigateToTransactions}

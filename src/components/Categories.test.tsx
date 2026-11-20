@@ -448,6 +448,7 @@ describe('Categories', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Revisar 2' }))
     expect(onNavigateToTransactions).toHaveBeenCalledWith({
       categories: ['uncategorized'],
+      reviewMode: true,
     })
   })
 

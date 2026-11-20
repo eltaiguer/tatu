@@ -1158,6 +1158,7 @@ describe('Dashboard', () => {
       expect(go).toHaveBeenLastCalledWith({
         categories: ['uncategorized'],
         type: 'debit',
+        reviewMode: true,
       })
       expect(
         screen.getByText(/4 gastos · todo el historial/)
