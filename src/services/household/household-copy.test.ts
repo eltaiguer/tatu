@@ -48,6 +48,12 @@ describe('household copy', () => {
       )
     })
 
+    it('rounds a half percent up to 1%', () => {
+      expect(householdShareLine(5, 1000, 'USD')).toBe(
+        'Hogar 1% de US$ 1.000,00'
+      )
+    })
+
     it('says 0% when the house spent nothing', () => {
       expect(householdShareLine(0, 300, 'USD')).toBe('Hogar 0% de US$ 300,00')
     })
