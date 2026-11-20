@@ -35,6 +35,7 @@ import {
   NoTransactionsState,
 } from './dashboard/EmptyStates'
 import { HouseholdModeToggle } from './dashboard/HouseholdModeToggle'
+import { ComparisonHint } from './dashboard/ComparisonHint'
 import { MonthHero } from './dashboard/MonthHero'
 import { MonthlySpendChart } from './dashboard/MonthlySpendChart'
 import { RecentTransactionsCard } from './dashboard/RecentTransactionsCard'
@@ -357,12 +358,15 @@ export function Dashboard({
 
       {hasTransactions && !allIgnored && !noHouseholdSpend && (
         <>
-          {/* Lead with what changed, before the totals. */}
-          <CategoryChangesCard
-            changes={changes}
-            homeCurrency={homeCurrency}
-            onOpen={openTransactions}
-          />
+          {/* Lead with what changed, before the totals. With too little to
+              compare, the hero says why instead (a hint under it). */}
+          {changes.kind === 'ok' && (
+            <CategoryChangesCard
+              changes={changes}
+              homeCurrency={homeCurrency}
+              onOpen={openTransactions}
+            />
+          )}
 
           <MonthHero
             monthSummary={monthSummary}
@@ -374,6 +378,15 @@ export function Dashboard({
               onHouseholdModeChange && (() => onHouseholdModeChange(true))
             }
             onNavigateToTransactions={openTransactions}
+            notes={
+              changes.kind === 'insufficient' && (
+                <ComparisonHint
+                  completeInARow={changes.completeInARow}
+                  gap={changes.gap}
+                  onImport={onNavigateToImport}
+                />
+              )
+            }
           />
 
           <ResumenSection

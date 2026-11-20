@@ -516,8 +516,24 @@ pass today's month (`todayAsUtcDate`), so a month still running by the clock is
 never compared, even when every account already covers it to within 3 days of
 its end.
 
+- `monthCoverage` is the same pass with the detail: per month, which
+  accounts cover it (`covered`), which don't (`missing`; a dormant account is
+  in neither) and which of those have no row at all that month (`absent`).
+  `completeMonths` is derived from it.
 - "Qué cambió" (`categoryChanges`) and Insights' `categoryChanges` compare
   only complete months.
+- When "Qué cambió" can't compare (fewer than 3 complete months in a row),
+  Resumen shows no card: the hero carries `ComparisonHint`, "Comparaciones
+  mes a mes: a partir de 3 meses completos seguidos (tenés N)", N being the run of
+  complete months ending at the latest one. If a month next to that run (the
+  one after it first, else the one before; with no complete month, the
+  newest) is covered by some account while another has no rows in it, a
+  second line names it ("A oct. 2025 le faltan datos de Cuenta USD") with an
+  "Importar extracto" button. It names only `absent` accounts, never one
+  whose statement for the month is imported but starts after the 3rd or ends
+  early, and says "le faltan datos de" because the rule can't tell "not
+  imported" from "quiet". Months nobody covers are time, not a gap. Hogar
+  mode shows the same lines (completeness reads every row).
 - "Mes a mes" draws every month but marks partial ones (`MonthlyTrendRow.complete`,
   from `buildMonthlyTrendRows`): faded bars, "(mes incompleto)" on their
   buttons. The savings verdict ("Mes típico", "N de M meses completos en

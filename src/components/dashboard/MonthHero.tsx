@@ -1,7 +1,7 @@
 // Resumen's hero: the month's spend as one sentence, converted + combined in
 // the home currency, with income, the currency split and the balance under it.
 
-import { useRef } from 'react'
+import { useRef, type ReactNode } from 'react'
 import type { Currency, TransactionsFilter } from '../../models'
 import type { MonthSummary } from '../../services/charts/chart-data'
 import { formatCurrency } from '../../utils/formatting'
@@ -25,6 +25,8 @@ interface MonthHeroProps {
   // the sentence that switches Resumen to Hogar mode; hidden at zero.
   householdExpense?: number
   onShowHousehold?: () => void
+  // Quiet lines under the caption (comparisons hint; #276 adds the rate).
+  notes?: ReactNode
 }
 
 export function MonthHero({
@@ -35,6 +37,7 @@ export function MonthHero({
   householdMode = false,
   householdExpense = 0,
   onShowHousehold,
+  notes,
 }: MonthHeroProps) {
   // Opens exactly the month's rows (optionally only income/expenses).
   const openSummaryMonth =
@@ -105,6 +108,7 @@ export function MonthHero({
             'Último mes con movimientos · importá tu extracto más reciente para ver este mes. '}
           Combina tus movimientos en US$ y $U usando el tipo de cambio.
         </p>
+        {notes && <div className="mt-1.5 flex flex-col gap-0.5">{notes}</div>}
       </div>
       {householdMode ? (
         // Nothing to open when the month has no household spend.

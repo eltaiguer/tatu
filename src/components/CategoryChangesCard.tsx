@@ -150,24 +150,10 @@ export function CategoryChangesCard({
   homeCurrency,
   onOpen,
 }: {
-  changes: CategoryChanges
+  changes: Extract<CategoryChanges, { kind: 'ok' }>
   homeCurrency: Currency
   onOpen?: (filter: TransactionsFilter) => void
 }) {
-  if (changes.kind === 'insufficient') {
-    return (
-      // Nothing to compare yet: a quiet note, so the month below leads.
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-[var(--radius-md)] bg-[var(--surface-2)] px-4 py-2.5">
-        <h2 className="text-small font-semibold">Qué cambió</h2>
-        <p className="text-small text-muted-foreground">
-          Todavía no hay suficientes meses completos para comparar: hace falta
-          un mes cerrado y al menos dos anteriores con todas tus cuentas
-          importadas.
-        </p>
-      </div>
-    )
-  }
-
   const { reference, baseline, increases, decrease } = changes
   const baselineLabel = `${monthName(baseline[0], 'short')}–${monthName(
     baseline[baseline.length - 1],

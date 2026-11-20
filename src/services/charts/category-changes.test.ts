@@ -282,4 +282,100 @@ describe('categoryChanges', () => {
     expect(alone.kind).not.toBe(covered.kind)
     expect(covered.kind).toBe('ok')
   })
+
+  describe('when it cannot compare yet', () => {
+    const bank = { source: 'bank_account' as const }
+    const uyuBank = {
+      source: 'bank_account' as const,
+      currency: 'UYU' as const,
+    }
+    const ids = (days: string[], o: Partial<Transaction> = bank) =>
+      days.map((d) => tx(d, 'fees', 0.01, o))
+
+    it('counts the complete months in a row', () => {
+      const txs = fullMonths(['2026-08', '2026-09'], () => [])
+      expect(categoryChanges(txs, 'USD', 40, NOW)).toEqual({
+        kind: 'insufficient',
+        reference: '2026-09',
+        completeInARow: 2,
+      })
+    })
+
+    it('reports zero complete months and no gap when nobody covers the month', () => {
+      const txs = [tx('2026-09-10', 'restaurants', 100)]
+      expect(categoryChanges(txs, 'USD', 40, NOW)).toEqual({
+        kind: 'insufficient',
+        completeInARow: 0,
+      })
+    })
+
+    it('names the account missing just before the run', () => {
+      const txs = [
+        ...fullMonths(['2026-06', '2026-07', '2026-08', '2026-09'], () => []),
+        ...ids(['2026-09-01', '2026-09-29']),
+      ]
+      expect(categoryChanges(txs, 'USD', 40, NOW)).toMatchObject({
+        completeInARow: 1,
+        gap: { month: '2026-08', accounts: ['bank_account_usd'] },
+      })
+    })
+
+    it('prefers the month after the run', () => {
+      const txs = [
+        ...fullMonths(['2026-06', '2026-07', '2026-08', '2026-09'], () => []),
+        ...ids(['2026-07-01', '2026-08-29']),
+      ]
+      expect(categoryChanges(txs, 'USD', 40, NOW)).toMatchObject({
+        completeInARow: 2,
+        gap: { month: '2026-09', accounts: ['bank_account_usd'] },
+      })
+    })
+
+    it('has no gap when every account stops in the same month', () => {
+      const txs = [
+        ...fullMonths(['2026-08'], () => []),
+        tx('2026-09-15', 'fees', 0.01),
+      ]
+      const result = categoryChanges(txs, 'USD', 40, NOW)
+      expect(result).toMatchObject({ completeInARow: 1 })
+      expect(result).not.toHaveProperty('gap')
+    })
+
+    it('lists every missing account in account order', () => {
+      const txs = [
+        ...fullMonths(['2026-06', '2026-07', '2026-08', '2026-09'], () => []),
+        ...ids(['2026-09-01', '2026-09-29']),
+        ...ids(['2026-09-01', '2026-09-29'], uyuBank),
+      ]
+      expect(categoryChanges(txs, 'USD', 40, NOW)).toMatchObject({
+        gap: {
+          month: '2026-08',
+          accounts: ['bank_account_usd', 'bank_account_uyu'],
+        },
+      })
+    })
+
+    it('never names a month the account already has rows in', () => {
+      const txs = [
+        ...fullMonths(['2026-07', '2026-08', '2026-09'], () => []),
+        ...ids(['2026-09-04', '2026-09-29']),
+      ]
+      expect(categoryChanges(txs, 'USD', 40, NOW)).toEqual({
+        kind: 'insufficient',
+        completeInARow: 0,
+        gap: { month: '2026-08', accounts: ['bank_account_usd'] },
+      })
+    })
+
+    it('shows no gap when only partial months are missing', () => {
+      const txs = [
+        ...fullMonths(['2026-09'], () => []),
+        ...ids(['2026-09-04', '2026-09-29']),
+      ]
+      expect(categoryChanges(txs, 'USD', 40, NOW)).toEqual({
+        kind: 'insufficient',
+        completeInARow: 0,
+      })
+    })
+  })
 })
