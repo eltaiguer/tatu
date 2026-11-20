@@ -1320,6 +1320,125 @@ describe('transaction-mutations — apply scope', () => {
       expect(stored('tx')?.displayDescription).toBe('Tienda Inglesa')
     })
   })
+
+  describe('an edit without a name leaves names alone (#279)', () => {
+    const OLD_NAME = {
+      descriptionNormalized: 'supermercado disco',
+      descriptionOriginal: MERCHANT,
+      friendlyDescription: 'Disco viejo',
+      category: 'groceries',
+      createdAt: '',
+      updatedAt: '',
+    }
+    const seedWithDescriptionOverride = () => {
+      const repo = signedIn(seed(), { descriptionOverrides: [OLD_NAME] })
+      replaceDescriptionOverrides({
+        'supermercado disco': {
+          descriptionOriginal: MERCHANT,
+          friendlyDescription: 'Disco viejo',
+          category: 'groceries',
+          updatedAt: '',
+        },
+      })
+      return repo
+    }
+
+    it("scope 'single' keeps the row's own name", async () => {
+      const repo = signedIn([
+        makeTransaction('tx', {
+          description: MERCHANT,
+          displayDescription: 'Tienda Inglesa',
+        }),
+      ])
+
+      await editTransaction(repo, 'tx', {
+        category: 'restaurants',
+        applyScope: 'single',
+      })
+
+      for (const read of [stored, repo.row]) {
+        expect(read('tx')).toMatchObject({
+          category: 'restaurants',
+          displayDescription: 'Tienda Inglesa',
+        })
+      }
+    })
+
+    it.each(['matching_past_and_future', 'future_matching_only'] as const)(
+      "scope '%s' keeps the merchant's name and gives it the new category",
+      async (applyScope) => {
+        const repo = seedWithDescriptionOverride()
+
+        await editTransaction(repo, 'same-1', {
+          category: 'restaurants',
+          applyScope,
+        })
+
+        expect(
+          repo.descriptionOverrides.get('supermercado disco')
+        ).toMatchObject({
+          friendlyDescription: 'Disco viejo',
+          category: 'restaurants',
+        })
+        expect(getDescriptionOverride(MERCHANT)).toMatchObject({
+          friendlyDescription: 'Disco viejo',
+          category: 'restaurants',
+        })
+        expect(repo.categoryOverrides.size).toBe(1)
+        expect(
+          categorizeTransaction('SUPERMERCADO DISCO', 'debit', {
+            rules: currentUserRules(),
+          }).category
+        ).toBe('restaurants')
+      }
+    )
+
+    it('takes the description override back to how it was when the category one fails', async () => {
+      const repo = seedWithDescriptionOverride()
+      repo.failOn('upsertCategoryOverride')
+
+      await expect(
+        editTransaction(repo, 'same-1', {
+          category: 'restaurants',
+          applyScope: 'matching_past_and_future',
+        })
+      ).rejects.toThrow()
+
+      for (const override of [
+        repo.descriptionOverrides.get('supermercado disco'),
+        getDescriptionOverride(MERCHANT),
+      ]) {
+        expect(override).toMatchObject({
+          friendlyDescription: 'Disco viejo',
+          category: 'groceries',
+        })
+      }
+      expect(repo.requests.deleteDescriptionOverride ?? 0).toBe(0)
+    })
+
+    it('creates no description override when there was none', async () => {
+      const repo = signedIn(seed())
+
+      await editTransaction(repo, 'same-1', {
+        category: 'restaurants',
+        applyScope: 'matching_past_and_future',
+      })
+
+      expect(repo.descriptionOverrides.size).toBe(0)
+      expect(repo.requests.upsertDescriptionOverride ?? 0).toBe(0)
+      expect(repo.requests.deleteDescriptionOverride ?? 0).toBe(0)
+    })
+
+    it("scope 'single' with nothing to change writes nothing", async () => {
+      const repo = signedIn(seed())
+
+      await expect(
+        editTransaction(repo, 'same-1', { applyScope: 'single' })
+      ).resolves.toEqual({ affected: 1 })
+
+      expect(repo.requests.update ?? 0).toBe(0)
+    })
+  })
 })
 
 describe('transaction-mutations — bulk operations (#60)', () => {

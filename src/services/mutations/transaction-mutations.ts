@@ -527,7 +527,9 @@ export interface TransactionEdit {
 
 /**
  * Saves the description override (the friendly name, when renamed; cleared
- * otherwise) and the merchant override (the category; cleared when none),
+ * when a name was given and equals the original; left alone when no name was
+ * given, except that an existing one takes the new category, since its
+ * category outranks the merchant override) and the merchant override (the category; cleared when none),
  * as one unit. Policy:
  *  1. Both go to the server first; in-memory overrides change only after.
  *  2. If the second write fails, the first is taken back on the server
@@ -539,7 +541,12 @@ export interface TransactionEdit {
 async function writeOverrides(
   repo: Repository,
   current: Transaction,
-  intent: { renamed: boolean; name?: string; category: string | null }
+  intent: {
+    nameGiven: boolean
+    renamed: boolean
+    name?: string
+    category: string | null
+  }
 ): Promise<void> {
   const description = current.description
   const descKey = buildDescriptionOverrideKey(description)
@@ -550,6 +557,10 @@ async function writeOverrides(
   const legacyMerchantKey = legacyMerchantOverrideKey(description)
   const previousDesc = descKey ? listDescriptionOverrides()[descKey] : undefined
 
+  // Whether this edit writes the description override at all: always when a
+  // name was given; with no name, only to keep an existing one in step.
+  const writesDesc = !!descKey && (intent.nameGiven || !!previousDesc)
+
   const applyDescLocally = () => {
     if (intent.renamed) {
       setDescriptionOverride({
@@ -557,17 +568,32 @@ async function writeOverrides(
         friendlyDescription: intent.name!,
         category: intent.category ?? undefined,
       })
+    } else if (!intent.nameGiven) {
+      if (previousDesc) {
+        setDescriptionOverride({
+          description,
+          friendlyDescription: previousDesc.friendlyDescription,
+          category: intent.category ?? undefined,
+        })
+      }
     } else {
       clearDescriptionOverride(description)
     }
   }
 
-  if (descKey) {
+  if (writesDesc) {
     if (intent.renamed) {
       await repo.upsertDescriptionOverride({
         descriptionNormalized: descKey,
         descriptionOriginal: description,
         friendlyDescription: intent.name!,
+        category: intent.category ?? undefined,
+      })
+    } else if (!intent.nameGiven) {
+      await repo.upsertDescriptionOverride({
+        descriptionNormalized: descKey,
+        descriptionOriginal: description,
+        friendlyDescription: previousDesc!.friendlyDescription,
         category: intent.category ?? undefined,
       })
     } else {
@@ -588,17 +614,17 @@ async function writeOverrides(
         await repo.deleteCategoryOverride(merchantKey)
       }
     } catch (error) {
-      if (!descKey) throw error
+      if (!writesDesc) throw error
       try {
         if (previousDesc) {
           await repo.upsertDescriptionOverride({
-            descriptionNormalized: descKey,
+            descriptionNormalized: descKey!,
             descriptionOriginal: previousDesc.descriptionOriginal,
             friendlyDescription: previousDesc.friendlyDescription,
             category: previousDesc.category,
           })
         } else {
-          await repo.deleteDescriptionOverride(descKey)
+          await repo.deleteDescriptionOverride(descKey!)
         }
       } catch {
         assertOwner(repo)
@@ -651,6 +677,8 @@ export async function editTransaction(
   if (!current) throw MISSING_TRANSACTION
 
   const name = edit.displayDescription?.trim()
+  // An absent name leaves names alone, like an absent category or tags.
+  const nameGiven = edit.displayDescription !== undefined
   const renamed = !!name && name !== current.description
   const category =
     edit.category === undefined ? undefined : edit.category?.trim() || null
@@ -663,6 +691,7 @@ export async function editTransaction(
     // Without a category, the rows' categories are left alone.
     const matching = findSimilarTransactions(all, current)
     await writeOverrides(repo, current, {
+      nameGiven,
       renamed,
       name,
       category: category ?? null,
@@ -691,20 +720,23 @@ export async function editTransaction(
 
   if (edit.applyScope === 'future_matching_only') {
     await writeOverrides(repo, current, {
+      nameGiven,
       renamed,
       name,
       category: category ?? null,
     })
   }
 
-  // One row: its name (cleared when not renamed), its category (set, or
+  // One row: its name (set when renamed, cleared when a name equal to the
+  // original was given, untouched when none was), its category (set, or
   // cleared for "Sin categoría", with its confidence) and its tags.
   const patch: TransactionPatch = {
-    displayDescription: renamed ? name : null,
+    ...(nameGiven && { displayDescription: renamed ? name : null }),
     ...(category && { category, categoryConfidence: 1 }),
     ...(category === null && { category: null, categoryConfidence: null }),
     ...(tags !== undefined && { tags }),
   }
+  if (isEmptyPatch(patch)) return { affected: 1 }
   const changes = new Map([[transactionId, patch]])
   const outcome = await writePatches(repo, changes)
   settle(outcome, {
