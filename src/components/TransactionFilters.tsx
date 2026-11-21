@@ -1,20 +1,17 @@
-import { useId, useRef, useState } from 'react'
-import { Filter, House, Search, X } from 'lucide-react'
-import { Button } from './ui/button'
+import { useRef, useState } from 'react'
+import { House, Search, X } from 'lucide-react'
 import { cn } from './ui/utils'
 import { Input } from './ui/input'
-import { SegmentedToggle } from './ui/segmented-toggle'
+import { FiltersPanel } from './transactions/FiltersPanel'
+import { filterControlClass } from './transactions/filter-control-class'
+import {
+  householdTogglePatch,
+  secondaryFilterChips,
+} from './transactions/secondary-filters'
 import { resolveCategory } from '../services/categories/category-registry'
 import { useClickOutside } from '../hooks/useClickOutside'
 import type { UrlFilterState } from '../services/filters/url-filters'
 import type { FilterPatch } from '../services/filters/transaction-filter'
-
-type Account = UrlFilterState['accounts'][number]
-
-const ACCOUNT_OPTIONS: { value: Account; label: string }[] = [
-  { value: 'credit_card', label: 'Tarjeta' },
-  { value: 'bank_account', label: 'Cuenta bancaria' },
-]
 
 interface MultiSelectPopoverProps<T extends string> {
   label: string
@@ -51,12 +48,7 @@ function MultiSelectPopover<T extends string>({
         type="button"
         aria-label={ariaLabel ?? label}
         onClick={() => setOpen((o) => !o)}
-        className={cn(
-          'bg-input-background focus-visible:ring-ring/50 inline-flex h-9 min-w-[120px] items-center gap-1.5 rounded-md border px-3 py-1 text-sm outline-none focus-visible:ring-[3px]',
-          isActive
-            ? 'border-[var(--brand)] text-[var(--brand-text,var(--brand))]'
-            : 'border-input focus-visible:border-ring'
-        )}
+        className={filterControlClass(isActive, 'min-w-[120px]')}
       >
         <span>
           {label}
@@ -143,6 +135,8 @@ interface TransactionFiltersProps {
   // here: "últimos n meses" counts from an anchor only the view's state has.
   dateRange: { from: string; to: string }
   availableCategories: string[]
+  // Rows hidden as ignored transfers: the panel's toggle shows the count.
+  ignoredCount: number
   onChange: (patch: FilterPatch) => void
   // Editing one end of the date inputs; the view keeps the other end.
   onDateBoundChange: (bound: 'from' | 'to', value: string) => void
@@ -154,33 +148,20 @@ export function TransactionFilters({
   hasActiveFilters,
   dateRange,
   availableCategories,
+  ignoredCount,
   onChange,
   onDateBoundChange,
   onClearAll,
 }: TransactionFiltersProps) {
-  const [amountPanelOpen, setAmountPanelOpen] = useState(false)
-  const minAmountId = useId()
-  const maxAmountId = useId()
-
   const categoryOptions = availableCategories.map((cat) => {
     const { label, color } = resolveCategory(cat)
     return { value: cat, label, color }
   })
 
-  const {
-    search,
-    categories,
-    accounts,
-    currency,
-    type,
-    household,
-    review,
-    min: minAmount,
-    max: maxAmount,
-  } = filters
-  const amountActive = Boolean(minAmount) || Boolean(maxAmount)
+  const { search, categories, household, review } = filters
 
-  // Build active chips (search has its own × in the input, date is MonthNav)
+  // Active chips (search has its own × in the input, date is MonthNav):
+  // categories, then the Filtros panel's, then A revisar.
   const chips: { label: string; onClear: () => void }[] = []
   categories.forEach((c) => {
     chips.push({
@@ -189,48 +170,25 @@ export function TransactionFilters({
         onChange({ categories: categories.filter((x) => x !== c) }),
     })
   })
-  accounts.forEach((a) => {
-    const opt = ACCOUNT_OPTIONS.find((o) => o.value === a)
-    chips.push({
-      label: opt?.label ?? a,
-      onClear: () => onChange({ accounts: accounts.filter((x) => x !== a) }),
-    })
+  const secondary = secondaryFilterChips(filters)
+  secondary.forEach((chip) => {
+    chips.push({ label: chip.label, onClear: () => onChange(chip.clear) })
   })
-  if (currency !== 'all') {
-    chips.push({
-      label: currency === 'USD' ? 'Dólares' : 'Pesos',
-      onClear: () => onChange({ currency: 'all' }),
-    })
-  }
-  if (type !== 'all') {
-    chips.push({
-      label: type === 'credit' ? 'Ingresos' : 'Gastos',
-      onClear: () => onChange({ type: 'all' }),
-    })
-  }
-  if (household !== 'all') {
-    chips.push({
-      label: 'Hogar',
-      onClear: () => onChange({ household: 'all' }),
-    })
-  }
   if (review) {
     chips.push({
       label: 'A revisar',
       onClear: () => onChange({ review: false }),
     })
   }
-  if (minAmount || maxAmount) {
-    chips.push({
-      label: `Monto ${minAmount || '0'}–${maxAmount || '∞'}`,
-      onClear: () => onChange({ min: '', max: '' }),
-    })
-  }
+
+  // Hogar has no chip of its own (the pressed button is its state), but its
+  // row still offers "Limpiar todo".
+  const showChipRow = chips.length > 0 || household !== 'all'
 
   return (
     // No card of its own: it heads the movements card it filters.
     <div className="space-y-3 border-b border-[var(--border)] p-4">
-      {/* Row 1: Search + Category + Account + Type + Currency + Monto */}
+      {/* Primary row: search · Categoría · Hogar · Filtros */}
       <div className="flex flex-wrap items-center gap-[8px]">
         <div className="relative w-full sm:flex-1">
           <Search
@@ -253,124 +211,30 @@ export function TransactionFilters({
           onChange={(next) => onChange({ categories: next })}
         />
 
-        <MultiSelectPopover
-          label="Cuenta"
-          ariaLabel="Filtro cuenta"
-          options={ACCOUNT_OPTIONS}
-          selected={accounts}
-          onChange={(next) => onChange({ accounts: next })}
-        />
-
-        {/* Type filter */}
-        <SegmentedToggle
-          options={[
-            { value: 'all' as const, label: 'Ambos' },
-            { value: 'credit' as const, label: 'Ingresos' },
-            { value: 'debit' as const, label: 'Gastos' },
-          ]}
-          value={type}
-          onChange={(next) =>
-            onChange(
-              next === 'credit' && household !== 'all'
-                ? { type: next, household: 'all' }
-                : { type: next }
-            )
-          }
-          size="sm"
-          aria-label="Tipo de transacción"
-        />
-
-        {/* Household filter. Income has no household answer, so the two never
-            combine: the latest pick wins (here and in the type toggle). */}
-        <div className="inline-flex items-center gap-[6px]">
-          <House
-            size={14}
-            aria-hidden="true"
-            className="shrink-0 text-[var(--text-muted)]"
-          />
-          <SegmentedToggle
-            options={[
-              { value: 'all' as const, label: 'Todo' },
-              { value: 'household' as const, label: 'Hogar' },
-            ]}
-            value={household}
-            onChange={(next) =>
-              onChange(
-                next !== 'all' && type === 'credit'
-                  ? { household: next, type: 'all' }
-                  : { household: next }
-              )
-            }
-            size="sm"
-            aria-label="Hogar"
-          />
-        </div>
-
-        {/* Currency filter */}
-        <SegmentedToggle
-          options={[
-            { value: 'all' as const, label: 'Ambas' },
-            { value: 'UYU' as const, label: '$U' },
-            { value: 'USD' as const, label: 'US$' },
-          ]}
-          value={currency}
-          onChange={(next) => onChange({ currency: next })}
-          size="sm"
-          aria-label="Moneda"
-        />
-
-        {/* Monto advanced panel toggle */}
-        <Button
-          variant={amountPanelOpen || amountActive ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setAmountPanelOpen((o) => !o)}
-          className="gap-[5px]"
+        {/* Household filter: one toggle chip, the pressed state is the filter.
+            Income has no household answer, so the two never combine: the
+            latest pick wins (here and in the type toggle). */}
+        <button
+          type="button"
+          aria-pressed={household !== 'all'}
+          aria-label="Filtro Hogar"
+          onClick={() => onChange(householdTogglePatch(filters))}
+          className={filterControlClass(household !== 'all')}
         >
-          <Filter size={14} />
-          Monto
-        </Button>
+          <House size={14} aria-hidden="true" />
+          Hogar
+        </button>
+
+        <FiltersPanel
+          filters={filters}
+          ignoredCount={ignoredCount}
+          activeCount={secondary.length}
+          onChange={onChange}
+        />
       </div>
 
-      {/* Advanced amount panel */}
-      {amountPanelOpen && (
-        <div className="grid grid-cols-[repeat(2,1fr)] gap-[14px] border-t border-[var(--border)] pt-[14px]">
-          <div>
-            <label
-              htmlFor={minAmountId}
-              className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5"
-            >
-              Monto mínimo
-            </label>
-            <Input
-              id={minAmountId}
-              type="number"
-              placeholder="0"
-              value={minAmount}
-              onChange={(e) => onChange({ min: e.target.value })}
-              className="text-[13px]!"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor={maxAmountId}
-              className="text-xs font-medium text-muted-foreground uppercase tracking-wider block mb-1.5"
-            >
-              Monto máximo
-            </label>
-            <Input
-              id={maxAmountId}
-              type="number"
-              placeholder="∞"
-              value={maxAmount}
-              onChange={(e) => onChange({ max: e.target.value })}
-              className="text-[13px]!"
-            />
-          </div>
-        </div>
-      )}
-
       {/* Active filter chips */}
-      {chips.length > 0 && (
+      {showChipRow && (
         <div className="flex flex-wrap items-center gap-[8px]">
           {chips.map((chip, i) => (
             <span
@@ -379,6 +243,7 @@ export function TransactionFilters({
             >
               {chip.label}
               <button
+                type="button"
                 onClick={chip.onClear}
                 aria-label={`Quitar filtro ${chip.label}`}
                 className="grid cursor-pointer place-items-center rounded-[999px] border-none [background:none] p-0 text-[var(--text-muted)]"
@@ -387,8 +252,9 @@ export function TransactionFilters({
               </button>
             </span>
           ))}
-          {hasActiveFilters && chips.length > 0 && (
+          {hasActiveFilters && showChipRow && (
             <button
+              type="button"
               onClick={onClearAll}
               className="cursor-pointer border-none [background:none] px-[4px] py-0 text-[13px] font-[500] text-[var(--brand)]"
             >

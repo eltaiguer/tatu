@@ -574,7 +574,9 @@ so it never renders empty when the results shrink.
 The hook sorts, groups split parts under their parent (`groupSplitRows`) and
 paginates. It freezes the "últimos n meses" anchor (the newest row) when that
 period is chosen, so an import does not shift the window. `TransactionFilters`
-takes `filters` and emits patches; "filtrado" is `hasActiveFilters(filters)`
+takes `filters` and emits patches: its primary row is search · Categoría · the Hogar
+chip · "Filtros", and Cuenta, Tipo, Moneda, Monto and "show ignored" live in
+the `FiltersPanel` behind that button (each active one also a chip); "filtrado" is `hasActiveFilters(filters)`
 (`url-filters.ts`; the period and "show ignored" don't count), computed once
 by the view and passed down. The same rule decides that a link which filters
 but names no period means all time (`filterToSearch` and the view's default). Export writes the rows it is handed; if it ever has to filter, it

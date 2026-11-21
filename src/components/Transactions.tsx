@@ -117,10 +117,6 @@ export function Transactions({
     (next: UrlPeriod) => updateFilters({ period: next }),
     [updateFilters]
   )
-  const setShowIgnored = useCallback(
-    (show: boolean) => updateFilters({ showIgnored: show }),
-    [updateFilters]
-  )
 
   // The merchant filter holds a merchant key (#120); the chip shows the same
   // label Resumen's "Mayores comercios" row did.
@@ -495,6 +491,7 @@ export function Transactions({
             hasActiveFilters={filtered}
             dateRange={dateRange}
             availableCategories={availableCategories}
+            ignoredCount={ignoredCount}
             onChange={updateFilters}
             onDateBoundChange={setDateBound}
             onClearAll={clearFilters}
@@ -519,7 +516,6 @@ export function Transactions({
         onHeaderCheckboxChange={handleHeaderCheckboxChange}
         onSort={handleSort}
         onClearFilters={clearFilters}
-        onShowIgnoredChange={setShowIgnored}
         onEdit={setEditingTransaction}
         onDelete={(transaction) => {
           void handleDeleteTransaction(transaction)

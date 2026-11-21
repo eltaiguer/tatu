@@ -46,7 +46,6 @@ function renderTable(overrides: Partial<TableProps> = {}) {
     onHeaderCheckboxChange: vi.fn(),
     onSort: vi.fn(),
     onClearFilters: vi.fn(),
-    onShowIgnoredChange: vi.fn(),
     onEdit: vi.fn(),
     onDelete: vi.fn(),
     onSplit: vi.fn(),
@@ -362,33 +361,27 @@ describe('TransactionTable', () => {
       expect(screen.getAllByText('Ignorada')).toHaveLength(2)
     })
 
-    it('toggles showing ignored transfers and shows how many there are', () => {
-      const { props } = renderTable({ ignoredCount: 3 })
+    it('says how many ignored rows are hidden, as text', () => {
+      renderTable({ ignoredCount: 3 })
 
-      const toggle = screen.getByRole('button', {
-        name: /Mostrar transferencias ignoradas/,
-      })
-      expect(toggle).toHaveTextContent('· 3')
-
-      fireEvent.click(toggle)
-      expect(props.onShowIgnoredChange).toHaveBeenCalledWith(true)
+      expect(screen.getByText('3 movimientos ocultos')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /ignorados/ })).toBeNull()
     })
 
-    it('offers to hide ignored transfers when they are shown', () => {
-      const { props } = renderTable({ ignoredCount: 3, showIgnored: true })
+    it('says it in the singular for one', () => {
+      renderTable({ ignoredCount: 1 })
 
-      fireEvent.click(
-        screen.getByRole('button', { name: /Ocultar transferencias ignoradas/ })
-      )
-      expect(props.onShowIgnoredChange).toHaveBeenCalledWith(false)
+      expect(screen.getByText('1 movimiento oculto')).toBeInTheDocument()
     })
 
-    it('disables the toggle when nothing is ignored', () => {
+    it('says nothing when they are shown', () => {
+      renderTable({ ignoredCount: 3, showIgnored: true })
+      expect(screen.queryByText(/movimientos? ocultos?/)).toBeNull()
+    })
+
+    it('says nothing when nothing is ignored', () => {
       renderTable({ ignoredCount: 0 })
-
-      expect(
-        screen.getByRole('button', { name: /transferencias ignoradas/ })
-      ).toBeDisabled()
+      expect(screen.queryByText(/movimientos? ocultos?/)).toBeNull()
     })
   })
 
